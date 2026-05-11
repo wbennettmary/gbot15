@@ -1,0 +1,3726 @@
+<!DOCTYPE html>
+<html lang="en" data-color-mode="auto" data-light-theme="light" data-dark-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}GBot Web{% endblock %}</title>
+
+    <!-- Tailwind CSS (Pinned v3.4.1) -->
+    <script src="https://cdn.tailwindcss.com/3.4.1"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: {
+                            800: '#1e293b',
+                            900: '#0f172a',
+                        },
+                        indigo: {
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Custom Glassmorphism Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='glass.css') }}?v=2026.1.2.07">
+
+    <!-- GitHub Primer CSS -->
+    <link href="https://unpkg.com/@primer/css@^21.0.0/dist/primer.css" rel="stylesheet">
+
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+    <!-- SortableJS (for Drag & Drop) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+
+    <!-- Bootstrap JS (for modal compatibility) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- EMERGENCY MODAL FIX - Run immediately -->
+    <script>
+            // Run this immediately, before any other scripts
+            (function () {
+                console.log('Emergency modal fix running immediately...');
+
+                // Force hide problematic modals immediately
+                function emergencyHideModals() {
+                    const problematicModals = ['testConnectionModal', 'deleteConfirmModal'];
+                    problematicModals.forEach(function (modalId) {
+                        const modal = document.getElementById(modalId);
+                        if (modal) {
+                            modal.style.display = 'none';
+                            modal.style.visibility = 'hidden';
+                            modal.style.opacity = '0';
+                            modal.style.pointerEvents = 'none';
+                            modal.classList.remove('show');
+                        }
+                    });
+
+                    // Remove modal backdrops
+                    const backdrops = document.querySelectorAll('.modal-backdrop');
+                    backdrops.forEach(function (backdrop) {
+                        backdrop.remove();
+                    });
+
+                    // Fix body
+                    document.body.classList.remove('modal-open');
+                    document.body.style.overflow = '';
+                    document.body.style.paddingRight = '';
+
+                    console.log('Emergency modal fix applied');
+                }
+
+                // Run immediately
+                emergencyHideModals();
+
+                // Run when DOM is ready
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', emergencyHideModals);
+                } else {
+                    emergencyHideModals();
+                }
+
+                // Run periodically to catch any modals that try to show
+                setInterval(emergencyHideModals, 100);
+            })();
+    </script>
+
+    <!-- Professional GitHub Theme -->
+    <style>
+        :root {
+            /* Modern ClickUp-like Light Theme */
+            --color-canvas-default: #ffffff;
+            --color-canvas-subtle: #f7f8f9;
+            --color-canvas-inset: #f0f1f2;
+            --color-border-default: #e4e6e8;
+            --color-border-muted: #e8eaed;
+            --color-border-subtle: rgba(0, 0, 0, 0.08);
+            --color-fg-default: #2d3436;
+            --color-fg-muted: #636e72;
+            --color-fg-subtle: #b2bec3;
+            --color-accent-fg: #6366f1;
+            --color-accent-emphasis: #4f46e5;
+            --color-accent-purple: #8b5cf6;
+            --color-success-fg: #10b981;
+            --color-success-emphasis: #059669;
+            --color-danger-fg: #ef4444;
+            --color-danger-emphasis: #dc2626;
+            --color-warning-fg: #f59e0b;
+            --color-warning-emphasis: #d97706;
+            --color-header-bg: #ffffff;
+            --color-header-text: #2d3436;
+            --color-btn-text: #2d3436;
+            --color-btn-bg: #ffffff;
+            --color-btn-border: #e4e6e8;
+            --color-btn-hover-bg: #f7f8f9;
+            --color-btn-hover-border: #d1d5db;
+            --color-btn-primary-text: #ffffff;
+            --color-btn-primary-bg: #6366f1;
+            --color-btn-primary-border: #6366f1;
+            --color-btn-primary-hover-bg: #4f46e5;
+            --color-btn-danger-text: #ffffff;
+            --color-btn-danger-bg: #ef4444;
+            --color-btn-danger-border: #ef4444;
+            --color-btn-danger-hover-bg: #dc2626;
+            --color-input-bg: #ffffff;
+            --color-input-border: #e4e6e8;
+            --color-shadow: rgba(0, 0, 0, 0.04);
+            --color-shadow-medium: rgba(0, 0, 0, 0.08);
+            --color-shadow-large: rgba(0, 0, 0, 0.12);
+            --radius-sm: 6px;
+            --radius-md: 8px;
+            --radius-lg: 12px;
+            --spacing-xs: 4px;
+            --spacing-sm: 8px;
+            --spacing-md: 16px;
+            --spacing-lg: 24px;
+            --spacing-xl: 32px;
+        }
+
+        [data-color-mode="dark"] {
+            /* Modern ClickUp-like Dark Theme */
+            --color-canvas-default: #1a1d29;
+            --color-canvas-subtle: #161922;
+            --color-canvas-inset: #0f1117;
+            --color-border-default: #2d3142;
+            --color-border-muted: #252836;
+            --color-border-subtle: rgba(255, 255, 255, 0.1);
+            --color-fg-default: #e4e6eb;
+            --color-fg-muted: #9ca3af;
+            --color-fg-subtle: #6b7280;
+            --color-accent-fg: #818cf8;
+            --color-accent-emphasis: #6366f1;
+            --color-accent-purple: #a78bfa;
+            --color-success-fg: #34d399;
+            --color-success-emphasis: #10b981;
+            --color-danger-fg: #f87171;
+            --color-danger-emphasis: #ef4444;
+            --color-warning-fg: #fbbf24;
+            --color-warning-emphasis: #f59e0b;
+            --color-header-bg: #1a1d29;
+            --color-header-text: #e4e6eb;
+            --color-btn-text: #e4e6eb;
+            --color-btn-bg: #252836;
+            --color-btn-border: #2d3142;
+            --color-btn-hover-bg: #2d3142;
+            --color-btn-hover-border: #3d4154;
+            --color-btn-primary-text: #ffffff;
+            --color-btn-primary-bg: #6366f1;
+            --color-btn-primary-border: #6366f1;
+            --color-btn-primary-hover-bg: #4f46e5;
+            --color-btn-danger-text: #ffffff;
+            --color-btn-danger-bg: #ef4444;
+            --color-btn-danger-border: #ef4444;
+            --color-btn-danger-hover-bg: #dc2626;
+            --color-input-bg: #161922;
+            --color-input-border: #2d3142;
+            --color-shadow: rgba(0, 0, 0, 0.3);
+            --color-shadow-medium: rgba(0, 0, 0, 0.4);
+            --color-shadow-large: rgba(0, 0, 0, 0.5);
+            --radius-sm: 6px;
+            --radius-md: 8px;
+            --radius-lg: 12px;
+            --spacing-xs: 4px;
+            --spacing-sm: 8px;
+            --spacing-md: 16px;
+            --spacing-lg: 24px;
+            --spacing-xl: 32px;
+        }
+
+        /* Force dark theme on ALL elements */
+        [data-color-mode="dark"] * {
+            border-color: var(--color-border-default) !important;
+        }
+
+        [data-color-mode="dark"] .form-control {
+            background-color: var(--color-input-bg) !important;
+            border-color: var(--color-input-border) !important;
+            color: var(--color-fg-default) !important;
+        }
+
+        [data-color-mode="dark"] button,
+        [data-color-mode="dark"] .btn,
+        [data-color-mode="dark"] .btn-github {
+            background-color: var(--color-btn-bg) !important;
+            border-color: var(--color-btn-border) !important;
+            color: var(--color-btn-text) !important;
+        }
+
+        [data-color-mode="dark"] .btn-primary,
+        [data-color-mode="dark"] .btn-github-primary {
+            background-color: var(--color-btn-primary-bg) !important;
+            border-color: var(--color-btn-primary-border) !important;
+            color: var(--color-btn-primary-text) !important;
+        }
+
+        [data-color-mode="dark"] .btn-danger,
+        [data-color-mode="dark"] .btn-github-danger {
+            background-color: var(--color-btn-danger-bg) !important;
+            border-color: var(--color-btn-danger-border) !important;
+            color: var(--color-btn-danger-text) !important;
+        }
+
+        [data-color-mode="dark"] div,
+        [data-color-mode="dark"] p,
+        [data-color-mode="dark"] span,
+        [data-color-mode="dark"] h1,
+        [data-color-mode="dark"] h2,
+        [data-color-mode="dark"] h3,
+        [data-color-mode="dark"] h4,
+        [data-color-mode="dark"] h5,
+        [data-color-mode="dark"] h6,
+        [data-color-mode="dark"] label {
+            color: var(--color-fg-default) !important;
+        }
+
+        [data-color-mode="dark"] .card,
+        [data-color-mode="dark"] .github-card {
+            background-color: var(--color-canvas-default) !important;
+            border-color: var(--color-border-default) !important;
+        }
+
+        /* Force dark theme for ALL possible elements */
+        [data-color-mode="dark"] .section,
+        [data-color-mode="dark"] .data-display,
+        [data-color-mode="dark"] .status-box,
+        [data-color-mode="dark"] .count-display,
+        [data-color-mode="dark"] .status-info,
+        [data-color-mode="dark"] .account-list,
+        [data-color-mode="dark"] .search-input,
+        [data-color-mode="dark"] .results-log,
+        [data-color-mode="dark"] .domain-list,
+        [data-color-mode="dark"] .csv-preview,
+        [data-color-mode="dark"] .download-area {
+            background-color: var(--color-canvas-subtle) !important;
+            border-color: var(--color-border-default) !important;
+            color: var(--color-fg-default) !important;
+        }
+
+        [data-color-mode="dark"] .account-item {
+            background-color: transparent !important;
+            color: var(--color-fg-default) !important;
+        }
+
+        [data-color-mode="dark"] .account-item:hover {
+            background-color: var(--color-canvas-default) !important;
+        }
+
+        [data-color-mode="dark"] .account-item.selected {
+            background-color: var(--color-accent-emphasis) !important;
+            color: #ffffff !important;
+        }
+
+        [data-color-mode="dark"] .action-button {
+            background-color: var(--color-btn-bg) !important;
+            border-color: var(--color-btn-border) !important;
+            color: var(--color-btn-text) !important;
+        }
+
+        [data-color-mode="dark"] .action-button:hover {
+            background-color: var(--color-btn-hover-bg) !important;
+        }
+
+        [data-color-mode="dark"] .delete-button {
+            background-color: var(--color-btn-danger-bg) !important;
+            border-color: var(--color-btn-danger-border) !important;
+            color: var(--color-btn-danger-text) !important;
+        }
+
+        [data-color-mode="dark"] .delete-button:hover {
+            background-color: var(--color-btn-danger-hover-bg) !important;
+        }
+
+        /* Force specific background for main containers */
+        [data-color-mode="dark"] .main-container,
+        [data-color-mode="dark"] .tab-content {
+            background-color: var(--color-canvas-default) !important;
+        }
+
+        /* Force tab navigation styling */
+        [data-color-mode="dark"] .tab-navigation {
+            background-color: var(--color-canvas-default) !important;
+            border-color: var(--color-border-default) !important;
+        }
+
+        [data-color-mode="dark"] .tab-button {
+            background: transparent !important;
+            color: var(--color-fg-muted) !important;
+            border: 1px solid transparent !important;
+            border-bottom: 3px solid transparent !important;
+        }
+
+        [data-color-mode="dark"] .tab-button:hover {
+            color: var(--color-fg-default) !important;
+            border-bottom-color: var(--color-border-muted) !important;
+            background: rgba(240, 246, 252, 0.05) !important;
+        }
+
+        [data-color-mode="dark"] .tab-button.active {
+            background: linear-gradient(135deg, rgba(9, 105, 218, 0.15) 0%, rgba(5, 80, 174, 0.08) 100%) !important;
+            color: var(--color-fg-default) !important;
+            border: 1px solid rgba(9, 105, 218, 0.3) !important;
+            border-bottom: 4px solid #0969da !important;
+            box-shadow: 0 4px 12px rgba(9, 105, 218, 0.2) !important;
+            transform: translateY(-1px) !important;
+            position: relative !important;
+        }
+
+        [data-color-mode="dark"] .tab-button.active::after {
+            content: '' !important;
+            position: absolute !important;
+            bottom: -4px !important;
+            left: 0 !important;
+            right: 0 !important;
+            height: 2px !important;
+            background: linear-gradient(90deg, #0969da 0%, #0550ae 100%) !important;
+            border-radius: 1px !important;
+        }
+
+        [data-color-mode="dark"] .tab-button.active i {
+            color: #0969da !important;
+        }
+
+        /* Complete dark mode coverage for ALL pages */
+        [data-color-mode="dark"] {
+            color-scheme: dark;
+        }
+
+        /* Force dark mode on Users page and all other pages */
+        [data-color-mode="dark"] .container,
+        [data-color-mode="dark"] .row,
+        [data-color-mode="dark"] .col,
+        [data-color-mode="dark"] .card-body,
+        [data-color-mode="dark"] .list-group,
+        [data-color-mode="dark"] .list-group-item,
+        [data-color-mode="dark"] .table,
+        [data-color-mode="dark"] .table td,
+        [data-color-mode="dark"] .table th,
+        [data-color-mode="dark"] .table-responsive {
+            background-color: var(--color-canvas-default) !important;
+            border-color: var(--color-border-default) !important;
+            color: var(--color-fg-default) !important;
+        }
+
+        /* Bootstrap components dark mode */
+        [data-color-mode="dark"] .btn-primary {
+            background-color: var(--color-btn-primary-bg) !important;
+            border-color: var(--color-btn-primary-border) !important;
+            color: var(--color-btn-primary-text) !important;
+        }
+
+        [data-color-mode="dark"] .btn-danger {
+            background-color: var(--color-btn-danger-bg) !important;
+            border-color: var(--color-btn-danger-border) !important;
+            color: var(--color-btn-danger-text) !important;
+        }
+
+        [data-color-mode="dark"] .btn-secondary,
+        [data-color-mode="dark"] .btn {
+            background-color: var(--color-btn-bg) !important;
+            border-color: var(--color-btn-border) !important;
+            color: var(--color-btn-text) !important;
+        }
+
+        /* Users page specific styling */
+        [data-color-mode="dark"] .user-item,
+        [data-color-mode="dark"] .user-card,
+        [data-color-mode="dark"] .badge {
+            background-color: var(--color-canvas-subtle) !important;
+            border-color: var(--color-border-default) !important;
+            color: var(--color-fg-default) !important;
+        }
+
+        [data-color-mode="dark"] .badge-primary {
+            background-color: var(--color-accent-emphasis) !important;
+            color: #ffffff !important;
+        }
+
+        [data-color-mode="dark"] .badge-success {
+            background-color: var(--color-success-emphasis) !important;
+            color: #ffffff !important;
+        }
+
+        [data-color-mode="dark"] .badge-danger {
+            background-color: var(--color-danger-emphasis) !important;
+            color: #ffffff !important;
+        }
+
+        /* Whitelist page specific styling */
+        [data-color-mode="dark"] .alert,
+        [data-color-mode="dark"] .alert-info,
+        [data-color-mode="dark"] .alert-success,
+        [data-color-mode="dark"] .alert-danger,
+        [data-color-mode="dark"] .alert-warning {
+            border-color: var(--color-border-default) !important;
+            color: var(--color-fg-default) !important;
+        }
+
+        [data-color-mode="dark"] .alert-info {
+            background-color: rgba(9, 105, 218, 0.1) !important;
+            border-color: var(--color-accent-emphasis) !important;
+            color: var(--color-accent-fg) !important;
+        }
+
+        [data-color-mode="dark"] .alert-success {
+            background-color: rgba(45, 164, 78, 0.1) !important;
+            border-color: var(--color-success-emphasis) !important;
+            color: var(--color-success-fg) !important;
+        }
+
+        [data-color-mode="dark"] .alert-danger {
+            background-color: rgba(218, 54, 51, 0.1) !important;
+            border-color: var(--color-danger-emphasis) !important;
+            color: var(--color-danger-fg) !important;
+        }
+
+        [data-color-mode="dark"] .alert-warning {
+            background-color: rgba(251, 133, 0, 0.1) !important;
+            border-color: var(--color-warning-emphasis) !important;
+            color: var(--color-warning-fg) !important;
+        }
+
+        /* Force all white backgrounds to dark */
+        [data-color-mode="dark"] *[style*="background: white"],
+        [data-color-mode="dark"] *[style*="background-color: white"],
+        [data-color-mode="dark"] *[style*="background: #fff"],
+        [data-color-mode="dark"] *[style*="background-color: #fff"],
+        [data-color-mode="dark"] *[style*="background: #ffffff"],
+        [data-color-mode="dark"] *[style*="background-color: #ffffff"] {
+            background-color: var(--color-canvas-default) !important;
+        }
+
+        /* Specific fixes for Domain Summary and Users List sections */
+        [data-color-mode="dark"] .domain-summary,
+        [data-color-mode="dark"] .domain-summary *,
+        [data-color-mode="dark"] .domain-summary-header,
+        [data-color-mode="dark"] .domain-summary-header *,
+        [data-color-mode="dark"] .users-list-section,
+        [data-color-mode="dark"] .users-list-section *,
+        [data-color-mode="dark"] .users-list-header,
+        [data-color-mode="dark"] .users-list-header *,
+        [data-color-mode="dark"] .users-list-content,
+        [data-color-mode="dark"] .users-list-content *,
+        [data-color-mode="dark"] .status-box,
+        [data-color-mode="dark"] .status-box *,
+        [data-color-mode="dark"] .count-display,
+        [data-color-mode="dark"] .count-display *,
+        [data-color-mode="dark"] .status-info,
+        [data-color-mode="dark"] .status-info * {
+            background-color: var(--color-canvas-default) !important;
+            color: var(--color-fg-default) !important;
+            border-color: var(--color-border-default) !important;
+        }
+
+        /* Force white backgrounds in dark mode to be dark */
+        [data-color-mode="dark"] [style*="background: white"],
+        [data-color-mode="dark"] [style*="background-color: white"],
+        [data-color-mode="dark"] [style*="background: #fff"],
+        [data-color-mode="dark"] [style*="background-color: #fff"],
+        [data-color-mode="dark"] [style*="background: #ffffff"],
+        [data-color-mode="dark"] [style*="background-color: #ffffff"] {
+            background-color: var(--color-canvas-default) !important;
+            color: var(--color-fg-default) !important;
+        }
+
+        /* Force light grey text in dark mode to be white */
+        [data-color-mode="dark"] [style*="color: #656d76"],
+        [data-color-mode="dark"] [style*="color: #8b949e"],
+        [data-color-mode="dark"] [style*="color: #6a737d"],
+        [data-color-mode="dark"] [style*="color: #7d8590"],
+        [data-color-mode="dark"] [style*="color: #8c959f"] {
+            color: var(--color-fg-default) !important;
+        }
+
+        /* Additional specific fixes for common white background elements */
+        [data-color-mode="dark"] .card,
+        [data-color-mode="dark"] .card-header,
+        [data-color-mode="dark"] .card-body,
+        [data-color-mode="dark"] .card-footer,
+        [data-color-mode="dark"] .github-card,
+        [data-color-mode="dark"] .github-card-header,
+        [data-color-mode="dark"] .github-card-body,
+        [data-color-mode="dark"] .github-card-footer,
+        [data-color-mode="dark"] .section,
+        [data-color-mode="dark"] .section-header,
+        [data-color-mode="dark"] .section-content,
+        [data-color-mode="dark"] .container,
+        [data-color-mode="dark"] .container-fluid,
+        [data-color-mode="dark"] .row,
+        [data-color-mode="dark"] .col,
+        [data-color-mode="dark"] .col-*,
+        [data-color-mode="dark"] .grid-container,
+        [data-color-mode="dark"] .grid-item,
+        [data-color-mode="dark"] .summary-card,
+        [data-color-mode="dark"] .stats-container,
+        [data-color-mode="dark"] .details-container {
+            background-color: var(--color-canvas-default) !important;
+            color: var(--color-fg-default) !important;
+            border-color: var(--color-border-default) !important;
+        }
+
+        /* Force all text elements to be white in dark mode */
+        [data-color-mode="dark"] .card *,
+        [data-color-mode="dark"] .github-card *,
+        [data-color-mode="dark"] .section *,
+        [data-color-mode="dark"] .container *,
+        [data-color-mode="dark"] .row *,
+        [data-color-mode="dark"] .col *,
+        [data-color-mode="dark"] .grid-container *,
+        [data-color-mode="dark"] .grid-item *,
+        [data-color-mode="dark"] .summary-card *,
+        [data-color-mode="dark"] .stats-container *,
+        [data-color-mode="dark"] .details-container * {
+            color: var(--color-fg-default) !important;
+        }
+
+        /* Comprehensive dark mode override for any remaining white backgrounds */
+        [data-color-mode="dark"] div[style*="background"],
+        [data-color-mode="dark"] section[style*="background"],
+        [data-color-mode="dark"] article[style*="background"],
+        [data-color-mode="dark"] aside[style*="background"],
+        [data-color-mode="dark"] header[style*="background"],
+        [data-color-mode="dark"] main[style*="background"],
+        [data-color-mode="dark"] footer[style*="background"] {
+            background-color: var(--color-canvas-default) !important;
+            color: var(--color-fg-default) !important;
+        }
+
+        /* Force all child elements to inherit proper colors */
+        [data-color-mode="dark"] div[style*="background"] *,
+        [data-color-mode="dark"] section[style*="background"] *,
+        [data-color-mode="dark"] article[style*="background"] *,
+        [data-color-mode="dark"] aside[style*="background"] *,
+        [data-color-mode="dark"] header[style*="background"] *,
+        [data-color-mode="dark"] main[style*="background"] *,
+        [data-color-mode="dark"] footer[style*="background"] * {
+            color: var(--color-fg-default) !important;
+        }
+
+        /* NUCLEAR OPTION - Force specific problematic elements to dark */
+        [data-color-mode="dark"] div[style*="background-color: white"],
+        [data-color-mode="dark"] div[style*="background: white"],
+        [data-color-mode="dark"] section[style*="background-color: white"],
+        [data-color-mode="dark"] section[style*="background: white"],
+        [data-color-mode="dark"] .github-card[style*="background"],
+        [data-color-mode="dark"] .card[style*="background"],
+        [data-color-mode="dark"] .container[style*="background"] {
+            background-color: #1a1a1a !important;
+            color: #ffffff !important;
+        }
+
+        /* Override specific white background elements */
+        [data-color-mode="dark"] div[style*="background: white"],
+        [data-color-mode="dark"] div[style*="background-color: white"],
+        [data-color-mode="dark"] div[style*="background: #fff"],
+        [data-color-mode="dark"] div[style*="background-color: #fff"],
+        [data-color-mode="dark"] div[style*="background: #ffffff"],
+        [data-color-mode="dark"] div[style*="background-color: #ffffff"],
+        [data-color-mode="dark"] section[style*="background: white"],
+        [data-color-mode="dark"] section[style*="background-color: white"],
+        [data-color-mode="dark"] section[style*="background: #fff"],
+        [data-color-mode="dark"] section[style*="background-color: #fff"],
+        [data-color-mode="dark"] section[style*="background: #ffffff"],
+        [data-color-mode="dark"] section[style*="background-color: #ffffff"] {
+            background-color: var(--color-canvas-default) !important;
+            color: var(--color-fg-default) !important;
+        }
+
+        /* Force all text in white backgrounds to be white */
+        [data-color-mode="dark"] div[style*="background: white"] *,
+        [data-color-mode="dark"] div[style*="background-color: white"] *,
+        [data-color-mode="dark"] div[style*="background: #fff"] *,
+        [data-color-mode="dark"] div[style*="background-color: #fff"] *,
+        [data-color-mode="dark"] section[style*="background: white"] *,
+        [data-color-mode="dark"] section[style*="background-color: white"] *,
+        [data-color-mode="dark"] section[style*="background: #fff"] *,
+        [data-color-mode="dark"] section[style*="background-color: #fff"] * {
+            color: var(--color-fg-default) !important;
+        }
+
+        /* Target specific classes that might be causing white backgrounds */
+        [data-color-mode="dark"] .github-card,
+        [data-color-mode="dark"] .github-card-header,
+        [data-color-mode="dark"] .github-card-body,
+        [data-color-mode="dark"] .github-card-footer,
+        [data-color-mode="dark"] .card,
+        [data-color-mode="dark"] .card-header,
+        [data-color-mode="dark"] .card-body,
+        [data-color-mode="dark"] .card-footer,
+        [data-color-mode="dark"] .container,
+        [data-color-mode="dark"] .container-fluid,
+        [data-color-mode="dark"] .row,
+        [data-color-mode="dark"] .col,
+        [data-color-mode="dark"] .col-*,
+        [data-color-mode="dark"] .grid-container,
+        [data-color-mode="dark"] .grid-item,
+        [data-color-mode="dark"] .summary-card,
+        [data-color-mode="dark"] .stats-container,
+        [data-color-mode="dark"] .details-container,
+        [data-color-mode="dark"] .domain-summary,
+        [data-color-mode="dark"] .users-list-section,
+        [data-color-mode="dark"] .users-list-content,
+        [data-color-mode="dark"] .status-box,
+        [data-color-mode="dark"] .count-display,
+        [data-color-mode="dark"] .status-info {
+            background-color: #1a1a1a !important;
+            color: #ffffff !important;
+            border-color: #333333 !important;
+        }
+
+        /* Force all child elements to be white text */
+        [data-color-mode="dark"] .github-card *,
+        [data-color-mode="dark"] .card *,
+        [data-color-mode="dark"] .container *,
+        [data-color-mode="dark"] .row *,
+        [data-color-mode="dark"] .col *,
+        [data-color-mode="dark"] .grid-container *,
+        [data-color-mode="dark"] .grid-item *,
+        [data-color-mode="dark"] .summary-card *,
+        [data-color-mode="dark"] .stats-container *,
+        [data-color-mode="dark"] .details-container *,
+        [data-color-mode="dark"] .domain-summary *,
+        [data-color-mode="dark"] .users-list-section *,
+        [data-color-mode="dark"] .users-list-content *,
+        [data-color-mode="dark"] .status-box *,
+        [data-color-mode="dark"] .count-display *,
+        [data-color-mode="dark"] .status-info * {
+            color: #ffffff !important;
+        }
+
+        /* FINAL NUCLEAR OPTION - Override ANY white background with hard-coded dark */
+        [data-color-mode="dark"] *[style*="background-color: white"],
+        [data-color-mode="dark"] *[style*="background: white"],
+        [data-color-mode="dark"] *[style*="background-color: #fff"],
+        [data-color-mode="dark"] *[style*="background: #fff"],
+        [data-color-mode="dark"] *[style*="background-color: #ffffff"],
+        [data-color-mode="dark"] *[style*="background: #ffffff"] {
+            background-color: #1a1a1a !important;
+            color: #ffffff !important;
+        }
+
+        /* Force ALL elements with white backgrounds to have white text */
+        [data-color-mode="dark"] *[style*="background-color: white"] *,
+        [data-color-mode="dark"] *[style*="background: white"] *,
+        [data-color-mode="dark"] *[style*="background-color: #fff"] *,
+        [data-color-mode="dark"] *[style*="background: #fff"] *,
+        [data-color-mode="dark"] *[style*="background-color: #ffffff"] *,
+        [data-color-mode="dark"] *[style*="background: #ffffff"] * {
+            color: #ffffff !important;
+        }
+
+        /* SPECIFIC FIXES for the exact HTML structure provided */
+        /* Domain Summary grid containers */
+        [data-color-mode="dark"] div[style*="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr))"] {
+            background-color: #1a1a1a !important;
+        }
+
+        [data-color-mode="dark"] div[style*="text-align: center; padding: 8px; background: white"] {
+            background-color: #2a2a2a !important;
+            color: #ffffff !important;
+            border: 1px solid #444444 !important;
+        }
+
+        [data-color-mode="dark"] div[style*="text-align: center; padding: 8px; background: white"] div {
+            color: #ffffff !important;
+        }
+
+        [data-color-mode="dark"] div[style*="color: #666"] {
+            color: #cccccc !important;
+        }
+
+        /* Users List section fixes */
+        [data-color-mode="dark"] .github-card-header[style*="background: linear-gradient(135deg, #f6f8fa 0%, #e1e8ed 100%)"] {
+            background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%) !important;
+            border-bottom-color: #444444 !important;
+        }
+
+        [data-color-mode="dark"] .github-card-title[style*="color: #24292f"] {
+            color: #ffffff !important;
+        }
+
+        [data-color-mode="dark"] div[style*="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)"] {
+            background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%) !important;
+            border-color: #444444 !important;
+        }
+
+        /* Status boxes with gradients */
+        [data-color-mode="dark"] div[style*="background: linear-gradient(135deg, #f6f8fa 0%, #e9ecef 100%)"] {
+            background: linear-gradient(135deg, #3a3a3a 0%, #2a2a2a 100%) !important;
+            border-color: #555555 !important;
+        }
+
+        [data-color-mode="dark"] div[style*="background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)"] {
+            background: linear-gradient(135deg, #1a4d1a 0%, #0d3d0d 100%) !important;
+            border-color: #2d5a2d !important;
+        }
+
+        [data-color-mode="dark"] div[style*="background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)"] {
+            background: linear-gradient(135deg, #4d1a1a 0%, #3d0d0d 100%) !important;
+            border-color: #5a2d2d !important;
+        }
+
+        [data-color-mode="dark"] div[style*="background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)"] {
+            background: linear-gradient(135deg, #1a2a4d 0%, #0d1a3d 100%) !important;
+            border-color: #2d3a5a !important;
+        }
+
+        /* Force all text in these elements to be white */
+        [data-color-mode="dark"] div[style*="background: linear-gradient"] span,
+        [data-color-mode="dark"] div[style*="background: linear-gradient"] div {
+            color: #ffffff !important;
+        }
+
+        /* Icons in dark mode */
+        [data-color-mode="dark"] .fas {
+            color: #ffffff !important;
+        }
+
+        /* Force all black text on white backgrounds to appropriate dark mode colors */
+        [data-color-mode="dark"] *[style*="color: black"],
+        [data-color-mode="dark"] *[style*="color: #000"],
+        [data-color-mode="dark"] *[style*="color: #000000"] {
+            color: var(--color-fg-default) !important;
+        }
+
+        /* Ensure all containers have proper dark backgrounds */
+        [data-color-mode="dark"] .content,
+        [data-color-mode="dark"] .page-content,
+        [data-color-mode="dark"] .main-content,
+        [data-color-mode="dark"] .container-fluid {
+            background-color: var(--color-canvas-default) !important;
+            color: var(--color-fg-default) !important;
+        }
+
+        /* Override specific inline styles in dark mode */
+        [data-color-mode="dark"] *[style*="background: #fff8c5"],
+        [data-color-mode="dark"] *[style*="background-color: #fff8c5"] {
+            background-color: rgba(251, 133, 0, 0.1) !important;
+        }
+
+        [data-color-mode="dark"] *[style*="color: #656d76"] {
+            color: var(--color-fg-muted) !important;
+        }
+
+        [data-color-mode="dark"] *[style*="color: #7d4e00"] {
+            color: var(--color-warning-fg) !important;
+        }
+
+        [data-color-mode="dark"] *[style*="background: #f6f8fa"],
+        [data-color-mode="dark"] *[style*="background-color: #f6f8fa"] {
+            background-color: var(--color-canvas-subtle) !important;
+        }
+
+        /* Force all elements with inline styles to be dark mode friendly */
+        [data-color-mode="dark"] [style] {
+            background-color: var(--color-canvas-default) !important;
+            color: var(--color-fg-default) !important;
+        }
+
+        /* EMERGENCY FIX: Completely disable problematic modals */
+        #testConnectionModal,
+        #deleteConfirmModal {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+
+        /* Hide modal backdrops */
+        .modal-backdrop {
+            display: none !important;
+        }
+
+        /* Ensure body is not locked */
+        body.modal-open {
+            overflow: auto !important;
+            padding-right: 0 !important;
+        }
+
+        /* Button colors are preserved through specific selectors below */
+
+        /* Fix specific GitHub card styles in templates */
+        [data-color-mode="dark"] .github-card[style*="background"] {
+            background-color: var(--color-canvas-default) !important;
+        }
+
+        /* Comprehensive dark mode for all containers and cards */
+        [data-color-mode="dark"] .github-card,
+        [data-color-mode="dark"] .github-card-header,
+        [data-color-mode="dark"] .github-card-body,
+        [data-color-mode="dark"] .card,
+        [data-color-mode="dark"] .container,
+        [data-color-mode="dark"] .section,
+        [data-color-mode="dark"] .data-display,
+        [data-color-mode="dark"] .status-box,
+        [data-color-mode="dark"] .count-display,
+        [data-color-mode="dark"] .status-info,
+        [data-color-mode="dark"] .account-list,
+        [data-color-mode="dark"] .search-input,
+        [data-color-mode="dark"] .results-log,
+        [data-color-mode="dark"] .domain-list,
+        [data-color-mode="dark"] .domain-summary,
+        [data-color-mode="dark"] .domain-details,
+        [data-color-mode="dark"] .summary-card,
+        [data-color-mode="dark"] .stats-container,
+        [data-color-mode="dark"] .details-container {
+            background-color: var(--color-canvas-default) !important;
+            color: var(--color-fg-default) !important;
+            border-color: var(--color-border-default) !important;
+        }
+
+        /* Dark mode text colors */
+        [data-color-mode="dark"] .github-card-title,
+        [data-color-mode="dark"] .github-card-header h1,
+        [data-color-mode="dark"] .github-card-header h2,
+        [data-color-mode="dark"] .github-card-header h3,
+        [data-color-mode="dark"] .github-card-header h4,
+        [data-color-mode="dark"] .github-card-header h5,
+        [data-color-mode="dark"] .github-card-header h6,
+        [data-color-mode="dark"] .github-card-body,
+        [data-color-mode="dark"] .github-card-body p,
+        [data-color-mode="dark"] .github-card-body span,
+        [data-color-mode="dark"] .github-card-body div,
+        [data-color-mode="dark"] .github-card-body td,
+        [data-color-mode="dark"] .github-card-body th,
+        [data-color-mode="dark"] .github-card-body label,
+        [data-color-mode="dark"] .github-card-body small {
+            color: var(--color-fg-default) !important;
+        }
+
+        /* Dark mode for specific elements that might have light text */
+        [data-color-mode="dark"] .text-muted,
+        [data-color-mode="dark"] .text-secondary,
+        [data-color-mode="dark"] .text-light,
+        [data-color-mode="dark"] .text-gray,
+        [data-color-mode="dark"] .text-grey {
+            color: var(--color-fg-muted) !important;
+        }
+
+        /* Dark mode for tables and lists */
+        [data-color-mode="dark"] table,
+        [data-color-mode="dark"] .table,
+        [data-color-mode="dark"] .table th,
+        [data-color-mode="dark"] .table td,
+        [data-color-mode="dark"] .table tr,
+        [data-color-mode="dark"] .list-group,
+        [data-color-mode="dark"] .list-group-item,
+        [data-color-mode="dark"] .list-item,
+        [data-color-mode="dark"] .domain-item,
+        [data-color-mode="dark"] .user-item,
+        [data-color-mode="dark"] .account-item {
+            background-color: var(--color-canvas-default) !important;
+            color: var(--color-fg-default) !important;
+            border-color: var(--color-border-default) !important;
+        }
+
+        /* Dark mode for form elements */
+        [data-color-mode="dark"] .form-control,
+        [data-color-mode="dark"] .form-control-github,
+        [data-color-mode="dark"] .form-select,
+        [data-color-mode="dark"] input,
+        [data-color-mode="dark"] textarea,
+        [data-color-mode="dark"] select {
+            background-color: var(--color-canvas-subtle) !important;
+            color: var(--color-fg-default) !important;
+            border-color: var(--color-border-default) !important;
+        }
+
+        /* Dark mode for buttons */
+        [data-color-mode="dark"] .btn-github,
+        [data-color-mode="dark"] .btn-github-primary,
+        [data-color-mode="dark"] .btn-github-secondary {
+            background-color: var(--color-btn-bg) !important;
+            color: var(--color-btn-text) !important;
+            border-color: var(--color-btn-border) !important;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html {
+            background-color: var(--color-canvas-default);
+            transition: background-color 0.3s ease;
+            min-height: 100vh;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Roboto", "Helvetica Neue", Arial, sans-serif;
+            font-size: 14px;
+            line-height: 1.6;
+            font-weight: 400;
+            letter-spacing: -0.01em;
+            background-color: var(--color-canvas-subtle);
+            color: var(--color-fg-default);
+            margin: 0;
+            min-height: 100vh;
+            transition: all 0.3s ease;
+            width: 100%;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* Ensure all containers inherit background and cover full width */
+        .main-container {
+            background-color: var(--color-canvas-subtle);
+            width: 100%;
+            min-height: calc(100vh - 80px);
+            padding: var(--spacing-lg);
+        }
+
+        /* Force full-width background coverage */
+        [data-color-mode="dark"] html,
+        [data-color-mode="dark"] body {
+            background-color: var(--color-canvas-default) !important;
+        }
+
+        /* Add dark blue-purple gradient for dark mode side areas */
+        [data-color-mode="dark"] body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background:
+                radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.08) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(255, 119, 198, 0.08) 0%, transparent 50%),
+                linear-gradient(135deg, #0d1117 0%, #161b22 30%, #1a1f2e 70%, #1e2337 100%);
+            z-index: -1;
+        }
+
+        /* Enhanced main container with better styling */
+        [data-color-mode="dark"] .main-container {
+            background-color: var(--color-canvas-default) !important;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Sidebar Layout */
+        body {
+            display: flex;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+        }
+
+        /* ============================================
+           SIDEBAR - COMPLETE REFACTOR
+           ============================================ */
+
+        /* Left Sidebar - Modern ClickUp Design */
+        .sidebar {
+            background: var(--color-canvas-default);
+            border-right: 1px solid var(--color-border-default);
+            position: fixed;
+            left: 0;
+            top: 0;
+            height: 100vh;
+            width: 260px;
+            z-index: 1000;
+            transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow-y: auto;
+            overflow-x: hidden;
+            box-shadow: 2px 0 8px var(--color-shadow);
+            display: flex;
+            flex-direction: column;
+        }
+
+        [data-color-mode="light"] .sidebar {
+            background: var(--color-canvas-default);
+            border-right: 1px solid var(--color-border-default);
+            box-shadow: 2px 0 8px var(--color-shadow);
+        }
+
+        .sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .sidebar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb {
+            background: rgba(240, 246, 252, 0.3);
+            border-radius: 3px;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb:hover {
+            background: rgba(240, 246, 252, 0.5);
+        }
+
+        .sidebar.collapsed {
+            width: 64px;
+        }
+
+        .sidebar-header {
+            padding: var(--spacing-lg) var(--spacing-md);
+            border-bottom: 1px solid var(--color-border-default);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            min-height: 64px;
+            background: transparent;
+            flex-wrap: wrap;
+            gap: var(--spacing-sm);
+        }
+
+        .sidebar.collapsed .sidebar-header {
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: center;
+            padding: 16px 8px;
+        }
+
+        .sidebar.collapsed .sidebar-header .sidebar-logo {
+            margin-bottom: 12px;
+            width: 100%;
+            justify-content: center;
+        }
+
+        .sidebar.collapsed .sidebar-header .sidebar-toggle {
+            width: 100%;
+            order: 2;
+        }
+
+        .sidebar.collapsed .sidebar-header .sidebar-logo {
+            order: 1;
+        }
+
+        .sidebar-logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: var(--color-header-text);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            flex: 1;
+        }
+
+        .sidebar.collapsed .sidebar-logo span {
+            display: none;
+        }
+
+        .sidebar-logo i {
+            font-size: 28px;
+            background: linear-gradient(135deg, #0969da 0%, #0550ae 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            min-width: 28px;
+            filter: drop-shadow(0 2px 4px rgba(9, 105, 218, 0.3));
+        }
+
+        .sidebar-logo span {
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+
+        .sidebar-toggle {
+            background: linear-gradient(135deg, rgba(240, 246, 252, 0.1) 0%, rgba(240, 246, 252, 0.05) 100%);
+            border: 1px solid rgba(240, 246, 252, 0.2);
+            color: rgba(255, 255, 255, 0.9);
+            padding: 8px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 38px;
+            height: 38px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            flex-shrink: 0;
+        }
+
+        [data-color-mode="light"] .sidebar-toggle {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            color: rgba(99, 102, 241, 0.9);
+        }
+
+        .sidebar.collapsed .sidebar-toggle {
+            width: 100%;
+            margin-top: 8px;
+        }
+
+        .sidebar-toggle:hover {
+            background: linear-gradient(135deg, rgba(240, 246, 252, 0.2) 0%, rgba(240, 246, 252, 0.12) 100%);
+            transform: scale(1.08) rotate(90deg);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            border-color: rgba(240, 246, 252, 0.3);
+            color: rgba(255, 255, 255, 1);
+        }
+
+        [data-color-mode="light"] .sidebar-toggle:hover {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(139, 92, 246, 0.2) 100%);
+            border-color: rgba(99, 102, 241, 0.5);
+            color: rgba(99, 102, 241, 1);
+        }
+
+        /* Sidebar Navigation */
+        .sidebar-nav {
+            flex: 1;
+            padding: 12px 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        /* Navigation Item Wrapper - Contains Dashboard + Dropdown */
+        .nav-item-wrapper {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            margin-bottom: 4px;
+        }
+
+        /* When dropdown is open, wrapper expands to push items below */
+        .nav-item-wrapper.is-open {
+            margin-bottom: 12px;
+        }
+
+        /* Navigation Items */
+        .nav-item {
+            color: var(--color-fg-muted);
+            text-decoration: none;
+            padding: 10px 12px;
+            border-radius: var(--radius-md);
+            font-weight: 500;
+            font-size: 14px;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            white-space: nowrap;
+            position: relative;
+            background: transparent;
+            border: none;
+            margin-bottom: 0;
+            letter-spacing: -0.01em;
+        }
+
+        .sidebar.collapsed .nav-item span {
+            display: none;
+        }
+
+        .nav-item:hover {
+            background: var(--color-canvas-subtle);
+            color: var(--color-fg-default);
+            text-decoration: none;
+            transform: none;
+        }
+
+        .nav-item.active {
+            background: var(--color-canvas-subtle);
+            color: var(--color-accent-fg);
+            font-weight: 600;
+        }
+
+        [data-color-mode="light"] .nav-item.active {
+            background: rgba(99, 102, 241, 0.08);
+            color: var(--color-accent-fg);
+        }
+
+        .nav-item.active::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 3px;
+            height: 20px;
+            background: linear-gradient(180deg, #6366f1 0%, #4f46e5 100%);
+            border-radius: 0 3px 3px 0;
+        }
+
+        .nav-item i {
+            font-size: 18px;
+            transition: all 0.3s ease;
+            min-width: 18px;
+            text-align: center;
+        }
+
+        .nav-item:hover i {
+            transform: scale(1.1);
+        }
+
+        /* Dropdown Toggle Icon */
+        .dropdown-toggle {
+            margin-left: auto;
+            transition: transform 0.3s ease;
+            font-size: 11px;
+            opacity: 0.6;
+            pointer-events: none;
+        }
+
+        .nav-item.has-dropdown .dropdown-toggle {
+            pointer-events: auto;
+        }
+
+        .nav-item.has-dropdown.is-open .dropdown-toggle {
+            transform: rotate(180deg);
+            opacity: 1;
+        }
+
+        .nav-item.has-dropdown:hover .dropdown-toggle {
+            opacity: 1;
+        }
+
+        .sidebar.collapsed .dropdown-toggle {
+            display: none;
+        }
+
+        /* Dropdown Menu - Clean Implementation */
+        .dropdown-menu {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.25s ease,
+                padding 0.35s ease,
+                margin-bottom 0.35s ease;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            opacity: 0;
+            visibility: hidden;
+            width: 100%;
+            background: transparent;
+            position: relative;
+        }
+
+        /* Dropdown Menu - Open State */
+        .nav-item-wrapper.is-open .dropdown-menu,
+        .dropdown-menu.is-open {
+            max-height: 500px;
+            opacity: 1;
+            visibility: visible;
+            padding: 4px 0;
+            margin-bottom: 8px;
+            overflow: visible;
+        }
+
+        .sidebar.collapsed .dropdown-menu {
+            display: none !important;
+        }
+
+        .dropdown-item {
+            padding: 8px 12px 8px 36px;
+            border-radius: 6px;
+            background: transparent;
+            border: none;
+            color: rgba(255, 255, 255, 0.7);
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 2px;
+            margin-top: 0;
+        }
+
+        [data-color-mode="light"] .dropdown-item {
+            color: rgba(0, 0, 0, 0.65);
+        }
+
+        .dropdown-item::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%) scaleY(0);
+            width: 2px;
+            height: 16px;
+            background: linear-gradient(180deg, #6366f1 0%, #4f46e5 100%);
+            border-radius: 0 2px 2px 0;
+            transition: transform 0.2s ease;
+        }
+
+        .dropdown-item:hover {
+            background: rgba(255, 255, 255, 0.06);
+            color: rgba(255, 255, 255, 0.95);
+            text-decoration: none;
+            transform: none;
+        }
+
+        [data-color-mode="light"] .dropdown-item:hover {
+            background: rgba(0, 0, 0, 0.03);
+            color: rgba(0, 0, 0, 0.85);
+        }
+
+        .dropdown-item:hover::before {
+            transform: translateY(-50%) scaleY(1);
+        }
+
+        .dropdown-item.active {
+            background: rgba(99, 102, 241, 0.12);
+            color: rgba(255, 255, 255, 1);
+            font-weight: 600;
+        }
+
+        [data-color-mode="light"] .dropdown-item.active {
+            background: rgba(99, 102, 241, 0.08);
+            color: rgba(99, 102, 241, 1);
+        }
+
+        .dropdown-item.active::before {
+            transform: translateY(-50%) scaleY(1);
+        }
+
+        .dropdown-item i {
+            font-size: 16px;
+            min-width: 16px;
+            color: inherit;
+        }
+
+        .dropdown-item span {
+            color: inherit;
+        }
+
+        .sidebar.collapsed .dropdown-item {
+            padding-left: 16px;
+        }
+
+        .sidebar-footer {
+            padding: 16px 12px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: auto;
+            background: transparent;
+        }
+
+        [data-color-mode="light"] .sidebar-footer {
+            border-top: 1px solid rgba(0, 0, 0, 0.08);
+        }
+
+        .sidebar.collapsed .sidebar-footer .sidebar-user-info span {
+            display: none;
+        }
+
+        .sidebar.collapsed .sidebar-footer .btn-logout span {
+            display: none;
+        }
+
+        .sidebar-user-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            color: rgba(255, 255, 255, 0.85);
+            border: none;
+            transition: all 0.2s ease;
+            justify-content: flex-start;
+        }
+
+        [data-color-mode="light"] .sidebar-user-info {
+            background: rgba(0, 0, 0, 0.03);
+            color: rgba(0, 0, 0, 0.75);
+        }
+
+        .sidebar.collapsed .sidebar-user-info {
+            padding: 10px;
+            justify-content: center;
+        }
+
+        .sidebar-user-info:hover {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        [data-color-mode="light"] .sidebar-user-info:hover {
+            background: rgba(0, 0, 0, 0.05);
+        }
+
+        .sidebar-user-info i {
+            font-size: 16px;
+            min-width: 16px;
+        }
+
+        .sidebar-footer-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .sidebar.collapsed .sidebar-footer-actions {
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .sidebar.collapsed .sidebar-footer-actions .btn-logout {
+            width: 100%;
+        }
+
+        .theme-toggle {
+            background: rgba(255, 255, 255, 0.05);
+            border: none;
+            color: rgba(255, 255, 255, 0.85);
+            padding: 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 40px;
+        }
+
+        [data-color-mode="light"] .theme-toggle {
+            background: rgba(0, 0, 0, 0.03);
+            color: rgba(0, 0, 0, 0.75);
+        }
+
+        .sidebar.collapsed .theme-toggle {
+            width: 40px;
+        }
+
+        .theme-toggle:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: none;
+        }
+
+        [data-color-mode="light"] .theme-toggle:hover {
+            background: rgba(0, 0, 0, 0.06);
+        }
+
+        .btn-logout {
+            background: rgba(239, 68, 68, 0.15);
+            color: rgba(239, 68, 68, 1);
+            border: none;
+            padding: 10px 12px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 13px;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            flex: 1;
+            box-shadow: none;
+            position: relative;
+            overflow: hidden;
+        }
+
+        [data-color-mode="light"] .btn-logout {
+            background: rgba(239, 68, 68, 0.1);
+            color: rgba(220, 38, 38, 1);
+        }
+
+        .sidebar.collapsed .btn-logout {
+            padding: 10px;
+            justify-content: center;
+        }
+
+        .btn-logout:hover {
+            background: rgba(239, 68, 68, 0.2);
+            color: rgba(239, 68, 68, 1);
+            text-decoration: none;
+            transform: none;
+            box-shadow: none;
+        }
+
+        [data-color-mode="light"] .btn-logout:hover {
+            background: rgba(239, 68, 68, 0.15);
+        }
+
+        .btn-logout span {
+            display: none;
+        }
+
+        .btn-logout i {
+            font-size: 16px;
+        }
+
+        /* Scroll to Top Button */
+        .scroll-to-top {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, #0969da 0%, #0550ae 100%);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            box-shadow: 0 4px 12px rgba(9, 105, 218, 0.4);
+            z-index: 9999;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            opacity: 0;
+            transform: scale(0.8);
+        }
+
+        .scroll-to-top.visible {
+            display: flex !important;
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .scroll-to-top:hover {
+            background: linear-gradient(135deg, #0550ae 0%, #033d85 100%);
+            transform: scale(1.1);
+            box-shadow: 0 6px 20px rgba(9, 105, 218, 0.5);
+        }
+
+        .scroll-to-top:active {
+            transform: scale(0.95);
+        }
+
+        .scroll-to-top i {
+            color: white;
+        }
+
+        /* Main Content Area - Modern Unboxed */
+        .main-wrapper {
+            flex: 1;
+            margin-left: 260px;
+            transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            min-height: 100vh;
+            width: calc(100% - 260px);
+            position: relative;
+            z-index: 1;
+            background-color: var(--color-canvas-subtle);
+            overflow-x: hidden;
+            /* Prevent horizontal overflow */
+        }
+
+        .sidebar.collapsed~.main-wrapper {
+            margin-left: 64px;
+            width: calc(100% - 64px);
+        }
+
+        /* Legacy header styles - keep for compatibility but hide */
+        .github-header {
+            display: none;
+        }
+
+        /* Responsive Sidebar */
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 70px;
+            }
+
+            .sidebar.collapsed {
+                width: 70px;
+            }
+
+            .main-wrapper {
+                margin-left: 70px;
+            }
+
+            .sidebar-nav .nav-item span,
+            .sidebar-footer .sidebar-user-info,
+            .sidebar-footer .btn-logout span {
+                display: none;
+            }
+        }
+
+        /* Main Content - Modern Unboxed Design - ClickUp Style */
+        .main-container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: var(--spacing-xl) var(--spacing-xl);
+            min-height: calc(100vh - 80px);
+            position: relative;
+            z-index: 1;
+            background-color: var(--color-canvas-subtle);
+        }
+
+        /* Tooltip for collapsed sidebar */
+        .sidebar.collapsed .nav-item[title],
+        .sidebar.collapsed .sidebar-logo[title] {
+            position: relative;
+        }
+
+        .sidebar.collapsed .nav-item:hover::after,
+        .sidebar.collapsed .sidebar-logo:hover::after {
+            content: attr(title);
+            position: absolute;
+            left: 100%;
+            top: 50%;
+            transform: translateY(-50%);
+            margin-left: 12px;
+            padding: 8px 12px;
+            background: var(--color-header-bg);
+            border: 1px solid var(--color-border-default);
+            border-radius: 6px;
+            white-space: nowrap;
+            z-index: 1001;
+            font-size: 14px;
+            box-shadow: 0 4px 12px var(--color-shadow);
+        }
+
+        /* Modern Cards - ClickUp Style - Unboxed */
+        .github-card {
+            background-color: var(--color-canvas-default);
+            border: none;
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-xl);
+            margin-bottom: var(--spacing-lg);
+            box-shadow: 0 1px 3px var(--color-shadow), 0 1px 2px var(--color-shadow);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+
+        .github-card:hover {
+            box-shadow: 0 4px 16px var(--color-shadow-medium), 0 2px 4px var(--color-shadow);
+            transform: translateY(-2px);
+        }
+
+        .github-card-header {
+            border-bottom: 1px solid var(--color-border-default);
+            padding-bottom: var(--spacing-md);
+            margin-bottom: var(--spacing-lg);
+        }
+
+        .github-card-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--color-fg-default);
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+            letter-spacing: -0.02em;
+        }
+
+        .github-card-title i {
+            color: var(--color-accent-fg);
+        }
+
+        /* Modern Buttons - ClickUp Style - Unboxed */
+        .btn-github {
+            background-color: var(--color-btn-bg);
+            border: 1px solid var(--color-btn-border);
+            color: var(--color-btn-text);
+            padding: 10px 20px;
+            border-radius: var(--radius-md);
+            font-weight: 500;
+            font-size: 14px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            min-height: 38px;
+            position: relative;
+            overflow: hidden;
+            letter-spacing: -0.01em;
+            box-shadow: 0 1px 2px var(--color-shadow);
+        }
+
+        .btn-github:hover {
+            box-shadow: 0 2px 4px var(--color-shadow);
+            transform: translateY(-1px);
+        }
+
+        .btn-github::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        .btn-github:hover::before {
+            left: 100%;
+        }
+
+        .btn-github:hover {
+            background-color: var(--color-btn-hover-bg);
+            border-color: var(--color-btn-hover-border);
+            color: var(--color-btn-text);
+            text-decoration: none;
+            transform: translateY(-1px);
+            box-shadow: 0 3px 6px var(--color-shadow);
+        }
+
+        .btn-github:active {
+            transform: translateY(0);
+        }
+
+        .btn-github-primary {
+            background-color: var(--color-btn-primary-bg);
+            border: 1px solid var(--color-btn-primary-border);
+            color: var(--color-btn-primary-text);
+        }
+
+        .btn-github-primary:hover {
+            background-color: var(--color-btn-primary-hover-bg);
+            border-color: var(--color-btn-primary-border);
+            color: var(--color-btn-primary-text);
+        }
+
+        .btn-github-danger {
+            background-color: var(--color-btn-danger-bg);
+            border: 1px solid var(--color-btn-danger-border);
+            color: var(--color-btn-danger-text);
+        }
+
+        .btn-github-danger:hover {
+            background-color: var(--color-btn-danger-hover-bg);
+            border-color: var(--color-btn-danger-border);
+            color: var(--color-btn-danger-text);
+        }
+
+        /* Modern Form Elements - ClickUp Style */
+        .form-control-github {
+            background-color: var(--color-input-bg);
+            border: 1px solid var(--color-border-default);
+            border-radius: var(--radius-md);
+            padding: 10px 14px;
+            font-size: 14px;
+            color: var(--color-fg-default);
+            width: 100%;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            min-height: 38px;
+            box-shadow: 0 1px 2px var(--color-shadow);
+        }
+
+        .form-control-github:hover {
+            border-color: var(--color-border-muted);
+            box-shadow: 0 2px 4px var(--color-shadow);
+        }
+
+        .form-control-github:focus {
+            border-color: var(--color-accent-fg);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1), 0 2px 4px var(--color-shadow);
+        }
+
+        [data-color-mode="dark"] .form-control-github:focus {
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2), 0 2px 4px var(--color-shadow);
+        }
+
+        .form-group-github {
+            margin-bottom: var(--spacing-lg);
+        }
+
+        .form-label-github {
+            display: block;
+            font-weight: 600;
+            font-size: 13px;
+            color: var(--color-fg-default);
+            margin-bottom: var(--spacing-sm);
+            letter-spacing: -0.01em;
+        }
+
+        /* Modern Alerts - ClickUp Style */
+        .alert-github {
+            padding: var(--spacing-md);
+            border-radius: var(--radius-md);
+            border: none;
+            margin-bottom: var(--spacing-md);
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+            box-shadow: 0 1px 3px var(--color-shadow);
+        }
+
+        .alert-success {
+            background-color: rgba(16, 185, 129, 0.08);
+            color: var(--color-success-fg);
+            box-shadow: 0 1px 3px rgba(16, 185, 129, 0.1);
+        }
+
+        .alert-danger {
+            background-color: rgba(239, 68, 68, 0.08);
+            color: var(--color-danger-fg);
+            box-shadow: 0 1px 3px rgba(239, 68, 68, 0.1);
+        }
+
+        .alert-warning {
+            background-color: rgba(245, 158, 11, 0.08);
+            color: var(--color-warning-fg);
+            box-shadow: 0 1px 3px rgba(245, 158, 11, 0.1);
+        }
+
+        /* Tables */
+        .table-github {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 16px 0;
+            background-color: var(--color-canvas-default);
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid var(--color-border-default);
+        }
+
+        .table-github th,
+        .table-github td {
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--color-border-muted);
+        }
+
+        .table-github th {
+            background-color: var(--color-canvas-subtle);
+            font-weight: 600;
+            color: var(--color-fg-default);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .table-github tr:hover {
+            background-color: var(--color-canvas-subtle);
+        }
+
+        .table-github tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 1012px) {
+            .header-container {
+                padding: 16px 24px;
+            }
+
+            .main-container {
+                padding: 24px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .header-container {
+                padding: 16px;
+                flex-direction: column;
+                gap: 16px;
+                min-height: auto;
+            }
+
+            .header-nav {
+                gap: 8px;
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+
+            .nav-item {
+                padding: 6px 12px;
+                font-size: 13px;
+            }
+
+            .main-container {
+                padding: 16px;
+            }
+
+            .github-card {
+                padding: 16px;
+            }
+
+            .user-info span {
+                display: none;
+            }
+        }
+
+        @media (max-width: 544px) {
+            .header-logo {
+                font-size: 18px;
+            }
+
+            .header-logo i {
+                font-size: 20px;
+            }
+
+            .nav-item {
+                padding: 4px 8px;
+                font-size: 12px;
+            }
+
+            .nav-item span {
+                display: none;
+            }
+        }
+
+        /* Login Page */
+        .login-container {
+            max-width: 400px;
+            margin: 80px auto;
+            background: var(--color-canvas-default);
+            border: 1px solid var(--color-border-default);
+            border-radius: 12px;
+            padding: 32px;
+            box-shadow: 0 8px 24px var(--color-shadow-large);
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .login-title {
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--color-fg-default);
+            margin: 0 0 8px 0;
+        }
+
+        .login-subtitle {
+            color: var(--color-fg-muted);
+            font-size: 16px;
+            margin: 0;
+        }
+
+        /* Animations */
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .github-card {
+            animation: slideIn 0.3s ease;
+        }
+
+        /* Tab Navigation */
+        .tab-navigation {
+            border-bottom: 1px solid var(--color-border-default);
+            margin-bottom: 24px;
+            overflow-x: auto;
+            background-color: var(--color-canvas-default);
+        }
+
+        .tab-navigation nav {
+            display: flex;
+            gap: 0;
+            margin-bottom: -1px;
+            min-width: max-content;
+            padding: 0 8px;
+        }
+
+        .tab-button {
+            background: transparent;
+            border: 1px solid transparent;
+            border-bottom: 3px solid transparent;
+            padding: 12px 16px;
+            border-radius: 6px 6px 0 0;
+            font-weight: 500;
+            font-size: 14px;
+            color: var(--color-fg-muted);
+            cursor: pointer;
+            margin-right: 8px;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            white-space: nowrap;
+            position: relative;
+        }
+
+        .tab-button:hover {
+            color: var(--color-fg-default);
+            border-bottom-color: var(--color-border-muted);
+            background: rgba(240, 246, 252, 0.05);
+        }
+
+        .tab-button.active {
+            color: var(--color-fg-default) !important;
+            background: linear-gradient(135deg, rgba(9, 105, 218, 0.1) 0%, rgba(5, 80, 174, 0.05) 100%) !important;
+            border: 1px solid rgba(9, 105, 218, 0.2) !important;
+            border-bottom: 4px solid #0969da !important;
+            font-weight: 600 !important;
+            box-shadow: 0 4px 12px rgba(9, 105, 218, 0.15) !important;
+            transform: translateY(-1px) !important;
+            position: relative !important;
+        }
+
+        .tab-button.active::after {
+            content: '' !important;
+            position: absolute !important;
+            bottom: -4px !important;
+            left: 0 !important;
+            right: 0 !important;
+            height: 2px !important;
+            background: linear-gradient(90deg, #0969da 0%, #0550ae 100%) !important;
+            border-radius: 1px !important;
+        }
+
+        .tab-button.active i {
+            color: #0969da !important;
+        }
+
+        .tab-content {
+            display: none !important;
+            background-color: var(--color-canvas-default);
+            padding: 24px 0;
+            min-height: 400px;
+        }
+
+        .tab-content.active {
+            display: block !important;
+        }
+
+        /* Ensure tab content is visible */
+        #tab1.active {
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+        }
+
+        #tab2.active {
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+        }
+
+        #tab3.active {
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+        }
+
+        /* Force all tab content to be visible when active */
+        .tab-content.active {
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            position: relative !important;
+            z-index: 1 !important;
+        }
+
+        /* Clean 3-tab layout - no special overrides needed */
+
+        /* Dashboard sections - Unboxed */
+        .section {
+            background-color: var(--color-canvas-default);
+            border: none;
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-xl);
+            margin-bottom: var(--spacing-lg);
+            box-shadow: 0 1px 3px var(--color-shadow), 0 1px 2px var(--color-shadow);
+        }
+
+        .section h3 {
+            color: var(--color-fg-default);
+            font-size: 18px;
+            font-weight: 600;
+            margin: 0 0 16px 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Form rows */
+        .form-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .form-row label {
+            font-weight: 600;
+            color: var(--color-fg-default);
+            min-width: 120px;
+        }
+
+        .form-row select,
+        .form-row input {
+            background-color: var(--color-input-bg);
+            border: 1px solid var(--color-border-default);
+            border-radius: var(--radius-md);
+            padding: 10px 14px;
+            color: var(--color-fg-default);
+            min-width: 200px;
+            flex: 1;
+            box-shadow: 0 1px 2px var(--color-shadow);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .form-row select:hover,
+        .form-row input:hover {
+            border-color: var(--color-border-muted);
+            box-shadow: 0 2px 4px var(--color-shadow);
+        }
+
+        .form-row select:focus,
+        .form-row input:focus {
+            border-color: var(--color-accent-fg);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1), 0 2px 4px var(--color-shadow);
+        }
+
+        [data-color-mode="dark"] .form-row select:focus,
+        [data-color-mode="dark"] .form-row input:focus {
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2), 0 2px 4px var(--color-shadow);
+        }
+
+        /* Button rows */
+        .button-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .button-row button {
+            background-color: var(--color-btn-bg);
+            border: 1px solid var(--color-btn-border);
+            color: var(--color-btn-text);
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .button-row button:hover {
+            background-color: var(--color-btn-hover-bg);
+            border-color: var(--color-btn-hover-border);
+            transform: translateY(-1px);
+            box-shadow: 0 3px 6px var(--color-shadow);
+        }
+
+        /* Data display areas */
+        .data-display {
+            background-color: var(--color-canvas-subtle);
+            border: 1px solid var(--color-border-default);
+            border-radius: 6px;
+            padding: 16px;
+            margin: 16px 0;
+            min-height: 100px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .count-display {
+            background-color: var(--color-canvas-subtle);
+            border: 1px solid var(--color-border-default);
+            border-radius: 6px;
+            padding: 12px;
+            margin: 8px 0;
+            font-weight: 600;
+            color: var(--color-fg-default);
+        }
+
+        .status-box {
+            background-color: var(--color-canvas-subtle);
+            border: 1px solid var(--color-border-default);
+            border-radius: 6px;
+            padding: 16px;
+            margin: 16px 0;
+        }
+
+        .status-info {
+            background-color: rgba(9, 105, 218, 0.1);
+            border: 1px solid var(--color-accent-emphasis);
+            border-radius: 6px;
+            padding: 16px;
+            margin: 16px 0;
+            color: var(--color-accent-fg);
+        }
+
+        /* Account management area */
+        .account-management-area {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 16px;
+            margin: 16px 0;
+        }
+
+        .search-and-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .search-input {
+            background-color: var(--color-input-bg);
+            border: 1px solid var(--color-input-border);
+            border-radius: 6px;
+            padding: 8px 12px;
+            color: var(--color-fg-default);
+            font-size: 14px;
+        }
+
+        .account-list {
+            background-color: var(--color-canvas-subtle);
+            border: 1px solid var(--color-border-default);
+            border-radius: 6px;
+            max-height: 200px;
+            overflow-y: auto;
+            padding: 8px;
+        }
+
+        .account-item {
+            padding: 8px 12px;
+            margin: 2px 0;
+            border-radius: 4px;
+            cursor: pointer;
+            color: var(--color-fg-default);
+            transition: background-color 0.2s ease;
+        }
+
+        .account-item:hover {
+            background-color: var(--color-canvas-default);
+        }
+
+        .account-item.selected {
+            background-color: var(--color-accent-emphasis);
+            color: #ffffff;
+        }
+
+        .account-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .action-button {
+            background-color: var(--color-btn-bg);
+            border: 1px solid var(--color-btn-border);
+            color: var(--color-btn-text);
+            padding: 16px;
+            border-radius: 6px;
+            font-weight: 500;
+            cursor: pointer;
+            text-align: center;
+            min-height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .action-button:hover {
+            background-color: var(--color-btn-hover-bg);
+            border-color: var(--color-btn-hover-border);
+            transform: translateY(-1px);
+            box-shadow: 0 3px 6px var(--color-shadow);
+        }
+
+        .delete-button {
+            background-color: var(--color-btn-danger-bg);
+            border-color: var(--color-btn-danger-border);
+            color: var(--color-btn-danger-text);
+        }
+
+        .delete-button:hover {
+            background-color: var(--color-btn-danger-hover-bg);
+            border-color: var(--color-btn-danger-border);
+            color: var(--color-btn-danger-text);
+        }
+
+        /* Modal styling */
+        .modal-content {
+            background-color: var(--color-canvas-default);
+            border: 1px solid var(--color-border-default);
+            border-radius: 12px;
+            box-shadow: 0 16px 32px var(--color-shadow-large);
+        }
+
+        .modal-header {
+            background-color: var(--color-canvas-subtle);
+            border-bottom: 1px solid var(--color-border-default);
+            border-radius: 12px 12px 0 0;
+            padding: 20px 24px;
+        }
+
+        .modal-title {
+            color: var(--color-fg-default);
+            font-weight: 600;
+            font-size: 18px;
+            margin: 0;
+        }
+
+        .modal-body {
+            padding: 24px;
+            color: var(--color-fg-default);
+        }
+
+        .modal-footer {
+            background-color: var(--color-canvas-subtle);
+            border-top: 1px solid var(--color-border-default);
+            border-radius: 0 0 12px 12px;
+            padding: 16px 24px;
+        }
+
+        /* Textarea styling */
+        textarea.form-control-github {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        /* Code/monospace styling */
+        code {
+            background-color: var(--color-canvas-subtle);
+            border: 1px solid var(--color-border-default);
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-family: 'SFMono-Regular', 'Consolas', 'Liberation Mono', 'Menlo', monospace;
+            font-size: 12px;
+            color: var(--color-fg-default);
+        }
+
+        /* Progress bars */
+        .progress-bar {
+            background-color: var(--color-canvas-subtle);
+            border: 1px solid var(--color-border-default);
+            border-radius: 6px;
+            height: 8px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-fill {
+            background-color: var(--color-success-emphasis);
+            height: 100%;
+            transition: width 0.3s ease;
+        }
+
+        /* Breadcrumbs */
+        .breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 16px;
+            font-size: 14px;
+            color: var(--color-fg-muted);
+        }
+
+        .breadcrumb-item {
+            color: var(--color-fg-muted);
+        }
+
+        .breadcrumb-item.active {
+            color: var(--color-fg-default);
+            font-weight: 600;
+        }
+
+        .breadcrumb-separator {
+            color: var(--color-fg-muted);
+        }
+
+        /* Tooltips */
+        .tooltip {
+            position: relative;
+            display: inline-block;
+        }
+
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 200px;
+            background-color: var(--color-canvas-default);
+            border: 1px solid var(--color-border-default);
+            color: var(--color-fg-default);
+            text-align: center;
+            border-radius: 6px;
+            padding: 8px 12px;
+            position: absolute;
+            z-index: 1000;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -100px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 12px;
+            box-shadow: 0 4px 8px var(--color-shadow);
+        }
+
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        /* Loading states */
+        .loading {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--color-fg-muted);
+        }
+
+        .loading-spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--color-border-default);
+            border-top: 2px solid var(--color-accent-emphasis);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Status badges */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+            border: 1px solid;
+        }
+
+        .status-badge.success {
+            background-color: rgba(45, 164, 78, 0.1);
+            border-color: var(--color-success-emphasis);
+            color: var(--color-success-fg);
+        }
+
+        .status-badge.danger {
+            background-color: rgba(218, 54, 51, 0.1);
+            border-color: var(--color-danger-emphasis);
+            color: var(--color-danger-fg);
+        }
+
+        .status-badge.warning {
+            background-color: rgba(251, 133, 0, 0.1);
+            border-color: var(--color-warning-emphasis);
+            color: var(--color-warning-fg);
+        }
+
+        .status-badge.info {
+            background-color: rgba(9, 105, 218, 0.1);
+            border-color: var(--color-accent-emphasis);
+            color: var(--color-accent-fg);
+        }
+
+        /* Input groups */
+        .input-group-github {
+            display: flex;
+            width: 100%;
+        }
+
+        .input-group-github .form-control-github {
+            border-top-right-radius: 0;
+            border-bottom-right-radius: 0;
+            border-right: 0;
+        }
+
+        .input-group-github .btn-github {
+            border-top-left-radius: 0;
+            border-bottom-left-radius: 0;
+        }
+
+        /* File input styling */
+        input[type="file"].form-control-github {
+            padding: 6px 12px;
+            cursor: pointer;
+        }
+
+        input[type="file"].form-control-github::-webkit-file-upload-button {
+            background-color: var(--color-btn-bg);
+            border: 1px solid var(--color-btn-border);
+            border-radius: 4px;
+            padding: 4px 12px;
+            margin-right: 12px;
+            color: var(--color-btn-text);
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        input[type="file"].form-control-github::-webkit-file-upload-button:hover {
+            background-color: var(--color-btn-hover-bg);
+        }
+
+        /* Backward compatibility for existing classes */
+        .modal {
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            font-size: 14px;
+            color: var(--color-fg-default);
+            margin-bottom: 8px;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            background-color: var(--color-input-bg);
+            border: 1px solid var(--color-border-default);
+            border-radius: var(--radius-md);
+            padding: 10px 14px;
+            font-size: 14px;
+            color: var(--color-fg-default);
+            width: 100%;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 1px 2px var(--color-shadow);
+            min-height: 38px;
+        }
+
+        .form-group input:hover,
+        .form-group select:hover,
+        .form-group textarea:hover {
+            border-color: var(--color-border-muted);
+            box-shadow: 0 2px 4px var(--color-shadow);
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            border-color: var(--color-accent-fg);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1), 0 2px 4px var(--color-shadow);
+        }
+
+        [data-color-mode="dark"] .form-group input:focus,
+        [data-color-mode="dark"] .form-group select:focus,
+        [data-color-mode="dark"] .form-group textarea:focus {
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2), 0 2px 4px var(--color-shadow);
+        }
+
+        /* Legacy button compatibility */
+        .primary-button {
+            background-color: var(--color-btn-primary-bg);
+            border: 1px solid var(--color-btn-primary-border);
+            color: var(--color-btn-primary-text);
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .primary-button:hover {
+            background-color: var(--color-btn-primary-hover-bg);
+        }
+
+        .secondary-button {
+            background-color: var(--color-btn-bg);
+            border: 1px solid var(--color-btn-border);
+            color: var(--color-btn-text);
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .secondary-button:hover {
+            background-color: var(--color-btn-hover-bg);
+        }
+
+        .warning-button {
+            background-color: var(--color-warning-emphasis);
+            border: 1px solid var(--color-warning-emphasis);
+            color: #ffffff;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .info-button {
+            background-color: var(--color-success-emphasis);
+            border: 1px solid var(--color-success-emphasis);
+            color: #ffffff;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .debug-button {
+            background-color: #6f42c1;
+            border: 1px solid #6f42c1;
+            color: #ffffff;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .results-log {
+            background-color: var(--color-canvas-subtle);
+            border: 1px solid var(--color-border-default);
+            border-radius: 6px;
+            padding: 16px;
+            margin: 16px 0;
+            font-family: monospace;
+            font-size: 13px;
+            color: var(--color-fg-default);
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .placeholder-text {
+            color: var(--color-fg-muted);
+            font-style: italic;
+        }
+
+        .domain-list {
+            background-color: var(--color-canvas-subtle);
+            border: 1px solid var(--color-border-default);
+            border-radius: 6px;
+            padding: 16px;
+            margin: 16px 0;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .workflow-step {
+            margin-bottom: 32px;
+        }
+
+        .step-content {
+            margin-top: 16px;
+        }
+
+        .info-text {
+            background-color: rgba(9, 105, 218, 0.1);
+            border: 1px solid var(--color-accent-emphasis);
+            border-radius: 6px;
+            padding: 12px;
+            color: var(--color-accent-fg);
+            font-size: 14px;
+            margin-top: 12px;
+        }
+
+        .csv-preview {
+            background-color: var(--color-canvas-subtle);
+            border: 1px solid var(--color-border-default);
+            border-radius: 6px;
+            padding: 16px;
+            margin: 16px 0;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow: auto;
+        }
+
+        .download-area {
+            background-color: var(--color-canvas-subtle);
+            border: 1px solid var(--color-border-default);
+            border-radius: 6px;
+            padding: 16px;
+            margin: 16px 0;
+            text-align: center;
+        }
+
+        /* Dark mode for grid elements and containers */
+        [data-color-mode="dark"] [style*="grid-template-columns"],
+        [data-color-mode="dark"] [style*="display: grid"],
+        [data-color-mode="dark"] .grid-container,
+        [data-color-mode="dark"] .grid-item,
+        [data-color-mode="dark"] .domain-summary,
+        [data-color-mode="dark"] .domain-details,
+        [data-color-mode="dark"] .summary-card,
+        [data-color-mode="dark"] .stats-container,
+        [data-color-mode="dark"] .details-container {
+            background-color: var(--color-canvas-default) !important;
+            color: var(--color-fg-default) !important;
+            border-color: var(--color-border-default) !important;
+        }
+
+        /* Dark mode for grid children */
+        [data-color-mode="dark"] [style*="grid-template-columns"] *,
+        [data-color-mode="dark"] [style*="display: grid"] *,
+        [data-color-mode="dark"] .grid-container *,
+        [data-color-mode="dark"] .grid-item *,
+        [data-color-mode="dark"] .domain-summary *,
+        [data-color-mode="dark"] .domain-details *,
+        [data-color-mode="dark"] .summary-card *,
+        [data-color-mode="dark"] .stats-container *,
+        [data-color-mode="dark"] .details-container * {
+            color: var(--color-fg-default) !important;
+        }
+
+        /* Force dark mode for any white background containers */
+        [data-color-mode="dark"] [style*="background: white"],
+        [data-color-mode="dark"] [style*="background-color: white"],
+        [data-color-mode="dark"] [style*="background: #fff"],
+        [data-color-mode="dark"] [style*="background-color: #fff"],
+        [data-color-mode="dark"] [style*="background: #ffffff"],
+        [data-color-mode="dark"] [style*="background-color: #ffffff"] {
+            background-color: var(--color-canvas-default) !important;
+            color: var(--color-fg-default) !important;
+        }
+
+        /* Force white text for any light colored text in dark mode */
+        [data-color-mode="dark"] [style*="color: #656d76"],
+        [data-color-mode="dark"] [style*="color: #7d8590"],
+        [data-color-mode="dark"] [style*="color: #6e7781"],
+        [data-color-mode="dark"] [style*="color: #8b949e"] {
+            color: var(--color-fg-default) !important;
+        }
+    </style>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+    <!-- Sidebar Override Styles - Must load after Primer CSS - Version 2.0 -->
+    <style id="sidebar-override-styles">
+        /* Force sidebar styles with high specificity to override Primer CSS */
+        aside.sidebar {
+            background: var(--color-canvas-default) !important;
+            border-right: 1px solid var(--color-border-default) !important;
+            position: fixed !important;
+            left: 0 !important;
+            top: 0 !important;
+            height: 100vh !important;
+            width: 260px !important;
+            z-index: 1000 !important;
+            transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
+            box-shadow: 2px 0 8px var(--color-shadow) !important;
+            display: flex !important;
+            flex-direction: column !important;
+        }
+
+        [data-color-mode="light"] aside.sidebar {
+            background: var(--color-canvas-default) !important;
+            border-right: 1px solid var(--color-border-default) !important;
+            box-shadow: 2px 0 8px var(--color-shadow) !important;
+        }
+
+        aside.sidebar.collapsed {
+            width: 64px !important;
+        }
+
+        /* Navigation Wrapper - Force flex layout */
+        aside.sidebar .nav-item-wrapper {
+            display: flex !important;
+            flex-direction: column !important;
+            width: 100% !important;
+            margin-bottom: 4px !important;
+        }
+
+        aside.sidebar .nav-item-wrapper.is-open {
+            margin-bottom: 12px !important;
+        }
+
+        /* Dropdown Menu - Force proper display */
+        aside.sidebar .dropdown-menu {
+            max-height: 0 !important;
+            overflow: hidden !important;
+            transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.25s ease,
+                padding 0.35s ease,
+                margin-bottom 0.35s ease !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 2px !important;
+            opacity: 0 !important;
+            visibility: hidden !important;
+            width: 100% !important;
+            background: transparent !important;
+            position: relative !important;
+        }
+
+        aside.sidebar .nav-item-wrapper.is-open .dropdown-menu,
+        aside.sidebar .dropdown-menu.is-open {
+            max-height: 500px !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+            padding: 4px 0 !important;
+            margin-bottom: 8px !important;
+            overflow: visible !important;
+        }
+
+        /* Ensure dropdown is directly attached to nav-item - NO SPACING */
+        aside.sidebar .nav-item-wrapper>.nav-item.has-dropdown {
+            margin-bottom: 0 !important;
+            margin-top: 0 !important;
+        }
+
+        aside.sidebar .nav-item-wrapper>.dropdown-menu {
+            margin-top: 0 !important;
+            margin-bottom: 0 !important;
+            padding-top: 0 !important;
+        }
+
+        aside.sidebar .nav-item-wrapper.is-open>.dropdown-menu {
+            margin-top: 0 !important;
+            margin-bottom: 8px !important;
+            padding-top: 0 !important;
+        }
+
+        /* Prevent dropdown from floating or appearing in wrong place */
+        aside.sidebar .nav-item-wrapper {
+            position: relative !important;
+            z-index: 1 !important;
+        }
+
+        aside.sidebar .nav-item-wrapper .dropdown-menu {
+            position: relative !important;
+            z-index: 1 !important;
+            top: auto !important;
+            left: auto !important;
+            right: auto !important;
+        }
+
+        /* Ensure other nav-items stay below wrapper */
+        aside.sidebar .sidebar-nav>.nav-item {
+            position: relative !important;
+            z-index: 0 !important;
+            margin-top: 0 !important;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="glass-orb glass-orb-1"></div>
+    <div class="glass-orb glass-orb-2"></div>
+    <div class="glass-orb glass-orb-3"></div>
+    <div class="glass-ui">
+        {% if user %}
+        <!-- Left Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <a href="/dashboard" class="sidebar-logo" title="GBot">
+                    <i class="fas fa-robot"></i>
+                </a>
+                <button class="sidebar-toggle" onclick="toggleSidebar()" title="Toggle sidebar">
+                    <i class="fas fa-angle-double-left" id="sidebarToggleIcon"></i>
+                </button>
+            </div>
+
+            <nav class="sidebar-nav">
+                <div class="nav-item-wrapper {% if request.endpoint == 'dashboard' %}is-open{% endif %}">
+                    <a href="/dashboard#tab1"
+                        class="nav-item has-dropdown {% if request.endpoint == 'dashboard' %}active is-open{% endif %}"
+                        onclick="if(event.target.closest('.dropdown-toggle')) { toggleDashboardDropdown(event); return false; } else { handleDashboardClick(event); }"
+                        title="Dashboard">
+                        <i class="fas fa-chart-bar"></i>
+                        <span>Dashboard</span>
+                        <i class="fas fa-chevron-down dropdown-toggle"
+                            onclick="toggleDashboardDropdown(event); event.stopPropagation();"></i>
+                    </a>
+                    <div class="dropdown-menu {% if request.endpoint == 'dashboard' %}is-open{% endif %}"
+                        id="dashboardDropdown">
+                        <a href="/dashboard#tab1" class="dropdown-item"
+                            onclick="handleDashboardTabClick(event, 'tab1');" title="Account & User Management">
+                            <i class="fas fa-user-friends"></i>
+                            <span>Account & User Mgmt</span>
+                        </a>
+                        <a href="/dashboard#tab2" class="dropdown-item"
+                            onclick="handleDashboardTabClick(event, 'tab2');" title="User Create/Delete/Domain">
+                            <i class="fas fa-user-plus"></i>
+                            <span>User Create/Delete/Domain</span>
+                        </a>
+                        <a href="/dashboard#tab3" class="dropdown-item"
+                            onclick="handleDashboardTabClick(event, 'tab3');" title="DNS & SMTP">
+                            <i class="fas fa-exchange-alt"></i>
+                            <span>DNS & SMTP</span>
+                        </a>
+                    </div>
+                </div>
+
+                {% if 'users' in user_permissions %}
+                <a href="/users" class="nav-item {% if request.endpoint == 'users' %}active{% endif %}" title="Users">
+                    <i class="fas fa-users"></i>
+                    <span>Users</span>
+                </a>
+                {% endif %}
+
+                {% if 'whitelist' in user_permissions %}
+                <a href="/whitelist" class="nav-item {% if request.endpoint == 'whitelist' %}active{% endif %}"
+                    title="IP Whitelist">
+                    <i class="fas fa-shield-alt"></i>
+                    <span>IP Whitelist</span>
+                </a>
+                {% endif %}
+
+                {% if 'aws_management' in user_permissions %}
+                <a href="/aws"
+                    class="nav-item {% if request.endpoint == 'aws_manager.aws_management' %}active{% endif %}"
+                    title="AWS Management">
+                    <i class="fas fa-cloud"></i>
+                    <span>AWS Management</span>
+                </a>
+                {% endif %}
+
+                {% if 'list_management' in user_permissions %}
+                <a href="/list-management"
+                    class="nav-item {% if request.endpoint == 'list_management' %}active{% endif %}"
+                    title="List Management">
+                    <i class="fas fa-clipboard-list"></i>
+                    <span>List Management</span>
+                </a>
+                {% endif %}
+
+                {% if 'settings' in user_permissions %}
+                <a href="/settings" class="nav-item {% if request.endpoint == 'settings' %}active{% endif %}"
+                    title="Settings">
+                    <i class="fas fa-cog"></i>
+                    <span>Settings</span>
+                </a>
+                {% endif %}
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="sidebar-user-info">
+                    <i class="fas fa-user"></i>
+                    <span>{{ user }} ({{ role }})</span>
+                </div>
+                <div class="sidebar-footer-actions">
+                    <a href="{{ url_for('logout') }}" class="btn-logout" title="Logout">
+                        <i class="fas fa-sign-out-alt"></i> Logout
+                    </a>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Legacy header - hidden -->
+        <header class="github-header" style="display: none;">
+        </header>
+        {% endif %}
+
+        <!-- Main Content Wrapper -->
+        <div class="main-wrapper">
+            <!-- New Glass Header -->
+            <header class="glass-header">
+                <div class="glass-header-left">
+                    <div class="header-title">
+                        <span class="text-muted">Admin</span>
+                        <i class="fas fa-chevron-right" style="font-size: 0.75rem;"></i>
+                        <span class="active">{{ self.title() if self.title() else 'Dashboard' }}</span>
+                    </div>
+                </div>
+                <div class="glass-header-right">
+                    <!-- Search Bar -->
+                    <div class="header-search">
+                        <i class="fas fa-search"></i>
+                        <input type="text" placeholder="Search resources..." class="glass-input">
+                    </div>
+
+                    <!-- 5-Mode Theme Palette -->
+                    <!-- 5-Mode Celestial Palette -->
+                    <div class="theme-palette">
+                        <button class="theme-btn" onclick="setTheme('nebula')" data-set-theme="nebula"
+                            title="Nebula (Cosmic Default)">
+                            <i class="fas fa-meteor"></i>
+                        </button>
+                        <button class="theme-btn" onclick="setTheme('midnight')" data-set-theme="midnight"
+                            title="Midnight (Neon Void)">
+                            <i class="fas fa-moon"></i>
+                        </button>
+                        <button class="theme-btn" onclick="setTheme('aurora')" data-set-theme="aurora"
+                            title="Aurora (Ethereal Light)">
+                            <i class="fas fa-sun"></i>
+                        </button>
+                        <button class="theme-btn" onclick="setTheme('forest')" data-set-theme="forest"
+                            title="Forest (Bio-luminescent)">
+                            <i class="fas fa-tree"></i>
+                        </button>
+                        <button class="theme-btn" onclick="setTheme('crimson')" data-set-theme="crimson"
+                            title="Crimson (Solar Flare)">
+                            <i class="fas fa-fire"></i>
+                        </button>
+                    </div>
+
+                    <!-- Notifications -->
+                    <div class="notification-wrapper" style="position: relative;">
+                        <button class="header-icon-btn" id="notificationBtn" onclick="toggleNotificationDropdown()">
+                            <i class="fas fa-bell"></i>
+                            <span class="notification-badge" id="notificationBadge" style="display: none;">0</span>
+                        </button>
+                        <div class="notification-dropdown glass-panel" id="notificationDropdown"
+                            style="display: none; position: absolute; top: 100%; right: 0; width: 350px; max-height: 400px; overflow-y: auto; z-index: 1100; margin-top: 8px; padding: 0;">
+                            <div class="notification-header"
+                                style="padding: 12px 16px; border-bottom: 1px solid var(--border-panel); display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-weight: 600; color: var(--text-primary);">Notifications</span>
+                                <button onclick="markAllNotificationsRead()" class="glass-button glass-button-sm"
+                                    style="padding: 4px 8px; font-size: 0.75rem;">
+                                    Mark all read
+                                </button>
+                            </div>
+                            <div class="notification-list" id="notificationList" style="padding: 8px 0;">
+                                <div class="text-center text-muted p-3">Loading...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Profile -->
+                    <div class="profile-btn" title="{{ user }}">
+                        {{ user[:2].upper() if user else 'AD' }}
+                    </div>
+                </div>
+            </header>
+            <!-- Flash messages -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            <div class="main-container">
+                {% for category, message in messages %}
+                <div class="alert-github alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% endwith %}
+
+            <div class="main-container">
+                {% block content %}{% endblock %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile Sidebar Toggle -->
+    <button class="mobile-nav-toggle" onclick="toggleSidebar()">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <!-- Sidebar Overlay -->
+    <div class="glass-sidebar-overlay" onclick="toggleSidebar()"></div>
+
+    <!-- Responsive Sidebar Script -->
+    <script>
+        function toggleSidebar() {
+            // Check if mobile (using same breakpoint as CSS 992px)
+            if (window.innerWidth < 992) {
+                // Mobile behavior
+                const sidebar = document.querySelector('.glass-sidebar') || document.getElementById('sidebar');
+                const overlay = document.querySelector('.glass-sidebar-overlay');
+                if (sidebar) sidebar.classList.toggle('active');
+                if (overlay) overlay.classList.toggle('active');
+            } else {
+                // Desktop behavior
+                const sidebar = document.getElementById('sidebar');
+                const toggleIcon = document.getElementById('sidebarToggleIcon');
+
+                if (sidebar) {
+                    sidebar.classList.toggle('collapsed');
+                    const isCollapsed = sidebar.classList.contains('collapsed');
+                    localStorage.setItem('sidebarCollapsed', isCollapsed);
+
+                    if (toggleIcon) {
+                        toggleIcon.className = isCollapsed ? 'fas fa-angle-double-right' : 'fas fa-angle-double-left';
+                    }
+                }
+            }
+        }
+
+        // Close sidebar when clicking a link on mobile
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.addEventListener('click', () => {
+                if (window.innerWidth < 992) {
+                    toggleSidebar();
+                }
+            });
+        });
+    </script>
+
+    <!-- Theme Toggle Script -->
+    <script>
+        // Theme Management
+        function setTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+        }
+
+        // Dashboard Dropdown Toggle - Clean Implementation
+        function toggleDashboardDropdown(event) {
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+
+            const wrapper = document.querySelector('aside.sidebar .nav-item-wrapper');
+            const navItem = wrapper ? wrapper.querySelector('.nav-item.has-dropdown') : null;
+            const dropdown = document.getElementById('dashboardDropdown');
+
+            if (!wrapper || !navItem || !dropdown) {
+                console.error('Sidebar dropdown elements not found', { wrapper, navItem, dropdown });
+                return;
+            }
+
+            const isOpen = wrapper.classList.contains('is-open');
+            console.log('Toggling dropdown, current state:', isOpen);
+
+            if (isOpen) {
+                // Close dropdown
+                wrapper.classList.remove('is-open');
+                navItem.classList.remove('is-open');
+                dropdown.classList.remove('is-open');
+                console.log('Dropdown closed');
+            } else {
+                // Open dropdown
+                wrapper.classList.add('is-open');
+                navItem.classList.add('is-open');
+                dropdown.classList.add('is-open');
+                console.log('Dropdown opened');
+            }
+        }
+
+        function handleDashboardClick(event) {
+            // If clicking on Dashboard link (not dropdown toggle), redirect to tab1
+            if (!event.target.closest('.dropdown-toggle')) {
+                event.preventDefault();
+                window.location.href = '/dashboard#tab1';
+            }
+        }
+
+        function handleDashboardTabClick(event, tabId) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            console.log('handleDashboardTabClick called with tabId:', tabId);
+
+            // Navigate to dashboard if not already there
+            if (window.location.pathname !== '/dashboard') {
+                console.log('Navigating to dashboard with tab:', tabId);
+                window.location.href = '/dashboard#' + tabId;
+                return;
+            }
+
+            // Update URL hash
+            window.location.hash = tabId;
+            console.log('Updated hash to:', tabId);
+
+            // Call showTab function if it exists
+            if (typeof showTab === 'function') {
+                console.log('Calling showTab directly');
+                showTab(tabId);
+            } else {
+                console.log('showTab not found, waiting...');
+                // Fallback: wait for showTab to be available
+                let attempts = 0;
+                const maxAttempts = 10;
+                const checkShowTab = setInterval(() => {
+                    attempts++;
+                    if (typeof showTab === 'function') {
+                        console.log('showTab found after', attempts * 100, 'ms');
+                        clearInterval(checkShowTab);
+                        showTab(tabId);
+                    } else if (attempts >= maxAttempts) {
+                        console.error('showTab function not found after', maxAttempts * 100, 'ms');
+                        clearInterval(checkShowTab);
+                        // Force show the tab by manipulating DOM directly
+                        const tabs = document.querySelectorAll('.tab-content');
+                        tabs.forEach(tab => {
+                            tab.classList.remove('active');
+                            tab.style.display = 'none';
+                        });
+                        const selectedTab = document.getElementById(tabId);
+                        if (selectedTab) {
+                            selectedTab.classList.add('active');
+                            selectedTab.style.display = 'block';
+                            console.log('Manually showed tab:', tabId);
+                        }
+                    }
+                }, 100);
+            }
+
+            // Update active state in dropdown
+            const dropdownItems = document.querySelectorAll('.dropdown-item');
+            dropdownItems.forEach(item => {
+                item.classList.remove('active');
+                if (item.getAttribute('onclick') && item.getAttribute('onclick').includes(tabId)) {
+                    item.classList.add('active');
+                }
+            });
+        }
+
+        // Initialize sidebar state
+        document.addEventListener('DOMContentLoaded', function () {
+            const sidebar = document.getElementById('sidebar');
+            const toggleIcon = document.getElementById('sidebarToggleIcon');
+            const savedState = localStorage.getItem('sidebarCollapsed');
+            if (sidebar && savedState === 'true') {
+                sidebar.classList.add('collapsed');
+                if (toggleIcon) {
+                    toggleIcon.className = 'fas fa-angle-double-right';
+                }
+            } else if (toggleIcon) {
+                toggleIcon.className = 'fas fa-angle-double-left';
+            }
+
+            // Handle hash navigation for dashboard tabs
+            if (window.location.hash) {
+                const tabId = window.location.hash.substring(1);
+                if (typeof showTab === 'function') {
+                    setTimeout(() => showTab(tabId), 100);
+                }
+            }
+
+            // Auto-open dashboard dropdown if on dashboard page
+            if (window.location.pathname === '/dashboard') {
+                const wrapper = document.querySelector('aside.sidebar .nav-item-wrapper');
+                const navItem = wrapper ? wrapper.querySelector('.nav-item.has-dropdown') : null;
+                const dropdown = document.getElementById('dashboardDropdown');
+
+                if (wrapper && navItem && dropdown) {
+                    wrapper.classList.add('is-open');
+                    navItem.classList.add('is-open');
+                    dropdown.classList.add('is-open');
+                    console.log('Auto-opened dashboard dropdown');
+                } else {
+                    console.error('Could not auto-open dropdown', { wrapper, navItem, dropdown });
+                }
+            }
+
+            // Update active dropdown item based on current tab
+            if (window.location.pathname === '/dashboard') {
+                const hash = window.location.hash.substring(1);
+                if (hash) {
+                    const dropdownItems = document.querySelectorAll('.dropdown-item');
+                    dropdownItems.forEach(item => {
+                        item.classList.remove('active');
+                        if (item.getAttribute('onclick') && item.getAttribute('onclick').includes(hash)) {
+                            item.classList.add('active');
+                        }
+                    });
+                }
+            }
+        });
+
+        // Theme management
+        // Theme management
+        const themes = ['nebula', 'midnight', 'aurora', 'forest', 'crimson'];
+
+        function getPreferredTheme() {
+            const stored = localStorage.getItem('theme');
+            if (stored && themes.includes(stored)) return stored;
+            return 'nebula'; // Default to Antigravity Nebula
+        }
+
+        function setTheme(theme) {
+            if (!themes.includes(theme)) theme = 'nebula';
+
+            // Set the attribute for CSS to pick up
+            document.documentElement.setAttribute('data-color-mode', theme);
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+
+            // Update active state on palette buttons
+            const buttons = document.querySelectorAll('.theme-btn');
+            buttons.forEach(btn => {
+                const btnTheme = btn.getAttribute('data-set-theme');
+                if (btnTheme === theme) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+        }
+
+        // Initialize theme on page load
+        document.addEventListener('DOMContentLoaded', function () {
+            setTheme(getPreferredTheme());
+
+            // Listen for system theme changes
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function (e) {
+                if (!localStorage.getItem('theme')) {
+                    setTheme(e.matches ? 'dark' : 'light');
+                }
+            });
+
+            // IMMEDIATELY force close any stuck modals on page load
+            function forceCloseAllModalsImmediate() {
+                // Close Bootstrap modals
+                const bootstrapModals = document.querySelectorAll('.modal.show');
+                bootstrapModals.forEach(function (modal) {
+                    const modalInstance = bootstrap.Modal.getInstance(modal);
+                    if (modalInstance) {
+                        modalInstance.hide();
+                    }
+                });
+
+                // Remove modal backdrops
+                const backdrops = document.querySelectorAll('.modal-backdrop');
+                backdrops.forEach(function (backdrop) {
+                    backdrop.remove();
+                });
+
+                // Force hide any modals with display: block
+                const stuckModals = document.querySelectorAll('.modal[style*="display: block"]');
+                stuckModals.forEach(function (modal) {
+                    modal.style.display = 'none';
+                });
+
+                // Remove any body classes that might be stuck
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+
+                console.log('IMMEDIATELY cleared stuck modals on page load');
+            }
+
+            // Run immediately
+            forceCloseAllModalsImmediate();
+
+            // Run again after a short delay
+            setTimeout(forceCloseAllModalsImmediate, 50);
+            setTimeout(forceCloseAllModalsImmediate, 100);
+            setTimeout(forceCloseAllModalsImmediate, 200);
+            setTimeout(forceCloseAllModalsImmediate, 500);
+        });
+
+        // Make toggleTheme globally available
+        window.toggleTheme = toggleTheme;
+
+        // Global function to force close all modals
+        window.forceCloseAllModals = function () {
+            // Close Bootstrap modals
+            const bootstrapModals = document.querySelectorAll('.modal.show');
+            bootstrapModals.forEach(function (modal) {
+                const modalInstance = bootstrap.Modal.getInstance(modal);
+                if (modalInstance) {
+                    modalInstance.hide();
+                }
+            });
+
+            // Remove modal backdrops
+            const backdrops = document.querySelectorAll('.modal-backdrop');
+            backdrops.forEach(function (backdrop) {
+                backdrop.remove();
+            });
+
+            // Force hide any modals with display: block
+            const stuckModals = document.querySelectorAll('.modal[style*="display: block"]');
+            stuckModals.forEach(function (modal) {
+                modal.style.display = 'none';
+            });
+
+            // Remove any body classes that might be stuck
+            document.body.classList.remove('modal-open');
+            document.body.style.overflow = '';
+            document.body.style.paddingRight = '';
+
+            console.log('Force closed all modals');
+        };
+
+        // Add keyboard shortcut to force close modals (Escape key)
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') {
+                window.forceCloseAllModals();
+            }
+        });
+
+        // EMERGENCY FIX: Completely disable problematic modals
+        document.addEventListener('DOMContentLoaded', function () {
+            // Override Bootstrap Modal functions to prevent showing
+            if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                const originalShow = bootstrap.Modal.prototype.show;
+                bootstrap.Modal.prototype.show = function () {
+                    console.log('Modal show attempt blocked for:', this._element.id);
+                    // Don't show the modal
+                    return;
+                };
+
+                const originalHide = bootstrap.Modal.prototype.hide;
+                bootstrap.Modal.prototype.hide = function () {
+                    console.log('Modal hide called for:', this._element.id);
+                    // Force hide
+                    this._element.style.display = 'none';
+                    this._element.classList.remove('show');
+                    document.body.classList.remove('modal-open');
+                    document.body.style.overflow = '';
+                    document.body.style.paddingRight = '';
+
+                    // Remove backdrop
+                    const backdrops = document.querySelectorAll('.modal-backdrop');
+                    backdrops.forEach(backdrop => backdrop.remove());
+                };
+            }
+
+            // Override jQuery modal functions if they exist
+            if (typeof $ !== 'undefined' && $.fn.modal) {
+                $.fn.modal = function () {
+                    console.log('jQuery modal call blocked');
+                    return this;
+                };
+            }
+
+            // Force hide specific problematic modals
+            const problematicModals = ['testConnectionModal', 'deleteConfirmModal'];
+            problematicModals.forEach(function (modalId) {
+                const modal = document.getElementById(modalId);
+                if (modal) {
+                    modal.style.display = 'none';
+                    modal.style.visibility = 'hidden';
+                    modal.style.opacity = '0';
+                    modal.style.pointerEvents = 'none';
+                }
+            });
+
+            console.log('Emergency modal blocking activated');
+        });
+    </script>
+
+    <!-- Notification System Script -->
+    <script>
+        // Notification System
+        let notificationDropdownOpen = false;
+
+        function toggleNotificationDropdown() {
+            const dropdown = document.getElementById('notificationDropdown');
+            notificationDropdownOpen = !notificationDropdownOpen;
+            dropdown.style.display = notificationDropdownOpen ? 'block' : 'none';
+
+            if (notificationDropdownOpen) {
+                loadNotifications();
+            }
+        }
+
+        function loadNotifications() {
+            fetch('/api/notifications')
+                .then(res => res.json())
+                .then(data => {
+                    const list = document.getElementById('notificationList');
+                    const badge = document.getElementById('notificationBadge');
+
+                    // Update badge
+                    if (data.unread_count > 0) {
+                        badge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
+                        badge.style.display = 'flex';
+                    } else {
+                        badge.style.display = 'none';
+                    }
+
+                    // Render notifications
+                    if (data.notifications && data.notifications.length > 0) {
+                        list.innerHTML = data.notifications.map(n => `
+                            <div class="notification-item" style="padding: 10px 16px; border-bottom: 1px solid var(--border-panel); display: flex; align-items: flex-start; gap: 12px; ${n.is_read ? 'opacity: 0.6;' : ''}">
+                                <div style="width: 32px; height: 32px; border-radius: 50%; background: rgba(59, 130, 246, 0.15); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                    <i class="fas ${n.icon || 'fa-bell'}" style="font-size: 0.85rem; color: var(--accent-primary);"></i>
+                                </div>
+                                <div style="flex: 1; min-width: 0;">
+                                    <div style="font-weight: 500; color: var(--text-primary); font-size: 0.875rem;">${n.title}</div>
+                                    <div style="color: var(--text-secondary); font-size: 0.75rem; margin-top: 2px;">${n.message}</div>
+                                    <div style="color: var(--text-muted); font-size: 0.7rem; margin-top: 4px;">${n.time_ago}</div>
+                                </div>
+                                ${!n.is_read ? '<div style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent-primary);"></div>' : ''}
+                            </div>
+                        `).join('');
+                    } else {
+                        list.innerHTML = '<div class="text-center text-muted p-4"><i class="fas fa-bell-slash fa-2x mb-2 opacity-50"></i><p class="m-0">No notifications yet</p></div>';
+                    }
+                })
+                .catch(err => {
+                    console.error('Error loading notifications:', err);
+                    document.getElementById('notificationList').innerHTML = '<div class="text-center text-danger p-3">Error loading notifications</div>';
+                });
+        }
+
+        function markAllNotificationsRead() {
+            fetch('/api/notifications/mark-read', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mark_all: true })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        loadNotifications();
+                    }
+                })
+                .catch(err => console.error('Error marking notifications read:', err));
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function (e) {
+            const wrapper = document.querySelector('.notification-wrapper');
+            if (wrapper && !wrapper.contains(e.target)) {
+                document.getElementById('notificationDropdown').style.display = 'none';
+                notificationDropdownOpen = false;
+            }
+        });
+
+        // Load notifications on page load and poll every 30 seconds
+        document.addEventListener('DOMContentLoaded', function () {
+            loadNotifications();
+            setInterval(loadNotifications, 30000);
+        });
+    </script>
+
+    {% block scripts %}{% endblock %}
+
+    <!-- Scroll to Top Button -->
+    <button class="scroll-to-top" id="scrollToTop" onclick="scrollToTop()" title="Scroll to top">
+        <i class="fas fa-arrow-up"></i>
+    </button>
+
+    <script>
+        // Scroll to Top Button
+        function scrollToTop() {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        }
+
+        // Show/hide scroll to top button
+        window.addEventListener('scroll', function () {
+            const scrollButton = document.getElementById('scrollToTop');
+            if (scrollButton) {
+                if (window.pageYOffset > 300) {
+                    scrollButton.classList.add('visible');
+                } else {
+                    scrollButton.classList.remove('visible');
+                }
+            }
+        });
+
+        // Initialize scroll button on page load
+        document.addEventListener('DOMContentLoaded', function () {
+            const scrollButton = document.getElementById('scrollToTop');
+            if (scrollButton && window.pageYOffset > 300) {
+                scrollButton.classList.add('visible');
+            }
+        });
+    </script>
+    </div>
+    <!-- GLOBAL FLOATING DOMAIN MANAGER -->
+    <div class="domain-fab-container">
+        <!-- Main Toggle Icon -->
+        <div class="domain-fab-main" onclick="toggleDomainFab()">
+            <i class="fas fa-globe"></i>
+        </div>
+
+        <!-- Options Menu -->
+        <div class="domain-fab-options" id="domain-fab-options">
+            <!-- Cloudflare Option -->
+            <div class="domain-fab-option fab-cloudflare" onclick="openCloudflareDomainsModal()"
+                data-tooltip="Cloudflare Domains">
+                <i class="fas fa-cloud"></i>
+            </div>
+            <!-- Namecheap Option -->
+            <div class="domain-fab-option fab-namecheap" onclick="openNamecheapDomainsModal()"
+                data-tooltip="Namecheap Domains">
+                <i class="fas fa-cubes"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- GLOBAL DOMAIN MODALS -->
+    <!-- Cloudflare Domains Modal -->
+    <div id="cloudflareDomainsModal" class="modal domain-modal-global" style="display: none;">
+        <div class="modal-content"
+            style="max-width: 800px; width: 90%; background: var(--bg-modal) !important; backdrop-filter: blur(28px) !important; border: 1px solid var(--border-panel) !important;">
+            <div class="modal-header">
+                <h2><i class="fas fa-cloud"></i> Cloudflare Domains</h2>
+                <span class="close" onclick="closeCloudflareDomainsModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="cloudflare-domains-loading" style="text-align: center; padding: 40px; display: none;">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 48px; color: #0969da;"></i>
+                    <p style="margin-top: 16px; color: var(--text-muted);">Fetching domains from Cloudflare...</p>
+                </div>
+
+                <div id="cloudflare-domains-content" style="display: none;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <span id="cloudflare-domains-count"
+                            style="font-weight: 600; color: var(--text-primary);"></span>
+                        <button onclick="copyCloudflareDomains()" class="btn-github">
+                            <i class="fas fa-copy"></i> Copy All
+                        </button>
+                    </div>
+
+                    <div
+                        style="max-height: 400px; overflow-y: auto; border: 1px solid var(--border-subtle); border-radius: 6px;">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <thead style="background: var(--bg-panel); position: sticky; top: 0;">
+                                <tr>
+                                    <th
+                                        style="padding: 12px; text-align: left; border-bottom: 1px solid var(--border-subtle); color: var(--text-primary);">
+                                        Domain</th>
+                                    <th
+                                        style="padding: 12px; text-align: left; border-bottom: 1px solid var(--border-subtle); color: var(--text-primary);">
+                                        Status</th>
+                                    <th
+                                        style="padding: 12px; text-align: left; border-bottom: 1px solid var(--border-subtle); color: var(--text-primary);">
+                                        ID
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody id="cloudflare-domains-list"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="cloudflare-domains-error"
+                    style="display: none; padding: 16px; background-color: rgba(207, 34, 46, 0.1); border: 1px solid rgba(207, 34, 46, 0.4); border-radius: 6px; color: #cf222e;">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Namecheap Domains Modal -->
+    <div id="namecheapDomainsModal" class="modal domain-modal-global" style="display: none;">
+        <div class="modal-content"
+            style="max-width: 800px; width: 90%; background: var(--bg-modal) !important; backdrop-filter: blur(28px) !important; border: 1px solid var(--border-panel) !important;">
+            <div class="modal-header">
+                <h2><i class="fas fa-globe"></i> Namecheap Domains</h2>
+                <span class="close" onclick="closeNamecheapDomainsModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="namecheap-domains-loading" style="text-align: center; padding: 40px; display: none;">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 48px; color: #0969da;"></i>
+                    <p style="margin-top: 16px; color: var(--text-muted);">Fetching domains from Namecheap...</p>
+                </div>
+                <div id="namecheap-domains-content" style="display: none;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <p style="margin: 0; color: var(--text-muted);">
+                            <strong id="namecheap-domains-count" style="color: var(--text-primary);">0</strong>
+                            domain(s)
+                            found
+                        </p>
+                        <button onclick="copyAllNamecheapDomains()" class="btn-github"
+                            style="padding: 6px 12px; font-size: 13px;">
+                            <i class="fas fa-copy"></i> Copy All
+                        </button>
+                    </div>
+                    <div id="namecheap-domains-list"
+                        style="max-height: 400px; overflow-y: auto; border: 1px solid var(--border-subtle); border-radius: 6px;">
+                    </div>
+                </div>
+
+                <div id="namecheap-domains-error" style="display: none; margin-top: 16px;">
+                    <div
+                        style="padding: 12px; background-color: rgba(207, 34, 46, 0.1); border: 1px solid rgba(207, 34, 46, 0.4); border-radius: 6px; color: #cf222e; font-size: 13px;">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <span id="namecheap-domains-error-message"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="border-top: 1px solid var(--border-panel); padding: 16px;">
+                <button onclick="closeNamecheapDomainsModal()" class="btn-github">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Global Domain Manager Script -->
+    <script src="{{ url_for('static', filename='js/domain_manager.js') }}"></script>
+
+</body>
+
+</html>

@@ -1,0 +1,41 @@
+[Unit]
+Description=GBot Web Application (MAXIMUM Resource Utilization)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=notify
+User=root
+Group=root
+WorkingDirectory=/opt/gbot-web-app
+Environment=PATH=/opt/gbot-web-app/venv/bin
+Environment=FLASK_ENV=production
+Environment=PYTHONPATH=/opt/gbot-web-app
+Environment=PYTHONUNBUFFERED=1
+Environment=OMP_NUM_THREADS=4
+ExecStart=/opt/gbot-web-app/venv/bin/gunicorn --config gunicorn_maximum.conf.py app:app
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=10
+PrivateTmp=true
+Restart=always
+RestartSec=5
+
+# MAXIMUM resource limits for 4 vCPU, 16GB RAM
+LimitNOFILE=262144
+LimitNPROC=16384
+LimitMEMLOCK=infinity
+LimitAS=infinity
+
+# Security settings
+NoNewPrivileges=false
+ProtectSystem=false
+ProtectHome=false
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=gbot-maximum
+
+[Install]
+WantedBy=multi-user.target

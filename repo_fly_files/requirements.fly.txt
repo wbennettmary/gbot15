@@ -1,0 +1,10 @@
+psycopg2-binary
+selenium
+selenium-stealth
+selenium-wire
+pyotp
+paramiko
+requests
+python-dotenv
+flask
+gunicorn

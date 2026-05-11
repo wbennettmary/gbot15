@@ -1,0 +1,2248 @@
+/* Glassmorphism UI System - Nebula Admin Theme */
+/* Strictly additive - No global overrides */
+
+:root {
+    /* 1. Geometric Foundations - Vercel Precision */
+    --radius-panel: 12px;
+    --radius-inner: 6px;
+    --radius-button: 6px;
+
+    /* 2. Refractive Surfaces - Subtle Production Glass */
+    --glass-blur: 16px;
+    --glass-opacity: 0.8;
+    /* Higher opacity for better contrast */
+
+    /* 3. Typography */
+    --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-code: 'Geist Mono', 'Fira Code', 'Monaco', monospace;
+    /* Geist if available */
+    --letter-spacing-header: -0.02em;
+
+    /* ANIMATION CURVES */
+    --ease-elastic: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-production: cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+/* THEME: DEFAULT / NEBULA (Vercel Production) */
+:root,
+[data-theme="nebula"],
+[data-theme="midnight"],
+[data-theme="dark"] {
+    /* Backgrounds - Deep Space */
+    --bg-app: #000000;
+    --bg-gradient: linear-gradient(to bottom, #000000, #000000);
+    /* Flat black base */
+
+    /* Surfaces */
+    --bg-panel: rgba(10, 10, 10, 0.6);
+    /* Slightly transparent dark */
+    --bg-modal: #0a0a0a;
+
+    /* Borders - Crisp & Subtle */
+    --border-panel: rgba(255, 255, 255, 0.08);
+    --border-top: rgba(255, 255, 255, 0.12);
+    /* Subtle highlight */
+    --border-bottom: rgba(0, 0, 0, 1);
+
+    --glass-header-bg: rgba(0, 0, 0, 0.8);
+
+    /* Primary / Accent - User Controlled */
+    --accent-primary: #ededed;
+    /* Default white for primary actions in dark mode */
+    --accent-secondary: #333333;
+    /* Dark gray for secondary */
+    --accent-glow: rgba(255, 255, 255, 0.15);
+
+    /* Text - High Contrast */
+    --text-primary: #ededed;
+    --text-secondary: #a1a1a1;
+    --text-muted: #666666;
+
+    /* Components */
+    --input-bg: #0a0a0a;
+    --input-border: #333333;
+
+    /* Orbs - Subtle or Removed for Clean Look */
+    --orb-1: rgba(255, 255, 255, 0.03);
+    --orb-2: rgba(255, 255, 255, 0.02);
+    --orb-3: rgba(0, 0, 0, 0);
+}
+
+/* THEME: MIDNIGHT (Neon Void) - REFINED */
+[data-theme="midnight"],
+[data-theme="dark"] {
+    /* Background */
+    --bg-app: #020202;
+    --bg-gradient: radial-gradient(circle at top right, #09090b 0%, #020202 100%);
+
+    /* Glass Surfaces */
+    --bg-panel: rgba(24, 24, 27, 0.6);
+    --bg-modal: rgba(24, 24, 27, 0.95);
+    --border-panel: rgba(168, 85, 247, 0.15);
+    --border-top: rgba(168, 85, 247, 0.3);
+    --border-bottom: rgba(168, 85, 247, 0.05);
+    --glass-header-bg: rgba(2, 2, 2, 0.8);
+
+    /* Primary / Accent */
+    --accent-primary: #e879f9;
+    /* Neon Fuchsia */
+    --accent-secondary: #8b5cf6;
+    /* Electric Violet */
+    --accent-glow: rgba(139, 92, 246, 0.5);
+
+    /* Text */
+    --text-primary: #fafafa;
+    --text-secondary: #d4d4d8;
+    --text-muted: #71717a;
+
+    /* Components */
+    --input-bg: rgba(255, 255, 255, 0.05);
+
+    /* Orbs */
+    --orb-1: rgba(232, 121, 249, 0.2);
+    --orb-2: rgba(139, 92, 246, 0.2);
+    --orb-3: rgba(0, 0, 0, 0);
+}
+
+/* THEME: AURORA (Ethereal Light) - REFINED */
+[data-theme="aurora"],
+[data-theme="light"] {
+    /* Background */
+    --bg-app: #f1f5f9;
+    --bg-gradient: radial-gradient(circle at top left, #f8fafc, #e2e8f0);
+
+    /* Glass Surfaces */
+    --bg-panel: rgba(255, 255, 255, 0.7);
+    --bg-modal: rgba(255, 255, 255, 0.95);
+    --border-panel: rgba(15, 23, 42, 0.08);
+    --border-top: rgba(255, 255, 255, 0.9);
+    --border-bottom: rgba(15, 23, 42, 0.05);
+    --glass-header-bg: rgba(255, 255, 255, 0.85);
+
+    /* Primary / Accent */
+    --accent-primary: #4f46e5;
+    /* Royal Azure */
+    --accent-secondary: #0891b2;
+    /* Teal */
+    --accent-glow: rgba(8, 145, 178, 0.25);
+
+    /* Text */
+    --text-primary: #020617;
+    --text-secondary: #334155;
+    --text-muted: #64748b;
+
+    /* Components */
+    --input-bg: rgba(255, 255, 255, 0.6);
+
+    /* Orbs */
+    --orb-1: rgba(8, 145, 178, 0.15);
+    --orb-2: rgba(79, 70, 229, 0.15);
+    --orb-3: rgba(255, 255, 255, 0.5);
+}
+
+/* THEME: FOREST (Bio-luminescent) - REFINED */
+[data-theme="forest"] {
+    /* Background */
+    --bg-app: #022c22;
+    --bg-gradient: radial-gradient(ellipse at top, #064e3b, #022c22);
+
+    /* Glass Surfaces */
+    --bg-panel: rgba(6, 78, 59, 0.55);
+    --bg-modal: rgba(6, 78, 59, 0.95);
+    --border-panel: rgba(52, 211, 153, 0.18);
+    --border-top: rgba(52, 211, 153, 0.3);
+    --border-bottom: rgba(52, 211, 153, 0.05);
+    --glass-header-bg: rgba(2, 44, 34, 0.8);
+
+    /* Primary / Accent */
+    --accent-primary: #34d399;
+    /* Emerald */
+    --accent-secondary: #2dd4bf;
+    /* Teal */
+    --accent-glow: rgba(45, 212, 191, 0.4);
+
+    /* Text */
+    --text-primary: #ecfdf5;
+    --text-secondary: #a7f3d0;
+    --text-muted: #6ee7b7;
+
+    /* Components */
+    --input-bg: rgba(0, 0, 0, 0.2);
+
+    /* Orbs */
+    --orb-1: rgba(52, 211, 153, 0.25);
+    --orb-2: rgba(45, 212, 191, 0.25);
+    --orb-3: rgba(2, 44, 34, 0.5);
+}
+
+/* --- ORBS REMOVED FOR CLEAN VERCEL LOOK --- */
+.glass-ui::before,
+.glass-ui::after,
+.glass-orb,
+.glass-orb-1,
+.glass-orb-2,
+.glass-orb-3 {
+    display: none !important;
+}
+
+/* Ensure Themes only affect Accent Colors, not Structure */
+/* Crimson Theme */
+[data-theme="crimson"] {
+    --accent-primary: #f43f5e;
+    /* Rose */
+    --accent-secondary: #881337;
+    /* Dark Rose */
+    --accent-glow: rgba(244, 63, 94, 0.2);
+}
+
+/* Forest Theme */
+[data-theme="forest"] {
+    --accent-primary: #10b981;
+    /* Emerald */
+    --accent-secondary: #064e3b;
+    /* Dark Emerald */
+    --accent-glow: rgba(16, 185, 129, 0.2);
+}
+
+/* Aurora Theme (Light Mode Mapping) */
+/* Aurora Theme (Monday.com Style) */
+[data-theme="aurora"],
+[data-theme="light"] {
+    --bg-app: #f5f6f8;
+    /* Soft blue-gray background common in monday.com */
+    --bg-modal: #ffffff;
+    --bg-panel: #ffffff;
+    --bg-gradient: none;
+
+    /* Crisp borders */
+    --border-panel: #d0d4e4;
+    --border-top: #d0d4e4;
+    --border-bottom: #d0d4e4;
+
+    /* Monday.com text colors */
+    --text-primary: #323338;
+    /* Dark gray, almost black */
+    --text-secondary: #676879;
+    /* Muted gray */
+    --text-muted: #9699a6;
+
+    /* Inputs */
+    --input-bg: #ffffff;
+    --input-border: #c3c6d4;
+
+    /* Monday.com Branding Colors */
+    --accent-primary: #0073ea;
+    /* Monday Blue (Primary Action) */
+    --accent-secondary: #f0f3ff;
+    /* Very light blue for secondary buttons */
+
+    /* Semantic Colors */
+    --color-success: #00ca72;
+    /* Monday Green */
+    --color-danger: #fb275d;
+    /* Monday Red */
+    --color-warning: #ffcb00;
+    /* Monday Yellow */
+
+    /* Specific overrides for light mode components */
+    --glass-header-bg: #ffffff;
+    --glass-blur: 0px;
+    --panel-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+    /* Subtle shadow for panels */
+}
+
+/* Light Mode Specific Overrides */
+[data-theme="aurora"] .glass-sidebar,
+[data-theme="light"] .glass-sidebar {
+    background: #ffffff;
+    /* Clean white sidebar */
+    border-right: 1px solid #d0d4e4;
+    box-shadow: 4px 0 16px rgba(0, 0, 0, 0.04);
+    /* Subtle depth */
+}
+
+/* Light mode buttons - Monday Style */
+[data-theme="aurora"] .glass-button:not(.glass-button-primary):not(.glass-button-danger),
+[data-theme="light"] .glass-button:not(.glass-button-primary):not(.glass-button-danger) {
+    background: #ffffff;
+    border: 1px solid #c3c6d4;
+    color: #323338;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    /* Slight lift */
+}
+
+[data-theme="aurora"] .glass-button:hover:not(.glass-button-primary):not(.glass-button-danger),
+[data-theme="light"] .glass-button:hover:not(.glass-button-primary):not(.glass-button-danger) {
+    background: #f0f3ff;
+    /* Soft blue hover */
+    border-color: #0073ea;
+    color: #0073ea;
+}
+
+/* 3. Glass Panels */
+/* 3. Glass Panels - Nebula Crystalline Style */
+/* 3. Glass Panels - Nebula Crystalline Style */
+/* 3. Glass Panels - Nebula Crystalline Style */
+.glass-panel,
+.glass-ui .github-card,
+.glass-ui .card {
+    background: var(--bg-panel) !important;
+    backdrop-filter: blur(var(--glass-blur)) !important;
+    -webkit-backdrop-filter: blur(var(--glass-blur)) !important;
+
+    /* Ghost Border: Dual-Stroke Simulation */
+    border: 1px solid transparent !important;
+    border-top-color: var(--border-top) !important;
+    border-bottom-color: var(--border-bottom) !important;
+    border-left-color: rgba(255, 255, 255, 0.05) !important;
+    border-right-color: rgba(255, 255, 255, 0.05) !important;
+
+    border-radius: var(--radius-panel) !important;
+    /* 2.5rem */
+
+    box-shadow: 0 8px 32px -8px rgba(0, 0, 0, 0.5) !important;
+    position: relative;
+    z-index: 10;
+    overflow: hidden;
+    margin-bottom: 2rem !important;
+
+    background: var(--bg-panel);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--border-panel);
+    border-radius: var(--radius-panel);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 1), 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+    /* Subtle depth */
+    transition: transform 0.2s var(--ease-production), box-shadow 0.2s var(--ease-production), border-color 0.2s ease;
+    position: relative;
+    overflow: hidden;
+    z-index: 10;
+    /* Keep it above orbs */
+    margin-bottom: 2rem !important;
+    /* Maintain spacing */
+    animation: slideUp 1s var(--ease-elastic) backwards;
+    /* Keep entrance animation */
+}
+
+.glass-panel:hover,
+.glass-ui .github-card:hover,
+.glass-ui .card:hover {
+    border-color: var(--border-top);
+    /* Subtle highlight on hover */
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 1), 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+    transform: translateY(-3px) scale(1.005);
+    /* Subtle lift */
+}
+
+/* Ensure no internal gradients mess up the flat look */
+.glass-panel::before,
+.glass-panel::after,
+.glass-ui .github-card::before,
+.glass-ui .github-card::after,
+.glass-ui .card::before,
+.glass-ui .card::after {
+    display: none !important;
+}
+
+/* Vercel Header Style */
+.glass-header {
+    background: var(--glass-header-bg);
+    border-bottom: 1px solid var(--border-panel);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    transition: border-color 0.2s ease;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(40px) scale(0.95);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* Gradient border effect */
+.glass-panel-highlight {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, var(--accent-glow) 50%, rgba(255, 255, 255, 0) 100%);
+    pointer-events: none;
+}
+
+/* 4. Glass Inputs - Transparent & Ignite */
+.glass-input {
+    background: var(--input-bg) !important;
+    border: 1px solid var(--border-panel) !important;
+    color: var(--text-primary) !important;
+    border-radius: 0.5rem !important;
+    padding: 0.75rem 1rem !important;
+    min-height: 46px;
+    transition: all 0.2s ease-in-out;
+}
+
+.glass-input:focus {
+    outline: none !important;
+    border-color: var(--accent-primary) !important;
+    /* "Ignite" effect */
+    background: transparent !important;
+    /* Spec says transparent */
+    box-shadow: 0 0 15px -3px var(--accent-glow) !important;
+}
+
+
+/* 5. Glass Buttons - Ultra Premium */
+.glass-button {
+    position: relative;
+    padding: 0.75rem 1.75rem !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.03em !important;
+    border-radius: 0.75rem !important;
+    transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1) !important;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    overflow: hidden;
+    z-index: 10;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    min-height: 46px;
+}
+
+/* --- 5. INPUTS (Vercel Style) --- */
+.glass-input {
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    color: var(--text-primary);
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius-button);
+    backdrop-filter: none;
+    /* Removed blur for cleaner text */
+    transition: all 0.15s ease;
+    width: 100%;
+    font-size: 0.9rem;
+    min-height: 40px;
+    /* Standardize height */
+}
+
+.glass-input:focus {
+    outline: none;
+    border-color: var(--text-secondary);
+    /* Subtle highlight */
+    box-shadow: 0 0 0 1px var(--text-secondary);
+    /* Minimal focus ring */
+    background: #000;
+}
+
+.glass-input::placeholder {
+    color: var(--text-muted);
+    opacity: 0.7;
+}
+
+/* --- 6. BUTTONS (Vercel Production) --- */
+.glass-button {
+    background: var(--accent-secondary);
+    /* Default dark button */
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    padding: 0.6rem 1.2rem;
+    border-radius: var(--radius-button);
+    font-weight: 500;
+    font-size: 0.9rem;
+    letter-spacing: -0.01em;
+    cursor: pointer;
+    transition: all 0.15s var(--ease-production);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 40px;
+}
+
+.glass-button:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+    transform: translateY(-1px);
+}
+
+/* Primary Action - White/High Contrast */
+.glass-button-primary {
+    background: var(--accent-primary) !important;
+    color: #000 !important;
+    /* Inverted text for white button */
+    border: 1px solid transparent !important;
+    font-weight: 600;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.glass-button-primary:hover {
+    background: #ffffff !important;
+    transform: translateY(-1px);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1), 0 4px 12px rgba(255, 255, 255, 0.2) !important;
+}
+
+/* Danger Action */
+.glass-button-danger {
+    background: rgba(255, 50, 50, 0.1) !important;
+    color: #ff4444 !important;
+    border: 1px solid rgba(255, 50, 50, 0.2) !important;
+}
+
+.glass-button-danger:hover {
+    background: rgba(255, 50, 50, 0.15) !important;
+    border-color: #ff4444 !important;
+}
+
+/* Warning Action */
+.glass-button-warning {
+    background: rgba(245, 158, 11, 0.1) !important;
+    color: #f59e0b !important;
+    border: 1px solid rgba(245, 158, 11, 0.2) !important;
+}
+
+.glass-button-warning:hover {
+    background: rgba(245, 158, 11, 0.15) !important;
+    border-color: #f59e0b !important;
+}
+
+/* Remove old glow effects */
+.glass-button::after,
+.glass-button-primary::after,
+.glass-button-danger::after {
+    display: none !important;
+}
+
+/* Mapped Legacy Classes (btn-github) to inherit Ultra Premium */
+.glass-ui .btn-github,
+.glass-ui .btn-github-primary,
+.glass-ui .btn-github-danger {
+    /* Reset and inherit base structure */
+    position: relative;
+    overflow: hidden;
+    z-index: 1;
+}
+
+/* We simply apply the same styles to the mapped classes by compositing selectors above would be cleaner,
+   but for now we replicate to ensure specificity override */
+.glass-ui .btn-github {
+    /* Neutral Pro copy */
+    background: rgba(255, 255, 255, 0.03) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.2) !important;
+    color: var(--text-secondary) !important;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+    padding: 0.75rem 1.75rem !important;
+    font-weight: 700 !important;
+    border-radius: 0.75rem !important;
+    transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+.glass-ui .btn-github:hover {
+    background: rgba(255, 255, 255, 0.1) !important;
+    transform: translateY(-3px) scale(1.02);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(200, 200, 255, 0.3) !important;
+    color: var(--text-primary) !important;
+}
+
+.glass-ui .btn-github-primary {
+    background: linear-gradient(135deg, var(--accent-primary) 0%, #4338ca 100%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.4) !important;
+    color: white !important;
+    box-shadow: 0 6px 20px var(--accent-glow), inset 0 1px 0 rgba(255, 255, 255, 0.4) !important;
+    padding: 0.75rem 1.75rem !important;
+    font-weight: 700 !important;
+    border-radius: 0.75rem !important;
+}
+
+.glass-ui .btn-github-primary:hover {
+    transform: translateY(-3px) scale(1.02);
+    box-shadow: 0 15px 35px var(--accent-glow), inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 0 25px var(--accent-primary) !important;
+    filter: brightness(1.2);
+}
+
+.glass-ui .btn-github-danger {
+    background: linear-gradient(135deg, #ef4444 0%, #7f1d1d 100%) !important;
+    border: 1px solid rgba(239, 68, 68, 0.3) !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.3) !important;
+    color: white !important;
+    box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
+    padding: 0.75rem 1.75rem !important;
+    font-weight: 700 !important;
+    border-radius: 0.75rem !important;
+}
+
+.glass-ui .btn-github-danger:hover {
+    transform: translateY(-3px) scale(1.02);
+    box-shadow: 0 15px 35px rgba(239, 68, 68, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 0 25px rgba(239, 68, 68, 0.4) !important;
+}
+
+
+
+
+/* 7. Modal Fixes for Glass Context */
+.glass-modal-backdrop {
+    background-color: rgba(15, 23, 42, 0.8) !important;
+    backdrop-filter: blur(8px) !important;
+}
+
+/* Scoped Overrides - Only apply inside .glass-ui to ensure safety */
+.glass-ui .table {
+    color: #f1f5f9;
+}
+
+.glass-ui .table td,
+.glass-ui .table th {
+    border-color: rgba(148, 163, 184, 0.1);
+}
+
+.glass-ui .card,
+.glass-ui .github-card {
+    background: transparent !important;
+    /* defer to glass-panel wrapper */
+    border: none !important;
+    box-shadow: none !important;
+}
+
+/* Scrollbar styling */
+.glass-ui ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.glass-ui ::-webkit-scrollbar-track {
+    background: rgba(15, 23, 42, 0.4);
+}
+
+.glass-ui ::-webkit-scrollbar-thumb {
+    background: rgba(71, 85, 105, 0.6);
+    border-radius: 4px;
+}
+
+.glass-ui ::-webkit-scrollbar-thumb:hover {
+    background: rgba(100, 116, 139, 0.8);
+}
+
+/* 8. Structural Overrides for Base Template */
+/* 8. Structural Overrides for Base Template */
+.glass-ui aside.sidebar {
+    background: rgba(15, 23, 42, 0.4) !important;
+    /* Reduced from 0.6 */
+    backdrop-filter: blur(16px) !important;
+    border-right: 1px solid var(--border-panel) !important;
+}
+
+.glass-ui .main-wrapper {
+    background: transparent !important;
+}
+
+.glass-ui .main-container {
+    background: transparent !important;
+}
+
+.glass-ui .github-card,
+.glass-ui .section,
+.glass-ui .card {
+    background: var(--bg-panel) !important;
+    backdrop-filter: blur(16px) !important;
+    -webkit-backdrop-filter: blur(16px) !important;
+    border: 1px solid var(--border-panel) !important;
+    border-radius: 1.5rem !important;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3) !important;
+    color: var(--text-primary) !important;
+    margin-bottom: 1.5rem !important;
+}
+
+.draggable-card .github-card-header:active {
+    cursor: grabbing;
+}
+
+/* =========================================
+   GLOBAL FLOATING DOMAIN MANAGER (FAB)
+   ========================================= */
+
+.domain-fab-container {
+    position: fixed;
+    /* Auto-Hide Logic:
+       Width is 56px.
+       -42px hides 75% of it, leaving a 14px "peek" area.
+       User hovers -> it slides out.
+    */
+    right: -42px;
+    transition: right 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+
+    top: 50%;
+    transform: translateY(-50%);
+    bottom: auto;
+    z-index: 10000;
+
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: center;
+    gap: 12px;
+
+    /* Increase hit area to the left so mouse doesn't slip off easily */
+    padding-left: 24px;
+}
+
+/* Slide out on hover */
+.domain-fab-container:hover {
+    right: 16px;
+}
+
+/* Main Toggle Button */
+.domain-fab-main {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    /* Use theme variable for background to match selected color */
+    background: var(--accent-primary, rgba(99, 102, 241, 0.9));
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    /* Keep icon white for contrast */
+    font-size: 24px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.domain-fab-main:hover {
+    transform: scale(1.1);
+    /* Slight brightness increase on hover */
+    filter: brightness(1.2);
+}
+
+.domain-fab-main:active {
+    transform: scale(0.95);
+}
+
+/* Option Buttons Container */
+.domain-fab-options {
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 12px;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(20px) scale(0.8);
+    transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.domain-fab-options.active {
+    opacity: 1;
+    pointer-events: all;
+    transform: translateY(0) scale(1);
+}
+
+/* Individual Option Buttons */
+.domain-fab-option {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--bg-panel);
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--border-panel);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-primary);
+    font-size: 18px;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.domain-fab-option:hover {
+    transform: scale(1.1);
+    background: var(--bg-modal);
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+}
+
+/* Tooltips */
+.domain-fab-option::before {
+    content: attr(data-tooltip);
+    position: absolute;
+    right: 60px;
+    top: 50%;
+    transform: translateY(-50%) translateX(10px);
+    background: var(--bg-modal);
+    color: var(--text-primary);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.2s ease;
+    border: 1px solid var(--border-panel);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.domain-fab-option:hover::before {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
+}
+
+/* Icon specific colors */
+.fab-cloudflare {
+    color: #F38020;
+}
+
+.fab-namecheap {
+    color: #DE3723;
+}
+
+/* Modal Global Overrides */
+.domain-modal-global {
+    z-index: 10001 !important;
+}
+
+.glass-ui .github-card-header,
+.glass-ui .card-header {
+    background: transparent !important;
+    border-bottom: 1px solid var(--border-panel) !important;
+    padding-bottom: 1rem !important;
+    margin-bottom: 1.5rem !important;
+}
+
+.glass-ui .github-card-title,
+.glass-ui h1,
+.glass-ui h2,
+.glass-ui h3,
+.glass-ui h4,
+.glass-ui h5 {
+    color: var(--text-primary) !important;
+    display: flex;
+    align-items: center;
+}
+
+.glass-ui .text-muted,
+.glass-ui .text-secondary,
+.glass-ui small {
+    color: var(--text-secondary) !important;
+}
+
+/* Tab Navigation Shim */
+.glass-ui .tab-navigation,
+.glass-ui .nav-tabs {
+    background: transparent !important;
+    border-bottom: 1px solid var(--border-panel) !important;
+    margin-bottom: 1.5rem !important;
+}
+
+.glass-ui .tab-button,
+.glass-ui .nav-link {
+    color: var(--text-secondary) !important;
+    background: transparent !important;
+    border: none !important;
+    border-bottom: 2px solid transparent !important;
+    padding: 0.75rem 1.5rem !important;
+    font-weight: 500 !important;
+}
+
+.glass-ui .tab-button:hover,
+.glass-ui .nav-link:hover {
+    color: var(--text-primary) !important;
+    background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.glass-ui .tab-button.active,
+.glass-ui .nav-link.active {
+    color: var(--accent-primary) !important;
+    border-bottom: 2px solid var(--accent-primary) !important;
+    background: transparent !important;
+    font-weight: 600 !important;
+}
+
+/* Table Shims */
+.glass-ui table {
+    color: var(--text-primary) !important;
+    border-color: var(--border-panel) !important;
+}
+
+/* 9. Sidebar Navigation Readability Fixes */
+.glass-ui .sidebar-nav .nav-item {
+    color: var(--text-secondary) !important;
+    transition: all 0.2s ease;
+    border-radius: 8px;
+    margin-bottom: 4px;
+    padding: 10px 16px;
+}
+
+.glass-ui .sidebar-nav .nav-item:hover {
+    background: rgba(255, 255, 255, 0.1) !important;
+    /* Semi-transparent white for drag-glass feel */
+    color: #ffffff !important;
+    /* Explicit white text */
+    transform: translateX(4px);
+}
+
+.glass-ui .sidebar-nav .nav-item.active {
+    background: linear-gradient(90deg, var(--accent-primary), transparent) !important;
+    color: #ffffff !important;
+    border-left: 3px solid #ffffff !important;
+}
+
+.glass-ui .sidebar-nav .nav-item i {
+    width: 24px;
+    text-align: center;
+    margin-right: 8px;
+}
+
+/* Fix for Bulk Account Modal Scrolling */
+#bulk-account-modal .glass-modal-content,
+#bulk-account-modal .modal-content {
+    max-height: 85vh !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+}
+
+#bulk-account-modal .glass-modal-body,
+#bulk-account-modal .modal-body {
+    overflow-y: auto !important;
+    flex: 1 1 auto !important;
+    max-height: calc(85vh - 120px) !important;
+    padding-right: 10px !important;
+}
+
+/* Ensure the table header stays visible */
+#bulk-account-modal .table-responsive {
+    overflow-y: visible !important;
+    height: auto !important;
+    max-height: none !important;
+}
+
+/* Fix for buttons */
+#bulk-account-modal .glass-modal-footer,
+#bulk-account-modal .modal-footer {
+    flex-shrink: 0 !important;
+    background: var(--bg-panel) !important;
+    z-index: 10 !important;
+    position: sticky !important;
+    bottom: 0 !important;
+}
+
+/* --- RESPONSIVE SIDEBAR & LAYOUT --- */
+
+/* Default Desktop State (Flex row) */
+.glass-ui {
+    display: flex;
+    flex-direction: row;
+    min-height: 100vh;
+    background: var(--bg-app);
+    background-image: var(--bg-gradient);
+    color: var(--text-primary);
+    overflow-x: hidden;
+    position: relative;
+    width: 100%;
+}
+
+.glass-sidebar {
+    width: 260px;
+    height: 100vh;
+    background: #000;
+    border-right: 1px solid var(--border-panel);
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    z-index: 100;
+    position: sticky;
+    top: 0;
+    flex-shrink: 0;
+    /* Prevent sidebar shrinking */
+    transition: transform 0.3s var(--ease-production);
+}
+
+.main-content {
+    flex: 1;
+    padding: 2rem;
+    overflow-y: auto;
+    overflow-x: hidden;
+    height: 100vh;
+    position: relative;
+    width: 100%;
+    /* Ensure it fills remaining space */
+    max-width: calc(100vw - 260px);
+    /* Explicit max-width for desktop */
+}
+
+/* Mobile Toggle - Hidden on Desktop */
+.mobile-nav-toggle {
+    display: none;
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 1000;
+    background: var(--accent-secondary);
+    border: 1px solid var(--border-panel);
+    color: var(--text-primary);
+    padding: 0.5rem;
+    border-radius: var(--radius-button);
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+/* RESPONSIVE BREAKPOINT (Tablet/Mobile < 992px) */
+@media (max-width: 991.98px) {
+    .glass-ui {
+        flex-direction: column;
+    }
+
+    .glass-sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        transform: translateX(-100%);
+        /* Hidden by default */
+        width: 280px;
+        /* Slightly wider for touch targets */
+        box-shadow: 10px 0 30px rgba(0, 0, 0, 0.5);
+    }
+
+    .glass-sidebar.active {
+        transform: translateX(0);
+    }
+
+    .main-content {
+        padding: 1rem;
+        /* Reduce padding on mobile */
+        width: 100%;
+        max-width: 100vw;
+        height: auto;
+        /* Let it scroll naturally */
+    }
+
+    .mobile-nav-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+    }
+
+    /* Overlay when sidebar is open */
+    .glass-sidebar-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.8);
+        backdrop-filter: blur(4px);
+        z-index: 90;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    }
+
+    .glass-sidebar-overlay.active {
+        display: block;
+        opacity: 1;
+    }
+}
+
+/* Fix Card Layouts on Mobile */
+@media (max-width: 768px) {
+    .glass-panel {
+        padding: 1rem !important;
+        /* Smaller padding inside cards */
+    }
+
+    .glass-header h1 {
+        font-size: 1.5rem !important;
+        /* Smaller headers */
+    }
+
+    /* Force certain flex containers to wrap */
+    .d-flex,
+    .glass-header .d-flex {
+        flex-wrap: wrap;
+    }
+
+    /* Exception for small icon groups or specific toolbars */
+    .no-wrap-mobile {
+        flex-wrap: nowrap !important;
+    }
+}
+
+/* Ensure no horizontal scroll on body */
+body {
+    overflow-x: hidden;
+    width: 100%;
+}
+
+.glass-ui th {
+    background: rgba(255, 255, 255, 0.03) !important;
+    color: var(--text-primary) !important;
+    border-bottom: 1px solid var(--border-panel) !important;
+}
+
+.glass-ui td {
+    border-bottom: 1px solid var(--border-panel) !important;
+    color: var(--text-secondary) !important;
+}
+
+
+/* 10. Top Header & Theme Palette */
+.glass-header {
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 1.5rem;
+    background: var(--glass-header-bg) !important;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border-panel);
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    transition: all 0.3s ease;
+}
+
+.glass-header-left,
+.glass-header-right {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+/* Search Bar */
+.header-search {
+    position: relative;
+    width: 320px;
+}
+
+.header-search input {
+    width: 100%;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--border-panel);
+    border-radius: 9999px;
+    /* Pill shape */
+    padding: 0.5rem 1rem 0.5rem 2.5rem;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    transition: all 0.2s ease;
+}
+
+.header-search i {
+    position: absolute;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-secondary);
+    pointer-events: none;
+}
+
+.header-search input:focus {
+    background: rgba(0, 0, 0, 0.4);
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px var(--accent-glow);
+    outline: none;
+}
+
+/* Theme Palette (5 Modes) */
+.theme-palette {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 4px;
+    border-radius: 9999px;
+    border: 1px solid var(--border-panel);
+}
+
+.theme-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: var(--text-secondary);
+    background: transparent;
+    font-size: 0.875rem;
+    position: relative;
+}
+
+.theme-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.theme-btn.active {
+    background: var(--accent-primary);
+    color: white;
+    box-shadow: 0 0 10px var(--accent-glow);
+}
+
+/* Specific button colors for better recognition */
+.theme-btn[data-set-theme="midnight"]:hover {
+    background: #6366f1;
+    color: white;
+}
+
+.theme-btn[data-set-theme="dark"]:hover {
+    background: #3f3f46;
+    color: white;
+}
+
+.theme-btn[data-set-theme="light"]:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+}
+
+.theme-btn[data-set-theme="aurora"]:hover {
+    background: #06b6d4;
+    color: white;
+}
+
+.theme-btn[data-set-theme="forest"]:hover {
+    background: #10b981;
+    color: white;
+}
+
+/* Notification & Profile */
+.header-icon-btn {
+    position: relative;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 1.25rem;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.header-icon-btn:hover {
+    color: var(--text-primary);
+}
+
+.notification-badge {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 8px;
+    height: 8px;
+    background: var(--accent-secondary);
+    border-radius: 50%;
+    box-shadow: 0 0 5px var(--accent-secondary);
+}
+
+.profile-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 0.875rem;
+    cursor: pointer;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    transition: all 0.2s ease;
+}
+
+.profile-btn:hover {
+    box-shadow: 0 0 15px var(--accent-glow);
+    transform: scale(1.05);
+}
+
+/* Breadcrumb / Title */
+.header-title {
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+
+/* Mobile Responsiveness for Header */
+@media (max-width: 768px) {
+    .glass-header {
+        padding: 0 1rem;
+        height: auto;
+        flex-direction: column;
+        gap: 1rem;
+        padding-bottom: 1rem;
+    }
+
+    .glass-header-left,
+    .glass-header-right {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .header-search {
+        order: 2;
+        width: 100%;
+    }
+
+    .theme-palette {
+        order: 1;
+    }
+
+}
+
+/* END Mobile Media Query */
+
+
+/* =========================================
+   VISUAL TRANSFORMATION: UN-BOXING PROTOCOL
+   ========================================= */
+
+/* 1. Force Transparent Containers (Kill the Box) */
+/* 1. Force Transparent Containers (Nuclear Option) */
+html body .glass-ui .container,
+html body .glass-ui .container-fluid,
+html body .glass-ui .main-container,
+html body .glass-ui .main-wrapper,
+html body .glass-ui .content-wrapper,
+html body .glass-ui .row,
+html body .glass-ui .col,
+html body .glass-ui .col-12,
+html body .glass-ui .card-body,
+html body .glass-ui .tab-content,
+html body .glass-ui .modal-content,
+html body .glass-ui .modal-header,
+html body .glass-ui .modal-footer,
+html body .glass-ui [data-color-mode="dark"] .main-container,
+html body .glass-ui [data-color-mode="dark"] .tab-content,
+html body .glass-ui .log-container,
+html body .glass-ui .activity-log,
+html body .glass-ui .suspended-users-container,
+html body .glass-ui .user-management-area,
+html body .glass-ui .table-wrapper,
+html body .glass-ui div[class*="log"],
+html body .glass-ui div[class*="suspended"] {
+    background: transparent !important;
+    background-color: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+}
+
+/* 2. Global Canvas Enforcer (Animated Gradient) */
+@keyframes nebula-flow {
+    0% {
+        background-position: 0% 50%;
+    }
+
+    50% {
+        background-position: 100% 50%;
+    }
+
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+body,
+html {
+    background: var(--bg-app) !important;
+    background-image: var(--bg-gradient) !important;
+    background-size: 400% 400% !important;
+    animation: nebula-flow 20s ease infinite !important;
+    background-attachment: fixed !important;
+    min-height: 100vh;
+}
+
+/* 3. Phantom Mode (Flat & Transparent) */
+.glass-ui .card,
+.glass-ui .github-card,
+.glass-ui .list-group-item,
+.glass-ui .modal-content,
+.glass-panel {
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    margin-bottom: 2rem !important;
+    overflow: visible !important;
+    color: var(--text-primary) !important;
+    transform: none !important;
+    transition: none !important;
+}
+
+/* Disable Hover Animations */
+.glass-ui .card:hover,
+.glass-ui .github-card:hover,
+.glass-panel:hover {
+    transform: none !important;
+    box-shadow: none !important;
+    border: none !important;
+}
+
+/* 4. Table Glazing */
+.glass-ui pre,
+.glass-ui code,
+.glass-ui .table-responsive {
+    background: rgba(0, 0, 0, 0.2) !important;
+    border-radius: var(--radius-inner) !important;
+    border: 1px solid var(--border-panel) !important;
+}
+
+/* 5. Button Glow */
+.glass-ui .btn-primary,
+.glass-ui .btn-success,
+.glass-ui .glass-button-primary {
+    background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary)) !important;
+    border: none !important;
+    box-shadow: 0 0 15px var(--accent-glow) !important;
+    color: white !important;
+    transition: all 0.3s ease !important;
+}
+
+.glass-ui .btn-primary:hover,
+.glass-ui .glass-button-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0 25px var(--accent-glow) !important;
+}
+
+/* 6. Typography Refinement (Theme-Aware) */
+.glass-ui h1,
+.glass-ui h2,
+.glass-ui h3,
+.glass-ui p,
+.glass-ui span,
+.glass-ui div,
+.glass-ui li,
+.glass-ui td,
+.glass-ui th,
+.glass-ui label,
+.glass-ui small,
+.glass-ui i {
+    color: var(--text-primary) !important;
+}
+
+.glass-ui .text-muted,
+.glass-ui .text-secondary {
+    color: var(--text-secondary) !important;
+}
+
+/* 7. Universal Transparency Enforcer (Inputs & Bars) */
+/* SUPER ENFORCER: Boosted specificity to override base.html inline styles */
+html body .glass-ui input,
+html body .glass-ui select,
+html body .glass-ui textarea,
+html body .glass-ui .form-control,
+html body .glass-ui .form-control-github,
+html body .glass-ui .search-input,
+html body .glass-ui .status-display,
+html body .glass-ui .data-display,
+html body .glass-ui .account-list,
+html body .glass-ui .status-database,
+html body .glass-ui .alert-github,
+/* Additionally target by attribute for max specificty */
+html body .glass-ui [type="text"],
+html body .glass-ui [type="password"],
+html body .glass-ui [type="email"],
+html body .glass-ui [type="number"] {
+    background: var(--input-bg) !important;
+    background-color: var(--input-bg) !important;
+    /* Force both properties */
+    border: 1px solid var(--border-panel) !important;
+    color: var(--text-primary) !important;
+    box-shadow: none !important;
+}
+
+/* AUTOFILL FIX: Override browser default autofill colors */
+html body .glass-ui input:-webkit-autofill,
+html body .glass-ui input:-webkit-autofill:hover,
+html body .glass-ui input:-webkit-autofill:focus,
+html body .glass-ui input:-webkit-autofill:active,
+html body .glass-ui textarea:-webkit-autofill,
+html body .glass-ui textarea:-webkit-autofill:hover,
+html body .glass-ui textarea:-webkit-autofill:focus,
+html body .glass-ui select:-webkit-autofill,
+html body .glass-ui select:-webkit-autofill:hover,
+html body .glass-ui select:-webkit-autofill:focus {
+    -webkit-text-fill-color: var(--text-primary) !important;
+    -webkit-box-shadow: 0 0 0px 1000px #0f172a inset !important;
+    /* Fallback dark */
+    box-shadow: 0 0 0px 1000px #0f172a inset !important;
+    background-color: transparent !important;
+    transition: background-color 5000s ease-in-out 0s;
+}
+
+/* Specific theme overrides for autofill to match glass background */
+[data-theme="nebula"] input:-webkit-autofill {
+    -webkit-box-shadow: 0 0 0px 1000px rgba(15, 23, 42, 0.9) inset !important;
+}
+
+[data-theme="midnight"] input:-webkit-autofill {
+    -webkit-box-shadow: 0 0 0px 1000px rgba(24, 24, 27, 0.9) inset !important;
+}
+
+[data-theme="forest"] input:-webkit-autofill {
+    -webkit-box-shadow: 0 0 0px 1000px rgba(6, 78, 59, 0.9) inset !important;
+}
+
+[data-theme="crimson"] input:-webkit-autofill {
+    -webkit-box-shadow: 0 0 0px 1000px rgba(127, 29, 29, 0.9) inset !important;
+}
+
+[data-theme="aurora"] input:-webkit-autofill,
+[data-theme="light"] input:-webkit-autofill {
+    -webkit-box-shadow: 0 0 0px 1000px rgba(255, 255, 255, 0.9) inset !important;
+    -webkit-text-fill-color: #020617 !important;
+}
+
+
+/* Force Cards to be Glass too */
+html body .glass-ui .card,
+html body .glass-ui .github-card {
+    background: var(--bg-panel) !important;
+    background-color: var(--bg-panel) !important;
+    border: 1px solid var(--border-panel) !important;
+    color: var(--text-primary) !important;
+}
+
+html body .glass-ui input::placeholder,
+html body .glass-ui textarea::placeholder {
+    color: rgba(226, 232, 240, 0.5) !important;
+}
+
+.glass-ui .text-muted,
+.glass-ui .text-secondary,
+.glass-ui small {
+    color: var(--text-secondary) !important;
+}
+
+.glass-ui h1,
+.glass-ui h2,
+.glass-ui h3 {
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+    margin-bottom: 1.5rem !important;
+}
+
+/* 7. Glass Modals (Universal) */
+.modal-backdrop {
+    background-color: rgba(0, 0, 0, 0.8) !important;
+    backdrop-filter: blur(8px) !important;
+}
+
+.modal-content,
+.modal-dialog .modal-content {
+    background: #0f172a !important;
+    /* Fallback */
+    background: var(--bg-modal) !important;
+    backdrop-filter: blur(28px) !important;
+    -webkit-backdrop-filter: blur(28px) !important;
+    border: 1px solid var(--border-panel) !important;
+    border-top: 1px solid var(--border-top) !important;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
+    border-radius: var(--radius-panel) !important;
+    color: var(--text-primary) !important;
+}
+
+.modal-header,
+.modal-footer {
+    border-color: var(--border-panel) !important;
+    background: transparent !important;
+}
+
+.modal-header .btn-close,
+.modal-header .close {
+    filter: invert(1) grayscale(100%) brightness(200%);
+    opacity: 0.8;
+}
+
+/* 8. Glass Utility Classes for Dashboard Modals */
+.glass-info-box {
+    background: rgba(9, 105, 218, 0.1) !important;
+    border: 1px solid var(--border-panel) !important;
+    border-radius: 6px;
+    padding: 12px;
+    color: var(--text-primary) !important;
+}
+
+.glass-warning-box {
+    background: rgba(245, 158, 11, 0.1) !important;
+    border: 1px solid var(--border-panel) !important;
+    border-radius: 6px;
+    padding: 12px;
+    color: var(--text-primary) !important;
+}
+
+.glass-success-box {
+    background: rgba(16, 185, 129, 0.1) !important;
+    border: 1px solid var(--border-panel) !important;
+    border-radius: 6px;
+    padding: 12px;
+    color: var(--text-primary) !important;
+}
+
+.glass-error-box {
+    background: rgba(239, 68, 68, 0.1) !important;
+    border: 1px solid var(--border-panel) !important;
+    border-radius: 6px;
+    padding: 12px;
+    color: var(--text-primary) !important;
+}
+
+.glass-code-block {
+    background: var(--input-bg) !important;
+    border: 1px solid var(--border-panel) !important;
+    border-radius: 6px;
+    padding: 12px;
+    font-family: 'Courier New', monospace;
+    color: var(--text-primary) !important;
+}
+
+.glass-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: transparent !important;
+}
+
+.glass-table th {
+    background: var(--bg-panel) !important;
+    color: var(--text-primary) !important;
+    border-bottom: 2px solid var(--border-panel) !important;
+    padding: 12px;
+    text-align: left;
+}
+
+.glass-table td {
+    padding: 12px;
+    border-bottom: 1px solid var(--border-panel) !important;
+    color: var(--text-secondary) !important;
+}
+
+.glass-table tr:hover td {
+    background: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* NUCLEAR OVERRIDE for Bulk Account Modal Rows on Hover */
+#bulk-account-modal table tr:hover,
+#bulk-account-modal table tr:hover td,
+#bulk-account-modal tr:hover,
+#bulk-account-modal tr:hover td {
+    background: transparent !important;
+    background-color: transparent !important;
+    color: #ffffff !important;
+}
+
+#bulk-account-modal input:hover,
+#bulk-account-modal input:focus {
+    background: var(--input-bg) !important;
+    color: #ffffff !important;
+}
+
+/* Glass Dropdown Items */
+.glass-dropdown-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border-panel);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: background 0.2s ease;
+    background: transparent;
+    color: var(--text-primary);
+}
+
+.glass-dropdown-item:hover {
+    background: rgba(255, 255, 255, 0.1) !important;
+    /* Glass hover effect */
+    color: #ffffff !important;
+}
+
+.glass-dropdown-item:last-child {
+    border-bottom: none;
+}
+
+.glass-table-header,
+.glass-table th {
+    background: var(--bg-panel) !important;
+    color: var(--text-primary) !important;
+    border-bottom: 2px solid var(--border-panel) !important;
+    padding: 12px;
+    text-align: left;
+}
+
+/* Fix light theme close buttons */
+[data-theme="aurora"] .modal-header .btn-close,
+[data-theme="aurora"] .modal-header .close,
+[data-theme="light"] .modal-header .btn-close,
+[data-theme="light"] .modal-header .close {
+    filter: none !important;
+    opacity: 0.5;
+}
+
+.modal-title {
+    color: var(--text-primary) !important;
+    font-weight: 600;
+}
+
+.modal-body {
+    color: var(--text-secondary) !important;
+}
+
+/* Ensure inputs in modals are readable */
+.modal-body input,
+.modal-body select,
+.modal-body textarea {
+    background: var(--input-bg) !important;
+    border-color: var(--border-panel) !important;
+    color: var(--text-primary) !important;
+}
+
+/* SUPER ENFORCER LEVEL 2: Target specific ID containers that are stubborn */
+#user-display,
+#suspended-display,
+#account-list,
+#status-display,
+#csv-download-area,
+#bulk-account-results,
+#bulk-subdomain-results,
+#domain-info-display,
+.count-display,
+.status-box,
+.status-info {
+    background: var(--bg-panel) !important;
+    background-color: var(--bg-panel) !important;
+    border: 1px solid var(--border-panel) !important;
+    color: var(--text-primary) !important;
+    backdrop-filter: blur(var(--glass-blur)) !important;
+}
+
+/* Explicit ID overrides for Authentication Section */
+#account-count-display,
+#auth-status {
+    background: var(--bg-panel) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-panel) !important;
+}
+
+/* 10. User Listing Status Box Fixes */
+.status-summary {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+}
+
+.status-item {
+    background: var(--bg-panel) !important;
+    background-color: var(--bg-panel) !important;
+    border: 1px solid var(--border-panel) !important;
+    padding: 10px 16px;
+    border-radius: 8px;
+    flex: 1;
+    min-width: 150px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    backdrop-filter: blur(var(--glass-blur));
+    color: var(--text-primary) !important;
+    box-shadow: none !important;
+}
+
+.status-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.status-value {
+    font-size: 14px;
+    color: var(--text-primary);
+    font-weight: 700;
+}
+
+/* 11. Bulk Account Result Items */
+.glass-result-item {
+    padding: 10px 12px;
+    margin-bottom: 6px;
+    background: var(--bg-panel) !important;
+    background-color: var(--bg-panel) !important;
+    border: 1px solid var(--border-panel) !important;
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    backdrop-filter: blur(var(--glass-blur));
+}
+
+.glass-progress-track {
+    background: rgba(255, 255, 255, 0.1) !important;
+    border: 1px solid var(--border-panel);
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+/* Override progress container to be glass */
+.progress-container {
+    background: var(--bg-panel) !important;
+    background-color: var(--bg-panel) !important;
+    border: 1px solid var(--border-panel) !important;
+    color: var(--text-primary) !important;
+    backdrop-filter: blur(var(--glass-blur)) !important;
+}
+
+/* Force input fields inside these specific containers too */
+#user-display input,
+#suspended-display input,
+#account-list input,
+.github-card input,
+.github-card select,
+.github-card textarea {
+    background: var(--input-bg) !important;
+    background-color: var(--input-bg) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-panel) !important;
+}
+
+.glass-sub-panel {
+    background: rgba(255, 255, 255, 0.02) !important;
+    border: 1px solid var(--border-panel) !important;
+    border-radius: 8px;
+    padding: 16px;
+}
+
+/* Responsive Button Row */
+.button-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 16px;
+    align-items: center;
+}
+
+/* Ensure buttons inside don't shrink too much but aren't huge */
+.button-row .btn-github,
+.button-row .glass-button {
+    flex: 0 1 auto;
+    min-width: max-content;
+}
+
+/* Mobile check: On very small screens, let them stretch */
+@media (max-width: 600px) {
+
+    .button-row .btn-github,
+    .button-row .glass-button {
+        flex: 1 1 100%;
+        width: 100%;
+    }
+}
+
+/* Button Fixes */
+.btn-github {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 16px !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    line-height: 20px !important;
+    border-radius: 6px !important;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    height: auto !important;
+    /* Force auto height */
+    min-height: 32px;
+}
+
+/* Primary Button Style */
+.btn-github-primary {
+    background-color: #1f883d;
+    color: #ffffff;
+    border: 1px solid rgba(27, 31, 36, 0.15);
+    box-shadow: 0 1px 0 rgba(27, 31, 36, 0.1);
+}
+
+.btn-github-primary:hover {
+    background-color: #1a7f37;
+}
+
+/* Warning Button Style */
+.btn-github-warning {
+    background-color: #9a6700;
+    /* Darker orange/brown */
+    color: #ffffff;
+    border: 1px solid rgba(27, 31, 36, 0.15);
+}
+
+/* Danger Button Style */
+.btn-github-danger {
+    background-color: #d73a49;
+    color: #ffffff;
+    border: 1px solid rgba(27, 31, 36, 0.15);
+}
+
+/* Drag Handle Cursor */
+.draggable-card .github-card-header {
+    cursor: move;
+    /* Fallback */
+    cursor: grab;
+}
+
+.draggable-card .github-card-header:active {
+    cursor: grabbing;
+}
+
+/* User Management Styles */
+.monday-table tbody tr {
+    border-bottom: 1px solid var(--border-panel);
+    transition: background-color 0.2s ease;
+}
+
+.monday-table tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.02);
+}
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.status-active {
+    background-color: rgba(45, 204, 112, 0.15);
+    color: #2ecc71;
+    border: 1px solid rgba(45, 204, 112, 0.3);
+}
+
+.status-inactive {
+    background-color: rgba(149, 165, 166, 0.15);
+    color: #95a5a6;
+    border: 1px solid rgba(149, 165, 166, 0.3);
+}
+
+.role-dropdown {
+    padding: 6px 16px;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 0.8rem;
+    color: white;
+    border: none;
+    cursor: pointer;
+    text-align: center;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: none;
+    /* Remove default arrow */
+    width: 100px;
+    transition: transform 0.1s ease;
+}
+
+.role-dropdown:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+
+.role-admin {
+    background-color: #e2445c;
+    box-shadow: 0 4px 0 #c02840;
+}
+
+.role-mailer {
+    background-color: #579bfc;
+    box-shadow: 0 4px 0 #2872d8;
+}
+
+.role-support {
+    background-color: #ffcb00;
+    color: #333;
+    box-shadow: 0 4px 0 #d9ad00;
+}
+
+.avatar-circle {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 0.9rem;
+    color: white;
+    margin-right: 12px;
+}
+
+/* Modal Animation */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+.modal-overlay {
+    animation: fadeIn 0.2s ease-out;
+}
+
+/* --- SIDEBAR REPAIR & COLLAPSE LOGIC (DESKTOP) --- */
+@media (min-width: 992px) {
+
+    /* Ensure Layout uses Flex/Fixed properly */
+    .glass-ui {
+        display: flex;
+        flex-direction: row;
+        min-height: 100vh;
+    }
+
+    /* Standard Desktop Sidebar */
+    .sidebar {
+        width: 280px;
+        background: var(--bg-panel);
+        border-right: 1px solid var(--border-panel);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        display: flex;
+        flex-direction: column;
+        position: fixed;
+        /* Stick to left */
+        top: 0;
+        bottom: 0;
+        left: 0;
+        z-index: 100;
+        transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+
+    /* Main Content Area Adjustment */
+    .main-wrapper {
+        flex: 1;
+        margin-left: 280px;
+        /* Offset by sidebar width */
+        width: calc(100% - 280px);
+        transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+    }
+
+    /* --- COLLAPSED STATE --- */
+    .sidebar.collapsed {
+        width: 80px !important;
+    }
+
+    .sidebar.collapsed~.main-wrapper {
+        margin-left: 80px !important;
+        width: calc(100% - 80px) !important;
+    }
+
+    /* Adjust Inner Elements when Collapsed */
+    .sidebar.collapsed .sidebar-header {
+        padding: 20px 0;
+        justify-content: center;
+    }
+
+    .sidebar.collapsed .sidebar-logo {
+        margin: 0;
+    }
+
+    .sidebar.collapsed .sidebar-toggle {
+        right: -10px;
+        /* Overlap border */
+        top: 25px;
+        background: var(--accent-primary);
+        color: white;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    }
+
+    .sidebar.collapsed .sidebar-toggle i {
+        font-size: 0.8rem;
+    }
+
+    .sidebar.collapsed .nav-item {
+        justify-content: center;
+        padding: 12px 0;
+    }
+
+    .sidebar.collapsed .nav-item i {
+        margin: 0 !important;
+        font-size: 1.25rem;
+    }
+
+    .sidebar.collapsed .sidebar-footer {
+        padding: 12px;
+        justify-content: center;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .sidebar.collapsed .sidebar-footer i {
+        margin: 0;
+        font-size: 1.2rem;
+    }
+
+    /* HIDE TEXT ELEMENTS */
+    .sidebar.collapsed .sidebar-logo span,
+    .sidebar.collapsed .nav-item span,
+    .sidebar.collapsed .dropdown-toggle,
+    .sidebar.collapsed .sidebar-user-info span,
+    .sidebar.collapsed .sidebar-footer-actions span,
+    .sidebar.collapsed .btn-logout {
+        display: none !important;
+    }
+
+    /* Special handling for logout button in footer */
+    .sidebar.collapsed .btn-logout {
+        width: 40px;
+        height: 40px;
+        padding: 0;
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+    }
+
+    .sidebar.collapsed .btn-logout i {
+        margin: 0;
+    }
+
+    /* Hide the text content of logout button but keep icon */
+    .sidebar.collapsed .btn-logout {
+        font-size: 0;
+        /* Hides text */
+    }
+
+    .sidebar.collapsed .btn-logout i {
+        font-size: 1rem;
+        /* Restore icon size */
+    }
+}
+
+/* --- MONDAY.COM REFINEMENTS --- */
+.monday-group-header td {
+    background-color: rgba(255, 255, 255, 0.03) !important;
+    padding: 12px 20px !important;
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--accent-primary);
+    border-top: 1px solid var(--border-panel);
+    border-left: 4px solid #579bfc;
+    /* Default Blue Group Color */
+    border-bottom: 1px solid var(--border-panel);
+    position: relative;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Status Full Cell */
+.monday-status-cell {
+    padding: 0 !important;
+    vertical-align: middle;
+    width: 140px;
+    height: 1px;
+    /* Force formatting */
+}
+
+.monday-cell-block {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    min-height: 56px;
+    /* Reduced slightly for tighter look */
+    background-color: #00c875;
+    /* Monday Green */
+    color: white;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+    cursor: default;
+    transition: all 0.2s ease;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+.monday-cell-block:hover {
+    filter: brightness(1.05);
+    transform: scale(0.98);
+}
+
+/* Date Cell Enhancements */
+.monday-date-cell {
+    display: flex;
+    align-items: center;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.monday-date-icon {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+    margin-right: 12px;
+    color: var(--text-primary);
+}
+
+/* Table Spacing & Reset */
+.monday-table {
+    border-collapse: collapse;
+    /* Better for glass */
+    width: 100%;
+}
+
+.monday-table tbody tr {
+    transition: background-color 0.15s ease;
+}
+
+.monday-table tbody tr:hover td {
+    background-color: rgba(255, 255, 255, 0.02);
+}
+
+.monday-table td {
+    border-bottom: 1px solid var(--border-panel);
+    vertical-align: middle;
+}
+
+.monday-table th {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+    color: var(--text-muted);
+    padding: 12px 24px;
+    background: rgba(0, 0, 0, 0.02);
+}

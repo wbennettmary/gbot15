@@ -1,0 +1,114 @@
+FROM public.ecr.aws/lambda/python:3.10
+
+# ------------------------
+# Lambda Prep - Selenium + Cloud Shell Automation
+# ------------------------
+
+ENV HOME=/tmp
+ENV XDG_CACHE_HOME=/tmp/.cache
+ENV TMPDIR=/tmp
+ENV TMP=/tmp
+ENV PYTHONUNBUFFERED=1
+
+# ------------------------
+# Install system libraries
+# ------------------------
+RUN yum update -y && \
+    yum install -y \
+        unzip \
+        zip \
+        wget \
+        curl \
+        which \
+        xz \
+        gtk3 \
+        atk \
+        at-spi2-atk \
+        cups-libs \
+        dbus-glib \
+        nss \
+        GConf2 \
+        alsa-lib \
+        libXcomposite \
+        libXcursor \
+        libXdamage \
+        libXext \
+        libXi \
+        libXrandr \
+        libXScrnSaver \
+        libXtst \
+        pango \
+        libcairo \
+        libX11 \
+        libXrender \
+        libXfixes \
+        libxshmfence \
+        mesa-libgbm \
+        mesa-libglu \
+        libdrm \
+        libuuid \
+        ipa-gothic-fonts \
+        less \
+        groff \
+        procps \
+        findutils && \
+    yum clean all
+
+# ------------------------
+# Create /tmp directories
+# ------------------------
+RUN mkdir -p /tmp/user-data /tmp/data-path /tmp/cache-dir /tmp/.cache && \
+    chmod -R 777 /tmp
+
+# ------------------------
+# Install Google Chrome (stable)
+# ------------------------
+RUN curl https://dl.google.com/linux/direct/google-chrome-stable_current_x86_64.rpm -o /tmp/chrome.rpm && \
+    yum install -y /tmp/chrome.rpm && \
+    rm /tmp/chrome.rpm && \
+    google-chrome --version
+
+# ------------------------
+# Install ChromeDriver
+# ------------------------
+RUN CHROME_VERSION=$(google-chrome --version | grep -oE "[0-9.]+" | head -1 | cut -d "." -f 1) && \
+    echo "Chrome major version: $CHROME_VERSION" && \
+    DRIVER_VERSION=$(curl -s "https://googlechromelabs.github.io/chrome-for-testing/LATEST_RELEASE_${CHROME_VERSION}" || echo "") && \
+    if [ -z "$DRIVER_VERSION" ]; then \
+        echo "Failed to get driver version, using latest"; \
+        DRIVER_VERSION=$(curl -s "https://googlechromelabs.github.io/chrome-for-testing/LATEST_RELEASE" || echo "latest"); \
+    fi && \
+    echo "Using ChromeDriver version: $DRIVER_VERSION" && \
+    curl -L "https://storage.googleapis.com/chrome-for-testing-public/${DRIVER_VERSION}/linux64/chromedriver-linux64.zip" -o /tmp/chromedriver.zip && \
+    unzip /tmp/chromedriver.zip -d /tmp/ && \
+    mv /tmp/chromedriver-linux64/chromedriver /usr/bin/chromedriver && \
+    chmod +x /usr/bin/chromedriver && \
+    rm -rf /tmp/chromedriver.zip /tmp/chromedriver-linux64 && \
+    chromedriver --version
+
+# ------------------------
+# Install AWS CLI v2
+# ------------------------
+RUN curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip" && \
+    unzip -q /tmp/awscliv2.zip -d /tmp && \
+    /tmp/aws/install && \
+    rm -rf /tmp/awscliv2.zip /tmp/aws && \
+    aws --version
+
+# ------------------------
+# Install Python dependencies
+# ------------------------
+COPY requirements_prep.txt ${LAMBDA_TASK_ROOT}/
+RUN pip install --upgrade pip && \
+    pip install -r ${LAMBDA_TASK_ROOT}/requirements_prep.txt && \
+    rm ${LAMBDA_TASK_ROOT}/requirements_prep.txt
+
+# ------------------------
+# Copy Lambda code
+# ------------------------
+COPY prep.py ${LAMBDA_TASK_ROOT}/
+
+# ------------------------
+# Set the Lambda handler
+# ------------------------
+CMD ["prep.main"]

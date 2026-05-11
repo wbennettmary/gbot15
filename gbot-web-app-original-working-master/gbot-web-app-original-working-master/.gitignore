@@ -1,0 +1,17 @@
+
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+Thumbs.db
+*.log
+
+# Never commit production .env (use .env.example as template)
+.env
+.env.backup.*
+
+# Virtual environment
+venv/
+
+# Instance folder
+instance/

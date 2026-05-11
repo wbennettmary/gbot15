@@ -1,0 +1,46 @@
+FROM umihico/aws-lambda-selenium-python:latest
+
+# ------------------------
+# Lambda Creation - Selenium Account Creator
+# Based on Education_creation.py logic
+# Uses same base image as main.py for stability
+# ------------------------
+
+ENV HOME=/tmp
+ENV XDG_CACHE_HOME=/tmp/.cache
+ENV TMPDIR=/tmp
+ENV TMP=/tmp
+ENV PYTHONUNBUFFERED=1
+
+# Disable SeleniumManager
+ENV SE_SELENIUM_MANAGER=false
+ENV SELENIUM_MANAGER=false
+ENV SELENIUM_DISABLE_DRIVER_MANAGER=1
+
+# Create /tmp directories
+RUN mkdir -p /tmp/user-data /tmp/data-path /tmp/cache-dir /tmp/.cache /tmp/chrome-data && \
+    chmod -R 777 /tmp
+
+# Install Python dependencies
+# Note: The base image already has selenium installed
+COPY requirements_creation.txt ${LAMBDA_TASK_ROOT}/
+RUN pip install --no-cache-dir -r ${LAMBDA_TASK_ROOT}/requirements_creation.txt && \
+    rm ${LAMBDA_TASK_ROOT}/requirements_creation.txt
+
+# Copy Lambda code
+COPY creation_lambda.py ${LAMBDA_TASK_ROOT}/
+
+# Verify Chrome is available
+RUN echo "=== Checking base image for Chrome/Chromium ===" && \
+    echo "Contents of /opt:" && \
+    (ls -la /opt 2>/dev/null || echo "Cannot list /opt") && \
+    echo "" && \
+    echo "Contents of /opt/chrome (if exists):" && \
+    (ls -la /opt/chrome 2>/dev/null || echo "/opt/chrome does not exist") && \
+    echo "" && \
+    echo "Searching for Chrome/Chromium binaries:" && \
+    (find /opt -type f -name "*chrome*" -o -name "*chromium*" 2>/dev/null | head -10 || echo "No Chrome found in /opt") && \
+    echo "=== End Chrome check ==="
+
+# Set the Lambda handler
+CMD ["creation_lambda.handler"]

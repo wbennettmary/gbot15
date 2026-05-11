@@ -1,0 +1,3644 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - GBot Web{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div style="margin-bottom: 24px;">
+        <h1 class="github-card-title">
+            <i class="fas fa-cog"></i>
+            Settings
+        </h1>
+        <p style="color: #656d76; margin: 8px 0 0 0; font-size: 14px;">
+            Configure application settings and server connections
+        </p>
+    </div>
+
+    <!-- Settings Content Wrapper for Drag & Drop -->
+    <style>
+        /* NUCLEAR LAYOUT FIX */
+        #settings-sortable-container {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 24px !important;
+            width: 100% !important;
+            max-width: 100% !important;
+        }
+
+        .draggable-card {
+            width: 100% !important;
+            display: block !important;
+            margin-bottom: 24px !important;
+            flex: 0 0 auto !important;
+        }
+    </style>
+    <div id="settings-sortable-container" style="display: flex; flex-direction: column; gap: 24px;">
+
+        <!-- Server Configuration Section -->
+        <div class="github-card draggable-card" data-id="server-config" style="margin-bottom: 24px;">
+            <div class="github-card-header" style="cursor: move;">
+                <h3 class="github-card-title" style="font-size: 18px;">
+                    <i class="fas fa-server"></i>
+                    Server Configuration
+                </h3>
+            </div>
+            <p style="color: #656d76; margin-bottom: 24px; font-size: 14px;">
+                Configure the server connection for importing accounts from JSON files.
+                This server should contain the credential JSON files for Google Workspace accounts.
+            </p>
+
+            <form id="server-config-form">
+                <div class="d-flex flex-wrap gap-3 mb-3">
+                    <div class="flex-grow-1" style="min-width: 250px;">
+                        <label for="server_host" class="form-label-github">
+                            <i class="fas fa-globe"></i> Server Host/IP
+                        </label>
+                        <input type="text" class="form-control-github w-100" id="server_host"
+                            placeholder="192.168.1.100 or server.domain.com" required>
+                        <small style="color: #656d76; font-size: 12px;">
+                            IP address or hostname of the server
+                        </small>
+                    </div>
+                    <div class="flex-grow-1" style="min-width: 250px;">
+                        <label for="server_port" class="form-label-github">
+                            <i class="fas fa-plug"></i> Port
+                        </label>
+                        <input type="number" class="form-control-github w-100" id="server_port" value="22" min="1"
+                            max="65535" required>
+                        <small style="color: #656d76; font-size: 12px;">
+                            SSH port (default: 22)
+                        </small>
+                    </div>
+                </div>
+
+                <div class="d-flex flex-wrap gap-3 mb-3">
+                    <div class="flex-grow-1" style="min-width: 250px;">
+                        <label for="server_username" class="form-label-github">
+                            <i class="fas fa-user"></i> Username
+                        </label>
+                        <input type="text" class="form-control-github w-100" id="server_username"
+                            placeholder="ubuntu or root" required>
+                        <small style="color: #656d76; font-size: 12px;">
+                            SSH username for server access
+                        </small>
+                    </div>
+                    <div class="flex-grow-1" style="min-width: 250px;">
+                        <label for="server_auth_method" class="form-label-github">
+                            <i class="fas fa-lock"></i> Authentication Method
+                        </label>
+                        <select class="form-control-github w-100" id="server_auth_method" required>
+                            <option value="password">Password</option>
+                            <option value="key">SSH Key</option>
+                        </select>
+                        <small style="color: #656d76; font-size: 12px;">
+                            Choose authentication method
+                        </small>
+                    </div>
+                </div>
+
+                <div class="d-flex flex-wrap gap-3 mb-3">
+                    <div class="flex-grow-1" id="password-field" style="min-width: 250px;">
+                        <label for="server_password" class="form-label-github">
+                            <i class="fas fa-key"></i> Password
+                        </label>
+                        <input type="password" class="form-control-github w-100" id="server_password"
+                            placeholder="Server password">
+                        <small style="color: #656d76; font-size: 12px;">
+                            SSH password (if using password auth)
+                        </small>
+                    </div>
+                    <div class="flex-grow-1" id="key-field" style="display: none; min-width: 250px;">
+                        <label for="server_private_key" class="form-label-github">
+                            <i class="fas fa-key"></i> Private Key
+                        </label>
+                        <textarea class="form-control-github w-100" id="server_private_key" rows="4"
+                            placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;...&#10;-----END OPENSSH PRIVATE KEY-----"
+                            style="resize: vertical; font-family: 'Courier New', monospace; font-size: 12px;"></textarea>
+                        <small style="color: #656d76; font-size: 12px;">
+                            SSH private key content (if using key auth)
+                        </small>
+                    </div>
+                </div>
+
+                <div class="form-group-github">
+                    <label for="server_json_path" class="form-label-github">
+                        <i class="fas fa-folder"></i> JSON Files Directory Structure
+                    </label>
+                    <div
+                        style="background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; padding: 12px; margin-bottom: 8px;">
+                        <code style="color: #0969da; font-size: 14px;">/home/brightmindscampus/{account}/*.json</code>
+                    </div>
+                    <small style="color: #656d76; font-size: 12px;">
+                        Each account has its own directory containing JSON credential files. The system will
+                        automatically
+                        look for JSON files in each account's directory.
+                    </small>
+                </div>
+
+                <div style="display: flex; gap: 16px; justify-content: center; margin-top: 24px;">
+                    <button type="button" class="btn-github" onclick="testServerConnection()">
+                        <i class="fas fa-search"></i> Test Connection
+                    </button>
+                    <button type="submit" class="btn-github btn-github-primary">
+                        <i class="fas fa-save"></i> Save Configuration
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Namecheap DNS Configuration Section -->
+        <div class="github-card draggable-card" data-id="namecheap-config" style="margin-bottom: 24px;">
+            <div class="github-card-header" style="cursor: move;">
+                <h3 class="github-card-title" style="font-size: 18px;">
+                    <i class="fas fa-globe"></i>
+                    Namecheap DNS Configuration
+                </h3>
+            </div>
+            <p style="color: #656d76; margin-bottom: 24px; font-size: 14px;">
+                Configure Namecheap API credentials for DNS management. These credentials are used for automated domain
+                verification via TXT records.
+                <strong>Note:</strong> Your client IP must be whitelisted in your Namecheap account settings.
+            </p>
+
+            <form id="namecheap-config-form">
+                <div class="d-flex flex-wrap gap-3 mb-3">
+                    <div class="flex-grow-1" style="min-width: 250px;">
+                        <label for="namecheap_api_user" class="form-label-github">
+                            <i class="fas fa-user"></i> API User
+                        </label>
+                        <input type="text" class="form-control-github w-100" id="namecheap_api_user"
+                            placeholder="your_api_user" required>
+                        <small style="color: #656d76; font-size: 12px;">
+                            Your Namecheap API username
+                        </small>
+                    </div>
+                    <div class="flex-grow-1" style="min-width: 250px;">
+                        <label for="namecheap_username" class="form-label-github">
+                            <i class="fas fa-user-circle"></i> Account Username
+                        </label>
+                        <input type="text" class="form-control-github w-100" id="namecheap_username"
+                            placeholder="your_namecheap_username" required>
+                        <small style="color: #656d76; font-size: 12px;">
+                            Your Namecheap account username
+                        </small>
+                    </div>
+                </div>
+
+                <div class="d-flex flex-wrap gap-3 mb-3">
+                    <div class="flex-grow-1" style="min-width: 250px;">
+                        <label for="namecheap_api_key" class="form-label-github">
+                            <i class="fas fa-key"></i> API Key
+                        </label>
+                        <input type="password" class="form-control-github w-100" id="namecheap_api_key"
+                            placeholder="your_api_key" required>
+                        <small style="color: #656d76; font-size: 12px;">
+                            Your Namecheap API key (found in your account settings)
+                        </small>
+                    </div>
+                    <div class="flex-grow-1" style="min-width: 250px;">
+                        <label for="namecheap_client_ip" class="form-label-github">
+                            <i class="fas fa-network-wired"></i> Client IP
+                        </label>
+                        <input type="text" class="form-control-github w-100" id="namecheap_client_ip"
+                            placeholder="1.2.3.4" required>
+                        <small style="color: #656d76; font-size: 12px;">
+                            Your server's public IP (must be whitelisted in Namecheap)
+                        </small>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 16px; justify-content: center; margin-top: 24px; flex-wrap: wrap;">
+                    <button type="submit" class="btn-github btn-github-primary">
+                        <i class="fas fa-save"></i> Save Namecheap Configuration
+                    </button>
+                    <button type="button" class="btn-github" onclick="fetchNamecheapDomains()" id="fetch-domains-btn">
+                        <i class="fas fa-download"></i> Fetch & Retrieve Domains
+                    </button>
+                </div>
+            </form>
+
+            <div id="namecheap-config-status" style="margin-top: 16px; display: none;"></div>
+        </div>
+
+        <!-- AWS Accounts Management Section -->
+        <div class="github-card draggable-card" data-id="aws-accounts" id="aws-accounts" style="margin-bottom: 24px;">
+            <div class="github-card-header" style="cursor: move;">
+                <h3 class="github-card-title" style="font-size: 18px;">
+                    <i class="fab fa-aws"></i>
+                    AWS Accounts Management
+                </h3>
+            </div>
+            <p style="color: #656d76; margin-bottom: 24px; font-size: 14px;">
+                Manage multiple AWS accounts. Add, edit, or remove AWS credentials.
+                Select the active account to use for AWS operations.
+            </p>
+
+            <!-- Add Account Button -->
+            <div style="margin-bottom: 16px;">
+                <button type="button" class="btn-github btn-github-primary" onclick="openAwsAccountModal()">
+                    <i class="fas fa-plus"></i> Add AWS Account
+                </button>
+            </div>
+
+            <!-- Accounts Table -->
+            <div style="overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                    <thead>
+                        <tr style="border-bottom: 1px solid #30363d;">
+                            <th style="padding: 12px; text-align: left; color: #e6edf3;">Account Name</th>
+                            <th style="padding: 12px; text-align: left; color: #e6edf3;">Region</th>
+                            <th style="padding: 12px; text-align: left; color: #e6edf3;">Access Key</th>
+                            <th style="padding: 12px; text-align: left; color: #e6edf3;">Status</th>
+                            <th style="padding: 12px; text-align: right; color: #e6edf3;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="aws-accounts-tbody">
+                        <tr>
+                            <td colspan="5" style="text-align: center; padding: 24px; color: #656d76;">
+                                <i class="fas fa-spinner fa-spin"></i> Loading accounts...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Cloudflare DNS Configuration Section -->
+        <div class="github-card draggable-card" data-id="cloudflare-config" style="margin-bottom: 24px;">
+            <div class="github-card-header" style="cursor: move;">
+                <h3 class="github-card-title" style="font-size: 18px;">
+                    <i class="fas fa-cloud"></i>
+                    Cloudflare DNS Configuration
+                </h3>
+            </div>
+            <p style="color: #656d76; margin-bottom: 24px; font-size: 14px;">
+                Configure Cloudflare API credentials for DNS management. These credentials are used for automated domain
+                verification via TXT records.
+            </p>
+
+            <form id="cloudflare-config-form">
+                <div class="d-flex flex-wrap gap-3 mb-3">
+                    <div class="flex-grow-1" style="min-width: 250px;">
+                        <label for="cloudflare_api_token" class="form-label-github">
+                            <i class="fas fa-key"></i> API Token
+                        </label>
+                        <input type="password" class="form-control-github w-100" id="cloudflare_api_token"
+                            placeholder="your_api_token" required>
+                        <small style="color: #656d76; font-size: 12px;">
+                            Your Cloudflare API Token (Edit Zone DNS permissions required)
+                        </small>
+                    </div>
+                    <div class="flex-grow-1" style="min-width: 250px;">
+                        <label for="cloudflare_email" class="form-label-github">
+                            <i class="fas fa-envelope"></i> Email Address
+                        </label>
+                        <input type="email" class="form-control-github w-100" id="cloudflare_email"
+                            placeholder="your_email@example.com" required>
+                        <small style="color: #656d76; font-size: 12px;">
+                            Your Cloudflare account email address
+                        </small>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 16px; justify-content: center; margin-top: 24px;">
+                    <button type="submit" class="btn-github btn-github-primary">
+                        <i class="fas fa-save"></i> Save Cloudflare Configuration
+                    </button>
+                    <button type="button" class="btn-github" onclick="fetchCloudflareDomains()"
+                        id="fetch-cf-domains-btn">
+                        <i class="fas fa-download"></i> Fetch & Retrieve Domains
+                    </button>
+                </div>
+            </form>
+
+            <div id="cloudflare-config-status" style="margin-top: 16px; display: none;"></div>
+        </div>
+
+        <!-- End settings-sortable-container removed from here -->
+
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                var el = document.getElementById('settings-sortable-container');
+                if (el) {
+                    Sortable.create(el, {
+                        animation: 150,
+                        handle: '.github-card-header',
+                        draggable: '.draggable-card',
+                        ghostClass: 'sortable-ghost',
+                        store: {
+                            get: function (sortable) {
+                                var order = localStorage.getItem('settings-order');
+                                return order ? order.split('|') : [];
+                            },
+                            set: function (sortable) {
+                                var order = sortable.toArray();
+                                localStorage.setItem('settings-order', order.join('|'));
+                            }
+                        }
+                    });
+                }
+            });
+        </script>
+
+        <!-- Garbage divs removed from here -->
+
+        <!-- AWS & G-Workspace Credentials Section -->
+        <div class="github-card" style="margin-bottom: 24px;">
+            <div class="github-card-header">
+                <h3 class="github-card-title" style="font-size: 18px;">
+                    <i class="fas fa-cloud"></i>
+                    AWS & G-Workspace Credentials
+                </h3>
+            </div>
+            <p style="color: #656d76; margin-bottom: 24px; font-size: 14px;">
+                Configure AWS credentials for Lambda function management and Google Workspace automation. These
+                credentials
+                are saved securely and will be used for all AWS operations.
+            </p>
+
+            <form id="aws-config-form">
+                <div class="d-flex flex-wrap gap-3 mb-3">
+                    <div class="flex-grow-1" style="min-width: 250px;">
+                        <label for="aws_access_key_id" class="form-label-github">
+                            <i class="fas fa-key"></i> Access Key ID
+                        </label>
+                        <input type="text" class="form-control-github w-100" id="aws_access_key_id"
+                            placeholder="Enter AWS Access Key ID" required>
+                        <small style="color: #656d76; font-size: 12px;">
+                            Your AWS Access Key ID
+                        </small>
+                    </div>
+                    <div class="flex-grow-1" style="min-width: 250px;">
+                        <label for="aws_secret_access_key" class="form-label-github">
+                            <i class="fas fa-lock"></i> Secret Access Key
+                        </label>
+                        <input type="password" class="form-control-github w-100" id="aws_secret_access_key"
+                            placeholder="Enter AWS Secret Access Key" required>
+                        <small style="color: #656d76; font-size: 12px;">
+                            Your AWS Secret Access Key
+                        </small>
+                    </div>
+                </div>
+
+                <div class="d-flex flex-wrap gap-3 mb-3">
+                    <div class="flex-grow-1" style="min-width: 250px;">
+                        <label for="aws_region" class="form-label-github">
+                            <i class="fas fa-globe"></i> AWS Region
+                        </label>
+                        <select class="form-control-github w-100" id="aws_region" required>
+                            <option value="us-east-1">US East (N. Virginia) - us-east-1</option>
+                            <option value="us-east-2">US East (Ohio) - us-east-2</option>
+                            <option value="us-west-1">US West (N. California) - us-west-1</option>
+                            <option value="us-west-2">US West (Oregon) - us-west-2</option>
+                            <option value="af-south-1">Africa (Cape Town) - af-south-1</option>
+                            <option value="ap-east-1">Asia Pacific (Hong Kong) - ap-east-1</option>
+                            <option value="ap-south-1">Asia Pacific (Mumbai) - ap-south-1</option>
+                            <option value="ap-northeast-1">Asia Pacific (Tokyo) - ap-northeast-1</option>
+                            <option value="ap-northeast-2">Asia Pacific (Seoul) - ap-northeast-2</option>
+                            <option value="ap-northeast-3">Asia Pacific (Osaka) - ap-northeast-3</option>
+                            <option value="ap-southeast-1">Asia Pacific (Singapore) - ap-southeast-1</option>
+                            <option value="ap-southeast-2">Asia Pacific (Sydney) - ap-southeast-2</option>
+                            <option value="ap-southeast-3">Asia Pacific (Jakarta) - ap-southeast-3</option>
+                            <option value="ca-central-1">Canada (Central) - ca-central-1</option>
+                            <option value="eu-central-1">Europe (Frankfurt) - eu-central-1</option>
+                            <option value="eu-west-1" selected>Europe (Ireland) - eu-west-1</option>
+                            <option value="eu-west-2">Europe (London) - eu-west-2</option>
+                            <option value="eu-west-3">Europe (Paris) - eu-west-3</option>
+                            <option value="eu-north-1">Europe (Stockholm) - eu-north-1</option>
+                            <option value="eu-south-1">Europe (Milan) - eu-south-1</option>
+                            <option value="me-south-1">Middle East (Bahrain) - me-south-1</option>
+                            <option value="me-central-1">Middle East (UAE) - me-central-1</option>
+                            <option value="sa-east-1">South America (São Paulo) - sa-east-1</option>
+                        </select>
+                        <small style="color: #656d76; font-size: 12px;">
+                            Select your AWS region
+                        </small>
+                    </div>
+                    <div class="flex-grow-1" style="min-width: 250px;">
+                        <label for="aws_s3_bucket" class="form-label-github">
+                            <i class="fas fa-bucket"></i> S3 Bucket (App Passwords)
+                        </label>
+                        <input type="text" class="form-control-github w-100" id="aws_s3_bucket"
+                            value="gbot-app-passwords" placeholder="gbot-app-passwords">
+                        <small style="color: #656d76; font-size: 12px;">
+                            S3 bucket name for app password storage
+                        </small>
+                    </div>
+                </div>
+
+                <div class="form-group-github" style="margin-bottom: 16px;">
+                    <label for="aws_ecr_uri" class="form-label-github">
+                        <i class="fas fa-box"></i> ECR Image URI (Chromium Lambda)
+                    </label>
+                    <input type="text" class="form-control-github" id="aws_ecr_uri" value=""
+                        placeholder="e.g., 123456789.dkr.ecr.eu-west-1.amazonaws.com/my-repo:latest">
+                    <small style="color: #656d76; font-size: 12px;">
+                        Enter your ECR Image URI. Format:
+                        &lt;account-id&gt;.dkr.ecr.&lt;region&gt;.amazonaws.com/&lt;repo-name&gt;:&lt;tag&gt;
+                    </small>
+                </div>
+
+                <div style="display: flex; gap: 16px; justify-content: center; margin-top: 24px;">
+                    <button type="button" class="btn-github" onclick="testAwsConnection()">
+                        <i class="fas fa-plug"></i> Test Connection
+                    </button>
+                    <button type="submit" class="btn-github btn-github-primary">
+                        <i class="fas fa-save"></i> Save Configuration
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- OTP Generator SSH Settings Section -->
+        <div class="github-card" style="margin-bottom: 24px;">
+            <div class="github-card-header">
+                <h3 class="github-card-title" style="font-size: 18px;">
+                    <i class="fas fa-key"></i>
+                    OTP Generator SSH Settings
+                </h3>
+            </div>
+            <p style="color: #656d76; margin-bottom: 24px; font-size: 14px;">
+                Configure the SSH server connection for OTP generation. This server should contain the authenticator
+                secret
+                key files for generating OTP codes.
+            </p>
+
+            <form id="otp-ssh-config-form">
+                <div class="d-flex flex-wrap gap-3 mb-3">
+                    <div class="flex-grow-1" style="min-width: 250px;">
+                        <label for="otp_server_host" class="form-label-github">
+                            <i class="fas fa-globe"></i> Server Host/IP
+                        </label>
+                        <input type="text" class="form-control-github w-100" id="otp_server_host"
+                            placeholder="91.98.224.35" required>
+                        <small style="color: #656d76; font-size: 12px;">
+                            IP address or hostname of the OTP server
+                        </small>
+                    </div>
+                    <div class="flex-grow-1" style="min-width: 250px;">
+                        <label for="otp_server_port" class="form-label-github">
+                            <i class="fas fa-plug"></i> Port
+                        </label>
+                        <input type="number" class="form-control-github w-100" id="otp_server_port" value="22" min="1"
+                            max="65535" required>
+                        <small style="color: #656d76; font-size: 12px;">
+                            SSH port (default: 22)
+                        </small>
+                    </div>
+                </div>
+
+                <div class="d-flex flex-wrap gap-3 mb-3">
+                    <div class="flex-grow-1" style="min-width: 250px;">
+                        <label for="otp_server_username" class="form-label-github">
+                            <i class="fas fa-user"></i> Username
+                        </label>
+                        <input type="text" class="form-control-github w-100" id="otp_server_username" placeholder="root"
+                            required>
+                        <small style="color: #656d76; font-size: 12px;">
+                            SSH username for server access
+                        </small>
+                    </div>
+                    <div class="flex-grow-1" style="min-width: 250px;">
+                        <label for="otp_server_auth_method" class="form-label-github">
+                            <i class="fas fa-lock"></i> Authentication Method
+                        </label>
+                        <select class="form-control-github w-100" id="otp_server_auth_method" required>
+                            <option value="password">Password</option>
+                            <option value="key">SSH Key</option>
+                        </select>
+                        <small style="color: #656d76; font-size: 12px;">
+                            Choose authentication method
+                        </small>
+                    </div>
+                </div>
+
+                <div class="d-flex flex-wrap gap-3 mb-3">
+                    <div class="flex-grow-1" id="otp_password_field" style="min-width: 250px;">
+                        <label for="otp_server_password" class="form-label-github">
+                            <i class="fas fa-key"></i> Password
+                        </label>
+                        <input type="password" class="form-control-github w-100" id="otp_server_password"
+                            placeholder="Server password">
+                        <small style="color: #656d76; font-size: 12px;">
+                            SSH password (if using password auth)
+                        </small>
+                    </div>
+                    <div class="flex-grow-1" id="otp_key_field" style="display: none; min-width: 250px;">
+                        <label for="otp_server_private_key" class="form-label-github">
+                            <i class="fas fa-key"></i> Private Key
+                        </label>
+                        <textarea class="form-control-github w-100" id="otp_server_private_key" rows="4"
+                            placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;...&#10;-----END OPENSSH PRIVATE KEY-----"
+                            style="resize: vertical; font-family: 'Courier New', monospace; font-size: 12px;"></textarea>
+                        <small style="color: #656d76; font-size: 12px;">
+                            SSH private key content (if using key auth)
+                        </small>
+                    </div>
+                </div>
+
+                <div class="form-group-github">
+                    <label for="otp_secret_keys_path" class="form-label-github">
+                        <i class="fas fa-folder"></i> Secret Keys Directory Structure
+                    </label>
+                    <div
+                        style="background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; padding: 12px; margin-bottom: 8px;">
+                        <code
+                            style="color: #0969da; font-size: 14px;">/home/brightmindscampus/{account}/{account}_authenticator_secret_key.txt</code>
+                    </div>
+                    <small style="color: #656d76; font-size: 12px;">
+                        Each account has its own directory containing the authenticator secret key file. The system will
+                        automatically look for the secret key file in each account's directory.
+                    </small>
+                </div>
+
+                <div style="display: flex; gap: 16px; justify-content: center; margin-top: 24px;">
+                    <button type="button" class="btn-github" onclick="testOTPServerConnection()">
+                        <i class="fas fa-search"></i> Test Connection
+                    </button>
+                    <button type="submit" class="btn-github btn-github-primary">
+                        <i class="fas fa-save"></i> Save OTP Settings
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Database Backup Section -->
+        <div class="github-card" style="margin-bottom: 24px;">
+            <div class="github-card-header">
+                <h3 class="github-card-title" style="font-size: 18px;">
+                    <i class="fas fa-database"></i>
+                    Database Backup
+                </h3>
+            </div>
+            <p style="color: #656d76; margin-bottom: 24px; font-size: 14px;">
+                Create and download complete database backups. This will backup the entire database including all users,
+                accounts, tokens, and configurations.
+            </p>
+
+            <div class="d-flex flex-wrap gap-3 mb-4">
+                <div class="flex-grow-1" style="min-width: 250px;">
+                    <label for="backup_format" class="form-label-github">
+                        <i class="fas fa-file-code"></i> Backup Format
+                    </label>
+                    <select class="form-control-github w-100" id="backup_format">
+                        <option value="sql">SQL Dump (.sql)</option>
+                        <option value="json">JSON Export (.json)</option>
+                        <option value="csv">CSV Export (.csv)</option>
+                    </select>
+                    <small style="color: #656d76; font-size: 12px;">
+                        Choose the format for your database backup
+                    </small>
+                </div>
+                <div class="flex-grow-1" style="min-width: 250px;">
+                    <label for="backup_include_data" class="form-label-github">
+                        <i class="fas fa-check-square"></i> Include Data
+                    </label>
+                    <select class="form-control-github w-100" id="backup_include_data">
+                        <option value="full">Full Backup (Schema + Data)</option>
+                        <option value="schema">Schema Only</option>
+                        <option value="data">Data Only</option>
+                    </select>
+                    <small style="color: #656d76; font-size: 12px;">
+                        Choose what to include in the backup
+                    </small>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 16px; justify-content: center; margin-bottom: 24px;">
+                <button type="button" class="btn-github btn-github-primary" onclick="createDatabaseBackup()">
+                    <i class="fas fa-database"></i> Create Database Backup
+                </button>
+                <button type="button" class="btn-github" onclick="testDatabaseBackup()">
+                    <i class="fas fa-search"></i> Test Backup System
+                </button>
+                <button type="button" class="btn-github" onclick="refreshBackupFiles()">
+                    <i class="fas fa-sync-alt"></i> Refresh Backup List
+                </button>
+            </div>
+
+            <div id="backup-progress" style="display: none; margin-bottom: 24px;">
+                <div class="status-info" style="background: #fff3cd; border-color: #ffeaa7;">
+                    <p><strong>🔄 Creating Database Backup</strong></p>
+                    <p id="backup-progress-text">Preparing backup...</p>
+                    <div
+                        style="background: #f6f8fa; border-radius: 6px; height: 8px; margin-top: 8px; overflow: hidden;">
+                        <div id="backup-progress-bar"
+                            style="background: #0969da; height: 100%; width: 0%; transition: width 0.3s; border-radius: 6px;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Available Backups -->
+        <div class="github-card" style="margin-bottom: 24px;">
+            <div class="github-card-header">
+                <h3 class="github-card-title" style="font-size: 18px;">
+                    <i class="fas fa-archive"></i>
+                    Available Database Backups
+                </h3>
+            </div>
+            <p style="color: #656d76; margin-bottom: 24px; font-size: 14px;">
+                Download previously created database backups. Backups are stored on the server and can be downloaded.
+            </p>
+
+            <div id="backup-files-list" style="margin-bottom: 24px;">
+                <div style="text-align: center; padding: 40px; color: #656d76;">
+                    <i class="fas fa-spinner fa-spin" style="margin-right: 8px;"></i>
+                    Loading backup files...
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 16px; justify-content: center;">
+                <button type="button" class="btn-github" onclick="refreshBackupFiles()">
+                    <i class="fas fa-sync-alt"></i> Refresh Backup List
+                </button>
+                <button type="button" class="btn-github btn-github-danger" onclick="cleanupOldBackups()">
+                    <i class="fas fa-trash"></i> Cleanup Old Backups
+                </button>
+            </div>
+        </div>
+
+        <!-- Database Restore Section -->
+        <div class="github-card" style="margin-bottom: 24px;">
+            <div class="github-card-header">
+                <h3 class="github-card-title" style="font-size: 18px;">
+                    <i class="fas fa-undo"></i>
+                    Database Restore
+                </h3>
+            </div>
+            <p style="color: #656d76; margin-bottom: 24px; font-size: 14px;">
+                Restore your database from a previous backup. You can either select from existing backups or upload a
+                new
+                backup file.
+            </p>
+
+            <!-- Restore Options -->
+            <div style="margin-bottom: 24px;">
+                <div class="form-group-github">
+                    <label class="form-label-github">
+                        <i class="fas fa-list"></i> Restore Method
+                    </label>
+                    <div style="display: flex; gap: 16px; margin-bottom: 16px;">
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="radio" name="restore_method" value="existing" checked
+                                style="margin-right: 8px;">
+                            <span>Select from existing backups</span>
+                        </label>
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="radio" name="restore_method" value="upload" style="margin-right: 8px;">
+                            <span>Upload backup file</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Existing Backup Selection -->
+            <div id="existing-backup-section">
+                <div class="form-group-github">
+                    <label for="backup_select" class="form-label-github">
+                        <i class="fas fa-archive"></i> Select Backup File
+                    </label>
+                    <select class="form-control-github" id="backup_select">
+                        <option value="">Loading backup files...</option>
+                    </select>
+                    <small style="color: #656d76; font-size: 12px;">
+                        Choose a backup file to restore from
+                    </small>
+                </div>
+            </div>
+
+            <!-- Upload Backup Section -->
+            <div id="upload-backup-section" style="display: none;">
+                <div class="form-group-github">
+                    <label for="backup_file" class="form-label-github">
+                        <i class="fas fa-upload"></i> Upload Backup File
+                    </label>
+                    <input type="file" class="form-control-github" id="backup_file" accept=".sql,.db,.json,.tar.gz">
+                    <small style="color: #656d76; font-size: 12px;">
+                        Supported formats: .sql, .db, .json, .tar.gz
+                    </small>
+                </div>
+            </div>
+
+            <!-- Restore Progress -->
+            <div id="restore-progress" style="display: none; margin-bottom: 24px;">
+                <div class="status-info" style="background: #fff3cd; border-color: #ffeaa7;">
+                    <p><strong>🔄 Restoring Database</strong></p>
+                    <p id="restore-progress-text">Preparing restore...</p>
+                    <div
+                        style="background: #f6f8fa; border-radius: 6px; height: 8px; margin-top: 8px; overflow: hidden;">
+                        <div id="restore-progress-bar"
+                            style="background: #0969da; height: 100%; width: 0%; transition: width 0.3s; border-radius: 6px;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Restore Actions -->
+            <div style="display: flex; gap: 16px; justify-content: center; margin-bottom: 24px;">
+                <button type="button" class="btn-github btn-github-warning" onclick="restoreDatabase()">
+                    <i class="fas fa-undo"></i> Restore Database
+                </button>
+                <button type="button" class="btn-github" onclick="refreshBackupList()">
+                    <i class="fas fa-sync-alt"></i> Refresh Backup List
+                </button>
+                <button type="button" class="btn-github" onclick="testChunkedUpload()" style="background: #6f42c1;">
+                    <i class="fas fa-bug"></i> Test Chunked Upload
+                </button>
+            </div>
+
+            <!-- Warning Message -->
+            <div class="status-warning" style="margin-bottom: 24px;">
+                <p><strong>⚠️ Important Warning</strong></p>
+                <p>Restoring a database will completely replace your current database with the backup data. This action
+                    cannot be undone. A backup of your current database will be created automatically before the restore
+                    process begins.</p>
+            </div>
+        </div>
+
+        <!-- Bulk Account Upload Section -->
+        <div class="github-card" style="margin-bottom: 24px;">
+            <div class="github-card-header">
+                <h3 class="github-card-title" style="font-size: 18px;">
+                    <i class="fas fa-upload"></i>
+                    Bulk Account Upload
+                </h3>
+            </div>
+            <p style="color: #656d76; margin-bottom: 24px; font-size: 14px;">
+                Upload authenticated Google Workspace accounts in JSON format. The accounts will be automatically added
+                to
+                the system with their tokens.
+            </p>
+
+            <div class="form-group-github">
+                <label for="bulk-json-upload" class="form-label-github">
+                    <i class="fas fa-file-code"></i> Upload JSON File
+                </label>
+                <input type="file" class="form-control-github" id="bulk-json-upload" accept=".json"
+                    style="padding: 12px; border: 2px dashed #d0d7de; background: #f6f8fa;">
+                <small style="color: #656d76; font-size: 12px;">
+                    Select a JSON file containing authenticated Google accounts with tokens, refresh tokens, and
+                    credentials.
+                </small>
+            </div>
+
+            <div id="json-preview" style="display: none; margin: 16px 0;">
+                <h6 style="font-weight: 600; margin-bottom: 8px; color: #24292f;">
+                    <i class="fas fa-eye"></i> Preview
+                </h6>
+                <div id="json-preview-content"
+                    style="background: #f6f8fa; padding: 16px; border-radius: 6px; border: 1px solid #d0d7de; max-height: 200px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 12px;">
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 16px; justify-content: center; margin-top: 24px;">
+                <button type="button" id="validate-json-btn" class="btn-github" onclick="validateJsonFile()" disabled>
+                    <i class="fas fa-check"></i> Validate JSON
+                </button>
+                <button type="button" id="upload-accounts-btn" class="btn-github btn-github-primary"
+                    onclick="uploadBulkAccounts()" disabled>
+                    <i class="fas fa-upload"></i> Upload Accounts
+                </button>
+            </div>
+
+            <div id="upload-results" style="display: none; margin-top: 24px;">
+                <h6 style="font-weight: 600; margin-bottom: 16px; color: #24292f;">
+                    <i class="fas fa-list-check"></i> Upload Results
+                </h6>
+                <div id="upload-results-content"
+                    style="background: #f6f8fa; padding: 16px; border-radius: 6px; border: 1px solid #d0d7de;">
+                </div>
+            </div>
+        </div>
+
+        <!-- Current Configuration Display -->
+        <div class="github-card">
+            <div class="github-card-header">
+                <h3 class="github-card-title" style="font-size: 18px;">
+                    <i class="fas fa-list"></i>
+                    Current Configuration
+                </h3>
+            </div>
+            <div id="current-config-display">
+                <div
+                    style="display: flex; align-items: center; justify-content: center; padding: 40px; color: #656d76;">
+                    <i class="fas fa-spinner fa-spin" style="margin-right: 8px;"></i>
+                    Loading current configuration...
+                </div>
+            </div>
+        </div>
+
+        <!-- Proxy Configuration Section -->
+        <div class="github-card" style="margin-bottom: 24px;">
+            <div class="github-card-header">
+                <h3 class="github-card-title" style="font-size: 18px;">
+                    <i class="fas fa-network-wired"></i>
+                    Proxy Configuration
+                </h3>
+            </div>
+            <p style="color: #656d76; margin-bottom: 24px; font-size: 14px;">
+                Configure proxies for Lambda sessions to avoid CAPTCHA and rate limiting.
+                Format: <code>IP:PORT:USERNAME:PASSWORD</code> (one per line).
+            </p>
+
+            <form id="proxy-config-form">
+                <div style="margin-bottom: 16px;">
+                    <div class="form-group-github"
+                        style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+                        <input type="checkbox" id="proxy_enabled" name="proxy_enabled"
+                            style="width: 20px; height: 20px; cursor: pointer;">
+                        <label for="proxy_enabled"
+                            style="font-weight: 600; color: #24292f; cursor: pointer; margin: 0;">
+                            Enable Proxy Usage
+                        </label>
+                    </div>
+                    <small style="color: #656d76; font-size: 12px; display: block; margin-bottom: 16px;">
+                        When enabled, Lambda sessions will use the configured proxies for login and authentication
+                        setup.
+                    </small>
+                </div>
+
+                <div class="form-group-github">
+                    <label for="proxy_list" class="form-label-github">
+                        <i class="fas fa-list"></i> Proxy List
+                    </label>
+                    <textarea class="form-control-github" id="proxy_list" rows="8"
+                        placeholder="150.241.117.154:5658:ptjboxwt:1wydh3226ef3&#10;150.241.117.71:5575:ptjboxwt:1wydh3226ef3&#10;104.253.199.246:5525:ptjboxwt:1wydh3226ef3"
+                        style="resize: vertical; font-family: 'Courier New', monospace; font-size: 12px;"></textarea>
+                    <small style="color: #656d76; font-size: 12px;">
+                        Enter one proxy per line in the format: <code>IP:PORT:USERNAME:PASSWORD</code>
+                    </small>
+                </div>
+
+                <div style="display: flex; gap: 12px; margin-top: 24px;">
+                    <button type="submit" class="btn-github-primary" style="flex: 1;">
+                        <i class="fas fa-save"></i> Save Proxy Configuration
+                    </button>
+                    <button type="button" class="btn-github-secondary" onclick="testProxyConnection()" style="flex: 1;">
+                        <i class="fas fa-vial"></i> Test Connection
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- 2Captcha Configuration Section -->
+        <div class="github-card" style="margin-bottom: 24px;">
+            <div class="github-card-header">
+                <h3 class="github-card-title" style="font-size: 18px;">
+                    <i class="fas fa-shield-alt"></i>
+                    2Captcha API Configuration
+                </h3>
+            </div>
+            <p style="color: #656d76; margin-bottom: 24px; font-size: 14px;">
+                Configure 2Captcha API to automatically solve reCAPTCHA challenges during login.
+                Get your API key from <a href="https://2captcha.com" target="_blank"
+                    style="color: #0969da;">2captcha.com</a>
+            </p>
+
+            <form id="twocaptcha-config-form">
+                <div style="margin-bottom: 16px;">
+                    <div class="form-group-github"
+                        style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+                        <input type="checkbox" id="twocaptcha_enabled" name="twocaptcha_enabled"
+                            style="width: 20px; height: 20px; cursor: pointer;">
+                        <label for="twocaptcha_enabled"
+                            style="font-weight: 600; color: #24292f; cursor: pointer; margin: 0;">
+                            Enable 2Captcha Solving
+                        </label>
+                    </div>
+                    <small style="color: #656d76; font-size: 12px; display: block; margin-bottom: 16px;">
+                        When enabled, Lambda sessions will automatically solve reCAPTCHA challenges using 2Captcha API.
+                    </small>
+                </div>
+
+                <div class="form-group-github">
+                    <label for="twocaptcha_api_key" class="form-label-github">
+                        <i class="fas fa-key"></i> 2Captcha API Key
+                    </label>
+                    <input type="password" class="form-control-github" id="twocaptcha_api_key"
+                        placeholder="Enter your 2Captcha API key"
+                        style="font-family: 'Courier New', monospace; font-size: 12px;">
+                    <small style="color: #656d76; font-size: 12px;">
+                        Your 2Captcha API key (found in your <a href="https://2captcha.com/setting" target="_blank"
+                            style="color: #0969da;">2Captcha account settings</a>)
+                    </small>
+                </div>
+
+                <div style="display: flex; gap: 12px; margin-top: 24px;">
+                    <button type="submit" class="btn-github-primary" style="flex: 1;">
+                        <i class="fas fa-save"></i> Save 2Captcha Configuration
+                    </button>
+                    <button type="button" class="btn-github-secondary" onclick="testTwoCaptchaConnection()"
+                        style="flex: 1;">
+                        <i class="fas fa-vial"></i> Test API Key
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Status Messages -->
+        <div id="status-messages" style="margin-top: 24px;"></div>
+    </div> <!-- Status Messages End -->
+</div> <!-- End settings-sortable-container -->
+</div> <!-- End container-fluid -->
+
+<style>
+    /* Modal Styles for Namecheap Domains */
+    #namecheapDomainsModal {
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+
+    #namecheapDomainsModal .modal-content {
+        background-color: #fefefe;
+        border-radius: 8px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+
+    #namecheapDomainsModal .modal-header {
+        padding: 20px;
+        border-bottom: 1px solid #e1e4e8;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background-color: #f6f8fa;
+        border-radius: 8px 8px 0 0;
+    }
+
+    #namecheapDomainsModal .modal-header h2 {
+        margin: 0;
+        color: #24292f;
+        font-size: 20px;
+    }
+
+    #namecheapDomainsModal .close {
+        color: #656d76;
+        font-size: 28px;
+        font-weight: bold;
+        cursor: pointer;
+        background: none;
+        border: none;
+        padding: 0;
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    #namecheapDomainsModal .close:hover {
+        color: #24292f;
+        background-color: #e1e4e8;
+        border-radius: 4px;
+    }
+
+    #namecheapDomainsModal .modal-body {
+        padding: 20px;
+    }
+</style>
+
+<!-- Test Connection Modal -->
+<div class="modal fade" id="testConnectionModal" tabindex="-1" aria-labelledby="testModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border: 1px solid #d0d7de; border-radius: 12px;">
+            <div class="modal-header"
+                style="background: #0969da; color: white; border-radius: 12px 12px 0 0; border-bottom: none; padding: 20px;">
+                <h5 class="modal-title w-100" id="testModalLabel"
+                    style="text-align: center; margin: 0; font-weight: 600;">
+                    <i class="fas fa-search"></i>
+                    Testing Server Connection
+                </h5>
+            </div>
+            <div class="modal-body" style="text-align: center; padding: 32px;">
+                <div style="margin-bottom: 24px;">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 48px; color: #0969da;"></i>
+                </div>
+                <p style="font-size: 16px; margin-bottom: 16px;">Testing connection to server...</p>
+                <div id="test-progress"
+                    style="display: none; background: #f6f8fa; border-radius: 6px; height: 8px; margin-top: 16px; overflow: hidden;">
+                    <div
+                        style="background: #0969da; height: 100%; width: 0%; transition: width 0.3s; border-radius: 6px;">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- AWS Account Modal -->
+<div id="awsAccountModal"
+    style="display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.6); justify-content: center; align-items: center;">
+    <div
+        style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; width: 90%; max-width: 500px; max-height: 90vh; overflow-y: auto;">
+        <div
+            style="padding: 16px 20px; border-bottom: 1px solid #30363d; display: flex; justify-content: space-between; align-items: center;">
+            <h3 id="awsModalTitle" style="margin: 0; font-size: 18px; color: #e6edf3;">
+                <i class="fab fa-aws"></i> Add AWS Account
+            </h3>
+            <button onclick="closeAwsAccountModal()"
+                style="background: none; border: none; color: #8b949e; cursor: pointer; font-size: 20px;">
+                &times;
+            </button>
+        </div>
+        <div style="padding: 20px;">
+            <input type="hidden" id="modal_aws_account_id" value="">
+
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; margin-bottom: 6px; color: #e6edf3; font-size: 14px;">
+                    <i class="fas fa-tag"></i> Account Name *
+                </label>
+                <input type="text" id="modal_aws_account_name" class="form-control-github w-100"
+                    placeholder="e.g., Production, Development" required>
+            </div>
+
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; margin-bottom: 6px; color: #e6edf3; font-size: 14px;">
+                    <i class="fas fa-key"></i> Access Key ID *
+                </label>
+                <input type="text" id="modal_aws_access_key_id" class="form-control-github w-100" placeholder="AKIA..."
+                    required>
+            </div>
+
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; margin-bottom: 6px; color: #e6edf3; font-size: 14px;">
+                    <i class="fas fa-lock"></i> Secret Access Key *
+                </label>
+                <input type="password" id="modal_aws_secret_access_key" class="form-control-github w-100"
+                    placeholder="Enter secret key">
+                <small style="color: #656d76; font-size: 12px;">Leave blank when editing to keep current key</small>
+            </div>
+
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; margin-bottom: 6px; color: #e6edf3; font-size: 14px;">
+                    <i class="fas fa-globe"></i> AWS Region *
+                </label>
+                <select id="modal_aws_region" class="form-control-github w-100">
+                    <option value="us-east-1">US East (N. Virginia)</option>
+                    <option value="us-east-2">US East (Ohio)</option>
+                    <option value="us-west-1">US West (N. California)</option>
+                    <option value="us-west-2">US West (Oregon)</option>
+                    <option value="eu-west-1" selected>Europe (Ireland)</option>
+                    <option value="eu-west-2">Europe (London)</option>
+                    <option value="eu-west-3">Europe (Paris)</option>
+                    <option value="eu-central-1">Europe (Frankfurt)</option>
+                    <option value="ap-northeast-1">Asia Pacific (Tokyo)</option>
+                    <option value="ap-southeast-1">Asia Pacific (Singapore)</option>
+                </select>
+            </div>
+
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; margin-bottom: 6px; color: #e6edf3; font-size: 14px;">
+                    <i class="fas fa-box"></i> ECR Image URI
+                </label>
+                <input type="text" id="modal_aws_ecr_uri" class="form-control-github w-100"
+                    placeholder="Auto-detected after test connection">
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 6px; color: #e6edf3; font-size: 14px;">
+                    <i class="fas fa-archive"></i> S3 Bucket Name
+                </label>
+                <input type="text" id="modal_aws_s3_bucket" class="form-control-github w-100"
+                    placeholder="gbot-app-passwords" value="gbot-app-passwords">
+            </div>
+
+            <div style="display: flex; gap: 12px;">
+                <button type="button" class="btn-github" style="flex: 1;" onclick="testAwsConnection()">
+                    <i class="fas fa-plug"></i> Test Connection
+                </button>
+                <button type="button" class="btn-github btn-github-primary" style="flex: 1;"
+                    onclick="saveAwsConfiguration()">
+                    <i class="fas fa-save"></i> Save Account
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    $(document).ready(function () {
+        console.log('Settings page loaded, initializing...');
+
+        // Load current configuration
+        loadCurrentConfiguration();
+
+        // Load Namecheap configuration
+        loadNamecheapConfiguration();
+
+        // Load AWS configuration
+        loadAwsConfiguration();
+
+        // Load OTP SSH configuration
+        loadOTPSSHConfiguration();
+
+        // Load Proxy configuration
+        loadProxyConfiguration();
+
+        // Load 2Captcha configuration
+        loadTwoCaptchaConfiguration();
+
+        // Handle authentication method change
+        $('#server_auth_method').change(function () {
+            const method = $(this).val();
+            if (method === 'password') {
+                $('#password-field').show();
+                $('#key-field').hide();
+                $('#server_password').prop('required', true);
+                $('#server_private_key').prop('required', false);
+            } else {
+                $('#password-field').hide();
+                $('#key-field').show();
+                $('#server_password').prop('required', false);
+                $('#server_private_key').prop('required', true);
+            }
+        });
+
+        // Handle OTP authentication method change
+        $('#otp_server_auth_method').change(function () {
+            const method = $(this).val();
+            if (method === 'password') {
+                $('#otp_password_field').show();
+                $('#otp_key_field').hide();
+                $('#otp_server_password').prop('required', true);
+                $('#otp_server_private_key').prop('required', false);
+            } else {
+                $('#otp_password_field').hide();
+                $('#otp_key_field').show();
+                $('#otp_server_password').prop('required', false);
+                $('#otp_server_private_key').prop('required', true);
+            }
+        });
+
+        // Handle form submission
+        $('#server-config-form').submit(function (e) {
+            e.preventDefault();
+            saveServerConfiguration();
+        });
+
+        // Handle Namecheap form submission
+        $('#namecheap-config-form').submit(function (e) {
+            e.preventDefault();
+            saveNamecheapConfiguration();
+        });
+
+        // Handle AWS form submission
+        $('#aws-config-form').submit(function (e) {
+            e.preventDefault();
+            saveAwsConfiguration();
+        });
+
+        // Handle OTP form submission
+        $('#otp-ssh-config-form').submit(function (e) {
+            e.preventDefault();
+            saveOTPSSHConfiguration();
+        });
+
+        // Handle Proxy form submission
+        $('#proxy-config-form').submit(function (e) {
+            e.preventDefault();
+            saveProxyConfiguration();
+        });
+
+        // Handle 2Captcha form submission
+        $('#twocaptcha-config-form').submit(function (e) {
+            e.preventDefault();
+            saveTwoCaptchaConfiguration();
+        });
+
+        // Handle file upload
+        $('#bulk-json-upload').change(function (e) {
+            handleJsonFileSelection(e);
+        });
+
+        // Load backup files
+        loadBackupFiles();
+
+        // Load backup list for restore
+        loadBackupList();
+
+        // Restore method toggle
+        $('input[name="restore_method"]').change(function () {
+            const method = $(this).val();
+            if (method === 'existing') {
+                $('#existing-backup-section').show();
+                $('#upload-backup-section').hide();
+            } else {
+                $('#existing-backup-section').hide();
+                $('#upload-backup-section').show();
+            }
+        });
+    });
+
+    function loadCurrentConfiguration() {
+        console.log('Loading current server configuration...');
+
+        fetch('/api/get-server-config', {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.config) {
+                    displayCurrentConfiguration(data.config);
+                } else {
+                    displayCurrentConfiguration(null);
+                }
+            })
+            .catch(error => {
+                console.error('Error loading configuration:', error);
+                displayCurrentConfiguration(null);
+            });
+    }
+
+    function loadOTPSSHConfiguration() {
+        console.log('Loading OTP SSH configuration...');
+
+        fetch('/api/get-otp-ssh-config', {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.config) {
+                    // Populate OTP form fields
+                    $('#otp_server_host').val(data.config.host || '');
+                    $('#otp_server_port').val(data.config.port || 22);
+                    $('#otp_server_username').val(data.config.username || '');
+                    $('#otp_server_auth_method').val(data.config.auth_method || 'password');
+
+                    // Trigger auth method change to show/hide fields
+                    $('#otp_server_auth_method').trigger('change');
+
+                    console.log('OTP SSH configuration loaded:', data.config);
+                } else {
+                    console.log('No OTP SSH configuration found');
+                }
+            })
+            .catch(error => {
+                console.error('Error loading OTP SSH configuration:', error);
+            });
+    }
+
+    function loadProxyConfiguration() {
+        console.log('Loading Proxy configuration...');
+
+        fetch('/api/get-proxy-config', {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.config) {
+                    $('#proxy_enabled').prop('checked', data.config.enabled || false);
+                    $('#proxy_list').val(data.config.proxies || '');
+                    console.log('Proxy configuration loaded:', data.config);
+                } else {
+                    console.log('No Proxy configuration found');
+                }
+            })
+            .catch(error => {
+                console.error('Error loading Proxy configuration:', error);
+            });
+    }
+
+    function saveProxyConfiguration() {
+        const enabled = $('#proxy_enabled').is(':checked');
+        const proxies = $('#proxy_list').val().trim();
+
+        // Validate proxy format if proxies are provided
+        if (proxies) {
+            const proxyLines = proxies.split('\n').filter(line => line.trim());
+            const proxyPattern = /^[\d\.]+:\d+:[^:]+:[^:]+$/;
+
+            for (let i = 0; i < proxyLines.length; i++) {
+                const line = proxyLines[i].trim();
+                if (line && !proxyPattern.test(line)) {
+                    showStatus(`Invalid proxy format on line ${i + 1}. Expected: IP:PORT:USERNAME:PASSWORD`, 'error');
+                    return;
+                }
+            }
+        }
+
+        showStatus('Saving proxy configuration...', 'info');
+
+        fetch('/api/save-proxy-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                enabled: enabled,
+                proxies: proxies
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showStatus('✅ Proxy configuration saved successfully', 'success');
+                } else {
+                    showStatus(`❌ Error: ${data.error || 'Failed to save proxy configuration'}`, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error saving proxy configuration:', error);
+                showStatus('❌ Network error while saving proxy configuration', 'error');
+            });
+    }
+
+    function loadTwoCaptchaConfiguration() {
+        console.log('Loading 2Captcha configuration...');
+
+        fetch('/api/get-twocaptcha-config', {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.config) {
+                    $('#twocaptcha_enabled').prop('checked', data.config.enabled || false);
+                    $('#twocaptcha_api_key').val(data.config.api_key || '');
+                    console.log('2Captcha configuration loaded:', data.config);
+                } else {
+                    console.log('No 2Captcha configuration found');
+                }
+            })
+            .catch(error => {
+                console.error('Error loading 2Captcha configuration:', error);
+            });
+    }
+
+    function saveTwoCaptchaConfiguration() {
+        const enabled = $('#twocaptcha_enabled').is(':checked');
+        const api_key = $('#twocaptcha_api_key').val().trim();
+
+        if (enabled && !api_key) {
+            showStatus('❌ API key is required when 2Captcha is enabled', 'error');
+            return;
+        }
+
+        showStatus('Saving 2Captcha configuration...', 'info');
+
+        fetch('/api/save-twocaptcha-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                enabled: enabled,
+                api_key: api_key
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showStatus('✅ 2Captcha configuration saved successfully', 'success');
+                } else {
+                    showStatus(`❌ Error: ${data.error || 'Failed to save 2Captcha configuration'}`, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error saving 2Captcha configuration:', error);
+                showStatus('❌ Network error while saving 2Captcha configuration', 'error');
+            });
+    }
+
+    function testTwoCaptchaConnection() {
+        const api_key = $('#twocaptcha_api_key').val().trim();
+        if (!api_key) {
+            showStatus('❌ Please enter your 2Captcha API key first', 'error');
+            return;
+        }
+
+        showStatus('Testing 2Captcha API key...', 'info');
+
+        fetch('/api/test-twocaptcha', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                api_key: api_key
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    let message = `✅ 2Captcha API key is valid. Balance: $${data.balance || 'N/A'}`;
+                    if (data.note) {
+                        message += `\n\nℹ️ ${data.note}`;
+                    }
+                    showStatus(message, 'success');
+                } else {
+                    // Build detailed error message
+                    let errorMsg = `❌ Error: ${data.error || 'Invalid API key or connection failed'}`;
+
+                    if (data.details) {
+                        errorMsg += `\n\n📋 Details: ${data.details}`;
+                    }
+
+                    if (data.suggestion) {
+                        errorMsg += `\n\n💡 Suggestion: ${data.suggestion}`;
+                    }
+
+                    if (data.help) {
+                        errorMsg += `\n\n🔗 ${data.help}`;
+                    }
+
+                    // Log full response to console for debugging
+                    console.error('2Captcha API Test Error:', {
+                        error: data.error,
+                        details: data.details,
+                        full_response: data.full_response,
+                        raw_response: data.raw_response
+                    });
+
+                    showStatus(errorMsg, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error testing 2Captcha:', error);
+                showStatus(`❌ Network error while testing 2Captcha API: ${error.message}`, 'error');
+            });
+    }
+
+    function testProxyConnection() {
+        showStatus('Testing proxy connection...', 'info');
+        // TODO: Implement proxy connection test
+        showStatus('Proxy connection test not yet implemented', 'info');
+    }
+
+    function displayCurrentConfiguration(config) {
+        const display = $('#current-config-display');
+
+        if (!config) {
+            display.html(`
+            <div style="text-align: center; padding: 40px; color: #656d76;">
+                <i class="fas fa-cog" style="font-size: 48px; margin-bottom: 16px; color: #d0d7de;"></i>
+                <h5 style="color: #656d76; margin-bottom: 8px;">No Configuration Set</h5>
+                <p style="color: #656d76;">Configure server settings above to enable "Add from Server JSON" functionality.</p>
+            </div>
+        `);
+            return;
+        }
+
+        // Populate form fields
+        $('#server_host').val(config.host || '');
+        $('#server_port').val(config.port || 22);
+        $('#server_username').val(config.username || '');
+        $('#server_auth_method').val(config.auth_method || 'password');
+        $('#server_password').val(config.password || '');
+        $('#server_private_key').val(config.private_key || '');
+
+        // Trigger auth method change to show/hide fields
+        $('#server_auth_method').trigger('change');
+
+        // Display current config
+        const statusColor = config.is_configured ? '#2da44e' : '#fb8500';
+        const statusIcon = config.is_configured ? 'fas fa-check-circle' : 'fas fa-exclamation-triangle';
+        const statusText = config.is_configured ? 'Configured' : 'Not Tested';
+
+        display.html(`
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px;">
+            <div>
+                <h6 style="font-weight: 600; margin-bottom: 16px; color: #24292f;">
+                    <i class="fas fa-server"></i> Server Details
+                </h6>
+                <div style="background: #f6f8fa; padding: 16px; border-radius: 6px; border: 1px solid #d0d7de;">
+                    <div style="margin-bottom: 8px;"><strong>Host:</strong> <code>${config.host || 'Not set'}</code></div>
+                    <div style="margin-bottom: 8px;"><strong>Port:</strong> <code>${config.port || 'Not set'}</code></div>
+                    <div style="margin-bottom: 8px;"><strong>Username:</strong> <code>${config.username || 'Not set'}</code></div>
+                    <div><strong>Auth Method:</strong> <code>${config.auth_method || 'Not set'}</code></div>
+                </div>
+            </div>
+            <div>
+                <h6 style="font-weight: 600; margin-bottom: 16px; color: #24292f;">
+                    <i class="fas fa-folder"></i> Directory Structure
+                </h6>
+                <div style="background: #f6f8fa; padding: 16px; border-radius: 6px; border: 1px solid #d0d7de;">
+                    <div style="margin-bottom: 8px;"><strong>Base Path:</strong> <code>/home/brightmindscampus</code></div>
+                    <div style="margin-bottom: 8px;"><strong>Account Pattern:</strong> <code>{account}/*.json</code></div>
+                    <div style="margin-bottom: 8px;"><strong>Example:</strong> <code>/home/brightmindscampus/support@example.com/client_secret.json</code></div>
+                    <div><strong>Status:</strong>
+                        <span style="display: inline-flex; align-items: center; gap: 4px; background: ${statusColor}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 500;">
+                            <i class="${statusIcon}"></i> ${statusText}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div style="text-align: center;">
+            <button class="btn-github btn-github-danger" onclick="clearServerConfiguration()" style="padding: 4px 16px; font-size: 12px;">
+                <i class="fas fa-trash"></i> Clear Configuration
+            </button>
+        </div>
+    `);
+    }
+
+    function saveServerConfiguration() {
+        console.log('Saving server configuration...');
+
+        const config = {
+            host: $('#server_host').val().trim(),
+            port: parseInt($('#server_port').val()),
+            username: $('#server_username').val().trim(),
+            auth_method: $('#server_auth_method').val(),
+            password: $('#server_password').val(),
+            private_key: $('#server_private_key').val().trim()
+        };
+
+        // Validate required fields - updated for new structure
+        if (!config.host || !config.username) {
+            showStatus('Please fill in all required fields', 'error');
+            return;
+        }
+
+        if (config.auth_method === 'password' && !config.password) {
+            showStatus('Password is required when using password authentication', 'error');
+            return;
+        }
+
+        if (config.auth_method === 'key' && !config.private_key) {
+            showStatus('Private key is required when using SSH key authentication', 'error');
+            return;
+        }
+
+        showStatus('Saving server configuration...', 'info');
+
+        fetch('/api/save-server-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showStatus('✅ Server configuration saved successfully', 'success');
+                    loadCurrentConfiguration();
+                } else {
+                    showStatus('❌ Failed to save configuration: ' + data.error, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error saving configuration:', error);
+                showStatus('❌ Network error: ' + error, 'error');
+            });
+    }
+
+    function testServerConnection() {
+        console.log('Testing server connection...');
+
+        const config = {
+            host: $('#server_host').val().trim(),
+            port: parseInt($('#server_port').val()),
+            username: $('#server_username').val().trim(),
+            auth_method: $('#server_auth_method').val(),
+            password: $('#server_password').val(),
+            private_key: $('#server_private_key').val().trim()
+        };
+
+        // Validate required fields - updated for new structure
+        if (!config.host || !config.username) {
+            showStatus('Please fill in all required fields before testing', 'error');
+            return;
+        }
+
+        if (config.auth_method === 'password' && !config.password) {
+            showStatus('Password is required when using password authentication', 'error');
+            return;
+        }
+
+        if (config.auth_method === 'key' && !config.private_key) {
+            showStatus('Private key is required when using SSH key authentication', 'error');
+            return;
+        }
+
+        // Show test modal
+        const modal = new bootstrap.Modal(document.getElementById('testConnectionModal'));
+        modal.show();
+
+        // Start progress bar
+        $('#test-progress').show();
+        const progressBar = $('#test-progress .progress-bar');
+        progressBar.css('width', '0%');
+
+        // Simulate progress
+        let progress = 0;
+        const progressInterval = setInterval(() => {
+            progress += 10;
+            progressBar.css('width', progress + '%');
+            if (progress >= 90) clearInterval(progressInterval);
+        }, 200);
+
+        fetch('/api/test-server-connection', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                clearInterval(progressInterval);
+                progressBar.css('width', '100%');
+
+                setTimeout(() => {
+                    try {
+                        modal.hide();
+                    } catch (e) {
+                        console.warn('Modal hide failed, forcing close:', e);
+                        window.forceCloseAllModals();
+                    }
+
+                    if (data.success) {
+                        showStatus('✅ ' + data.message, 'success');
+                        loadCurrentConfiguration();
+                    } else {
+                        showStatus('❌ Connection failed: ' + data.error, 'error');
+                    }
+                }, 500);
+            })
+            .catch(error => {
+                clearInterval(progressInterval);
+                try {
+                    modal.hide();
+                } catch (e) {
+                    console.warn('Modal hide failed, forcing close:', e);
+                    window.forceCloseAllModals();
+                }
+                console.error('Error testing connection:', error);
+                showStatus('❌ Network error: ' + error.message, 'error');
+            });
+    }
+
+    function clearServerConfiguration() {
+        if (!confirm('Are you sure you want to clear the server configuration? This will disable the "Add from Server JSON" functionality.')) {
+            return;
+        }
+
+        console.log('Clearing server configuration...');
+
+        fetch('/api/clear-server-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showStatus('✅ Server configuration cleared', 'success');
+                    loadCurrentConfiguration();
+                } else {
+                    showStatus('❌ Failed to clear configuration: ' + data.error, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error clearing configuration:', error);
+                showStatus('❌ Network error: ' + error, 'error');
+            });
+    }
+
+    function showStatus(message, type) {
+        console.log('Showing status:', message, type);
+        var bgColor = type === 'success' ? '#dafbe1' :
+            type === 'error' ? '#ffebe9' :
+                type === 'warning' ? '#fff8c5' : '#dbeafe';
+
+        var borderColor = type === 'success' ? '#2da44e' :
+            type === 'error' ? '#da3633' :
+                type === 'warning' ? '#d1242f' : '#0969da';
+
+        var textColor = type === 'success' ? '#1a7f37' :
+            type === 'error' ? '#cf222e' :
+                type === 'warning' ? '#7d4e00' : '#0969da';
+
+        var icon = type === 'success' ? 'fas fa-check-circle' :
+            type === 'error' ? 'fas fa-exclamation-circle' :
+                type === 'warning' ? 'fas fa-exclamation-triangle' : 'fas fa-info-circle';
+
+        // Convert newlines to <br> tags for proper multi-line display
+        var formattedMessage = String(message).replace(/\n/g, '<br>');
+
+        var statusHtml = '<div class="alert-github" style="background: ' + bgColor + '; border: 1px solid ' + borderColor + '; color: ' + textColor + '; display: flex; align-items: flex-start; gap: 8px; padding: 16px; border-radius: 6px;">' +
+            '<i class="' + icon + '" style="margin-top: 2px;"></i>' +
+            '<div style="flex: 1; line-height: 1.6;">' + formattedMessage + '</div>' +
+            '<button type="button" onclick="this.parentElement.style.display=\'none\'" style="background: none; border: none; color: ' + textColor + '; cursor: pointer; margin-left: auto; padding: 4px; font-size: 16px;">×</button>' +
+            '</div>';
+
+        $('#status-messages').html(statusHtml);
+
+        // Auto-hide success messages after 5 seconds
+        if (type === 'success') {
+            setTimeout(function () {
+                $('#status-messages .alert-github').fadeOut();
+            }, 5000);
+        }
+    }
+
+    // Global variables for bulk upload
+    let selectedJsonFile = null;
+    let parsedJsonData = null;
+
+    function handleJsonFileSelection(event) {
+        const file = event.target.files[0];
+        if (!file) {
+            resetBulkUploadUI();
+            return;
+        }
+
+        selectedJsonFile = file;
+
+        // Validate file type
+        if (!file.name.toLowerCase().endsWith('.json')) {
+            showStatus('❌ Please select a valid JSON file', 'error');
+            resetBulkUploadUI();
+            return;
+        }
+
+        // Read and parse the file
+        const reader = new FileReader();
+        reader.onload = function (e) {
+            try {
+                const jsonContent = e.target.result;
+                parsedJsonData = JSON.parse(jsonContent);
+
+                // Show preview
+                showJsonPreview(jsonContent);
+
+                // Enable validation button
+                $('#validate-json-btn').prop('disabled', false);
+
+                showStatus('📄 JSON file loaded successfully', 'info');
+
+            } catch (error) {
+                showStatus('❌ Invalid JSON format: ' + error.message, 'error');
+                resetBulkUploadUI();
+            }
+        };
+
+        reader.onerror = function () {
+            showStatus('❌ Failed to read file', 'error');
+            resetBulkUploadUI();
+        };
+
+        reader.readAsText(file);
+    }
+
+    function showJsonPreview(jsonContent) {
+        const preview = $('#json-preview');
+        const content = $('#json-preview-content');
+
+        // Show first 500 characters of JSON with formatting
+        let previewText = jsonContent;
+        if (previewText.length > 500) {
+            previewText = previewText.substring(0, 500) + '...';
+        }
+
+        // Basic syntax highlighting for JSON
+        previewText = previewText
+            .replace(/(".*?")/g, '<span style="color: #032f62;">$1</span>')
+            .replace(/(true|false|null)/g, '<span style="color: #005cc5;">$1</span>')
+            .replace(/(\d+)/g, '<span style="color: #005cc5;">$1</span>');
+
+        content.html('<pre style="margin: 0; white-space: pre-wrap;">' + previewText + '</pre>');
+        preview.show();
+    }
+
+    function validateJsonFile() {
+        if (!parsedJsonData) {
+            showStatus('❌ No JSON data to validate', 'error');
+            return;
+        }
+
+        try {
+            const accounts = Object.keys(parsedJsonData);
+            const validAccounts = [];
+            const invalidAccounts = [];
+
+            // Validate each account structure
+            for (const email of accounts) {
+                const accountData = parsedJsonData[email];
+
+                // Check required fields for authenticated accounts
+                const requiredFields = ['token', 'refresh_token', 'token_uri', 'client_id', 'client_secret', 'scopes'];
+                const missingFields = requiredFields.filter(field => !accountData[field]);
+
+                if (missingFields.length === 0) {
+                    // Validate email format
+                    if (email.includes('@')) {
+                        validAccounts.push(email);
+                    } else {
+                        invalidAccounts.push({ email, error: 'Invalid email format' });
+                    }
+                } else {
+                    invalidAccounts.push({ email, error: `Missing fields: ${missingFields.join(', ')}` });
+                }
+            }
+
+            // Show validation results
+            let validationHtml = `
+            <div style="margin-bottom: 16px;">
+                <strong>Validation Results:</strong>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                <div>
+                    <h6 style="color: #2da44e; margin-bottom: 8px;">
+                        <i class="fas fa-check-circle"></i> Valid Accounts (${validAccounts.length})
+                    </h6>
+                    <div style="background: #dafbe1; padding: 8px; border-radius: 4px; border: 1px solid #2da44e; max-height: 150px; overflow-y: auto;">
+        `;
+
+            if (validAccounts.length > 0) {
+                validAccounts.forEach(email => {
+                    validationHtml += `<div style="font-size: 12px; margin-bottom: 4px;">✅ ${email}</div>`;
+                });
+            } else {
+                validationHtml += `<div style="color: #656d76; font-style: italic;">No valid accounts found</div>`;
+            }
+
+            validationHtml += `
+                    </div>
+                </div>
+                <div>
+                    <h6 style="color: #da3633; margin-bottom: 8px;">
+                        <i class="fas fa-exclamation-circle"></i> Invalid Accounts (${invalidAccounts.length})
+                    </h6>
+                    <div style="background: #ffebe9; padding: 8px; border-radius: 4px; border: 1px solid #da3633; max-height: 150px; overflow-y: auto;">
+        `;
+
+            if (invalidAccounts.length > 0) {
+                invalidAccounts.forEach(item => {
+                    validationHtml += `<div style="font-size: 12px; margin-bottom: 4px;">❌ ${item.email}: ${item.error}</div>`;
+                });
+            } else {
+                validationHtml += `<div style="color: #656d76; font-style: italic;">No invalid accounts</div>`;
+            }
+
+            validationHtml += `
+                    </div>
+                </div>
+            </div>
+        `;
+
+            // Show results
+            $('#upload-results-content').html(validationHtml);
+            $('#upload-results').show();
+
+            // Enable upload button if there are valid accounts
+            if (validAccounts.length > 0) {
+                $('#upload-accounts-btn').prop('disabled', false);
+                showStatus(`✅ Validation complete: ${validAccounts.length} valid accounts found`, 'success');
+            } else {
+                $('#upload-accounts-btn').prop('disabled', true);
+                showStatus('❌ No valid accounts found in the JSON file', 'error');
+            }
+
+        } catch (error) {
+            showStatus('❌ Validation error: ' + error.message, 'error');
+        }
+    }
+
+    function uploadBulkAccounts() {
+        if (!parsedJsonData) {
+            showStatus('❌ No JSON data to upload', 'error');
+            return;
+        }
+
+        // Confirm upload
+        const accountCount = Object.keys(parsedJsonData).length;
+        if (!confirm(`Are you sure you want to upload ${accountCount} accounts? This will add them to the database with their authentication tokens.`)) {
+            return;
+        }
+
+        // Disable upload button and show loading
+        $('#upload-accounts-btn').prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Uploading...');
+
+        showStatus('🔄 Uploading accounts...', 'info');
+
+        // Send to backend
+        fetch('/api/bulk-upload-authenticated-accounts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ accounts: parsedJsonData })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Show detailed results
+                    let resultsHtml = `
+                <div style="margin-bottom: 16px;">
+                    <strong>Upload Complete:</strong>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    <div>
+                        <h6 style="color: #2da44e; margin-bottom: 8px;">
+                            <i class="fas fa-check-circle"></i> Successfully Added (${data.added_count})
+                        </h6>
+                        <div style="background: #dafbe1; padding: 8px; border-radius: 4px; border: 1px solid #2da44e; max-height: 150px; overflow-y: auto;">
+            `;
+
+                    if (data.added_accounts && data.added_accounts.length > 0) {
+                        data.added_accounts.forEach(email => {
+                            resultsHtml += `<div style="font-size: 12px; margin-bottom: 4px;">✅ ${email}</div>`;
+                        });
+                    } else {
+                        resultsHtml += `<div style="color: #656d76; font-style: italic;">No accounts added</div>`;
+                    }
+
+                    resultsHtml += `
+                        </div>
+                    </div>
+                    <div>
+                        <h6 style="color: #da3633; margin-bottom: 8px;">
+                            <i class="fas fa-exclamation-circle"></i> Failed (${data.failed_accounts ? data.failed_accounts.length : 0})
+                        </h6>
+                        <div style="background: #ffebe9; padding: 8px; border-radius: 4px; border: 1px solid #da3633; max-height: 150px; overflow-y: auto;">
+            `;
+
+                    if (data.failed_accounts && data.failed_accounts.length > 0) {
+                        data.failed_accounts.forEach(item => {
+                            resultsHtml += `<div style="font-size: 12px; margin-bottom: 4px;">❌ ${item.email}: ${item.error}</div>`;
+                        });
+                    } else {
+                        resultsHtml += `<div style="color: #656d76; font-style: italic;">No failed accounts</div>`;
+                    }
+
+                    resultsHtml += `
+                        </div>
+                    </div>
+                </div>
+            `;
+
+                    $('#upload-results-content').html(resultsHtml);
+                    $('#upload-results').show();
+
+                    showStatus(`✅ ${data.message}`, 'success');
+
+                    // Reset form after successful upload
+                    setTimeout(() => {
+                        resetBulkUploadUI();
+                    }, 3000);
+
+                } else {
+                    showStatus('❌ Upload failed: ' + data.error, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Upload error:', error);
+                showStatus('❌ Network error: ' + error.message, 'error');
+            })
+            .finally(() => {
+                // Re-enable upload button
+                $('#upload-accounts-btn').prop('disabled', false).html('<i class="fas fa-upload"></i> Upload Accounts');
+            });
+    }
+
+    function resetBulkUploadUI() {
+        selectedJsonFile = null;
+        parsedJsonData = null;
+
+        $('#bulk-json-upload').val('');
+        $('#json-preview').hide();
+        $('#upload-results').hide();
+        $('#validate-json-btn').prop('disabled', true);
+        $('#upload-accounts-btn').prop('disabled', true);
+    }
+
+    // Database Backup Functions
+    function createDatabaseBackup() {
+        console.log('Creating database backup...');
+
+        const backupFormat = $('#backup_format').val();
+        const includeData = $('#backup_include_data').val();
+
+        // Show progress
+        $('#backup-progress').show();
+        updateBackupProgress(10, 'Initializing backup...');
+
+        showStatus('Creating database backup...', 'info');
+
+        fetch('/api/create-database-backup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                format: backupFormat,
+                include_data: includeData
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    updateBackupProgress(100, 'Backup completed successfully!');
+                    showStatus('✅ Database backup created successfully: ' + data.filename, 'success');
+
+                    // Hide progress after 3 seconds
+                    setTimeout(() => {
+                        $('#backup-progress').hide();
+                    }, 3000);
+
+                    // Refresh backup files list
+                    loadBackupFiles();
+                } else {
+                    $('#backup-progress').hide();
+                    showStatus('❌ Failed to create backup: ' + data.error, 'error');
+                }
+            })
+            .catch(error => {
+                $('#backup-progress').hide();
+                console.error('Error creating database backup:', error);
+                showStatus('❌ Network error: ' + error, 'error');
+            });
+    }
+
+    function updateBackupProgress(percentage, message) {
+        $('#backup-progress-bar').css('width', percentage + '%');
+        $('#backup-progress-text').text(message);
+    }
+
+    function testDatabaseBackup() {
+        console.log('Testing database backup system...');
+
+        showStatus('Testing database backup system...', 'info');
+
+        fetch('/api/test-database-backup', {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const results = data.test_results;
+                    let statusMessage = '🔍 Database Backup System Test Results:\n\n';
+
+                    statusMessage += `📊 Database Type: ${results.database_type}\n`;
+                    statusMessage += `🔗 Database URL: ${results.database_url}\n\n`;
+
+                    statusMessage += `🗄️ pg_dump Available: ${results.pg_dump_available ? '✅ Yes' : '❌ No'}\n`;
+                    if (results.pg_dump_version) {
+                        statusMessage += `📦 pg_dump Version: ${results.pg_dump_version}\n`;
+                    }
+                    if (results.pg_dump_error) {
+                        statusMessage += `⚠️ pg_dump Error: ${results.pg_dump_error}\n`;
+                    }
+
+                    statusMessage += `\n🔌 Database Connection: ${results.database_connection ? '✅ Yes' : '❌ No'}\n`;
+                    if (results.database_connection_error) {
+                        statusMessage += `⚠️ Connection Error: ${results.database_connection_error}\n`;
+                    }
+
+                    statusMessage += `\n📁 Backup Directory: ${results.backup_directory ? '✅ Writable' : '❌ Not Writable'}\n`;
+                    if (results.backup_directory_error) {
+                        statusMessage += `⚠️ Directory Error: ${results.backup_directory_error}\n`;
+                    }
+
+                    // Show detailed results in a modal or alert
+                    alert(statusMessage);
+
+                    if (results.pg_dump_available && results.database_connection && results.backup_directory) {
+                        showStatus('✅ Database backup system is ready!', 'success');
+                    } else {
+                        showStatus('⚠️ Database backup system has issues. Check the test results above.', 'warning');
+                    }
+                } else {
+                    showStatus('❌ Failed to test database backup system: ' + data.error, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error testing database backup system:', error);
+                showStatus('❌ Network error testing backup system: ' + error, 'error');
+            });
+    }
+
+    function loadBackupFiles() {
+        console.log('Loading backup files...');
+
+        fetch('/api/list-database-backups', {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    displayBackupFiles(data.files || []);
+                } else {
+                    displayBackupFiles([]);
+                    if (data.error) {
+                        showStatus('❌ Failed to load backup files: ' + data.error, 'error');
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error loading backup files:', error);
+                displayBackupFiles([]);
+                showStatus('❌ Network error loading backup files: ' + error, 'error');
+            });
+    }
+
+    function displayBackupFiles(files) {
+        const container = $('#backup-files-list');
+
+        if (files.length === 0) {
+            container.html(`
+            <div style="text-align: center; padding: 40px; color: #656d76;">
+                <i class="fas fa-database" style="font-size: 48px; margin-bottom: 16px; color: #d0d7de;"></i>
+                <h5 style="color: #656d76; margin-bottom: 8px;">No Database Backups Found</h5>
+                <p style="color: #656d76;">Create a database backup using the options above to see available backup files.</p>
+            </div>
+        `);
+            return;
+        }
+
+        let html = `
+        <div style="margin-bottom: 16px;">
+            <h6 style="font-weight: 600; margin-bottom: 8px; color: #24292f;">
+                <i class="fas fa-list"></i> Available Database Backups (${files.length})
+            </h6>
+        </div>
+        <div style="display: grid; gap: 8px;">
+    `;
+
+        files.forEach((file, index) => {
+            const fileSize = file.size ? formatFileSize(file.size) : 'Unknown size';
+            const modifiedDate = file.modified ? new Date(file.modified).toLocaleString() : 'Unknown date';
+            const fileIcon = getFileIcon(file.name);
+
+            html += `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: #f6f8fa; border-radius: 6px; border: 1px solid #d0d7de;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <span style="background: #24292f; color: white; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600;">${index + 1}</span>
+                    <div>
+                        <div style="font-weight: 600; font-size: 14px; color: #24292f; margin-bottom: 4px;">
+                            <i class="${fileIcon}" style="margin-right: 6px; color: #656d76;"></i>
+                            ${file.name}
+                        </div>
+                        <div style="font-size: 12px; color: #656d76;">
+                            Size: ${fileSize} • Created: ${modifiedDate}
+                        </div>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button onclick="downloadBackupFile('${file.name}')" class="btn-github" style="padding: 4px 12px; font-size: 12px;">
+                        <i class="fas fa-download"></i> Download
+                    </button>
+                    <button onclick="deleteBackupFile('${file.name}')" class="btn-github btn-github-danger" style="padding: 4px 12px; font-size: 12px;">
+                        <i class="fas fa-trash"></i> Delete
+                    </button>
+                </div>
+            </div>
+        `;
+        });
+
+        html += `</div>`;
+
+        container.html(html);
+    }
+
+    function getFileIcon(filename) {
+        if (filename.endsWith('.sql')) return 'fas fa-database';
+        if (filename.endsWith('.json')) return 'fas fa-file-code';
+        if (filename.endsWith('.csv')) return 'fas fa-file-csv';
+        if (filename.endsWith('.zip')) return 'fas fa-file-archive';
+        return 'fas fa-file';
+    }
+
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    function refreshBackupFiles() {
+        showStatus('Refreshing backup files list...', 'info');
+        loadBackupFiles();
+    }
+
+    function downloadBackupFile(filename) {
+        console.log('Downloading backup file:', filename);
+
+        showStatus(`Downloading ${filename}...`, 'info');
+
+        fetch('/api/download-database-backup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename: filename })
+        })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return response.blob();
+            })
+            .then(blob => {
+                // Create download link
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+
+                showStatus(`✅ ${filename} downloaded successfully`, 'success');
+            })
+            .catch(error => {
+                console.error('Error downloading backup file:', error);
+                showStatus(`❌ Failed to download ${filename}: ${error.message}`, 'error');
+            });
+    }
+
+    function deleteBackupFile(filename) {
+        console.log('Deleting backup file:', filename);
+
+        if (!confirm(`Are you sure you want to delete ${filename}? This action cannot be undone.`)) {
+            return;
+        }
+
+        showStatus(`Deleting ${filename}...`, 'info');
+
+        fetch('/api/delete-database-backup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename: filename })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showStatus(`✅ ${filename} deleted successfully`, 'success');
+                    loadBackupFiles(); // Refresh the list
+                } else {
+                    showStatus(`❌ Failed to delete ${filename}: ${data.error}`, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error deleting backup file:', error);
+                showStatus(`❌ Failed to delete ${filename}: ${error.message}`, 'error');
+            });
+    }
+
+    function cleanupOldBackups() {
+        console.log('Cleaning up old backup files...');
+
+        if (!confirm('Are you sure you want to delete old backup files? This will keep only the 5 most recent backups.')) {
+            return;
+        }
+
+        showStatus('Cleaning up old backup files...', 'info');
+
+        fetch('/api/cleanup-old-backups', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showStatus(`✅ Cleanup completed. Deleted ${data.deleted_count} old backup files.`, 'success');
+                    loadBackupFiles(); // Refresh the list
+                } else {
+                    showStatus(`❌ Failed to cleanup old backups: ${data.error}`, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error cleaning up old backups:', error);
+                showStatus(`❌ Failed to cleanup old backups: ${error.message}`, 'error');
+            });
+    }
+
+    // Restore functionality functions
+    function loadBackupList() {
+        console.log('Loading backup list for restore...');
+
+        fetch('/api/list-backups', {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+        })
+            .then(response => response.json())
+            .then(data => {
+                const select = $('#backup_select');
+                select.empty();
+
+                if (data.success && data.backups && data.backups.length > 0) {
+                    select.append('<option value="">Select a backup file...</option>');
+                    data.backups.forEach(backup => {
+                        const fileSize = backup.size ? formatFileSize(backup.size) : 'Unknown size';
+                        const modifiedDate = backup.modified ? new Date(backup.modified).toLocaleString() : 'Unknown date';
+                        select.append(`<option value="${backup.name}">${backup.name} (${fileSize}, ${modifiedDate})</option>`);
+                    });
+                } else {
+                    select.append('<option value="">No backup files found</option>');
+                }
+            })
+            .catch(error => {
+                console.error('Error loading backup list:', error);
+                const select = $('#backup_select');
+                select.empty();
+                select.append('<option value="">Error loading backup list</option>');
+            });
+    }
+
+    function restoreDatabase() {
+        const method = $('input[name="restore_method"]:checked').val();
+
+        if (method === 'existing') {
+            const selectedBackup = $('#backup_select').val();
+            if (!selectedBackup) {
+                showStatus('Please select a backup file to restore', 'error');
+                return;
+            }
+
+            // Show progress
+            $('#restore-progress').show();
+            $('#restore-progress-text').text('Restoring from existing backup...');
+            $('#restore-progress-bar').css('width', '20%');
+
+            // Call restore API
+            fetch('/api/restore-backup', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    backup_file: selectedBackup
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    $('#restore-progress-bar').css('width', '100%');
+                    $('#restore-progress-text').text('Restore completed!');
+
+                    setTimeout(() => {
+                        $('#restore-progress').hide();
+                        if (data.success) {
+                            showStatus('✅ Database restored successfully!', 'success');
+                            // Refresh backup list
+                            loadBackupList();
+                        } else {
+                            showStatus('❌ Restore failed: ' + data.error, 'error');
+                        }
+                    }, 1000);
+                })
+                .catch(error => {
+                    $('#restore-progress').hide();
+                    console.error('Error restoring database:', error);
+                    showStatus('❌ Network error during restore: ' + error.message, 'error');
+                });
+
+        } else if (method === 'upload') {
+            const fileInput = document.getElementById('backup_file');
+            const file = fileInput.files[0];
+
+            if (!file) {
+                showStatus('Please select a backup file to upload', 'error');
+                return;
+            }
+
+            // Log file info for debugging
+            console.log('File selected:', {
+                fileName: file.name,
+                fileSize: file.size,
+                fileSizeKB: (file.size / 1024).toFixed(2),
+                fileSizeMB: (file.size / (1024 * 1024)).toFixed(2)
+            });
+
+            // Show progress
+            $('#restore-progress').show();
+            $('#restore-progress-text').text('Converting file to text format...');
+            $('#restore-progress-bar').css('width', '10%');
+
+            // Use chunked base64 encoding to bypass file upload limits entirely
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const base64Content = e.target.result.split(',')[1]; // Remove data:application/octet-stream;base64, prefix
+
+                $('#restore-progress-text').text('Preparing chunked upload...');
+                $('#restore-progress-bar').css('width', '20%');
+
+                // Split base64 content into smaller chunks (500KB each)
+                const chunkSize = 500 * 1024; // 500KB chunks
+                const totalChunks = Math.ceil(base64Content.length / chunkSize);
+
+                console.log(`Base64 content length: ${base64Content.length}, Total chunks: ${totalChunks}`);
+
+                uploadBase64InChunks(base64Content, file.name, file.size, chunkSize, totalChunks);
+            };
+
+            reader.onerror = function () {
+                $('#restore-progress').hide();
+                showStatus('❌ Failed to read file', 'error');
+            };
+
+            reader.readAsDataURL(file);
+            return;
+
+            // Call upload restore API
+            fetch('/api/upload-restore-backup', {
+                method: 'POST',
+                body: formData
+            })
+                .then(response => {
+                    console.log('Response status:', response.status);
+                    console.log('Response headers:', response.headers);
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+
+                    const contentType = response.headers.get('content-type');
+                    if (!contentType || !contentType.includes('application/json')) {
+                        return response.text().then(text => {
+                            console.error('Non-JSON response:', text);
+                            throw new Error('Server returned non-JSON response. This might be an error page.');
+                        });
+                    }
+
+                    return response.json();
+                })
+                .then(data => {
+                    $('#restore-progress-bar').css('width', '100%');
+                    $('#restore-progress-text').text('Upload and restore completed!');
+
+                    setTimeout(() => {
+                        $('#restore-progress').hide();
+                        if (data.success) {
+                            showStatus('✅ Backup uploaded and database restored successfully!', 'success');
+                            // Clear file input
+                            fileInput.value = '';
+                            // Refresh backup list
+                            loadBackupList();
+                        } else {
+                            showStatus('❌ Upload/restore failed: ' + data.error, 'error');
+                        }
+                    }, 1000);
+                })
+                .catch(error => {
+                    console.error('Direct upload failed:', error);
+
+                    // If direct upload fails with 413, try chunked upload as fallback
+                    if (error.message.includes('413') || error.message.includes('Request Entity Too Large')) {
+                        showStatus('📤 Direct upload failed, trying chunked upload...', 'info');
+                        uploadFileInChunks(file, 512 * 1024, Math.ceil(file.size / (512 * 1024))); // 512KB chunks
+                    } else {
+                        $('#restore-progress').hide();
+                        showStatus('❌ Network error during upload/restore: ' + error.message, 'error');
+                    }
+                });
+        }
+    }
+
+    function refreshBackupList() {
+        loadBackupList();
+        showStatus('🔄 Backup list refreshed', 'info');
+    }
+
+    function testChunkedUpload() {
+        console.log('Testing chunked upload system...');
+
+        fetch('/api/test-chunked-upload', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+            .then(response => {
+                console.log('Test response status:', response.status);
+                console.log('Test response headers:', response.headers);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    return response.text().then(text => {
+                        console.error('Test chunked upload - Non-JSON response:', text);
+                        throw new Error('Server returned non-JSON response. This might be an error page.');
+                    });
+                }
+
+                return response.json();
+            })
+            .then(data => {
+                console.log('Test chunked upload success:', data);
+                showStatus('✅ Chunked upload system is working: ' + data.message, 'success');
+            })
+            .catch(error => {
+                console.error('Test chunked upload error:', error);
+                showStatus('❌ Chunked upload system test failed: ' + error.message, 'error');
+            });
+    }
+
+    function uploadBase64InChunks(base64Content, filename, fileSize, chunkSize, totalChunks) {
+        let currentChunk = 0;
+        const uploadId = 'base64_upload_' + Date.now();
+
+        function uploadNextChunk() {
+            if (currentChunk >= totalChunks) {
+                // All chunks uploaded, now restore
+                $('#restore-progress-text').text('All chunks uploaded, restoring database...');
+                $('#restore-progress-bar').css('width', '90%');
+
+                // Call restore API with upload ID
+                fetch('/api/restore-from-base64-chunks', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        upload_id: uploadId,
+                        filename: filename,
+                        total_chunks: totalChunks,
+                        file_size: fileSize
+                    })
+                })
+                    .then(response => {
+                        console.log('Restore from base64 chunks response status:', response.status);
+                        console.log('Restore from base64 chunks response headers:', response.headers);
+
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        }
+
+                        const contentType = response.headers.get('content-type');
+                        if (!contentType || !contentType.includes('application/json')) {
+                            return response.text().then(text => {
+                                console.error('Restore from base64 chunks - Non-JSON response:', text);
+                                throw new Error('Server returned non-JSON response for restore. This might be an error page.');
+                            });
+                        }
+
+                        return response.json();
+                    })
+                    .then(data => {
+                        $('#restore-progress-bar').css('width', '100%');
+                        $('#restore-progress-text').text('Restore completed!');
+
+                        setTimeout(() => {
+                            $('#restore-progress').hide();
+                            if (data.success) {
+                                showStatus('✅ Database restored successfully from chunked base64 upload!', 'success');
+                                // Clear file input
+                                document.getElementById('backup_file').value = '';
+                                // Refresh backup list
+                                loadBackupList();
+                            } else {
+                                showStatus('❌ Restore failed: ' + data.error, 'error');
+                            }
+                        }, 1000);
+                    })
+                    .catch(error => {
+                        $('#restore-progress').hide();
+                        console.error('Error restoring from base64 chunks:', error);
+                        showStatus('❌ Restore failed: ' + error.message, 'error');
+                    });
+                return;
+            }
+
+            const start = currentChunk * chunkSize;
+            const end = Math.min(start + chunkSize, base64Content.length);
+            const chunk = base64Content.substring(start, end);
+
+            const progress = ((currentChunk + 1) / totalChunks) * 80; // 80% for upload, 20% for restore
+            $('#restore-progress-bar').css('width', progress + '%');
+            $('#restore-progress-text').text(`Uploading base64 chunk ${currentChunk + 1} of ${totalChunks}...`);
+
+            fetch('/api/upload-base64-chunk', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    upload_id: uploadId,
+                    chunk_index: currentChunk,
+                    total_chunks: totalChunks,
+                    filename: filename,
+                    chunk_content: chunk
+                })
+            })
+                .then(response => {
+                    console.log('Base64 chunk upload response status:', response.status);
+                    console.log('Base64 chunk upload response headers:', response.headers);
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+
+                    const contentType = response.headers.get('content-type');
+                    if (!contentType || !contentType.includes('application/json')) {
+                        return response.text().then(text => {
+                            console.error('Base64 chunk upload - Non-JSON response:', text);
+                            throw new Error('Server returned non-JSON response for chunk upload. This might be an error page.');
+                        });
+                    }
+
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success) {
+                        currentChunk++;
+                        uploadNextChunk();
+                    } else {
+                        throw new Error(data.error);
+                    }
+                })
+                .catch(error => {
+                    $('#restore-progress').hide();
+                    console.error('Error uploading base64 chunk:', error);
+                    showStatus('❌ Chunked base64 upload failed: ' + error.message, 'error');
+                });
+        }
+
+        uploadNextChunk();
+    }
+
+    function uploadFileInChunks(file, chunkSize, totalChunks) {
+        let currentChunk = 0;
+        const uploadId = 'upload_' + Date.now();
+
+        function uploadNextChunk() {
+            if (currentChunk >= totalChunks) {
+                // All chunks uploaded, now restore
+                $('#restore-progress-text').text('All chunks uploaded, restoring database...');
+                $('#restore-progress-bar').css('width', '90%');
+
+                // Call restore API with upload ID
+                fetch('/api/restore-from-chunks', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        upload_id: uploadId,
+                        filename: file.name,
+                        total_chunks: totalChunks
+                    })
+                })
+                    .then(response => {
+                        console.log('Restore from chunks response status:', response.status);
+                        console.log('Restore from chunks response headers:', response.headers);
+
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        }
+
+                        const contentType = response.headers.get('content-type');
+                        if (!contentType || !contentType.includes('application/json')) {
+                            return response.text().then(text => {
+                                console.error('Restore from chunks - Non-JSON response:', text);
+                                throw new Error('Server returned non-JSON response for restore. This might be an error page.');
+                            });
+                        }
+
+                        return response.json();
+                    })
+                    .then(data => {
+                        $('#restore-progress-bar').css('width', '100%');
+                        $('#restore-progress-text').text('Restore completed!');
+
+                        setTimeout(() => {
+                            $('#restore-progress').hide();
+                            if (data.success) {
+                                showStatus('✅ Database restored successfully from chunked upload!', 'success');
+                                // Clear file input
+                                document.getElementById('backup_file').value = '';
+                                // Refresh backup list
+                                loadBackupList();
+                            } else {
+                                showStatus('❌ Restore failed: ' + data.error, 'error');
+                            }
+                        }, 1000);
+                    })
+                    .catch(error => {
+                        $('#restore-progress').hide();
+                        console.error('Error restoring from chunks:', error);
+                        showStatus('❌ Restore failed: ' + error.message, 'error');
+                    });
+                return;
+            }
+
+            const start = currentChunk * chunkSize;
+            const end = Math.min(start + chunkSize, file.size);
+            const chunk = file.slice(start, end);
+
+            const formData = new FormData();
+            formData.append('chunk', chunk);
+            formData.append('upload_id', uploadId);
+            formData.append('chunk_index', currentChunk);
+            formData.append('total_chunks', totalChunks);
+            formData.append('filename', file.name);
+
+            const progress = ((currentChunk + 1) / totalChunks) * 80; // 80% for upload, 20% for restore
+            $('#restore-progress-bar').css('width', progress + '%');
+            $('#restore-progress-text').text(`Uploading chunk ${currentChunk + 1} of ${totalChunks}...`);
+
+            fetch('/api/upload-chunk', {
+                method: 'POST',
+                body: formData
+            })
+                .then(response => {
+                    console.log('Chunk upload response status:', response.status);
+                    console.log('Chunk upload response headers:', response.headers);
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+
+                    const contentType = response.headers.get('content-type');
+                    if (!contentType || !contentType.includes('application/json')) {
+                        return response.text().then(text => {
+                            console.error('Chunk upload - Non-JSON response:', text);
+                            throw new Error('Server returned non-JSON response for chunk upload. This might be an error page.');
+                        });
+                    }
+
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success) {
+                        currentChunk++;
+                        uploadNextChunk();
+                    } else {
+                        throw new Error(data.error);
+                    }
+                })
+                .catch(error => {
+                    $('#restore-progress').hide();
+                    console.error('Error uploading chunk:', error);
+                    showStatus('❌ Chunked upload failed: ' + error.message, 'error');
+                });
+        }
+
+        uploadNextChunk();
+    }
+
+    // Namecheap Configuration Functions
+    function loadNamecheapConfiguration() {
+        console.log('Loading Namecheap configuration...');
+
+        fetch('/api/namecheap-config', {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.config) {
+                    // Populate form fields
+                    $('#namecheap_api_user').val(data.config.api_user || '');
+                    $('#namecheap_username').val(data.config.username || '');
+                    $('#namecheap_client_ip').val(data.config.client_ip || '');
+
+                    // Handle API key display
+                    if (data.config.api_key_configured) {
+                        $('#namecheap_api_key').attr('placeholder', '•••••••• (Stored - leave blank to keep)');
+                        $('#namecheap_api_key').data('configured', true);
+                    } else {
+                        $('#namecheap_api_key').attr('placeholder', 'your_api_key');
+                        $('#namecheap_api_key').data('configured', false);
+                    }
+                    $('#namecheap_api_key').val('');
+
+                    // Show status
+                    const statusDiv = $('#namecheap-config-status');
+                    statusDiv.html(`
+                <div style="background-color: rgba(45, 164, 78, 0.1); border: 1px solid #2da44e; border-radius: 6px; padding: 12px; color: #2da44e;">
+                    <i class="fas fa-check-circle"></i> Configuration loaded
+                </div>
+            `);
+                    statusDiv.show();
+                } else {
+                    // No configuration found
+                    const statusDiv = $('#namecheap-config-status');
+                    statusDiv.html(`
+                <div style="background-color: rgba(251, 133, 0, 0.1); border: 1px solid #fb8500; border-radius: 6px; padding: 12px; color: #fb8500;">
+                    <i class="fas fa-exclamation-triangle"></i> No configuration found. Please configure Namecheap API credentials.
+                </div>
+            `);
+                    statusDiv.show();
+                }
+            })
+            .catch(error => {
+                console.error('Error loading Namecheap configuration:', error);
+                showStatus('❌ Error loading Namecheap configuration: ' + error, 'error');
+            });
+    }
+
+    function saveNamecheapConfiguration() {
+        console.log('Saving Namecheap configuration...');
+
+        const config = {
+            api_user: $('#namecheap_api_user').val().trim(),
+            api_key: $('#namecheap_api_key').val().trim(),
+            username: $('#namecheap_username').val().trim(),
+            client_ip: $('#namecheap_client_ip').val().trim()
+        };
+
+        // Validate required fields
+        // API Key is optional if already configured
+        const isConfigured = $('#namecheap_api_key').data('configured');
+
+        if (!config.api_user || (!config.api_key && !isConfigured) || !config.username || !config.client_ip) {
+            showStatus('Please fill in all required fields', 'error');
+            return;
+        }
+
+        // Validate IP format (basic)
+        const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+        if (!ipRegex.test(config.client_ip)) {
+            showStatus('Please enter a valid IP address', 'error');
+            return;
+        }
+
+        showStatus('Saving Namecheap configuration...', 'info');
+
+        fetch('/api/namecheap-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showStatus('✅ Namecheap configuration saved successfully', 'success');
+                    // Clear API key field for security
+                    $('#namecheap_api_key').val('');
+                    // Reload configuration to show updated status
+                    loadNamecheapConfiguration();
+                } else {
+                    showStatus('❌ Failed to save configuration: ' + data.error, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error saving Namecheap configuration:', error);
+                showStatus('❌ Network error: ' + error, 'error');
+            });
+    }
+
+    // --- AWS Accounts Management ---
+
+    let awsAccounts = [];
+
+    function loadAwsConfiguration() {
+        console.log('Loading AWS accounts list...');
+
+        const tbody = document.getElementById('aws-accounts-tbody');
+        if (!tbody) return;
+
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px;"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr>';
+
+        fetch('/api/aws/list-configs', {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    awsAccounts = data.configs;
+                    renderAwsAccountsTable();
+                } else {
+                    tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--color-danger-fg);">Error: ${data.error}</td></tr>`;
+                }
+            })
+            .catch(error => {
+                console.error('Error loading AWS configs:', error);
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--color-danger-fg);">Network Error</td></tr>`;
+            });
+    }
+
+    function renderAwsAccountsTable() {
+        const tbody = document.getElementById('aws-accounts-tbody');
+        tbody.innerHTML = '';
+
+        if (awsAccounts.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="5" style="text-align: center; padding: 30px; color: var(--text-secondary);">
+                        No AWS accounts configured. Click "Add Account" to start.
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        awsAccounts.forEach(acc => {
+            const tr = document.createElement('tr');
+
+            const activeBadge = acc.active
+                ? '<span class="status-badge status-success">Active</span>'
+                : '<span class="status-badge status-neutral">Inactive</span>';
+
+            tr.innerHTML = `
+                <td><strong>${acc.name || 'Set Name'}</strong></td>
+                <td><code style="background: rgba(175, 184, 193, 0.2); padding: 2px 6px; border-radius: 4px;">${acc.region}</code></td>
+                <td>${acc.access_key_masked}</td>
+                <td>${activeBadge}</td>
+                <td style="text-align: right;">
+                    <button class="btn-github" onclick="editAwsAccount(${acc.id})" style="padding: 4px 8px; font-size: 12px;">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn-github" onclick="deleteAwsAccount(${acc.id})" style="padding: 4px 8px; font-size: 12px; color: var(--color-danger-fg);">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    // Modal Management
+    function openAwsAccountModal() {
+        document.getElementById('modal_aws_account_id').value = '';
+        document.getElementById('awsModalTitle').textContent = 'Add AWS Account';
+        document.getElementById('modal_aws_account_name').value = '';
+        document.getElementById('modal_aws_access_key_id').value = '';
+        document.getElementById('modal_aws_secret_access_key').value = '';
+        document.getElementById('modal_aws_region').value = 'eu-west-1';
+        document.getElementById('modal_aws_ecr_uri').value = '';
+        document.getElementById('modal_aws_s3_bucket').value = 'gbot-app-passwords';
+
+        document.getElementById('awsAccountModal').style.display = 'flex';
+    }
+
+    function closeAwsAccountModal() {
+        document.getElementById('awsAccountModal').style.display = 'none';
+    }
+
+    function editAwsAccount(id) {
+        // Since list doesn't have full details (secret key is never returned),
+        // we might pull from the list for basic info, but ideally we'd fetch full details? 
+        // For now, let's just populate what we have from the list view + assume secrets are hidden.
+        // Actually, the implementation plan says standard CRUD. 
+        // We will fetch the single config if needed, or update API to return detail? 
+        // API get-config returns "active" config, not specific ID. 
+        // Use list data for now.
+
+        const acc = awsAccounts.find(a => a.id === id);
+        if (!acc) return;
+
+        document.getElementById('modal_aws_account_id').value = acc.id;
+        document.getElementById('awsModalTitle').textContent = 'Edit AWS Account';
+        document.getElementById('modal_aws_account_name').value = acc.name;
+        // Clear access key field - user must re-enter to change
+        document.getElementById('modal_aws_access_key_id').value = '';
+        document.getElementById('modal_aws_access_key_id').placeholder = 'Leave empty to keep existing key';
+
+        document.getElementById('modal_aws_secret_access_key').value = '';
+        document.getElementById('modal_aws_region').value = acc.region;
+        document.getElementById('modal_aws_ecr_uri').value = '';
+        document.getElementById('modal_aws_s3_bucket').value = 'gbot-app-passwords';
+
+        document.getElementById('awsAccountModal').style.display = 'flex';
+    }
+
+    function deleteAwsAccount(id) {
+        if (!confirm('Are you sure you want to delete this AWS account connection?')) return;
+
+        fetch(`/api/aws/delete-config/${id}`, {
+            method: 'DELETE'
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showStatus('Account deleted.', 'success');
+                    loadAwsConfiguration(); // Refresh list
+                } else {
+                    showStatus('Error: ' + data.error, 'error');
+                }
+            })
+            .catch(err => showStatus('Error: ' + err, 'error'));
+    }
+
+    function saveAwsConfiguration() {
+        const id = document.getElementById('modal_aws_account_id').value;
+        const mode = id ? 'UPDATE' : 'CREATE';
+
+        console.log(`Saving AWS Account (${mode})...`);
+
+        const config = {
+            id: id,
+            name: document.getElementById('modal_aws_account_name').value.trim(),
+            access_key_id: document.getElementById('modal_aws_access_key_id').value.trim(),
+            secret_access_key: document.getElementById('modal_aws_secret_access_key').value.trim(),
+            region: document.getElementById('modal_aws_region').value,
+            ecr_uri: document.getElementById('modal_aws_ecr_uri').value.trim(),
+            s3_bucket: document.getElementById('modal_aws_s3_bucket').value.trim()
+        };
+
+        if (mode === 'CREATE') {
+            config.create_new = true;
+        }
+
+        // Basic validation
+        if (!config.name) {
+            showStatus('Please enter a name.', 'error');
+            return;
+        }
+        if (mode === 'CREATE' && (!config.access_key_id || !config.secret_access_key)) {
+            showStatus('Access and Secret keys are required for new accounts.', 'error');
+            return;
+        }
+
+        showStatus('Saving account...', 'info');
+
+        fetch('/api/aws/save-config', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify(config)
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showStatus('✅ AWS account saved successfully', 'success');
+                    closeAwsAccountModal();
+                    loadAwsConfiguration(); // Refresh list
+                } else {
+                    showStatus('❌ Failed to save: ' + (data.error || 'Unknown error'), 'error');
+                }
+            })
+            .catch(error => {
+                showStatus('❌ Error saving: ' + error.message, 'error');
+            });
+    }
+
+    function testAwsConnection() {
+        const accessKey = $('#modal_aws_access_key_id').val().trim();
+        const secretKey = $('#modal_aws_secret_access_key').val().trim();
+        const region = $('#modal_aws_region').val();
+
+        if (!accessKey || !secretKey || !region) {
+            showStatus('Please provide Access Key ID, Secret Access Key and Region.', 'error');
+            return;
+        }
+
+        showStatus('Testing AWS connection...', 'info');
+
+        fetch('/api/aws/test-connection', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                access_key: accessKey,
+                secret_key: secretKey,
+                region: region
+            })
+        })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => {
+                        throw new Error(err.error || `HTTP ${response.status}`);
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    // Update ECR URI field but DON'T clear the secret key
+                    $('#modal_aws_ecr_uri').val(data.ecr_uri);
+                    showStatus(`✅ Connected to AWS account ${data.account_id} (Region: ${data.region})`, 'success');
+                    // Don't auto-save - let user decide when to save
+                    // Secret key remains in the field so user can save if they want
+                } else {
+                    showStatus(`❌ Connection failed: ${data.error}`, 'error');
+                    // Don't clear secret key on error - user can try again
+                }
+            })
+            .catch(error => {
+                console.error('Error testing AWS connection:', error);
+                showStatus('❌ Network error: ' + error.message, 'error');
+                // Don't clear secret key on error - user can try again
+            });
+    }
+
+    function fetchNamecheapDomains() {
+        console.log('Fetching Namecheap domains...');
+
+        // Check if configuration exists (either in form or database)
+        const apiUser = $('#namecheap_api_user').val().trim();
+        const apiKey = $('#namecheap_api_key').val().trim();
+        const username = $('#namecheap_username').val().trim();
+        const clientIp = $('#namecheap_client_ip').val().trim();
+
+        // If form fields are empty, check if config is saved in database
+        if (!apiUser || !apiKey || !username || !clientIp) {
+            // Try to fetch from database first
+            fetch('/api/namecheap-config', {
+                method: 'GET',
+                headers: { 'Content-Type': 'application/json' }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.config && data.config.api_key_configured) {
+                        // Config exists in database, proceed with fetch
+                        proceedWithFetch();
+                    } else {
+                        showStatus('Please save Namecheap configuration first', 'error');
+                    }
+                })
+                .catch(error => {
+                    showStatus('Please save Namecheap configuration first', 'error');
+                });
+            return;
+        }
+
+        proceedWithFetch();
+    }
+
+    function proceedWithFetch() {
+
+        // Show modal
+        const modal = document.getElementById('namecheapDomainsModal');
+        modal.style.display = 'flex';
+
+        // Show loading, hide content and error
+        document.getElementById('namecheap-domains-loading').style.display = 'block';
+        document.getElementById('namecheap-domains-content').style.display = 'none';
+        document.getElementById('namecheap-domains-error').style.display = 'none';
+
+        // Disable button
+        const btn = document.getElementById('fetch-domains-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Fetching...';
+
+        fetch('/api/namecheap-domains', {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+        })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(data => {
+                        throw new Error(data.error || `HTTP ${response.status}: ${response.statusText}`);
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-download"></i> Fetch & Retrieve Domains';
+
+                if (data.success) {
+                    displayNamecheapDomains(data.domains);
+                } else {
+                    let errorMsg = data.error || 'Failed to fetch domains';
+                    if (data.debug_info) {
+                        errorMsg += '\n\n' + data.debug_info;
+                    }
+                    if (data.troubleshooting && data.troubleshooting.length > 0) {
+                        errorMsg += '\n\nTroubleshooting:\n' + data.troubleshooting.join('\n');
+                    }
+                    // Store debug data if available
+                    window.namecheapDebugData = data;
+                    showNamecheapDomainsError(errorMsg, data);
+                }
+            })
+            .catch(error => {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-download"></i> Fetch & Retrieve Domains';
+                console.error('Error fetching domains:', error);
+                showNamecheapDomainsError('Network error: ' + error);
+            });
+    }
+
+    function displayNamecheapDomains(domains) {
+        const loading = document.getElementById('namecheap-domains-loading');
+        const content = document.getElementById('namecheap-domains-content');
+        const error = document.getElementById('namecheap-domains-error');
+        const list = document.getElementById('namecheap-domains-list');
+        const count = document.getElementById('namecheap-domains-count');
+
+        loading.style.display = 'none';
+        error.style.display = 'none';
+        content.style.display = 'block';
+
+        count.textContent = domains.length;
+
+        if (domains.length === 0) {
+            list.innerHTML = '<p style="text-align: center; color: #656d76; padding: 20px;">No domains found in your Namecheap account.</p>';
+            return;
+        }
+
+        let html = '';
+        domains.forEach((domain, index) => {
+            const domainName = domain.name || domain;
+            html += `
+            <div style="padding: 8px; border-bottom: 1px solid #e1e4e8; cursor: pointer; transition: background-color 0.2s;"
+                 onmouseover="this.style.backgroundColor='#f6f8fa'"
+                 onmouseout="this.style.backgroundColor='transparent'"
+                 onclick="copyDomainToClipboard('${domainName}')"
+                 title="Click to copy">
+                <span style="color: #0969da; font-weight: 500;">${domainName}</span>
+                ${domain.expire_date ? `<span style="color: #656d76; font-size: 11px; margin-left: 12px;">Expires: ${domain.expire_date}</span>` : ''}
+            </div>
+        `;
+        });
+
+        list.innerHTML = html;
+    }
+
+    function showNamecheapDomainsError(message, debugData) {
+        const loading = document.getElementById('namecheap-domains-loading');
+        const content = document.getElementById('namecheap-domains-content');
+        const error = document.getElementById('namecheap-domains-error');
+        const errorMsg = document.getElementById('namecheap-domains-error-message');
+        const debugInfo = document.getElementById('namecheap-debug-info');
+        const debugContent = document.getElementById('namecheap-debug-content');
+
+        loading.style.display = 'none';
+        content.style.display = 'none';
+        error.style.display = 'block';
+        debugInfo.style.display = 'none';
+
+        // Format error message with line breaks
+        errorMsg.innerHTML = message.replace(/\n/g, '<br>');
+
+        // Store debug data
+        if (debugData) {
+            window.namecheapDebugData = debugData;
+            debugContent.textContent = JSON.stringify(debugData, null, 2);
+        }
+
+        // Also show in status
+        showStatus('❌ ' + message.split('\n')[0], 'error');
+
+        // Log to console for debugging
+        console.error('Namecheap domains fetch error:', message);
+        if (debugData) {
+            console.error('Debug data:', debugData);
+        }
+    }
+
+    function toggleDebugInfo() {
+        const debugInfo = document.getElementById('namecheap-debug-info');
+        if (debugInfo.style.display === 'none') {
+            debugInfo.style.display = 'block';
+        } else {
+            debugInfo.style.display = 'none';
+        }
+    }
+
+    function closeNamecheapDomainsModal() {
+        document.getElementById('namecheapDomainsModal').style.display = 'none';
+    }
+
+    function copyDomainToClipboard(domain) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(domain).then(() => {
+                showStatus(`✅ Copied: ${domain}`, 'success');
+            }).catch(err => {
+                copyToClipboardFallback(domain);
+            });
+        } else {
+            copyToClipboardFallback(domain);
+        }
+    }
+
+    function copyAllNamecheapDomains() {
+        const domains = [];
+        const listItems = document.querySelectorAll('#namecheap-domains-list > div');
+        listItems.forEach(item => {
+            const domainSpan = item.querySelector('span[style*="color: #0969da"]');
+            if (domainSpan) {
+                domains.push(domainSpan.textContent.trim());
+            }
+        });
+
+        if (domains.length === 0) {
+            showStatus('No domains to copy', 'error');
+            return;
+        }
+
+        const domainsText = domains.join('\n');
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(domainsText).then(() => {
+                showStatus(`✅ Copied ${domains.length} domain(s) to clipboard`, 'success');
+            }).catch(err => {
+                copyToClipboardFallback(domainsText);
+            });
+        } else {
+            copyToClipboardFallback(domainsText);
+        }
+    }
+
+    function copyToClipboardFallback(text) {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+
+        try {
+            const successful = document.execCommand('copy');
+            if (successful) {
+                showStatus('✅ Copied to clipboard', 'success');
+            } else {
+                showStatus('❌ Copy failed. Please select and copy manually.', 'error');
+            }
+        } catch (err) {
+            showStatus('❌ Copy failed: ' + err.message, 'error');
+        } finally {
+            document.body.removeChild(textArea);
+        }
+    }
+
+    // Close modal when clicking outside
+    window.onclick = function (event) {
+        const modal = document.getElementById('namecheapDomainsModal');
+        if (event.target === modal) {
+            closeNamecheapDomainsModal();
+        }
+    }
+
+    // OTP SSH Configuration Functions
+    function saveOTPSSHConfiguration() {
+        console.log('Saving OTP SSH configuration...');
+
+        const config = {
+            host: $('#otp_server_host').val().trim(),
+            port: parseInt($('#otp_server_port').val()),
+            username: $('#otp_server_username').val().trim(),
+            auth_method: $('#otp_server_auth_method').val(),
+            password: $('#otp_server_password').val(),
+            private_key: $('#otp_server_private_key').val().trim()
+        };
+
+        // Validate required fields
+        if (!config.host || !config.username) {
+            showStatus('Please fill in all required fields', 'error');
+            return;
+        }
+
+        if (config.auth_method === 'password' && !config.password) {
+            showStatus('Password is required when using password authentication', 'error');
+            return;
+        }
+
+        if (config.auth_method === 'key' && !config.private_key) {
+            showStatus('Private key is required when using SSH key authentication', 'error');
+            return;
+        }
+
+        showStatus('Saving OTP SSH configuration...', 'info');
+
+        fetch('/api/save-otp-ssh-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showStatus('✅ OTP SSH configuration saved successfully', 'success');
+                    loadCurrentConfiguration();
+                } else {
+                    showStatus('❌ Failed to save OTP configuration: ' + data.error, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error saving OTP configuration:', error);
+                showStatus('❌ Network error: ' + error, 'error');
+            });
+    }
+
+    function testOTPServerConnection() {
+        console.log('Testing OTP server connection...');
+
+        const config = {
+            host: $('#otp_server_host').val().trim(),
+            port: parseInt($('#otp_server_port').val()),
+            username: $('#otp_server_username').val().trim(),
+            auth_method: $('#otp_server_auth_method').val(),
+            password: $('#otp_server_password').val(),
+            private_key: $('#otp_server_private_key').val().trim()
+        };
+
+        // Validate required fields
+        if (!config.host || !config.username) {
+            showStatus('Please fill in all required fields before testing', 'error');
+            return;
+        }
+
+        if (config.auth_method === 'password' && !config.password) {
+            showStatus('Password is required when using password authentication', 'error');
+            return;
+        }
+
+        if (config.auth_method === 'key' && !config.private_key) {
+            showStatus('Private key is required when using SSH key authentication', 'error');
+            return;
+        }
+
+        showStatus('Testing OTP server connection...', 'info');
+
+        fetch('/api/test-otp-server-connection', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showStatus('✅ ' + data.message, 'success');
+                } else {
+                    showStatus('❌ OTP server connection failed: ' + data.error, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error testing OTP connection:', error);
+                showStatus('❌ Network error: ' + error.message, 'error');
+            });
+    }
+
+    // Cloudflare Configuration Functions
+    function loadCloudflareConfig() {
+        console.log('Loading Cloudflare configuration...');
+
+        fetch('/api/get-cloudflare-config', {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.config) {
+                    // Populate form fields
+                    $('#cloudflare_email').val(data.config.email || '');
+                    // Don't populate API token for security
+                    $('#cloudflare_api_token').val('');
+
+                    // Show status
+                    const statusDiv = $('#cloudflare-config-status');
+                    statusDiv.html(`
+                <div style="background-color: rgba(45, 164, 78, 0.1); border: 1px solid #2da44e; border-radius: 6px; padding: 12px; color: #2da44e;">
+                    <i class="fas fa-check-circle"></i> Configuration loaded
+                </div>
+            `);
+                    statusDiv.show();
+                } else {
+                    // No configuration found
+                    const statusDiv = $('#cloudflare-config-status');
+                    statusDiv.html(`
+                <div style="background-color: rgba(251, 133, 0, 0.1); border: 1px solid #fb8500; border-radius: 6px; padding: 12px; color: #fb8500;">
+                    <i class="fas fa-exclamation-triangle"></i> No configuration found. Please configure Cloudflare API credentials.
+                </div>
+            `);
+                    statusDiv.show();
+                }
+            })
+            .catch(error => {
+                console.error('Error loading Cloudflare configuration:', error);
+                showStatus('❌ Error loading Cloudflare configuration: ' + error, 'error');
+            });
+    }
+
+    function saveCloudflareConfig(event) {
+        if (event) event.preventDefault();
+        console.log('Saving Cloudflare configuration...');
+
+        const config = {
+            api_token: $('#cloudflare_api_token').val().trim(),
+            email: $('#cloudflare_email').val().trim()
+        };
+
+        // Validate required fields
+        if (!config.api_token || !config.email) {
+            showStatus('Please fill in all required fields', 'error');
+            return;
+        }
+
+        showStatus('Saving Cloudflare configuration...', 'info');
+
+        fetch('/api/save-cloudflare-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showStatus('✅ Cloudflare configuration saved successfully', 'success');
+                    // Clear API token field for security
+                    $('#cloudflare_api_token').val('');
+                    // Reload configuration to show updated status
+                    loadCloudflareConfig();
+                } else {
+                    showStatus('❌ Failed to save configuration: ' + data.error, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error saving Cloudflare configuration:', error);
+                showStatus('❌ Network error: ' + error, 'error');
+            });
+    }
+
+    // Initialize Cloudflare config on load
+    $(document).ready(function () {
+        loadCloudflareConfig();
+        $('#cloudflare-config-form').on('submit', saveCloudflareConfig);
+    });
+
+    // Cloudflare Domains Functions
+    function fetchCloudflareDomains() {
+        const modal = document.getElementById('cloudflareDomainsModal');
+        const loading = document.getElementById('cloudflare-domains-loading');
+        const content = document.getElementById('cloudflare-domains-content');
+        const errorDiv = document.getElementById('cloudflare-domains-error');
+
+        modal.style.display = 'block';
+        loading.style.display = 'block';
+        content.style.display = 'none';
+        errorDiv.style.display = 'none';
+
+        fetch('/api/cloudflare-domains')
+            .then(response => response.json())
+            .then(data => {
+                loading.style.display = 'none';
+
+                if (data.success) {
+                    content.style.display = 'block';
+                    document.getElementById('cloudflare-domains-count').textContent = `Found ${data.total} domains`;
+
+                    const tbody = document.getElementById('cloudflare-domains-list');
+                    tbody.innerHTML = '';
+
+                    if (data.domains && data.domains.length > 0) {
+                        data.domains.forEach(domain => {
+                            const row = document.createElement('tr');
+                            row.style.borderBottom = '1px solid #d0d7de';
+                            row.innerHTML = `
+                            <td style="padding: 12px; font-family: monospace;">${domain.name}</td>
+                            <td style="padding: 12px;">
+                                <span style="background: ${domain.status === 'active' ? '#dafbe1' : '#f6f8fa'}; color: ${domain.status === 'active' ? '#1a7f37' : '#24292f'}; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: 600;">
+                                    ${domain.status}
+                                </span>
+                            </td>
+                            <td style="padding: 12px; font-family: monospace; font-size: 12px; color: #656d76;">${domain.id}</td>
+                        `;
+                            tbody.appendChild(row);
+                        });
+                    } else {
+                        tbody.innerHTML = '<tr><td colspan="3" style="padding: 20px; text-align: center; color: #656d76;">No domains found</td></tr>';
+                    }
+                } else {
+                    errorDiv.style.display = 'block';
+                    errorDiv.innerHTML = `
+                    <strong>Error fetching domains:</strong><br>
+                    ${data.error}
+                `;
+                }
+            })
+            .catch(error => {
+                loading.style.display = 'none';
+                errorDiv.style.display = 'block';
+                errorDiv.textContent = 'Network error: ' + error.message;
+            });
+    }
+
+    function closeCloudflareDomainsModal() {
+        document.getElementById('cloudflareDomainsModal').style.display = 'none';
+    }
+
+    function copyCloudflareDomains() {
+        const rows = document.querySelectorAll('#cloudflare-domains-list tr');
+        let domains = [];
+        rows.forEach(row => {
+            const domain = row.cells[0].textContent;
+            if (domain) domains.push(domain);
+        });
+
+        if (domains.length > 0) {
+            navigator.clipboard.writeText(domains.join('\n'))
+                .then(() => showStatus('✅ Domains copied to clipboard', 'success'))
+                .catch(err => showStatus('❌ Failed to copy: ' + err, 'error'));
+        }
+    }
+
+    // Close modal when clicking outside
+    window.onclick = function (event) {
+        const cfModal = document.getElementById('cloudflareDomainsModal');
+        const ncModal = document.getElementById('namecheapDomainsModal');
+        const awsModal = document.getElementById('awsAccountModal');
+        if (event.target == cfModal) {
+            cfModal.style.display = "none";
+        }
+        if (event.target == ncModal) {
+            ncModal.style.display = "none";
+        }
+        if (event.target == awsModal) {
+            awsModal.style.display = "none";
+        }
+    }
+</script>
+{% endblock %}

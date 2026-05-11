@@ -1,0 +1,8 @@
+selenium==4.15.0
+selenium-wire==5.1.0
+selenium-stealth==1.0.6
+fake-useragent==1.4.0
+faker==21.0.0
+boto3==1.34.0
+pyotp==2.9.0
+blinker==1.7.0

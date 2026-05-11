@@ -1,0 +1,39 @@
+[Unit]
+Description=GBot Web Application (Optimized for High Load)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=notify
+User=root
+Group=root
+WorkingDirectory=/opt/gbot-web-app
+Environment=PATH=/opt/gbot-web-app/venv/bin
+Environment=FLASK_ENV=production
+Environment=PYTHONPATH=/opt/gbot-web-app
+ExecStart=/opt/gbot-web-app/venv/bin/gunicorn --config gunicorn.conf.py app:app
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=300
+PrivateTmp=true
+Restart=always
+RestartSec=10
+
+LimitNOFILE=524288
+LimitNPROC=32768
+
+# Security settings
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/gbot-web-app
+ReadWritePaths=/var/log
+ReadWritePaths=/tmp
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=gbot
+
+[Install]
+WantedBy=multi-user.target

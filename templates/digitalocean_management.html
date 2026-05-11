@@ -1,0 +1,2100 @@
+{% extends "base.html" %}
+
+{% block title %}DigitalOcean Management{% endblock %}
+
+{% block content %}
+<style>
+    :root {
+        --do-blue: #008bcf;
+        --do-dark: #00699a;
+        --do-light: #e6f7ff;
+        --glass-bg: rgba(255, 255, 255, 0.7);
+        --glass-border: rgba(255, 255, 255, 0.2);
+        --card-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+        --radius-premium: 16px;
+    }
+
+    /* Professional Dashboard Header */
+    .dashboard-header {
+        background: linear-gradient(135deg, var(--do-blue) 0%, var(--do-dark) 100%);
+        border-radius: var(--radius-premium);
+        padding: 2.5rem;
+        margin-bottom: 2rem;
+        color: white;
+        box-shadow: var(--card-shadow);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .dashboard-header::after {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -10%;
+        width: 300px;
+        height: 600px;
+        background: rgba(255, 255, 255, 0.05);
+        transform: rotate(45deg);
+        pointer-events: none;
+    }
+
+    /* Premium Custom Tabs */
+    .modern-tabs .nav-link {
+        border: none;
+        padding: 1rem 2rem;
+        color: #64748b;
+        font-weight: 500;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        border-radius: 12px 12px 0 0;
+        margin-right: 0.5rem;
+    }
+
+    .modern-tabs .nav-link.active {
+        background: white !important;
+        color: var(--do-blue) !important;
+        box-shadow: 0 -4px 12px rgba(0, 139, 207, 0.08);
+        border-bottom: 3px solid var(--do-blue) !important;
+    }
+
+    .modern-tabs .nav-link:hover:not(.active) {
+        background: rgba(0, 139, 207, 0.05);
+        color: var(--do-blue);
+    }
+
+    /* Glassmorphism Cards */
+    .premium-card {
+        background: var(--glass-bg);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius-premium);
+        box-shadow: var(--card-shadow);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        overflow: hidden;
+    }
+
+    .premium-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 12px 40px 0 rgba(31, 38, 135, 0.15);
+    }
+
+    .premium-card .card-header {
+        background: transparent !important;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        padding: 1.5rem;
+        font-weight: 600;
+    }
+
+    /* Better Tables */
+    .elegant-table {
+        border-collapse: separate;
+        border-spacing: 0 0.5rem;
+    }
+
+    .elegant-table tr {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+        transition: all 0.2s ease;
+    }
+
+    .elegant-table tr:hover {
+        background: #f8fafc;
+        transform: scale(1.002);
+    }
+
+    .elegant-table td {
+        border: none;
+        padding: 1.25rem 1rem;
+        vertical-align: middle;
+    }
+
+    /* Glowing Terminal */
+    .terminal-window {
+        background: #0d1117;
+        border-radius: 12px;
+        border: 1px solid #30363d;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+    }
+
+    .terminal-header {
+        background: #161b22;
+        padding: 10px 15px;
+        border-bottom: 1px solid #30363d;
+        display: flex;
+        align-items: center;
+    }
+
+    .terminal-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        margin-right: 8px;
+    }
+
+    .dot-red {
+        background: #ff5f56;
+    }
+
+    .dot-yellow {
+        background: #ffbd2e;
+    }
+
+    .dot-green {
+        background: #27c93f;
+    }
+
+    /* Micro-animations */
+    .fade-in-up {
+        animation: fadeInUp 0.5s ease-out forwards;
+    }
+
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    /* Dark Mode Compatibility Fixes */
+    [data-color-mode="dark"] .premium-card {
+        background: rgba(22, 27, 34, 0.8) !important;
+        border-color: #30363d !important;
+    }
+
+    [data-color-mode="dark"] .modern-tabs .nav-link.active {
+        background: #161b22 !important;
+        color: #58a6ff !important;
+        border-bottom-color: #58a6ff !important;
+    }
+
+    [data-color-mode="dark"] .elegant-table tr {
+        background: #161b22;
+    }
+
+    [data-color-mode="dark"] .elegant-table tr:hover {
+        background: #1c2128;
+    }
+</style>
+
+<div class="container-fluid mt-4 fade-in-up">
+    <!-- Header Section -->
+    <div class="dashboard-header d-flex justify-content-between align-items-center">
+        <div>
+            <h1 class="display-6 mb-1 fw-bold">
+                <i class="fab fa-digital-ocean me-2"></i>
+                DigitalOcean Operations
+            </h1>
+            <p class="mb-0 opacity-75">Professional Droplet Management & Automation Suite</p>
+        </div>
+        <div class="header-stats d-none d-md-flex gap-4">
+            <div class="text-end">
+                <small class="d-block opacity-75">Auto-Destroy</small>
+                <span class="badge bg-light text-dark px-3 py-2" id="headerAutoDestroyBadge">Active</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Navigation Tabs -->
+    <ul class="nav nav-tabs modern-tabs mb-4 px-3" id="mainDashboardTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="setup-tab" data-bs-toggle="tab" data-bs-target="#setup" type="button"
+                role="tab">
+                <i class="fa fa-wrench me-2"></i> Deployment Setup
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="automation-tab" data-bs-toggle="tab" data-bs-target="#automation" type="button"
+                role="tab">
+                <i class="fa fa-rocket me-2"></i> Bulk Execution
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="passwords-tab" data-bs-toggle="tab" data-bs-target="#passwords" type="button"
+                role="tab" onclick="fetchAppPasswords()">
+                <i class="fa fa-key me-2"></i> App Passwords
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="mainDashboardContent">
+        <!-- TAB 1: SETUP -->
+        <div class="tab-pane fade show active" id="setup" role="tabpanel">
+            <div class="row">
+                <!-- Initial Droplet Setup Section -->
+                <div class="col-12 mb-4">
+                    <div class="card premium-card">
+                        <div class="card-header bg-success text-white">
+                            <h5 class="mb-0">
+                                <i class="fa fa-rocket"></i> Initial Droplet Setup
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted mb-3">
+                                <i class="fa fa-info-circle"></i>
+                                Create your first droplet with your automation script installed, then snapshot it for
+                                bulk execution.
+                                <br><small>Configure API credentials in <a href="/settings">Settings</a> first.</small>
+                            </p>
+
+                            <form id="createDropletForm">
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">Droplet Name</label>
+                                        <input type="text" class="form-control" id="dropletName"
+                                            placeholder="automation-master-01" required>
+                                    </div>
+                                    <div class="col-md-3 mb-3">
+                                        <label class="form-label">Region</label>
+                                        <select class="form-select" id="region" required>
+                                            <option value="">Loading...</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3 mb-3">
+                                        <label class="form-label">Size</label>
+                                        <select class="form-select" id="size" required>
+                                            <option value="">Loading...</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-12 mb-3">
+                                        <label class="form-label">Authentication Method</label>
+                                        <div class="btn-group w-100" role="group">
+                                            <input type="radio" class="btn-check" name="authMethod" id="authSSH"
+                                                value="ssh" checked onchange="toggleAuthMethod()">
+                                            <label class="btn btn-outline-primary" for="authSSH">
+                                                <i class="fab fa-ssh"></i> SSH Key
+                                            </label>
+
+                                            <input type="radio" class="btn-check" name="authMethod" id="authPassword"
+                                                value="password" onchange="toggleAuthMethod()">
+                                            <label class="btn btn-outline-primary" for="authPassword">
+                                                <i class="fa fa-key"></i> Root Password
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="row" id="sshKeySection">
+                                    <div class="col-12 mb-3">
+                                        <div class="alert alert-info">
+                                            <i class="fa fa-info-circle"></i> Using configured SSH Key from Settings.
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="row" id="passwordSection" style="display: none;">
+                                    <div class="col-12 mb-3">
+                                        <label class="form-label">Root Password</label>
+                                        <div class="input-group">
+                                            <input type="text" class="form-control" id="rootPassword"
+                                                placeholder="e.g. Batata010..++" value="Batata010..++">
+                                            <button class="btn btn-outline-secondary" type="button"
+                                                onclick="copyToClipboard($('#rootPassword').val())">
+                                                <i class="fa fa-copy"></i>
+                                            </button>
+                                        </div>
+                                        <small class="text-danger">
+                                            <i class="fa fa-exclamation-triangle"></i>
+                                            Must be complex: Uppercase, lowercase, number, and special character.
+                                        </small>
+                                    </div>
+                                </div>
+
+                                <div class="d-flex gap-2">
+                                    <button type="submit" class="btn btn-success">
+                                        <i class="fa fa-plus"></i> Create Initial Droplet
+                                    </button>
+                                    <button type="button" class="btn btn-secondary" onclick="loadRegionsAndSizes()">
+                                        <i class="fa fa-sync"></i> Reload Regions/Sizes
+                                    </button>
+                                </div>
+                            </form>
+
+                            <div id="createDropletMessages" class="mt-3"></div>
+
+                            <!-- Instant Live Logs Container -->
+                            <div id="creationLogContainer" class="mt-3" style="display: none;">
+                                <div class="card bg-dark text-white shadow-lg">
+                                    <div
+                                        class="card-header bg-secondary d-flex justify-content-between align-items-center py-2">
+                                        <h6 class="mb-0"><i class="fa fa-terminal text-info"></i> Live Setup Logs
+                                            (<span id="creationLogIp">...</span>)</h6>
+                                        <span class="badge bg-success" id="creationLogStatus">Initializing...</span>
+                                    </div>
+                                    <div class="card-body p-0">
+                                        <pre id="creationLogContent" class="m-0 p-3"
+                                            style="height: 300px; overflow-y: auto; font-family: 'Courier New', Courier, monospace; font-size: 0.85rem; color: #00ff00; background-color: #000;"></pre>
+                                    </div>
+                                    <div class="card-footer py-1 text-muted small bg-dark">
+                                        <i class="fa fa-sync fa-spin"></i> Polling for updates...
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Snapshot Creation Section -->
+                            <div id="snapshotSection" class="mt-4 pt-4 border-top" style="display: none;">
+                                <h6 class="mb-3">
+                                    <i class="fa fa-camera"></i> Create Automation Snapshot
+                                </h6>
+                                <p class="text-muted mb-3">
+                                    Once your droplet is configured with the automation script, create a snapshot for
+                                    bulk execution.
+                                </p>
+                                <form id="createSnapshotForm">
+                                    <div class="row">
+                                        <div class="col-md-8 mb-3">
+                                            <label class="form-label">Snapshot Name</label>
+                                            <input type="text" class="form-control" id="snapshotName"
+                                                placeholder="automation-snapshot-v1" required>
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <label class="form-label">Droplet to Snapshot</label>
+                                            <select class="form-select" id="dropletToSnapshot" required>
+                                                <option value="">Select a droplet</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <button type="submit" class="btn btn-warning">
+                                        <i class="fa fa-camera"></i> Create Snapshot
+                                    </button>
+                                </form>
+                                <div id="createSnapshotMessages" class="mt-3"></div>
+                            </div>
+                        </div> <!-- card-body end -->
+                    </div> <!-- premium-card end -->
+                </div> <!-- col-12 end -->
+            </div> <!-- row end -->
+
+            <div class="row">
+                <!-- Droplets Section -->
+                <div class="col-lg-6 mb-4">
+                    <div class="card premium-card h-100">
+                        <div class="card-header bg-info text-white">
+                            <h5 class="mb-0">
+                                <i class="fa fa-server"></i> Active Droplets
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <button class="btn btn-sm btn-primary mb-3" onclick="loadDroplets()">
+                                <i class="fa fa-sync"></i> Refresh List
+                            </button>
+                            <div id="dropletsList" class="table-responsive">
+                                <p class="text-muted">Click refresh to load droplets</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Snapshots Section -->
+                <div class="col-lg-6 mb-4">
+                    <div class="card premium-card h-100">
+                        <div class="card-header bg-warning text-dark">
+                            <h5 class="mb-0">
+                                <i class="fa fa-camera"></i> Snapshots
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <button class="btn btn-sm btn-primary mb-3" onclick="loadSnapshots()">
+                                <i class="fa fa-sync"></i> Refresh List
+                            </button>
+                            <div id="snapshotsList" class="table-responsive">
+                                <p class="text-muted">Click refresh to load snapshots</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div> <!-- row end -->
+        </div> <!-- Setup TAB end -->
+
+        <!-- TAB 2: AUTOMATION -->
+        <div class="tab-pane fade" id="automation" role="tabpanel">
+            <div class="row">
+                <!-- Bulk Automation Execution Section - Width 7 -->
+                <div class="col-lg-7 mb-4">
+                    <div class="card premium-card border-primary h-100">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0">
+                                <i class="fa fa-rocket"></i> Bulk Automation Execution
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <form id="bulkExecutionForm">
+                                <div class="row">
+                                    <div class="col-12 mb-3">
+                                        <label class="form-label">Users (Email:Password format, one per line)</label>
+                                        <textarea class="form-control font-monospace" id="bulkUsers" rows="5"
+                                            placeholder="user1@domain.com:password1&#10;user2@domain.com:password2"
+                                            required oninput="calculateDroplets()"></textarea>
+                                    </div>
+                                    <div class="col-md-4 mb-3">
+                                        <label class="form-label">Droplets</label>
+                                        <input type="number" class="form-control" id="dropletCount" min="1" max="50"
+                                            value="5" required>
+                                    </div>
+                                    <div class="col-md-4 mb-3">
+                                        <label class="form-label">Parallel Users</label>
+                                        <input type="number" class="form-control" id="parallelUsers" min="1" max="50"
+                                            value="5" required>
+                                    </div>
+                                    <div class="col-md-4 mb-3">
+                                        <label class="form-label">Users / Droplet</label>
+                                        <input type="number" class="form-control" id="usersPerDroplet" min="1" max="100"
+                                            value="50" required onchange="calculateDroplets()">
+                                    </div>
+                                    <div class="col-md-12 mb-3">
+                                        <label class="form-label">Snapshot ID</label>
+                                        <input type="text" class="form-control" id="snapshotId" placeholder="123456789"
+                                            required>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">Region</label>
+                                        <select class="form-select" id="bulkRegion">
+                                            <option value="">Use default</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">Size</label>
+                                        <select class="form-select" id="bulkSize">
+                                            <option value="">Use default</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="form-check mb-3">
+                                    <input type="checkbox" class="form-check-input" id="autoDestroy" checked>
+                                    <label class="form-check-label" for="autoDestroy">
+                                        Auto-destroy droplets after execution
+                                    </label>
+                                </div>
+
+                                <button type="submit" class="btn btn-primary btn-lg w-100">
+                                    <i class="fa fa-play"></i> Start Bulk Execution
+                                </button>
+                            </form>
+                            <div id="bulkExecutionMessages" class="mt-3"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Active Droplets Status Section - Width 5 -->
+                <div class="col-lg-5 mb-4">
+                    <div id="activeDropletsSection" style="display: none;" class="h-100">
+                        <div class="card premium-card border-danger shadow-sm h-100">
+                            <div
+                                class="card-header bg-danger text-white d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">
+                                    <i class="fa fa-heartbeat"></i> Status Monitor
+                                </h5>
+                                <button class="btn btn-sm btn-light text-danger" onclick="refreshActiveDroplets()">
+                                    <i class="fa fa-sync-alt"></i>
+                                </button>
+                            </div>
+                            <div class="card-body p-0">
+                                <div class="table-responsive">
+                                    <table class="table table-hover mb-0 elegant-table" id="activeDropletsTable">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Droplet</th>
+                                                <th>Status</th>
+                                                <th class="text-end">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td colspan="3" class="text-center py-3">Waiting...</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div> <!-- End side-by-side row -->
+
+            <div class="row">
+                <!-- Real-Time Execution Monitor - Full Width -->
+                <div class="col-12 mb-4">
+                    <div id="executionMonitor" style="display: none;">
+                        <div class="card premium-card border-0">
+                            <div
+                                class="card-header d-flex justify-content-between align-items-center bg-dark text-white">
+                                <h6 class="mb-0 text-white"><i class="fa fa-desktop"></i> Real-Time Monitor Terminal
+                                </h6>
+                                <span class="badge bg-info" id="monitorStatus">Initializing...</span>
+                            </div>
+                            <div class="card-body bg-light">
+                                <ul class="nav nav-pills mb-3" id="dropletTabs" role="tablist">
+                                    <!-- Tabs injected here -->
+                                </ul>
+                                <div class="tab-content" id="dropletLogsContent">
+                                    <!-- Log panes injected here -->
+                                </div>
+                            </div>
+                            <div class="card-footer bg-white py-2 text-end">
+                                <small class="text-muted">Execution ID: <span id="executionId"></span></small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div> <!-- Automation TAB end -->
+
+        <!-- TAB 3: PASSWORDS -->
+        <div class="tab-pane fade" id="passwords" role="tabpanel">
+            <div class="row">
+                <div class="col-12 mb-4">
+                    <div class="card premium-card border-success">
+                        <div class="card-header bg-success text-white">
+                            <h5 class="mb-0">
+                                <i class="fa fa-key"></i> Generated App Passwords
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted mb-4">
+                                <i class="fa fa-info-circle"></i>
+                                View app passwords generated from bulk automation executions.
+                            </p>
+
+                            <div class="d-flex gap-2 mb-3 flex-wrap">
+                                <button type="button" class="btn btn-success" onclick="fetchAppPasswords()">
+                                    <i class="fa fa-refresh"></i> Fetch App-Passwords
+                                </button>
+                                <button type="button" class="btn btn-outline-dark" onclick="downloadPasswords()">
+                                    <i class="fa fa-download"></i> Download Backup (TXT)
+                                </button>
+                                <button type="button" class="btn btn-primary" onclick="copySMTPS()">
+                                    <i class="fa fa-copy"></i> Copy-SMTPS
+                                </button>
+                                <button type="button" class="btn btn-danger" onclick="copyFailedUsers()">
+                                    <i class="fa fa-exclamation-triangle"></i> Copy Failed Users
+                                </button>
+                            </div>
+
+                            <div id="passwordsMessages" class="mt-3"></div>
+                            <div id="passwordsList" class="mt-3"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div> <!-- Passwords TAB end -->
+    </div> <!-- All Tabs content end -->
+</div> <!-- container-fluid end -->
+
+<!-- Test Automation Modal -->
+<!-- ... (omitted for brevity, assume unchanged until script) ... -->
+
+<script>
+    // === Global Variables ===
+    let currentExecutionId = null;  // Track current bulk execution
+    let currentMinDisk = 0;         // Track min disk required by selected snapshot
+    let fetchedPasswordsCache = []; // Cache for Copy-SMTPS feature
+    let globalSnapshots = [];      // Track all snapshots for filtering
+    let globalRegions = [];        // Track all regions for filtering
+
+    // Helper to escape single quotes for onclick attributes
+    function escapeHtmlJS(str) {
+        if (!str) return "";
+        return str.replace(/'/g, "\\'");
+    }
+
+    // === Page Initialization ===
+    $(document).ready(function () {
+        loadRegionsAndSizes();
+        loadSnapshots();
+        loadDroplets();
+        loadBulkDefaults();
+        autoRestoreMonitor();
+
+        // Listen for manual snapshot ID changes
+        $('#snapshotId').on('input change', function () {
+            filterBulkRegions($(this).val());
+        });
+    });
+
+    // Fetch App Passwords (Strict Batch Mode)
+    function fetchAppPasswords() {
+        // 1. Get users from input
+        const usersText = $('#bulkUsers').val() ? $('#bulkUsers').val().trim() : '';
+
+        if (!usersText) {
+            showMessage('passwordsMessages', '⚠️ Please enter users in the "Bulk Automation Execution" box to fetch their passwords.', 'warning');
+            $('#passwordsList').html('');
+            return;
+        }
+
+        showMessage('passwordsMessages', '⏳ Fetching passwords for listed users...', 'info');
+
+        // Parse emails
+        const emails = usersText.split('\n')
+            .map(line => line.split(':')[0].trim())
+            .filter(email => email.length > 0);
+
+        if (emails.length === 0) {
+            showMessage('passwordsMessages', '⚠️ No valid emails found in the input box.', 'warning');
+            return;
+        }
+
+        $.ajax({
+            url: '/api/do/generated-passwords/batch-fetch',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ emails: emails }),
+            success: function (response) {
+                if (response.success) {
+                    const passwords = response.passwords;
+
+                    if (passwords.length === 0) {
+                        showMessage('passwordsMessages', '📭 No app passwords found for the requested users.', 'warning');
+                        $('#passwordsList').html('');
+                    } else {
+                        const count = passwords.length;
+                        const requested = response.requested_count;
+                        fetchedPasswordsCache = passwords; // Cache for Copy-SMTPS
+                        showMessage('passwordsMessages', `✅ Found ${count} passwords (out of ${requested} requested).`, 'success');
+                        renderPasswords(passwords);
+                    }
+                } else {
+                    showMessage('passwordsMessages', `❌ ${response.error}`, 'danger');
+                }
+            },
+            error: function (xhr) {
+                const error = xhr.responseJSON?.error || 'Failed to fetch passwords';
+                showMessage('passwordsMessages', `❌ Error: ${error}`, 'danger');
+            }
+        });
+    }
+
+    // Render Passwords Table
+    function renderPasswords(passwords) {
+        let html = '<div class="table-responsive mt-3"><table class="table table-sm table-striped">';
+        html += '<thead class="table-dark"><tr>';
+        html += '<th>#</th><th>Email</th><th>App Password</th><th>Created</th><th>Source</th><th>Actions</th>';
+        html += '</tr></thead><tbody>';
+
+        passwords.forEach(function (pwd, index) {
+            const createdDate = pwd.created_at ? new Date(pwd.created_at).toLocaleString() : 'N/A';
+            html += `<tr>
+                <td>${index + 1}</td>
+                <td>${pwd.email}</td>
+                <td><code>${pwd.app_password}</code></td>
+                <td><small>${createdDate}</small></td>
+                <td><span class="badge bg-secondary">${pwd.source || 'DB'}</span></td>
+                <td>
+                    <button class="btn btn-sm btn-primary" onclick="navigator.clipboard.writeText('${pwd.app_password}')">
+                        <i class="fa fa-copy"></i>
+                    </button>
+                </td>
+            </tr>`;
+        });
+
+        html += '</tbody></table></div>';
+        $('#passwordsList').html(html);
+    }
+
+    // Reset min disk if ID is manually changed
+    $('#snapshotId').on('input', function () {
+        currentMinDisk = 0;
+    });
+
+    // Trigger calculation initially
+    calculateDroplets();
+
+
+    // === Auto-Calculate Droplets ===
+    function calculateDroplets() {
+        const usersText = $('#bulkUsers').val();
+        if (!usersText) return;
+
+        // Count non-empty lines
+        const lineCount = usersText.split('\n').filter(line => line.trim().length > 0).length;
+        const perDroplet = parseInt($('#usersPerDroplet').val()) || 50;
+
+        if (lineCount > 0 && perDroplet > 0) {
+            const recommended = Math.ceil(lineCount / perDroplet);
+            $('#dropletCount').val(recommended);
+
+            // Show feedback
+            const existingFeedback = $('#dropletCalcFeedback');
+            const msg = `<small id="dropletCalcFeedback" class="text-success d-block mt-1"><i class="fa fa-calculator"></i> Auto-set to ${recommended} droplets for ${lineCount} users</small>`;
+
+            if (existingFeedback.length) {
+                existingFeedback.replaceWith(msg);
+            } else {
+                $('#dropletCount').after(msg);
+            }
+        }
+    }
+
+    // === Download Passwords ===
+    function downloadPasswords() {
+        const executionId = currentExecutionId || 'all';
+        window.location.href = `/api/do/generated-passwords/download/${executionId}`;
+    }
+
+    // === Copy Failed Users (users in input that have NO generated app password) ===
+    function copyFailedUsers() {
+        // 1. Read all users from the bulk users input box
+        const usersText = $('#bulkUsers').val() ? $('#bulkUsers').val().trim() : '';
+        if (!usersText) {
+            showMessage('passwordsMessages', '⚠️ No users found in the Bulk Automation Execution input box.', 'warning');
+            return;
+        }
+
+        const inputLines = usersText.split('\n').filter(line => line.trim().length > 0);
+        if (inputLines.length === 0) {
+            showMessage('passwordsMessages', '⚠️ No valid users found in the input box.', 'warning');
+            return;
+        }
+
+        // 2. Build set of emails that succeeded (have an app password)
+        // Check if cache is empty or doesn't exist
+        if (!fetchedPasswordsCache || fetchedPasswordsCache.length === 0) {
+            const confirmFetch = confirm('No passwords have been fetched yet. Would you like to fetch them now?');
+            if (confirmFetch) {
+                fetchAppPasswords();
+            } else {
+                showMessage('passwordsMessages', '⚠️ Please click "Fetch App-Passwords" first to identify which users failed.', 'warning');
+            }
+            return;
+        }
+
+        // Extract lowercase emails from successful cache
+        const succeededEmails = new Set(
+            fetchedPasswordsCache
+                .filter(p => p.email && p.app_password)
+                .map(p => p.email.trim().toLowerCase())
+        );
+
+        // 3. Find the difference
+        const failedLines = [];
+        let failedCount = 0;
+        
+        inputLines.forEach(line => {
+             const parts = line.split(':');
+             const email = parts[0].trim().toLowerCase();
+             
+             if (!succeededEmails.has(email)) {
+                 failedCount++;
+                 // Format as email,password (for easy CSV/Bulk import elsewhere)
+                 if (parts.length >= 2) {
+                     const password = parts.slice(1).join(':').trim();
+                     failedLines.push(`${parts[0].trim()},${password}`);
+                 } else {
+                     failedLines.push(line.trim());
+                 }
+             }
+        });
+
+        if (failedCount === 0) {
+            showMessage('passwordsMessages', '✅ All users in the list have app passwords! No failed users found.', 'success');
+            return;
+        }
+
+        // 4. Copy to clipboard (Modern API with Fallback)
+        const textToCopy = failedLines.join('\n');
+        
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                showMessage('passwordsMessages', 
+                    `📋 Copied ${failedCount} failed user(s) (email,password) to clipboard.`, 
+                    'warning'
+                );
+            }).catch(err => {
+                console.error('Clipboard API failed, using fallback:', err);
+                fallbackCopyText(textToCopy, failedCount);
+            });
+        } else {
+            fallbackCopyText(textToCopy, failedCount);
+        }
+
+        function fallbackCopyText(text, count) {
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            textArea.style.position = 'fixed'; // Avoid scrolling to bottom
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                showMessage('passwordsMessages', 
+                    `📋 Copied ${count} failed user(s) (email,password) to clipboard.`, 
+                    'warning'
+                );
+            } catch (err) {
+                console.error('Fallback copy failed:', err);
+                showMessage('passwordsMessages', '❌ Failed to copy to clipboard. Please copy manually.', 'danger');
+            }
+            document.body.removeChild(textArea);
+        }
+    }
+
+    // === Copy SMTPS ===
+    function copySMTPS() {
+        if (!fetchedPasswordsCache || fetchedPasswordsCache.length === 0) {
+            showMessage('passwordsMessages', '⚠️ No passwords loaded. Fetch them first!', 'warning');
+            return;
+        }
+
+        // Add header as requested
+        let lines = ['Email,App Password,smtp.gmail.com,587'];
+
+        fetchedPasswordsCache.forEach(pwd => {
+            if (pwd.email && pwd.app_password) {
+                lines.push(`${pwd.email},${pwd.app_password},smtp.gmail.com,587`);
+            }
+        });
+
+        const textToCopy = lines.join('\n');
+
+        // Use a simpler copy approach to ensure compatibility
+        const textArea = document.createElement("textarea");
+        textArea.value = textToCopy;
+        document.body.appendChild(textArea);
+        textArea.select();
+        try {
+            document.execCommand('copy');
+            showMessage('passwordsMessages', `📋 Copied ${lines.length - 1} SMTP settings with header to clipboard!`, 'success');
+        } catch (err) {
+            console.error('Fallback copy error:', err);
+            showMessage('passwordsMessages', '❌ Failed to copy to clipboard.', 'danger');
+        }
+        document.body.removeChild(textArea);
+    }
+
+    // === Load Regions and Sizes ===
+    function loadRegionsAndSizes() {
+        $.ajax({
+            url: '/api/do/regions-sizes',
+            method: 'GET',
+            success: function (response) {
+                if (response.success) {
+                    // Populate initial droplet creation form - Regions
+                    const regionSelect = $('#region');
+                    regionSelect.html('<option value="">Select a region</option>');
+                    // Populate bulk execution form - Regions
+                    const bulkRegionSelect = $('#bulkRegion');
+                    bulkRegionSelect.html('<option value="">Use default</option>');
+
+                    globalRegions = response.regions;
+
+                    response.regions.forEach(function (region) {
+                        regionSelect.append(`<option value="${region.slug}">${region.name}</option>`);
+                        bulkRegionSelect.append(`<option value="${region.slug}">${region.name}</option>`);
+                    });
+
+                    // Populate initial droplet creation form - Sizes
+                    const sizeSelect = $('#size');
+                    sizeSelect.html('<option value="">Select a size</option>');
+                    // Populate bulk execution form - Sizes
+                    const bulkSizeSelect = $('#bulkSize');
+                    bulkSizeSelect.html('<option value="">Use default</option>');
+
+                    response.sizes.forEach(function (size) {
+                        const price = size.price_monthly ? ` ($${size.price_monthly}/mo)` : '';
+                        sizeSelect.append(`<option value="${size.slug}" data-disk="${size.disk}">${size.description}${price}</option>`);
+                        bulkSizeSelect.append(`<option value="${size.slug}" data-disk="${size.disk}">${size.description}${price}</option>`);
+                    });
+                }
+            },
+            error: function () {
+                $('#region').html('<option value="">Error loading regions</option>');
+                $('#size').html('<option value="">Error loading sizes</option>');
+            }
+        });
+    }
+
+    // === Load Bulk Defaults ===
+    function loadBulkDefaults() {
+        $.ajax({
+            url: '/api/do/config',
+            method: 'GET',
+            success: function (response) {
+                if (response.success && response.config) {
+                    const config = response.config;
+                    if (config.parallel_users) $('#parallelUsers').val(config.parallel_users);
+                    if (config.users_per_droplet) $('#usersPerDroplet').val(config.users_per_droplet);
+                    if (config.automation_snapshot_id) {
+                        $('#snapshotId').val(config.automation_snapshot_id);
+                        // Filter regions after a short delay to ensure globalRegions and globalSnapshots are loaded
+                        setTimeout(() => filterBulkRegions(config.automation_snapshot_id), 800);
+                    }
+                    if (config.auto_destroy_droplets !== undefined) $('#autoDestroy').prop('checked', config.auto_destroy_droplets);
+                }
+            }
+        });
+    }
+
+    // === Auth Method Toggle ===
+    function toggleAuthMethod() {
+        const method = $('input[name="authMethod"]:checked').val();
+        if (method === 'ssh') {
+            $('#sshKeySection').show();
+            $('#passwordSection').hide();
+        } else {
+            $('#sshKeySection').hide();
+            $('#passwordSection').show();
+        }
+    }
+
+    // Create Droplet
+    $('#createDropletForm').on('submit', function (e) {
+        e.preventDefault();
+
+        const authMethod = $('input[name="authMethod"]:checked').val();
+
+        const droplet = {
+            name: $('#dropletName').val().trim(),
+            region: $('#region').val(),
+            size: $('#size').val(),
+            // Backend will use the configured SSH key from Settings if authMethod is ssh
+            ssh_key: null,
+            root_password: authMethod === 'password' ? $('#rootPassword').val().trim() : null
+        };
+
+        if (!droplet.name || !droplet.region || !droplet.size) {
+            showMessage('createDropletMessages', 'Please fill in all required fields', 'danger');
+            return;
+        }
+
+        if (authMethod === 'password' && !droplet.root_password) {
+            showMessage('createDropletMessages', 'Root password is required', 'danger');
+            return;
+        }
+
+        showMessage('createDropletMessages', 'Creating droplet... This may take a few minutes.', 'info');
+
+        $.ajax({
+            url: '/api/do/droplets/create',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(droplet),
+            success: function (response) {
+                if (response.success) {
+                    showMessage('createDropletMessages', `✅ Droplet created successfully! IP: ${response.ip_address}`, 'success');
+
+                    // Start Instant Live Logs
+                    startCreationLogPolling(response.droplet_id, response.ip_address);
+
+                    // Show snapshot section
+                    $('#snapshotSection').show();
+                    // Refresh droplet list
+                    loadDroplets();
+                    // Reset form but keep password preference
+                    const currentAuth = $('input[name="authMethod"]:checked').val();
+                    $('#createDropletForm')[0].reset();
+                    $(`input[name="authMethod"][value="${currentAuth}"]`).prop('checked', true);
+                    toggleAuthMethod();
+                } else {
+                    showMessage('createDropletMessages', `❌ Failed to create droplet: ${response.error}`, 'danger');
+                }
+            },
+            error: function (xhr) {
+                const error = xhr.responseJSON?.error || 'Failed to create droplet';
+                showMessage('createDropletMessages', `❌ Error: ${error}`, 'danger');
+            }
+        });
+    });
+
+    // Create Snapshot
+    $('#createSnapshotForm').on('submit', function (e) {
+        e.preventDefault();
+
+        const snapshot = {
+            droplet_id: $('#dropletToSnapshot').val(),
+            name: $('#snapshotName').val().trim()
+        };
+
+        if (!snapshot.droplet_id || !snapshot.name) {
+            showMessage('createSnapshotMessages', 'Please select a droplet and provide a snapshot name', 'danger');
+            return;
+        }
+
+        showMessage('createSnapshotMessages', '⏳ Requesting snapshot creation... This runs in the background.', 'info');
+
+        $.ajax({
+            url: `/api/do/droplets/${snapshot.droplet_id}/snapshot`,
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ name: snapshot.name }),
+            success: function (response) {
+                if (response.success) {
+                    showMessage('createSnapshotMessages', `✅ Snapshot started! ID: ${response.snapshot_id || 'Pending'} (Check list below in a few mins)`, 'success');
+                    // Refresh snapshots list
+                    loadSnapshots();
+                    // Reset form
+                    $('#createSnapshotForm')[0].reset();
+                } else {
+                    showMessage('createSnapshotMessages', `❌ Failed to start snapshot: ${response.error}`, 'danger');
+                }
+            },
+            error: function (xhr) {
+                const error = xhr.responseJSON?.error || 'Failed to create snapshot';
+                showMessage('createSnapshotMessages', `❌ Error: ${error}`, 'danger');
+            }
+        });
+    });
+
+    // Bulk Execution Form Submit
+    $('#bulkExecutionForm').on('submit', function (e) {
+        e.preventDefault();
+
+        // Parse users from textarea
+        const usersText = $('#bulkUsers').val().trim();
+        const lines = usersText.split('\n').filter(line => line.trim());
+
+        const users = [];
+        for (const line of lines) {
+            const parts = line.trim().split(':');
+            if (parts.length >= 2) {
+                users.push({
+                    email: parts[0].trim(),
+                    password: parts.slice(1).join(':')  // Handle passwords with colons
+                });
+            }
+        }
+
+        if (users.length === 0) {
+            showMessage('bulkExecutionMessages', 'Please enter at least one user', 'danger');
+            return;
+        }
+
+        const totalUsers = users.length;
+        const dropletCount = parseInt($('#dropletCount').val());
+
+        const executionData = {
+            users: users,
+            droplet_count: dropletCount,
+            parallel_users: parseInt($('#parallelUsers').val()) || 5,
+            users_per_droplet: parseInt($('#usersPerDroplet').val()) || 50,
+            snapshot_id: $('#snapshotId').val().trim(),
+            region: $('#bulkRegion').val() || '',
+            size: $('#bulkSize').val() || '',
+            auto_destroy: $('#autoDestroy').is(':checked')
+        };
+
+        // Validate
+        if (!executionData.snapshot_id) {
+            showMessage('bulkExecutionMessages', 'Snapshot ID is required', 'danger');
+            return;
+        }
+
+        // DISK SIZE VALIDATION
+        const selectedSizeOption = $('#bulkSize option:selected');
+        const selectedDisk = parseInt(selectedSizeOption.data('disk') || 0);
+
+        // If snapshot was selected via UI, we know its min disk
+        if (currentMinDisk > 0 && selectedDisk > 0 && selectedDisk < currentMinDisk) {
+            const confirmMsg = `⚠️ WARNING: The selected snapshot requires at least ${currentMinDisk}GB of disk, but the selected size only provides ${selectedDisk}GB.\n\n` +
+                `This execution will likely FAIL with a "smaller disk" error.\n\n` +
+                `Do you want to proceed anyway?`;
+
+            if (!confirm(confirmMsg)) {
+                return;
+            }
+        }
+
+        showMessage('bulkExecutionMessages', '⏳ Starting bulk execution...', 'info');
+
+        // Disable submit button to prevent double-clicks
+        $(this).find('button[type="submit"]').prop('disabled', true);
+
+        $.ajax({
+            url: '/api/do/execute',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(executionData),
+            success: function (response) {
+                if (response.success) {
+                    // Store execution ID for password viewing
+                    currentExecutionId = response.execution_id;
+
+
+                    showMessage('bulkExecutionMessages', `✅ Bulk execution started! Execution ID: ${response.execution_id}`, 'success');
+
+                    // Switch to Monitor View
+                    // $('#executionMonitor').hide(); // Stay hidden initially
+                    $('#executionId').text(response.execution_id);
+
+                    // Initialize Monitor
+                    initializeLogMonitor(response.execution_id);
+
+                    // Form is NOT reset so user keeps their settings
+
+                } else {
+                    showMessage('bulkExecutionMessages', `❌ Failed to start execution: ${response.error}`, 'danger');
+                }
+            },
+            error: function (xhr) {
+                const error = xhr.responseJSON?.error || 'Failed to start execution';
+                showMessage('bulkExecutionMessages', `❌ Error: ${error}`, 'danger');
+            }
+        });
+    });
+    // === End of Page Initialization ===
+
+    // === Bulk Execution Monitor Logic ===
+    let monitorInterval = null;
+    let activePollDropletId = null;
+    let activePollInterval = null;
+    let activeDropletIds = new Set();
+    let logCursors = {}; // Tracks next_cursor per dropletId
+
+    // Ensure Controls (Dropdown + Pause) exist
+    function ensureMonitorControls() {
+        // Replace Tabs with Dropdown if not already converted
+        if ($('#dropletLogControls').length === 0) {
+            // Remove old tabs if present
+            $('#dropletTabs').hide(); // Hide or remove
+
+            // Insert new controls above content
+            $('#dropletLogsContent').before(`
+                <div id="dropletLogControls" class="bg-dark p-2 rounded mb-2 border border-secondary">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="w-50">
+                            <label class="text-white small mb-1"><i class="fa fa-desktop"></i> Select Droplet to Monitor:</label>
+                            <select id="dropletLogSelector" class="form-select form-select-sm bg-black text-white border-secondary" style="font-family: monospace;">
+                                <option value="">-- Waiting for droplets --</option>
+                            </select>
+                        </div>
+                        
+                        <div class="d-flex align-items-center">
+                            <span id="monitorStatusBadge" class="badge bg-secondary me-3">INITIALIZING</span>
+                            <button id="forceRefreshBtn" class="btn btn-sm btn-outline-light" title="Force Refresh Logs">
+                                <i class="fa fa-sync"></i> Refresh
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `);
+
+            // Event Listeners
+            // 1. Dropdown Change
+            $('#dropletLogSelector').on('change', function () {
+                const dropletId = $(this).val();
+                const executionId = $(this).find('option:selected').attr('data-execution-id');
+                if (dropletId) {
+                    switchToDropletLog(dropletId, executionId);
+                }
+            });
+
+            // 2. Force Refresh
+            $('#forceRefreshBtn').on('click', function () {
+                const dropletId = $('#dropletLogSelector').val();
+                const icon = $(this).find('i');
+
+                if (dropletId && currentExecutionId) {
+                    icon.addClass('fa-spin');
+                    pollDropletLog(currentExecutionId, dropletId);
+
+                    // Remove spin after 500ms
+                    setTimeout(() => icon.removeClass('fa-spin'), 500);
+                }
+            });
+
+        }
+    }
+
+    function initializeLogMonitor(executionId) {
+        console.log("Initializing Monitor for Execution:", executionId);
+
+        // Setup UI
+        ensureMonitorControls();
+        $('#dropletLogSelector').empty().append('<option value="">-- Waiting for droplets --</option>');
+        $('#monitorStatusBadge').text('ORCHESTRATING').removeClass('bg-danger bg-success').addClass('bg-info');
+
+        // Clear any previous monitoring state
+        if (monitorInterval) clearInterval(monitorInterval);
+        stopActivePolling();
+
+        // Clear Content Area and cursors
+        logCursors = {};
+        activeDropletIds = new Set();
+        $('#dropletLogsContent').html(`
+            <div id="noDropletsMessage" class="text-center p-5 text-muted">
+                <i class="fa fa-spinner fa-spin fa-2x"></i><br>
+                Waiting for droplets to be created and initialized...
+            </div>
+        `);
+
+        // Start polling for droplets assigned to this execution
+        monitorInterval = setInterval(function () {
+            updateMonitorTabs(executionId);
+        }, 5000);
+
+        // Immediate check
+        updateMonitorTabs(executionId);
+    }
+
+    function stopActivePolling() {
+        if (activePollInterval) {
+            clearInterval(activePollInterval);
+            activePollInterval = null;
+        }
+    }
+
+    function switchToDropletLog(droplet_id, executionId) {
+        // 1. UI: Show the monitor container if hidden
+        $('#executionMonitor').slideDown();
+
+        // Scroll to monitor for better UX
+        $('html, body').animate({
+            scrollTop: $('#executionMonitor').offset().top - 50
+        }, 300);
+
+        // 2. UI: Show correct pane
+        $('.droplet-log-pane').hide(); // Hide all
+        $(`#pane-${droplet_id}`).show(); // Show target
+
+        // 2. Logic: Start polling
+        startSingleDropletPolling(droplet_id, executionId);
+    }
+
+    function startSingleDropletPolling(dropletId, executionId) {
+        // Stop previous
+        stopActivePolling();
+
+        if (!dropletId) return;
+
+        // Use global execution ID if not passed
+        const execId = executionId || currentExecutionId;
+        if (!execId) return;
+
+        activePollDropletId = dropletId;
+        console.log("Starting SINGLE polling for:", dropletId);
+
+        // Poll immediately
+        pollDropletLog(execId, dropletId);
+
+        // Then interval
+        activePollInterval = setInterval(function () {
+            pollDropletLog(execId, dropletId);
+        }, 3000);
+    }
+
+    function pollDropletLog(executionId, dropletId) {
+        const cursor = logCursors[dropletId] || 0;
+
+        $.ajax({
+            url: `/api/do/execution/${executionId}/droplets/${dropletId}/logs?cursor=${cursor}`,
+            method: 'GET',
+            success: function (response) {
+                if (dropletId !== activePollDropletId) return; // Switched during request
+
+                const logElement = document.getElementById(`logs-${dropletId}`);
+                const statusBadge = $(`#status-${dropletId}`);
+
+                if (response.success) {
+                    // Update cursor for next call
+                    if (response.next_cursor !== undefined) {
+                        logCursors[dropletId] = response.next_cursor;
+                    }
+
+                    if (response.logs && logElement) {
+                        if (cursor === 0) {
+                            // First load or reset: Replace content
+                            logElement.textContent = response.logs;
+                        } else {
+                            // Incremental load: Append content
+                            logElement.textContent += response.logs;
+                        }
+                        logElement.scrollTop = logElement.scrollHeight;
+                    }
+
+                    if (response.is_active) {
+                        statusBadge.text('RUNNING').removeClass('bg-secondary').addClass('bg-primary');
+                        if (!isLogPollingPaused) $('#monitorStatusBadge').text('RUNNING').removeClass('bg-secondary').addClass('bg-primary');
+                    } else {
+                        statusBadge.text('FINISHED').removeClass('bg-primary bg-secondary').addClass('bg-success');
+
+                        // Keep polling slowly? Or stop?
+                        if (!isLogPollingPaused) {
+                            $('#monitorStatusBadge').text('FINISHED').removeClass('bg-primary').addClass('bg-success');
+                            // We can probably stop polling if it's finished, but sometimes final logs lag.
+                            // Let's keep it but maybe warn user.
+                        }
+                    }
+                }
+            },
+            error: function () {
+                $(`#status-${dropletId}`).text('Offline').addClass('bg-danger');
+            }
+        });
+    }
+
+    function renderMonitorDroplets(droplets, executionId) {
+        if (!droplets || droplets.length === 0) return;
+
+        $('#noDropletsMessage').hide();
+        $('#activeDropletsSection').show(); // Show the new section
+
+        const tableBody = $('#activeDropletsTable tbody');
+        tableBody.empty();
+
+        droplets.forEach(function (droplet) {
+            // Handle different property names between routes
+            const droplet_id = droplet.droplet_id || droplet.id;
+            const execId = executionId || droplet.execution_id;
+            const displayName = (droplet.droplet_name || droplet.name || `Droplet ${droplet_id}`).replace('bulk-exec-', '');
+            const escapedName = escapeHtmlJS(displayName);
+
+            // Determine status badge classes and text
+            let status = droplet.status;
+            let statusClasses = 'bg-secondary';
+
+            if (status === 'active') statusClasses = 'bg-success';
+            else if (status === 'new') statusClasses = 'bg-info';
+            else if (status === 'off') statusClasses = 'bg-dark';
+            else if (status === 'archive') statusClasses = 'bg-warning text-dark';
+            else if (status === 'destroyed') statusClasses = 'bg-danger';
+
+            let activity = droplet.current_activity || 'Running automation...';
+            if (status === 'destroyed') {
+                activity = 'Finalized / Destroyed';
+            } else if (status === 'new') {
+                activity = 'Initializing...';
+            } else if (status === 'off') {
+                activity = 'Powered Off';
+            } else if (status === 'archive') {
+                activity = 'Archived';
+            }
+
+            const isNew = !activeDropletIds.has(droplet_id);
+            if (isNew) {
+                activeDropletIds.add(droplet_id);
+
+                if ($('#dropletLogSelector option[value=""]').text().includes('Waiting')) {
+                    $('#dropletLogSelector option[value=""]').text('-- Select Droplet --');
+                }
+                const option = new Option(`${displayName} (${droplet.ip_address})`, droplet_id);
+                $(option).attr('data-execution-id', execId);
+                $('#dropletLogSelector').append(option);
+
+                $('#dropletLogsContent').append(`
+                    <div class="droplet-log-pane" id="pane-${droplet_id}" style="display: none;">
+                        <div class="p-2 bg-dark text-white rounded">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <small class="text-muted">IP: ${droplet.ip_address || 'Pending...'}</small>
+                                <span class="badge bg-secondary" id="status-${droplet_id}">Connecting...</span>
+                            </div>
+                            <pre id="logs-${droplet_id}" class="m-0 p-2 border border-secondary" 
+                                 style="height: 450px; overflow-y: auto; font-family: monospace; font-size: 0.75rem; color: #00ff00; background-color: #000;"></pre>
+                        </div>
+                    </div>
+                `);
+
+                if ($('#dropletLogSelector option').length === 2) {
+                    $('#dropletLogSelector').val(droplet_id);
+                }
+            }
+
+            tableBody.append(`
+                <tr id="row-${droplet_id}" class="droplet-row">
+                    <td><strong>${displayName}</strong></td>
+                    <td><code class="text-primary">${droplet.ip_address || 'Pending...'}</code></td>
+                    <td><span class="badge ${statusClasses}" id="status-${droplet_id}">${status.toUpperCase()}</span></td>
+                    <td id="activity-${droplet_id}">${activity}</td>
+                    <td class="text-end">
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-primary" onclick="switchToDropletLog('${droplet_id}', '${execId}')" title="View Logs">
+                                <i class="fa fa-terminal"></i>
+                            </button>
+                            <button class="btn btn-outline-danger" onclick="manualDeleteDroplet('${droplet_id}', '${escapedName}')" title="Destroy Droplet">
+                                <i class="fa fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `);
+        });
+    }
+
+    function updateMonitorTabs(executionId) {
+        $.ajax({
+            url: `/api/do/execution/${executionId}/status`,
+            method: 'GET',
+            success: function (response) {
+                if (!response.success) return;
+
+                if (response.completed) {
+                    clearInterval(monitorInterval);
+                    $('#monitorStatus').text(response.status.toUpperCase())
+                        .removeClass('bg-info bg-warning bg-success bg-danger')
+                        .addClass(response.status === 'failed' ? 'bg-danger' : 'bg-success');
+
+                    if (response.status === 'failed') {
+                        showMessage('bulkExecutionMessages', `❌ Execution Failed: ${response.error_message || 'Unknown error during execution'}`, 'danger');
+                    } else if (response.status === 'completed') {
+                        showMessage('bulkExecutionMessages', `✅ Execution Completed Successfully! (Success: ${response.success_count || 0}, Failed: ${response.failure_count || 0})`, 'success');
+                    }
+                }
+
+                renderMonitorDroplets(response.droplets, executionId);
+            }
+        });
+    }
+
+    // === Global Monitor Restoration ===
+    function autoRestoreMonitor() {
+        // Ensure UI stays initialized
+        ensureMonitorControls();
+
+        $.ajax({
+            url: '/api/do/monitor/active-droplets',
+            method: 'GET',
+            success: function (response) {
+                if (response.success && response.droplets && response.droplets.length > 0) {
+                    console.log("Restoring monitor with", response.droplets.length, "droplets");
+                    renderMonitorDroplets(response.droplets);
+
+                    // Update header to indicate global view
+                    $('#monitorStatus').text('GLOBAL VIEW').removeClass('bg-info bg-warning bg-success bg-danger').addClass('bg-primary');
+                }
+            }
+        });
+    }
+
+    // === Refresh Active Droplets Button ===
+    function refreshActiveDroplets() {
+        if (currentExecutionId) {
+            monitorExecution(currentExecutionId);
+        } else {
+            // Restore from global if no specific execution is tracked
+            autoRestoreMonitor();
+        }
+    }
+
+    // === Instant Live Logs Polling ===
+    let creationLogPollInterval = null;
+
+    function startCreationLogPolling(dropletId, ipAddress) {
+        // Reset and show container
+        $('#creationLogContainer').show();
+        $('#creationLogIp').text(ipAddress);
+        $('#creationLogContent').text('Waiting for SSH to run cloud-init...');
+        $('#creationLogStatus').text('Booting...');
+
+        // Clear any existing poll
+        if (creationLogPollInterval) clearInterval(creationLogPollInterval);
+
+        let retryCount = 0;
+        const maxRetries = 100; // 5 minutes approx
+
+        creationLogPollInterval = setInterval(function () {
+            $.ajax({
+                url: `/api/do/droplets/${dropletId}/setup-logs`,
+                method: 'GET',
+                success: function (response) {
+                    if (response.success) {
+                        $('#creationLogContent').text(response.logs || '');
+
+                        // Auto-scroll to bottom
+                        const textarea = document.getElementById('creationLogContent');
+                        textarea.scrollTop = textarea.scrollHeight;
+
+                        if (response.setup_complete) {
+                            $('#creationLogStatus').removeClass('bg-warning').addClass('bg-success').text('Setup Complete');
+                            clearInterval(creationLogPollInterval);
+                        } else {
+                            $('#creationLogStatus').removeClass('bg-success').addClass('bg-warning').text('Installing... (Do not run test yet)');
+                        }
+                    }
+                },
+                error: function (xhr) {
+                    // Swallow 500 errors initially as SSH might not be ready
+                    retryCount++;
+                    if (retryCount > 10) {
+                        // Only show error text if it persists for >30 seconds
+                        const currentText = $('#creationLogContent').text();
+                        if (!currentText.includes('Error connecting')) {
+                            $('#creationLogContent').text(currentText + '\n[Waiting for SSH connection...]');
+                        }
+                    }
+                }
+            });
+        }, 3000); // Poll every 3 seconds
+    }
+
+    // Check Execution Status
+    function checkExecutionStatus(executionId, intervalId) {
+        $.ajax({
+            url: `/api/do/execution/${executionId}/status`,
+            method: 'GET',
+            success: function (response) {
+                if (response.success) {
+                    // Update progress UI
+                    $('#dropletsProgress').text(response.droplets_created);
+
+                    // Update status badge/text if you have one, or just the progress counters
+
+                    if (response.completed) {
+                        clearInterval(intervalId); // Stop polling
+
+                        // Refresh droplet list one last time to capture any final states
+                        loadDroplets();
+
+                        if (response.status === 'completed') {
+                            showMessage('bulkExecutionMessages', `✅ Execution Completed Successfully!(Success: ${response.success_count}, Failed: ${response.failure_count})`, 'success');
+
+                            // Switch to Passwords Tab
+                            $('#passwords-tab').tab('show');
+
+                            // Auto-scroll to password section
+                            setTimeout(() => {
+                                $('html, body').animate({
+                                    scrollTop: $('#passwordsList').offset().top - 150
+                                }, 500);
+                            }, 150);
+
+                        } else {
+                            // Failed
+                            showMessage('bulkExecutionMessages', `❌ Execution Failed: ${response.error_message} `, 'danger');
+                        }
+                    }
+                }
+            },
+            error: function (xhr) {
+                console.error("Error checking status:", xhr);
+                // Don't stop polling on transient network errors, but maybe log it
+            }
+        });
+    }
+
+    // Load Droplets
+    function loadDroplets() {
+        $.ajax({
+            url: '/api/do/droplets',
+            method: 'GET',
+            success: function (response) {
+                if (response.success) {
+                    renderDroplets(response.droplets);
+
+                    // Populate droplet selection for snapshot creation
+                    const dropletSelect = $('#dropletToSnapshot');
+                    dropletSelect.html('<option value="">Select a droplet</option>');
+                    response.droplets.forEach(function (droplet) {
+                        if (droplet.status === 'active') {
+                            dropletSelect.append(`<option value="${droplet.id}">${droplet.name} (${droplet.ip_address})</option>`);
+                        }
+                    });
+
+                    // Show snapshot section if there are droplets
+                    if (response.droplets.length > 0) {
+                        $('#snapshotSection').show();
+                    }
+                } else {
+                    showMessage('dropletsList', response.error || 'Failed to load droplets', 'danger');
+                }
+            },
+            error: function (xhr) {
+                const error = xhr.responseJSON?.error || 'Failed to load droplets';
+                $('#dropletsList').html('<div class="alert alert-danger">' + error + '</div>');
+            }
+        });
+    }
+
+    // Render Droplets
+    function renderDroplets(droplets) {
+        if (!droplets || droplets.length === 0) {
+            $('#dropletsList').html('<p class="text-muted">No droplets found</p>');
+            return;
+        }
+
+        let html = '<div class="table-responsive"><table class="table table-hover mb-0 elegant-table"><thead><tr>' +
+            '<th>Name</th><th>IP</th><th>Region</th><th>Size</th><th>Status</th><th>Actions</th>' +
+            '</tr></thead><tbody>';
+
+        droplets.forEach(function (droplet) {
+            const statusClass = droplet.status === 'active' ? 'success' : 'warning';
+            const escapedName = escapeHtmlJS(droplet.name || 'Unknown');
+            html += `<tr>
+                <td><strong>${droplet.name || 'Unknown'}</strong></td>
+                <td><code>${droplet.ip_address || 'N/A'}</code></td>
+                <td>${droplet.region}</td>
+                <td>${droplet.size}</td>
+                <td><span class="badge bg-${statusClass}">${droplet.status}</span></td>
+                <td>
+                    <button class="btn btn-sm btn-info text-white me-1" onclick="openTestAutomationModal('${droplet.id}')" title="Test Automation">
+                        <i class="fa fa-bug"></i> Test
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteDroplet('${droplet.id}', '${escapedName}')">
+                        <i class="fa fa-trash"></i>
+                    </button>
+                </td>
+            </tr>`;
+        });
+
+        html += '</tbody></table>';
+        $('#dropletsList').html(html);
+    }
+
+    // Delete Droplet
+    function deleteDroplet(dropletId, dropletName) {
+        if (!confirm(`Delete droplet "${dropletName}" ? `)) {
+            return;
+        }
+
+        $.ajax({
+            url: '/api/do/droplets/' + dropletId,
+            method: 'DELETE',
+            success: function (response) {
+                if (response.success) {
+                    alert('Droplet destruction requested successfully.');
+                    loadDroplets();
+                } else {
+                    alert('Failed to delete droplet: ' + (response.error || 'Server error'));
+                }
+            },
+            error: function (xhr) {
+                console.error('Delete error details:', xhr);
+                const error = xhr.responseJSON?.error || `HTTP ${xhr.status}: ${xhr.statusText || 'Connection failed'} `;
+                alert('Connection Error: ' + error);
+            }
+        });
+    }
+
+    // Load Snapshots
+    function loadSnapshots() {
+        $.ajax({
+            url: '/api/do/snapshots',
+            method: 'GET',
+            success: function (response) {
+                if (response.success) {
+                    globalSnapshots = response.snapshots;
+                    renderSnapshots(response.snapshots);
+                } else {
+                    showMessage('snapshotsList', response.error || 'Failed to load snapshots', 'danger');
+                }
+            },
+            error: function (xhr) {
+                const error = xhr.responseJSON?.error || 'Failed to load snapshots';
+                $('#snapshotsList').html('<div class="alert alert-danger">' + error + '</div>');
+            }
+        });
+    }
+
+    // Render Snapshots
+    function renderSnapshots(snapshots) {
+        if (!snapshots || snapshots.length === 0) {
+            $('#snapshotsList').html('<p class="text-muted">No snapshots found</p>');
+            return;
+        }
+
+        let html = '<div class="table-responsive"><table class="table table-hover mb-0 elegant-table text-center"><thead><tr>' +
+            '<th class="text-start">Name</th><th>ID</th><th>Min Disk</th><th>Size (GB)</th><th>Regions</th><th>Actions</th>' +
+            '</tr></thead><tbody>';
+
+        snapshots.forEach(function (snapshot) {
+            // Check if this is our automation snapshot
+            const isAuto = snapshot.name.toLowerCase().includes('automation');
+            const rowClass = isAuto ? 'table-success' : '';
+
+            html += `< tr class="${rowClass}" >
+            <td class="text-start">${snapshot.name}</td>
+            <td>
+                <code>${snapshot.id}</code>
+                <button class="btn btn-sm btn-link p-0 ms-1 text-muted" onclick="copyToClipboard('${snapshot.id}')" title="Copy ID">
+                    <i class="fa fa-copy"></i>
+                </button>
+                <button class="btn btn-sm btn-link p-0 ms-1 text-primary" onclick="selectSnapshot('${snapshot.id}', ${snapshot.min_disk_size || 0})" title="Use for Bulk Execution">
+                    <i class="fa fa-rocket"></i>
+                </button>
+            </td>
+            <td><span class="badge bg-info text-dark">${snapshot.min_disk_size || '?'} GB</span></td>
+            <td>${snapshot.size_gigabytes.toFixed(2)} GB</td>
+            <td>${snapshot.regions.join(', ')}</td>
+            <td>
+                <button class="btn btn-sm btn-danger" onclick="deleteSnapshot('${snapshot.id}', '${snapshot.name}')">
+                    <i class="fa fa-trash"></i>
+                </button>
+            </td>
+        </tr > `;
+        });
+
+        html += '</tbody></table>';
+        $('#snapshotsList').html(html);
+    }
+
+    // Select Snapshot for Bulk Execution
+    function selectSnapshot(id, minDisk) {
+        $('#snapshotId').val(id);
+        currentMinDisk = minDisk;
+        filterBulkRegions(id); // Filter regions immediately
+
+        // Switch to Automation Tab
+        $('#automation-tab').tab('show');
+
+        // Auto-scroll to bulk section
+        setTimeout(() => {
+            $('html, body').animate({
+                scrollTop: $('#bulkExecutionForm').offset().top - 100
+            }, 500);
+        }, 150);
+
+        // Brief highlight effect on the input
+        $('#snapshotId').css('background-color', '#fff3cd').animate({
+            backgroundColor: '#fff'
+        }, 1000);
+    }
+
+    // Filter Bulk Execution regions based on snapshot availability
+
+    // Auto-filter when user pastes or types a snapshot ID
+    $('#snapshotId').on('input change', function () {
+        filterBulkRegions($(this).val().trim());
+    });
+
+    function filterBulkRegions(snapshotId) {
+        const bulkRegionSelect = $('#bulkRegion');
+        const currentValue = bulkRegionSelect.val();
+
+        // Reset to full list if no snapshot selected
+        if (!snapshotId) {
+            bulkRegionSelect.html('<option value="">Use default</option>');
+            globalRegions.forEach(function (region) {
+                bulkRegionSelect.append(`< option value = "${region.slug}" > ${region.name}</option > `);
+            });
+            bulkRegionSelect.val(currentValue);
+            return;
+        }
+
+        // Find the snapshot object
+        const snapshot = globalSnapshots.find(s => s.id === snapshotId || String(s.id) === String(snapshotId));
+
+        if (!snapshot) {
+            // Even if not found in list, we don't clear (user might have typed a valid ID manually)
+            return;
+        }
+
+        const supportedRegions = snapshot.regions || [];
+        console.log("Filtering regions for snapshot:", snapshotId, "Supported:", supportedRegions);
+
+        // Populate filtered list, do NOT add empty default option to force valid selection match
+        bulkRegionSelect.empty();
+
+        globalRegions.forEach(function (region) {
+            if (supportedRegions.includes(region.slug)) {
+                bulkRegionSelect.append(`<option value="${region.slug}">${region.name}</option>`);
+            }
+        });
+
+        // Try to restore value if it still exists in the filtered list
+        if (currentValue && supportedRegions.includes(currentValue)) {
+            bulkRegionSelect.val(currentValue);
+        } else if (supportedRegions.length > 0) {
+            // Auto-select the first valid region instead of leaving it blank
+            bulkRegionSelect.val(supportedRegions[0]);
+        }
+    }
+
+    // Delete Snapshot
+    function deleteSnapshot(snapshotId, snapshotName) {
+        if (!confirm(`Delete snapshot "${snapshotName}" ? `)) {
+            return;
+        }
+
+        $.ajax({
+            url: '/api/do/snapshots/' + snapshotId,
+            method: 'DELETE',
+            success: function (response) {
+                if (response.success) {
+                    alert('Snapshot deleted successfully');
+                    loadSnapshots();
+                } else {
+                    alert('Failed to delete snapshot: ' + (response.error || 'Unknown error'));
+                }
+            },
+            error: function (xhr) {
+                const error = xhr.responseJSON?.error || 'Failed to delete snapshot';
+                alert('Error: ' + error);
+            }
+        });
+    }
+
+    // Load Generated Passwords
+    function loadGeneratedPasswords() {
+        const executionId = currentExecutionId || 'all';
+
+        if (!currentExecutionId) {
+            showMessage('passwordsMessages', 'ℹ️ No active execution in this session. Loading ALL recent generated passwords...', 'info');
+        } else {
+            showMessage('passwordsMessages', `⏳ Loading passwords from execution: ${currentExecutionId}...`, 'info');
+        }
+
+        $.ajax({
+            url: '/api/do/generated-passwords/' + executionId,
+            method: 'GET',
+            success: function (response) {
+                if (response.success) {
+                    let passwords = response.passwords;
+
+                    // Filter by Input Users if present
+                    const inputUsersText = $('#bulkUsers').val() ? $('#bulkUsers').val().trim() : '';
+                    if (inputUsersText) {
+                        const inputEmails = inputUsersText.split('\n')
+                            .map(line => line.split(':')[0].trim().toLowerCase()) // Handle email:pass format too
+                            .filter(email => email.length > 0);
+
+                        if (inputEmails.length > 0) {
+                            passwords = passwords.filter(p => inputEmails.includes(p.email.toLowerCase()));
+                            console.log(`Filtered passwords from ${response.passwords.length} to ${passwords.length} based on input list.`);
+                        }
+                    }
+
+                    if (passwords.length === 0) {
+                        const msg = inputUsersText
+                            ? '📭 No recent passwords found matching the input users.'
+                            : '📭 No app passwords found.';
+                        showMessage('passwordsMessages', msg, 'warning');
+                        $('#passwordsList').html('');
+                    } else {
+                        const count = passwords.length;
+                        const msg = inputUsersText
+                            ? `✅ Loaded ${count} matching passwords`
+                            : (currentExecutionId
+                                ? `✅ Loaded ${count} passwords from execution ${currentExecutionId} `
+                                : `✅ Loaded ${count} passwords from database / backups`);
+
+                        showMessage('passwordsMessages', msg, 'success');
+                        renderPasswords(passwords);
+                    }
+                } else {
+                    showMessage('passwordsMessages', `❌ ${response.error} `, 'danger');
+                }
+            },
+            error: function (xhr) {
+                const error = xhr.responseJSON?.error || 'Failed to load passwords';
+                showMessage('passwordsMessages', `❌ Error: ${error} `, 'danger');
+            }
+        });
+    }
+
+    // Render Passwords Table
+    function renderPasswords(passwords) {
+        let html = '<div class="table-responsive mt-3"><table class="table table-hover mb-0 elegant-table">';
+        html += '<thead class="table-light"><tr>';
+        html += '<th>#</th><th>Email</th><th>App Password</th><th>Created</th><th class="text-end">Actions</th>';
+        html += '</tr></thead><tbody>';
+
+        passwords.forEach(function (pwd, index) {
+            const createdDate = pwd.created_at ? new Date(pwd.created_at).toLocaleString() : 'N/A';
+            html += `< tr >
+                <td>${index + 1}</td>
+                <td>${pwd.email}</td>
+                <td><code>${pwd.app_password}</code></td>
+                <td><small>${createdDate}</small></td>
+                <td>
+                    <button class="btn btn-sm btn-primary" onclick="navigator.clipboard.writeText('${pwd.app_password}')">
+                        <i class="fa fa-copy"></i>
+                    </button>
+                </td>
+            </tr > `;
+        });
+
+        html += '</tbody></table></div>';
+        $('#passwordsList').html(html);
+    }
+
+    // Helper: Show Message
+    function showMessage(elementId, message, type) {
+        const alertClass = 'alert-' + type;
+        const html = '<div class="alert ' + alertClass + ' alert-dismissible fade show" role="alert">' +
+            message +
+            '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>' +
+            '</div>';
+        $('#' + elementId).html(html);
+    }
+
+    // === Test Automation Functions ===
+    function openTestAutomationModal(dropletId) {
+        $('#testDropletId').val(dropletId);
+        $('#testAutomationResult').html('');
+        $('#testAutomationForm')[0].reset();
+        new bootstrap.Modal('#testAutomationModal').show();
+    }
+
+    function runTestAutomation() {
+        const dropletId = $('#testDropletId').val();
+        const email = $('#testEmail').val().trim();
+        const password = $('#testPassword').val().trim();
+
+
+
+        if (!email || !password) {
+            $('#testAutomationResult').html('<div class="alert alert-danger">Email and password are required</div>');
+            return;
+        }
+
+        $('#testAutomationResult').html(`
+            < div class="alert alert-info" > <i class="fa fa-spinner fa-spin"></i> Test Started... Waiting for logs...</div >
+                <div class="mt-2"><small><strong>Live Logs:</strong></small>
+                    <pre id="liveAutomationLogs" class="bg-dark text-white p-2 border rounded" style="max-height: 300px; overflow-y: auto; font-size: 0.8rem; font-family: monospace;">Initializing...</pre>
+                </div>
+        `);
+
+        // 1. Start Automation
+        $.ajax({
+            url: `/ api /do /droplets/${dropletId} / test - automation`,
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ email: email, password: password }),
+            success: function (response) {
+                if (response.success && response.status === 'running') {
+                    const logFile = response.log_file;
+                    const resultFile = response.result_file;
+                    pollAutomationStatus(dropletId, logFile, resultFile);
+                } else {
+                    $('#testAutomationResult').html(`< div class="alert alert-danger" > <strong>❌ Start Failed:</strong> ${response.error || 'Unknown error'}</div > `);
+                }
+            },
+            error: function (xhr) {
+                const error = xhr.responseJSON?.error || 'Failed to start test';
+                $('#testAutomationResult').html(`< div class="alert alert-danger" > <strong>❌ Error:</strong> ${error}</div > `);
+            }
+        });
+    }
+
+    function pollAutomationStatus(dropletId, logFile, resultFile) {
+        const pollInterval = setInterval(() => {
+            $.ajax({
+                url: `/ api /do /droplets/${dropletId} / automation - status`,
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ log_file: logFile, result_file: resultFile }),
+                success: function (response) {
+                    if (response.success) {
+                        const data = response.data;
+
+                        // Update Logs
+                        if (data.logs) {
+                            $('#liveAutomationLogs').text(data.logs);
+                            // Auto-scroll to bottom
+                            const logContainer = document.getElementById('liveAutomationLogs');
+                            if (logContainer) logContainer.scrollTop = logContainer.scrollHeight;
+                        }
+
+                        // Check for completion
+                        if (data.status === 'completed') {
+                            clearInterval(pollInterval);
+                            displayFinalResult(data.result);
+                        } else if (data.status === 'error') {
+                            clearInterval(pollInterval);
+                            $('#testAutomationResult').prepend(`< div class="alert alert-danger" > <strong>❌ Polling Error:</strong> ${data.error}</div > `);
+                        }
+                    }
+                },
+                error: function () {
+                    // Keep polling on transient network errors, but stop after N retries if needed (omitted for simplicity)
+                }
+            });
+        }, 2000); // Poll every 2 seconds
+    }
+
+    function displayFinalResult(result) {
+        // Re-use logic to display final result (success/fail + screenshots)
+        let html = '';
+
+        // Check for explicit success in JSON result
+        if (result.status === 'success') {
+            html += `< div class="alert alert-success" >
+            <strong>✅ Test Passed!</strong><br>
+            App Password: <code>${result.app_password || 'N/A'}</code>
+        </div>`;
+        } else {
+            const errorMsg = result.error_message || result.error || 'Test Failed';
+            html += `< div class="alert alert-danger" >
+            <strong>❌ Test Failed:</strong> ${errorMsg}
+        </div > `;
+        }
+
+        // Check for screenshot in stdout (from final result or logs)
+        // Note: The 'logs' polling showed the tail, but 'result.stdout' has the full run potentially
+        // Actually, result.stdout might NOT be in the JSON file if we didn't capture it there explicitly
+        // But our Python script writes to stdout AND result file.
+        // Let's use the 'logs' we last saw if result doesn't have screenshot, OR check result.
+
+        // Wait, do_automation.py writes the JSON result file. It does NOT put stdout IN the JSON result file.
+        // But start_automation_script captures stdout/stderr in the log file, which we are polling!
+
+        // So we should check the FINAL logs for the screenshot tag.
+        const finalLogs = $('#liveAutomationLogs').text();
+        const screenshotMatch = finalLogs.match(/<SCREENSHOT>(.*?)<\/SCREENSHOT>/);
+
+        if (screenshotMatch) {
+            const base64Image = screenshotMatch[1];
+            html += `< div class="mt-2" ><strong>Debug Screenshot:</strong><br><img src="data:image/png;base64,${base64Image}" class="img-fluid border rounded" style="max-height: 400px;"></div>`;
+
+            // Clean up logs
+            const cleanLogs = finalLogs.replace(/<SCREENSHOT>.*?<\/SCREENSHOT>/, '[Screenshot captured]');
+            $('#liveAutomationLogs').text(cleanLogs);
+        }
+
+        $('#testAutomationResult').prepend(html);
+    }
+    function manualDeleteDroplet(dropletId, name) {
+        if (!confirm(`Are you sure you want to destroy droplet ${name}?`)) return;
+
+        $.ajax({
+            url: `/api/do/droplets/${dropletId}`,
+            method: 'DELETE',
+            success: function (response) {
+                if (response.success) {
+                    alert('Droplet destruction requested successfully.');
+                    // Refresh monitor state
+                    if (currentExecutionId) updateMonitorTabs(currentExecutionId);
+                } else {
+                    alert('Deletion failed: ' + (response.error || 'Unknown server error'));
+                }
+            },
+            error: function (xhr) {
+                console.error('Manual delete error:', xhr);
+                const error = xhr.responseJSON?.error || `HTTP ${xhr.status}: ${xhr.statusText || 'Failed to reach server'}`;
+                alert('Connection Error: ' + error);
+            }
+        });
+    }
+
+    // === Setup Logs Functions Removed ===
+</script>
+
+<style>
+    .card {
+        border-radius: 8px;
+    }
+
+    .card-header {
+        border-radius: 8px 8px 0 0;
+    }
+
+    /* Monitor Responsive & Sizing Fixes */
+    #executionMonitor {
+        max-width: 100% !important;
+        width: 100% !important;
+        overflow-x: hidden !important;
+    }
+
+    .droplet-log-pane pre {
+        white-space: pre-wrap !important;
+        word-break: break-all !important;
+        max-width: 100% !important;
+        overflow-x: hidden !important;
+        border: 1px solid #333 !important;
+    }
+
+    .container-fluid {
+        max-width: 100vw !important;
+        overflow-x: hidden !important;
+    }
+
+    code {
+        font-size: 0.85em;
+    }
+</style>
+{% endblock %}

@@ -1,0 +1,2573 @@
+{% extends "base.html" %}
+
+{% block title %}AWS Management - GBot Web{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+    <h1 class="glass-text-primary mb-0" style="font-size: 2rem; font-weight: 700;">
+        <i class="fas fa-cloud me-3"></i>AWS Management
+    </h1>
+    <div class="d-flex align-items-center gap-3">
+        <!-- AWS Account Selector -->
+        <div class="d-flex align-items-center gap-2">
+            <i class="fas fa-user-circle text-muted"></i>
+            <select id="aws-account-selector" class="glass-input"
+                style="min-width: 200px; padding: 8px 12px; font-size: 0.9rem;" onchange="switchAwsAccount(this.value)">
+                <option value="">Loading accounts...</option>
+            </select>
+        </div>
+        <!-- Add New Account Button -->
+        <a href="/settings#aws-accounts" class="glass-button" title="Manage AWS Accounts">
+            <i class="fas fa-cog"></i>
+        </a>
+    </div>
+</div>
+
+<!-- Info Message -->
+<div class="glass-panel p-4 mb-5" style="border-left: 4px solid var(--accent-secondary) !important;">
+    <div class="d-flex align-items-start gap-3">
+        <div class="glass-orb"
+            style="position: static; width: 24px; height: 24px; background: var(--accent-secondary); filter: blur(10px); opacity: 0.8;">
+        </div>
+        <div>
+            <h5 class="mb-1" style="color: var(--accent-secondary);">Multi-Account Support</h5>
+            <p class="mb-0 text-muted">
+                Use the dropdown above to switch between AWS accounts.
+                Add or manage accounts in <a href="/settings#aws-accounts"
+                    class="text-white text-decoration-underline">Settings</a>.
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- Main Interface -->
+<div class="glass-panel p-0 overflow-hidden mb-5">
+    <!-- Glass Tabs -->
+    <!-- Glass Tabs (Improved Spacing & No Background) -->
+    <div class="d-flex border-bottom border-white-10 p-3 gap-3">
+        {% if role == 'admin' %}
+        <button class="glass-button tab-button active" onclick="switchTab('infra')" id="tab-infra-btn">
+            <i class="fas fa-server me-2"></i>Core Infrastructure
+        </button>
+        {% endif %}
+
+        <button class="glass-button tab-button {% if role == 'mailer' %}active{% endif %}" onclick="switchTab('lambda')"
+            id="tab-lambda-btn">
+            <i class="fas fa-code me-2"></i>Production Lambda
+        </button>
+
+        {% if role == 'admin' %}
+        <button class="glass-button tab-button" onclick="switchTab('ec2')" id="tab-ec2-btn">
+            <i class="fas fa-desktop me-2"></i>EC2 Build Box
+        </button>
+        {% endif %}
+
+        <button class="glass-button tab-button" onclick="switchTab('status')" id="tab-status-btn">
+            <i class="fas fa-chart-bar me-2"></i>Global Status
+        </button>
+    </div>
+
+    <div class="p-4">
+
+        <!-- Tab: Core Infrastructure -->
+        {% if role == 'admin' %}
+        <div id="tab-infra" class="tab-content active">
+            <h4 class="mb-4 glass-text-primary">Core Resource Management</h4>
+
+            <div class="row g-4">
+                <!-- Naming Config -->
+                <div class="col-12 mb-2">
+                    <div class="glass-panel p-3 mb-0" style="background: rgba(255,255,255,0.03) !important;">
+                        <h6 class="mb-3 text-uppercase text-muted" style="font-size: 0.75rem; letter-spacing: 1px;">
+                            Resource Naming Configuration</h6>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                            <div>
+                                <label class="form-label text-muted small">ECR Repository Name</label>
+                                <input type="text" class="glass-input w-100" id="ecrRepoName"
+                                    value="dev-app-password-worker" placeholder="e.g., dev-worker">
+                            </div>
+                            <div>
+                                <label class="form-label text-muted small">DynamoDB Table Name</label>
+                                <input type="text" class="glass-input w-100" id="dynamodbTableName"
+                                    value="dev-app-passwords" placeholder="e.g., dev-passwords">
+                            </div>
+                            <div>
+                                <label class="form-label text-muted small">S3 Bucket Name</label>
+                                <input type="text" class="glass-input w-100" id="s3BucketName" value="dev-app-passwords"
+                                    placeholder="e.g., dev-bucket">
+                            </div>
+                            <div>
+                                <label class="form-label text-muted small">IAM Role Prefix</label>
+                                <input type="text" class="glass-input w-100" id="iamRolePrefix" value="dev"
+                                    placeholder="e.g., dev">
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <button class="glass-button glass-button-primary" onclick="saveNamingConfig()">
+                                <i class="fas fa-save me-2"></i>Save Resource Names
+                            </button>
+                            <span id="namingConfigStatus" class="ms-2 small text-muted"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Actions Grid -->
+                <div class="col-md-6">
+                    <h5 class="mb-3">Setup & Provisioning</h5>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <button class="glass-button glass-button-primary w-100" onclick="createInfrastructure()">
+                            <i class="fas fa-plus-circle me-2"></i>Core Res.
+                        </button>
+                        <button class="glass-button glass-button-primary w-100" onclick="createDynamoDBTable()">
+                            <i class="fas fa-database me-2"></i>DynamoDB
+                        </button>
+                        <button class="glass-button w-100" onclick="createECRManual()">
+                            <i class="fas fa-box me-2"></i>ECR Repo
+                        </button>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <h5 class="mb-3">Deployment & Inspection</h5>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <button class="glass-button w-100"
+                            style="border-color: var(--color-success-emphasis); color: var(--color-success-fg);"
+                            onclick="pushECRToAllRegions()">
+                            <i class="fas fa-globe me-2"></i>Push ECR
+                        </button>
+                        <button class="glass-button w-100" onclick="generateECRPushScript()">
+                            <i class="fas fa-file-code me-2"></i>Script
+                        </button>
+                        <button class="glass-button w-100" onclick="inspectResources()">
+                            <i class="fas fa-search me-2"></i>Inspect
+                        </button>
+                    </div>
+                </div>
+
+                <!-- ECR Push Options (Hidden by default) -->
+                <div id="ecrPushOptions" class="col-12" style="display: none;">
+                    <div class="glass-panel p-3 border border-secondary">
+                        <label class="form-label">Source Region (where ECR image exists)</label>
+                        <select id="sourceRegionSelect" class="glass-input w-100">
+                            <option value="">Auto-detect from ECR URI</option>
+                            <option value="us-east-1">US East (N. Virginia)</option>
+                            <option value="us-east-2">US East (Ohio)</option>
+                            <option value="us-west-1">US West (N. California)</option>
+                            <option value="us-west-2">US West (Oregon)</option>
+                            <option value="eu-west-1" selected>Europe (Ireland)</option>
+                            <option value="eu-central-1">Europe (Frankfurt)</option>
+                            <!-- Add other regions as needed -->
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Tab: Lambda Management -->
+        <div id="tab-lambda" class="tab-content {% if role == 'mailer' %}active{% endif %}">
+            <h4 class="mb-4 glass-text-primary">Production Lambda Management</h4>
+
+            <!-- Config Box -->
+            <div class="glass-panel p-3 mb-4">
+                <div class="d-flex align-items-center mb-3">
+                    <i class="fas fa-code me-2 glass-text-primary"></i>
+                    <h6 class="mb-0 glass-text-primary">Lambda Function Naming</h6>
+                </div>
+                <p class="small text-muted mb-2">Prefix used for all operations:
+                    <code>{prefix}-{region}-{number}</code>
+                </p>
+                <input type="text" class="glass-input w-100" id="lambdaPrefix" value="dev-chromium"
+                    placeholder="e.g., dev-chromium">
+            </div>
+
+            <!-- Creation Options -->
+            <div class="mb-4">
+                <label class="glass-checkbox d-flex align-items-center gap-2 mb-3 cursor-pointer">
+                    <input type="checkbox" id="createMultipleLambdas" onchange="toggleLambdaOptions()"
+                        style="accent-color: var(--accent-primary);">
+                    <span>Create multiple Lambda functions (Parallel Processing)</span>
+                </label>
+
+                <div id="lambdaOptions" class="glass-panel p-3 mb-3" style="display: none;">
+                    <div class="row align-items-center">
+                        <div class="col-md-6">
+                            <label class="form-label text-muted small">Users per Function</label>
+                            <input type="number" id="usersPerFunction" class="glass-input w-100" value="10" min="1"
+                                max="20" onchange="updateLambdaCalculation()" oninput="updateLambdaCalculation()">
+                            <small class="text-muted d-block mt-1">Recommended: 5-8 for fewer CAPTCHAs</small>
+                        </div>
+                        <div class="col-md-6">
+                            <div id="lambdaCalculation" class="text-info small">
+                                <i class="fas fa-calculator me-1"></i>
+                                <span id="lambdaCount">0</span> function(s) for <span id="detectedUserCount">0</span>
+                                user(s)
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-grid gap-3 d-md-flex">
+                    <button class="glass-button glass-button-primary flex-grow-1" onclick="createLambdas()">
+                        <i class="fas fa-sync-alt me-2"></i>Create / Update Prod Lambda(s)
+                    </button>
+                    <button class="glass-button" onclick="checkAWSLimits()">
+                        <i class="fas fa-search me-2"></i>Check AWS Limits
+                    </button>
+                    <button class="glass-button" onclick="fixLambdaConcurrency()">
+                        <i class="fas fa-tachometer-alt me-2"></i>Fix Concurrency
+                    </button>
+                    <button class="glass-button" onclick="requestQuotaIncrease()">
+                        <i class="fas fa-arrow-up me-2"></i>Request Quota
+                    </button>
+                </div>
+            </div>
+
+            <!-- Execution Mode (Single Account Removed) -->
+            <div class="mb-4 pt-3 border-top border-white-10">
+                <input type="hidden" name="executionMode" value="multiple"> <!-- Force multiple mode -->
+
+                <label class="form-label text-muted small">Account Input (email:password)</label>
+                <textarea id="multipleUsers" class="glass-input w-100 font-monospace mb-2" rows="6"
+                    placeholder="email1:password1&#10;email2:password2"></textarea>
+                <div id="multiStatus" class="small text-success">Ready</div>
+            </div>
+
+            <!-- Batch Size Configuration -->
+            <div class="mb-3">
+                <label class="form-label text-muted small">Batch Size (Users per Function)</label>
+                <div class="d-flex align-items-center gap-2">
+                    <input type="number" id="usersPerInvoke" class="glass-input" value="12" min="1" max="50"
+                        style="max-width: 100px;">
+                    <span class="text-muted small">users per Lambda invocation</span>
+                </div>
+            </div>
+
+            <div class="d-flex flex-column gap-3">
+                <button type="button" id="invokeButton" class="glass-button glass-button-primary py-3 w-100"
+                    onclick="invokeProductionLambda()">
+                    <i class="fas fa-play me-2"></i>Invoke Production Lambda
+                </button>
+                <div class="d-flex gap-3">
+
+                    <button type="button" class="glass-button glass-button-danger flex-grow-1"
+                        onclick="stopAllLambdas()">
+                        <i class="fas fa-stop me-2"></i>Stop All
+                    </button>
+                    <button type="button" class="glass-button glass-button-danger flex-grow-1"
+                        onclick="deleteAllLambdas()">
+                        <i class="fas fa-trash me-2"></i>Delete All
+                    </button>
+                </div>
+            </div>
+
+            <!-- Results -->
+            <div class="glass-panel p-3 mt-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="mb-0">Generated App Passwords</h6>
+                    <div>
+                        <button class="glass-button btn-sm me-2" onclick="fetchFromDynamoDB()"><i
+                                class="fas fa-cloud-download-alt me-1"></i>Fetch DB</button>
+                        <button class="glass-button glass-button-danger btn-sm me-2" onclick="emptyDynamoDBTable()"><i
+                                class="fas fa-trash-alt me-1"></i>Empty Table</button>
+                        <button class="glass-button btn-sm" onclick="fetchGeneratedPasswords()"><i
+                                class="fas fa-sync me-1"></i>Refresh Local</button>
+                    </div>
+                </div>
+                <textarea id="resultsOutput" class="glass-input w-100 font-monospace" rows="8" readonly></textarea>
+
+                <!-- Cleanup Section -->
+                <div class="mt-4 pt-3 border-top border-white-10">
+                    <h6 class="text-danger mb-3"><i class="fas fa-exclamation-triangle me-2"></i>Destructive
+                        Cleanup</h6>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                        <div>
+                            <input type="text" class="glass-input w-100 form-control-sm" id="deleteS3BucketName"
+                                value="dev-app-passwords" placeholder="Bucket">
+                        </div>
+                        {% if role == 'admin' %}
+                        <div>
+                            <input type="text" class="glass-input w-100 form-control-sm" id="deleteEcrRepoName"
+                                value="dev-app-password-worker" placeholder="Repo">
+                        </div>
+                        {% endif %}
+                        <div>
+                            <input type="text" class="glass-input w-100 form-control-sm" id="deleteLogGroupPrefix"
+                                value="/aws/lambda/dev" placeholder="Logs">
+                        </div>
+                        {% if role == 'admin' %}
+                        <div>
+                            <input type="text" class="glass-input w-100 form-control-sm" id="deleteDynamodbTableName"
+                                value="dev-app-passwords" placeholder="Table">
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <button class="glass-button glass-button-danger btn-sm w-100" onclick="deleteS3Content()">S3
+                            Content</button>
+                        {% if role == 'admin' %}
+                        <button class="glass-button glass-button-danger btn-sm w-100" onclick="deleteECRRepo()">ECR
+                            Repo</button>
+                        {% endif %}
+                        <button class="glass-button glass-button-danger btn-sm w-100"
+                            onclick="deleteCloudWatchLogs()">Logs</button>
+                        {% if role == 'admin' %}
+                        <button class="glass-button glass-button-danger btn-sm w-100"
+                            onclick="deleteDynamoDBTable()">DynamoDB</button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: EC2 Build Box -->
+        {% if role == 'admin' %}
+        <div id="tab-ec2" class="tab-content" style="display: none;">
+            <div class="glass-panel p-4 mb-4" style="border-left: 4px solid #f59e0b !important;">
+                <h5 style="color: #f59e0b;"><i class="fas fa-info-circle me-2"></i>Hybrid Build Box</h5>
+                <p class="text-muted small mb-0">
+                    Automatically provisions a t2.micro instance to build your Docker image and push it to ECR.
+                    This avoids local Docker requirements.
+                </p>
+            </div>
+
+            <div class="glass-panel p-3 mb-4">
+                <label class="form-label small text-muted">EC2 Instance Name</label>
+                <input type="text" class="glass-input w-100 mb-2" id="ec2InstanceName" value="dev-ec2-build-box">
+            </div>
+
+            <div class="d-grid gap-3">
+                <button class="glass-button glass-button-primary" onclick="ec2CreateBuildBox()">
+                    <i class="fas fa-hammer me-2"></i>Create & Prepare EC2 Build Box
+                </button>
+                <button class="glass-button" onclick="ec2ShowStatus()">
+                    <i class="fas fa-info-circle me-2"></i>Check Status
+                </button>
+                <button class="glass-button glass-button-danger" onclick="ec2Terminate()">
+                    <i class="fas fa-power-off me-2"></i>Terminate Instance
+                </button>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Tab: Global Status -->
+        <div id="tab-status" class="tab-content" style="display: none;">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h4 class="mb-0">Global Resource View</h4>
+                <button class="glass-button glass-button-primary" onclick="checkGlobalStatus()">
+                    <i class="fas fa-sync me-2"></i>Refresh Status
+                </button>
+            </div>
+
+            <div id="globalStatusLoading" class="text-center py-5" style="display: none;">
+                <div class="loading-spinner mb-3 mx-auto"></div>
+                <p class="text-muted">Scanning all supported AWS regions...</p>
+            </div>
+
+            <div class="table-container glass-panel p-0 overflow-hidden">
+                <table class="table mb-0 text-white" style="background: transparent; width: 100%; table-layout: fixed;">
+                    <thead>
+                        <tr style="background: rgba(255,255,255,0.05); border-bottom: 1px solid rgba(255,255,255,0.1);">
+                            <th class="p-3" style="width: 25%;">Region</th>
+                            <th class="p-3" style="width: 20%;">Lambdas</th>
+                            <th class="p-3" style="width: 15%;">ECR Repo</th>
+                            <th class="p-3" style="width: 25%;">Image Tag</th>
+                            <th class="p-3" style="width: 15%;">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="statusTableBody">
+                        <!-- Populated by JS -->
+                    </tbody>
+                    <tfoot id="statusTableFoot">
+                        <!-- Populated by JS -->
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- Log Output -->
+<div class="glass-panel p-0 mt-4">
+    <div class="p-3 border-bottom border-white-10 bg-black-20">
+        <h5 class="m-0 font-monospace text-muted small text-uppercase"><i class="fas fa-terminal me-2"></i>System
+            Log</h5>
+    </div>
+    <div id="logOutput" class="p-3 font-monospace small text-muted"
+        style="height: 300px; overflow-y: auto; white-space: pre-wrap;"></div>
+</div>
+
+</div>
+
+<style>
+    .tab-content {
+        display: none;
+        animation: fadeIn 0.3s ease-in-out;
+    }
+
+    .tab-content.active {
+        display: block;
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(5px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+</style>
+
+<script>
+    // Logging function
+    function log(message) {
+        const logOutput = document.getElementById('logOutput');
+        const timestamp = new Date().toLocaleTimeString();
+        const logLine = `[${timestamp}] ${message}\n`;
+        logOutput.textContent += logLine;
+        logOutput.scrollTop = logOutput.scrollHeight;
+        console.log(logLine);
+    }
+
+    // Initialize
+    loadAwsAccountsSelector(); // Load account list first
+    loadAwsCredentials(); // Load AWS credentials into window.awsConfig
+
+    // Tab switching logic
+    function switchTab(tabId) {
+        // Hide all tabs
+        document.querySelectorAll('.tab-content').forEach(tab => {
+            tab.classList.remove('active');
+            tab.style.display = 'none';
+        });
+        document.querySelectorAll('.tab-button').forEach(btn => {
+            btn.classList.remove('active');
+        });
+
+        // Show selected tab (safely)
+        const tab = document.getElementById(`tab-${tabId}`);
+        const btn = document.getElementById(`tab-${tabId}-btn`);
+
+        if (tab) {
+            tab.classList.add('active');
+            tab.style.display = 'block';
+        }
+        if (btn) {
+            btn.classList.add('active');
+        }
+    }
+
+    // Global Status Check
+    async function checkGlobalStatus() {
+        const creds = getAwsCredentials();
+        if (!creds) return;
+        const { access_key: accessKey, secret_key: secretKey } = creds;
+        const naming = getNamingConfig();
+
+        const loading = document.getElementById('globalStatusLoading');
+        const tbody = document.getElementById('statusTableBody');
+        const tfoot = document.getElementById('statusTableFoot');
+
+        if (loading) loading.style.display = 'block';
+        if (tbody) tbody.innerHTML = ''; // Clear table body
+        if (tfoot) tfoot.innerHTML = ''; // Clear table footer
+
+        log(`Initiating global AWS resource status check...`);
+        log(`Using Lambda prefix: ${naming.lambda_prefix}`);
+        log(`Using ECR repo: ${naming.ecr_repo_name}`);
+
+        try {
+            const response = await fetch('/api/aws/inspect-all-regions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    access_key: accessKey,
+                    secret_key: secretKey,
+                    lambda_prefix: naming.lambda_prefix,
+                    ecr_repo_name: naming.ecr_repo_name
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                log('Global status check completed. Populating table...');
+
+                if (!data.results || data.results.length === 0) {
+                    log('⚠️ No results returned from status check. This might indicate a configuration issue.');
+                    alert('No results returned. Please check server logs for details.');
+                    return;
+                }
+
+                // Initialize counters
+                let totalRegions = 0;
+                let totalLambdas = 0;
+                let totalRepos = 0;
+                let totalImages = 0;
+                let readyRegions = 0;
+                let errorRegions = 0;
+
+                data.results.forEach(region => {
+                    totalRegions++;
+                    if (region.lambda_count) totalLambdas += region.lambda_count;
+                    if (region.ecr_repo) totalRepos++;
+                    if (region.image_tag && region.image_tag !== 'MISSING' && region.image_tag !== 'ERROR') totalImages++;
+                    if (region.status === 'ready') readyRegions++;
+                    if (region.status === 'error') errorRegions++;
+
+                    const tr = document.createElement('tr');
+
+                    // Add helpful hints when resources aren't found
+                    let errorDetails = '';
+                    let lambdaHint = '';
+                    let ecrHint = '';
+
+                    if (region.error) {
+                        errorDetails = `<br><small style="color: var(--color-danger-fg);">Error: ${region.error.substring(0, 100)}</small>`;
+                    }
+
+                    // Show hints if resources weren't found
+                    if (region.lambda_count === 0 && region.lambda_functions_found && region.lambda_functions_found.length > 0) {
+                        lambdaHint = `<br><small style="color: var(--color-accent-fg);">Found: ${region.lambda_functions_found.join(', ')}</small>`;
+                    } else if (region.lambda_count === 0 && region.lambda_prefix_searched) {
+                        lambdaHint = `<br><small style="color: #656d76;">Searched: ${region.lambda_prefix_searched}*</small>`;
+                    }
+
+                    if (!region.ecr_repo && region.ecr_repo_found) {
+                        ecrHint = `<br><small style="color: var(--color-accent-fg);">Found: ${region.ecr_repo_found}</small>`;
+                    } else if (!region.ecr_repo && region.ecr_repo_searched) {
+                        ecrHint = `<br><small style="color: #656d76;">Searched: ${region.ecr_repo_searched}</small>`;
+                    }
+
+                    // Status Icon
+                    let statusIcon = '❓ Unknown';
+                    let statusClass = '';
+                    if (region.status === 'ready') {
+                        statusIcon = '✅ Ready';
+                        statusClass = 'text-success';
+                    } else if (region.status === 'incomplete') {
+                        statusIcon = '⚠️ Incomplete';
+                        statusClass = 'text-warning';
+                    } else if (region.status === 'error') {
+                        statusIcon = '❌ Error';
+                        statusClass = 'text-danger';
+                    } else if (region.status === 'not_applicable') {
+                        statusIcon = '➖ N/A';
+                        statusClass = '';
+                    }
+
+                    tr.innerHTML = `
+                        <td>${region.region}${errorDetails}</td>
+                        <td>${region.lambda_count !== undefined ? `${region.lambda_count} function(s)` : 'N/A'}${lambdaHint}</td>
+                        <td>${region.ecr_repo ? '✅ Found' : '❌ Missing'}${ecrHint}</td>
+                        <td>${region.image_tag === 'MISSING' ? '❌ Missing' : (region.image_tag === 'ERROR' ? '❌ Error' : (region.image_tag ? '✅ ' + region.image_tag : '❌ None'))}</td>
+                        <td class="${statusClass}">${statusIcon}</td>
+                    `;
+                    if (tbody) tbody.appendChild(tr);
+                });
+
+                // Add Total Row
+                if (!tfoot) {
+                    // Create tfoot if it doesn't exist (though we should add it to HTML)
+                    const newTfoot = document.createElement('tfoot');
+                    newTfoot.id = 'statusTableFoot';
+                    const table = document.querySelector('.table');
+                    if (table) table.appendChild(newTfoot);
+                }
+
+                const footerRow = document.createElement('tr');
+                footerRow.style.backgroundColor = 'rgba(255, 255, 255, 0.1)'; // Glass effect
+                footerRow.style.fontWeight = 'bold';
+                footerRow.style.borderTop = '2px solid rgba(255, 255, 255, 0.2)';
+
+                footerRow.innerHTML = `
+                    <td style="padding: 12px; color: white;">TOTAL (${totalRegions} Regions)${errorRegions > 0 ? ` - ${errorRegions} Error(s)` : ''}</td>
+                    <td style="padding: 12px; color: white;">${totalLambdas} function(s)</td>
+                    <td style="padding: 12px; color: white;">${totalRepos} Repo(s)</td>
+                    <td style="padding: 12px; color: white;">${totalImages} Image(s)</td>
+                    <td style="padding: 12px; color: white;">${readyRegions}/${totalRegions} Ready${errorRegions > 0 ? `, ${errorRegions} Error(s)` : ''}</td>
+                `;
+
+                const targetTfoot = document.getElementById('statusTableFoot') || document.querySelector('tfoot');
+                if (targetTfoot) {
+                    targetTfoot.innerHTML = '';
+                    targetTfoot.appendChild(footerRow);
+                }
+
+                // Log summary
+                log(`✓ Status check complete: ${totalRegions} regions checked, ${totalLambdas} Lambda(s), ${totalRepos} ECR repo(s), ${totalImages} image(s), ${readyRegions} ready${errorRegions > 0 ? `, ${errorRegions} error(s)` : ''}`);
+
+                // Show helpful message if no resources found
+                if (totalLambdas === 0 && totalRepos === 0) {
+                    log(`⚠️ No resources found. Make sure the Lambda prefix and ECR repo name in the UI match your actual resource names.`);
+                    log(`   Current settings: Lambda prefix="${naming.lambda_prefix}", ECR repo="${naming.ecr_repo_name}"`);
+                    log(`   Tip: Update these fields in the "Core Infrastructure" and "Production Lambda" tabs to match your actual resources.`);
+                } else if (totalLambdas === 0) {
+                    log(`⚠️ No Lambda functions found with prefix "${naming.lambda_prefix}". Check if your Lambdas use a different prefix.`);
+                } else if (totalRepos === 0) {
+                    log(`⚠️ No ECR repos found with name "${naming.ecr_repo_name}". Check if your repo uses a different name.`);
+                }
+
+            } else {
+                log(`❌ Error checking global status: ${data.error}`);
+                alert('Error: ' + data.error);
+            }
+        } catch (error) {
+            log(`❌ Failed to check global status: ${error.message}`);
+            console.error('Error:', error);
+            alert('Failed to check global status');
+        } finally {
+            if (loading) loading.style.display = 'none';
+        }
+    }
+
+    // Helper function to get AWS credentials
+    function getAwsCredentials() {
+        if (!window.awsConfig) {
+            console.error('AWS credentials not loaded in window.awsConfig');
+            alert('AWS credentials not loaded. Please configure them in Settings first.');
+            return null;
+        }
+        return {
+            access_key: window.awsConfig.access_key_id,
+            secret_key: window.awsConfig.secret_access_key,
+            region: window.awsConfig.region
+        };
+    }
+
+    // Helper to safely get element value
+    function getSafeValue(id, defaultValue) {
+        const el = document.getElementById(id);
+        return (el && el.value && el.value.trim()) ? el.value.trim() : defaultValue;
+    }
+
+    // Helper function to get resource naming configuration
+    function getNamingConfig() {
+        const config = window.awsConfig || {};
+
+        return {
+            // Use DOM value (override) OR Config value OR Hardcoded Default
+            // Infrastructure Tab (Inputs might be hidden for mailers)
+            ecr_repo_name: getSafeValue('ecrRepoName', config.ecr_repo_name || 'gbot-app-password-worker'),
+            dynamodb_table: getSafeValue('dynamodbTableName', config.dynamodb_table || 'gbot-app-passwords'),
+            s3_bucket: getSafeValue('s3BucketName', config.s3_bucket || 'gbot-app-passwords'),
+            iam_role_prefix: getSafeValue('iamRolePrefix', 'dev'),
+
+            // Lambda Tab
+            lambda_prefix: getSafeValue('lambdaPrefix', config.lambda_prefix || 'gbot-chromium'),
+
+            // EC2 Tab
+            ec2_instance_name: getSafeValue('ec2InstanceName', config.instance_name || 'dev-ec2-build-box'),
+
+            // Cleanup Tab
+            delete_s3_bucket: getSafeValue('deleteS3BucketName', config.s3_bucket || 'gbot-app-passwords'),
+            delete_ecr_repo: getSafeValue('deleteEcrRepoName', config.ecr_repo_name || 'gbot-app-password-worker'),
+            delete_log_prefix: getSafeValue('deleteLogGroupPrefix', '/aws/lambda/dev'),
+            delete_dynamodb_table: getSafeValue('deleteDynamodbTableName', 'dev-app-passwords')
+        };
+    }
+
+    // Create Infrastructure
+    function createDynamoDBTable() {
+        const creds = getAwsCredentials();
+        if (!creds) return;
+        const { access_key: accessKey, secret_key: secretKey, region } = creds;
+        const naming = getNamingConfig();
+
+        log(`Creating DynamoDB table: ${naming.dynamodb_table}...`);
+
+        fetch('/api/aws/create-dynamodb', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                access_key: accessKey,
+                secret_key: secretKey,
+                region: region,
+                table_name: naming.dynamodb_table
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Show actual message from backend (could be "created" or "already exists")
+                    log(`✅ DynamoDB: ${data.message || 'Success'}`);
+                    alert(data.message || `DynamoDB table "${naming.dynamodb_table}" operation completed!`);
+                } else {
+                    log(`❌ ERROR creating DynamoDB table: ${data.error}`);
+                    alert(`Error: ${data.error}`);
+                }
+            })
+            .catch(error => {
+                log(`❌ ERROR: ${error.message}`);
+                alert(`Error: ${error.message}`);
+            });
+    }
+
+    function createInfrastructure() {
+        const creds = getAwsCredentials();
+        if (!creds) return;
+        const { access_key: accessKey, secret_key: secretKey, region } = creds;
+        const naming = getNamingConfig();
+
+        log(`Creating core infrastructure with prefix "${naming.ecr_repo_name.split('-')[0]}"...`);
+        log(`ECR Repo: ${naming.ecr_repo_name}`);
+        log(`S3 Bucket: ${naming.s3_bucket}`);
+        log(`IAM Prefix: ${naming.iam_role_prefix}`);
+
+        fetch('/api/aws/create-infrastructure', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                access_key: accessKey,
+                secret_key: secretKey,
+                region: region,
+                ecr_repo_name: naming.ecr_repo_name,
+                s3_bucket: naming.s3_bucket,
+                iam_role_prefix: naming.iam_role_prefix
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    log('Infrastructure setup completed.');
+                    log(`IAM Lambda Role ARN: ${data.role_arn}`);
+                    alert('Core infrastructure created successfully.');
+                } else {
+                    log(`ERROR creating infrastructure: ${data.error}`);
+                    alert(`Error: ${data.error}`);
+                }
+            })
+            .catch(error => {
+                log(`ERROR: ${error.message}`);
+                alert(`Error: ${error.message}`);
+            });
+    }
+
+    // Create ECR Manual
+    function pushECRToAllRegions() {
+        const creds = getAwsCredentials();
+        if (!creds) return;
+        const { access_key: accessKey, secret_key: secretKey, region } = creds;
+        const naming = getNamingConfig();
+
+        // Show options dialog
+        const optionsDiv = document.getElementById('ecrPushOptions');
+        if (optionsDiv.style.display === 'none') {
+            optionsDiv.style.display = 'block';
+            return; // Show options first
+        }
+
+        // Get ECR URI from settings, or construct from naming config
+        let ecrUri = window.awsConfig?.ecr_uri;
+
+        // If ECR URI is not in settings or uses old gbot prefix, construct from naming config
+        if (!ecrUri || ecrUri.includes('gbot-')) {
+            // Try to construct ECR URI from naming config and region
+            // Format: {accountId}.dkr.ecr.{region}.amazonaws.com/{repoName}:latest
+            const repoName = naming.ecr_repo_name || 'dev-app-password-worker';
+            const sourceRegionSelect = document.getElementById('sourceRegionSelect');
+            const selectedRegion = sourceRegionSelect?.value || region || 'eu-west-1';
+
+            // We need the account ID - try to get from existing ECR URI or prompt
+            let accountId = '';
+            if (window.awsConfig?.ecr_uri) {
+                const match = window.awsConfig.ecr_uri.match(/^(\d+)\.dkr\.ecr/);
+                if (match) accountId = match[1];
+            }
+
+            if (accountId) {
+                ecrUri = `${accountId}.dkr.ecr.${selectedRegion}.amazonaws.com/${repoName}:latest`;
+                log(`📦 Using ECR repo from naming config: ${repoName}`);
+            }
+        }
+
+        if (!ecrUri) {
+            ecrUri = prompt('Enter ECR Image URI (e.g., account.dkr.ecr.region.amazonaws.com/repo:tag):');
+        }
+
+        if (!ecrUri) {
+            log('❌ ECR URI is required', 'error');
+            return;
+        }
+
+        // Get selected source region
+        const sourceRegionSelect = document.getElementById('sourceRegionSelect');
+        const sourceRegion = sourceRegionSelect.value;
+
+        if (!confirm(`This will create ECR repositories in all AWS regions${sourceRegion ? ` and push image from ${sourceRegion}` : ''}. Continue?`)) {
+            return;
+        }
+
+        log('🌍 Starting ECR image push to all regions...');
+        if (sourceRegion) {
+            log(`📍 Source region: ${sourceRegion}`);
+        }
+        log('This may take several minutes. Check status using the job ID.');
+
+        fetch('/api/aws/push-ecr-to-all-regions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                access_key: accessKey,
+                secret_key: secretKey,
+                ecr_uri: ecrUri,
+                source_region: sourceRegion || null
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    log(`✅ Started pushing ECR image to ${data.target_regions.length} regions`);
+                    log(`📋 Job ID: ${data.job_id}`);
+                    log(`📍 Source region: ${data.source_region}`);
+                    log(`📍 Source ECR URI: ${data.source_ecr_uri}`);
+                    log(`🎯 Target regions: ${data.target_regions.join(', ')}`);
+                    log('💡 Check status: /api/aws/lambda-creation-status/' + data.job_id);
+
+                    // Hide options after starting
+                    document.getElementById('ecrPushOptions').style.display = 'none';
+
+                    // Start polling for status
+                    pollECRPushStatus(data.job_id);
+                } else {
+                    log(`❌ Error: ${data.error}`, 'error');
+                }
+            })
+            .catch(error => {
+                log(`❌ Error: ${error.message}`, 'error');
+            });
+    }
+
+    function pollECRPushStatus(jobId) {
+        const pollInterval = setInterval(() => {
+            fetch(`/api/aws/lambda-creation-status/${jobId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.job) {
+                        const job = data.job;
+                        if (job.status === 'completed' || job.status === 'failed') {
+                            clearInterval(pollInterval);
+                            if (job.status === 'completed') {
+                                log(`✅ ECR push completed: ${job.success_count} success, ${job.failure_count} failed`);
+                                if (job.results) {
+                                    Object.entries(job.results).forEach(([region, result]) => {
+                                        if (result.success) {
+                                            log(`  ✓ ${region}: ${result.message || 'Success'}`);
+                                        } else {
+                                            log(`  ✗ ${region}: ${result.error}`, 'error');
+                                            if (result.instructions) {
+                                                log(`    Instructions:`, 'info');
+                                                result.instructions.forEach((cmd, idx) => {
+                                                    log(`      ${idx + 1}. ${cmd}`, 'info');
+                                                });
+                                            }
+                                        }
+                                    });
+                                }
+                            } else {
+                                log(`❌ ECR push failed: ${job.error}`, 'error');
+                            }
+                        } else {
+                            log(`⏳ Processing... ${job.success_count || 0} success, ${job.failure_count || 0} failed`);
+                        }
+                    }
+                })
+                .catch(error => {
+                    log(`❌ Error checking status: ${error.message}`, 'error');
+                });
+        }, 5000); // Poll every 5 seconds
+
+        // Stop polling after 10 minutes
+        setTimeout(() => clearInterval(pollInterval), 600000);
+    }
+
+    function pollLambdaCreationStatus(jobId) {
+        log(`⏳ Polling status for job: ${jobId}...`);
+        const pollInterval = setInterval(() => {
+            fetch(`/api/aws/lambda-creation-status/${jobId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.job) {
+                        const job = data.job;
+
+                        // Log intermediate progress if changed? (Simpler: just log "Processing...")
+                        if (job.status === 'processing') {
+                            // Optional: Calculate percentage or show counts
+                            const total = job.total_functions || 0;
+                            const success = job.success_count || 0;
+                            const failed = job.failure_count || 0;
+                            // log(`⏳ Creating Lambdas... ${success} success, ${failed} failed (Total: ${total})`);
+                        } else if (job.status === 'completed' || job.status === 'failed') {
+                            clearInterval(pollInterval);
+                            if (job.status === 'completed') {
+                                log(`✅ Lambda creation completed!`);
+                                log(`   Success: ${job.success_count}`);
+                                log(`   Failed: ${job.failure_count}`);
+                                if (job.success_count > 0 && job.successfully_created_functions) {
+                                    log(`   Created functions: ${job.successfully_created_functions.join(', ')}`);
+                                }
+                                if (job.failure_count > 0) {
+                                    log(`   ⚠️ Some functions failed to create.`);
+                                    if (job.errors) {
+                                        Object.entries(job.errors).forEach(([geo, errs]) => {
+                                            log(`   [${geo}] Errors: ${errs}`);
+                                        });
+                                    }
+                                }
+                                alert(`Lambda creation completed!\n\nSuccess: ${job.success_count}\nFailed: ${job.failure_count}\n\nCheck log for details.`);
+                            } else {
+                                log(`❌ Lambda creation job failed: ${job.error}`, 'error');
+                                alert(`Lambda creation job failed:\n${job.error}`);
+                            }
+                        }
+                    } else {
+                        // Job not found or error
+                        log(`⚠️ Could not get job status: ${data.error || 'Unknown error'}`);
+                    }
+                })
+                .catch(error => {
+                    log(`❌ Error checking status: ${error.message}`, 'error');
+                });
+        }, 5000); // Poll every 5 seconds
+
+        // Stop polling after 15 minutes (Lambda timeout)
+        setTimeout(() => clearInterval(pollInterval), 900000);
+    }
+
+    function generateECRPushScript() {
+        const creds = getAwsCredentials();
+        if (!creds) return;
+        const { access_key: accessKey, secret_key: secretKey, region } = creds;
+        const naming = getNamingConfig();
+
+        // Get ECR URI from settings, or construct from naming config
+        let ecrUri = window.awsConfig?.ecr_uri;
+
+        // If ECR URI uses old gbot prefix, construct from naming config
+        if (!ecrUri || ecrUri.includes('gbot-')) {
+            const repoName = naming.ecr_repo_name || 'dev-app-password-worker';
+            const sourceRegionSelect = document.getElementById('sourceRegionSelect');
+            const selectedRegion = sourceRegionSelect?.value || region || 'eu-west-1';
+
+            let accountId = '';
+            if (window.awsConfig?.ecr_uri) {
+                const match = window.awsConfig.ecr_uri.match(/^(\d+)\.dkr\.ecr/);
+                if (match) accountId = match[1];
+            }
+
+            if (accountId) {
+                ecrUri = `${accountId}.dkr.ecr.${selectedRegion}.amazonaws.com/${repoName}:latest`;
+                log(`📦 Using ECR repo from naming config: ${repoName}`);
+            }
+        }
+
+        if (!ecrUri) {
+            ecrUri = prompt('Enter ECR Image URI (e.g., account.dkr.ecr.region.amazonaws.com/repo:tag):');
+        }
+
+        if (!ecrUri) {
+            log('❌ ECR URI is required', 'error');
+            return;
+        }
+
+        // Get selected source region
+        const sourceRegionSelect = document.getElementById('sourceRegionSelect');
+        const sourceRegion = sourceRegionSelect ? sourceRegionSelect.value : '';
+
+        log('📝 Generating ECR push script...');
+
+        fetch('/api/aws/generate-ecr-push-script', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                access_key: accessKey,
+                secret_key: secretKey,
+                ecr_uri: ecrUri,
+                source_region: sourceRegion || null
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    log('✅ Script generated successfully!');
+                    log('');
+                    log('📋 Instructions:');
+                    data.instructions.forEach(instruction => {
+                        log(`   ${instruction}`);
+                    });
+                    log('');
+                    log('📄 Script content:');
+                    log('='.repeat(60));
+                    log(data.script);
+                    log('='.repeat(60));
+                    log('');
+                    log('💡 Copy the script above and save it as ' + data.filename);
+                    log('💡 Then run it on your EC2 build box or any machine with Docker');
+
+                    // Also show in a modal or copy to clipboard option
+                    if (navigator.clipboard) {
+                        navigator.clipboard.writeText(data.script).then(() => {
+                            log('📋 Script copied to clipboard!');
+                        }).catch(() => {
+                            log('⚠️ Could not copy to clipboard automatically');
+                        });
+                    }
+                } else {
+                    log(`❌ Error: ${data.error}`, 'error');
+                }
+            })
+            .catch(error => {
+                log(`❌ Error: ${error.message}`, 'error');
+            });
+    }
+
+    function createECRManual() {
+        const creds = getAwsCredentials();
+        if (!creds) return;
+        const { access_key: accessKey, secret_key: secretKey, region } = creds;
+        const naming = getNamingConfig();
+
+        log(`Manually creating ECR repository: ${naming.ecr_repo_name}...`);
+
+        fetch('/api/aws/create-ecr-manual', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                access_key: accessKey,
+                secret_key: secretKey,
+                region: region,
+                ecr_repo_name: naming.ecr_repo_name
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    log(`ECR repository verified: ${data.repo_uri}`);
+                    alert(`ECR repository created/verified:\n${data.repo_uri}`);
+                } else {
+                    log(`ERROR creating ECR repository: ${data.error}`);
+                    alert(`Error: ${data.error}`);
+                }
+            })
+            .catch(error => {
+                log(`ERROR: ${error.message}`);
+                alert(`Error: ${error.message}`);
+            });
+    }
+
+    // Inspect Resources
+    function inspectResources() {
+        const creds = getAwsCredentials();
+        if (!creds) return;
+        const { access_key: accessKey, secret_key: secretKey, region } = creds;
+
+        log('Inspecting resources...');
+
+        fetch('/api/aws/inspect-resources', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                access_key: accessKey,
+                secret_key: secretKey,
+                region: region
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    log('Resource inspection completed.');
+                    if (data.iam_roles) {
+                        data.iam_roles.forEach(role => {
+                            log(`IAM Role: ${role.name} | ARN: ${role.arn}`);
+                        });
+                    }
+                    if (data.ecr_repos) {
+                        data.ecr_repos.forEach(repo => {
+                            log(`ECR Repo: ${repo.name} | URI: ${repo.uri}`);
+                        });
+                    }
+                    if (data.s3_buckets) {
+                        data.s3_buckets.forEach(bucket => {
+                            log(`S3 Bucket: ${bucket.name} | Created: ${bucket.created}`);
+                        });
+                    }
+                    if (data.lambdas) {
+                        data.lambdas.forEach(lambda => {
+                            log(`Lambda: ${lambda.name} | Runtime: ${lambda.runtime} | PackageType: ${lambda.package_type}`);
+                        });
+                    }
+                } else {
+                    log(`ERROR inspecting resources: ${data.error}`);
+                    alert(`Error: ${data.error}`);
+                }
+            })
+            .catch(error => {
+                log(`ERROR: ${error.message}`);
+                alert(`Error: ${error.message}`);
+            });
+    }
+
+    // --- Multi-Account Logic ---
+    function loadAwsAccountsSelector() {
+        const selector = document.getElementById('aws-account-selector');
+        if (!selector) return;
+
+        fetch('/api/aws/list-configs')
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    selector.innerHTML = '';
+                    if (data.configs.length === 0) {
+                        const opt = document.createElement('option');
+                        opt.text = "No Accounts Configured";
+                        selector.add(opt);
+                        selector.disabled = true;
+                        return;
+                    }
+
+                    data.configs.forEach(acc => {
+                        const opt = document.createElement('option');
+                        opt.value = acc.id;
+                        opt.text = `${acc.name} (${acc.region})`;
+                        if (acc.active) opt.selected = true;
+                        selector.add(opt);
+                    });
+                }
+            })
+            .catch(err => console.error('Error loading accounts:', err));
+    }
+
+    function switchAwsAccount(configId) {
+        if (!configId) return;
+
+        // Show loading overlay or similar?
+        // Simple alert/toast for now or just reload
+
+        fetch('/api/aws/set-active-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ config_id: configId })
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    // Reload page to refresh all data with new account context
+                    window.location.reload();
+                } else {
+                    alert('Failed to switch account: ' + data.error);
+                }
+            })
+            .catch(err => alert('Network error switching account: ' + err));
+    }
+
+    // --- AWS Deployment ---
+    // Create Lambdas
+    function createLambdas() {
+        // Get AWS credentials from saved config or use defaults
+        let accessKey, secretKey, region, ecrUri, s3Bucket;
+
+        if (window.awsConfig) {
+            accessKey = window.awsConfig.access_key_id;
+            secretKey = window.awsConfig.secret_access_key;
+            region = window.awsConfig.region;
+            ecrUri = window.awsConfig.ecr_uri || '';
+            s3Bucket = window.awsConfig.s3_bucket || 'gbot-app-passwords';
+        } else {
+            // Try to load from API
+            alert('AWS credentials not loaded. Please configure them in Settings first.');
+            return;
+        }
+
+        // Get naming configuration
+        const naming = getNamingConfig();
+        s3Bucket = naming.s3_bucket; // Override with UI value
+
+        if (!accessKey || !secretKey || !region) {
+            alert('AWS credentials not configured. Please configure them in Settings.');
+            return;
+        }
+
+        if (!ecrUri || !ecrUri.includes('amazonaws.com')) {
+            alert('ECR Image URI is not set. Please test connection in Settings first.');
+            return;
+        }
+
+        if (!s3Bucket) {
+            alert('S3 Bucket name is required.');
+            return;
+        }
+
+        log(`📦 Using Lambda prefix: ${naming.lambda_prefix}`);
+        log(`📦 Using S3 bucket: ${naming.s3_bucket}`);
+        log(`📦 Using DynamoDB table: ${naming.dynamodb_table}`);
+
+        // Get Lambda creation options
+        const createMultiple = document.getElementById('createMultipleLambdas').checked;
+        let userCount = 0;
+        const usersPerFunction = parseInt(document.getElementById('usersPerFunction')?.value || '10', 10) || 10; // Configurable: Users per function (default: 10)
+
+        // If createMultiple is checked, automatically count users from the input field
+        if (createMultiple) {
+            const usersText = document.getElementById('multipleUsers').value.trim();
+            if (!usersText) {
+                alert('Please enter users in the "Multiple Accounts" field to automatically calculate the number of Lambda functions needed.');
+                return;
+            }
+
+            // Parse users from textarea (same format as bulk processing)
+            const usersRaw = usersText.split('\n').filter(line => line.trim() && line.includes(':'));
+            userCount = usersRaw.length;
+
+            if (userCount <= 0) {
+                alert('No valid users found. Please enter users in format: email:password (one per line)');
+                return;
+            }
+
+            log(`Automatically detected ${userCount} user(s) from input field`);
+        }
+
+        log(`Creating / updating PRODUCTION Lambda(s) (container image)...`);
+        if (createMultiple) {
+            const numFunctions = Math.ceil(userCount / usersPerFunction);
+            log(`Will create ${numFunctions} Lambda function(s) for ${userCount} users (${usersPerFunction} users per function)`);
+        }
+
+        // Get users_per_function value from input field
+        const usersPerFunctionInput = document.getElementById('usersPerFunction');
+        const usersPerFunctionValue = usersPerFunctionInput ? parseInt(usersPerFunctionInput.value || '10', 10) : 10;
+
+        // Validate the value
+        if (isNaN(usersPerFunctionValue) || usersPerFunctionValue < 1 || usersPerFunctionValue > 20) {
+            alert(`Invalid "Users per Function" value: ${usersPerFunctionInput ? usersPerFunctionInput.value : 'N/A'}. Must be between 1 and 20.`);
+            return;
+        }
+
+        // DEBUG: Log the value being sent
+        log(`[DEBUG] users_per_function value being sent: ${usersPerFunctionValue}`);
+        log(`[DEBUG] Input field value: ${usersPerFunctionInput ? usersPerFunctionInput.value : 'NOT FOUND'}`);
+        log(`[DEBUG] user_count: ${userCount}`);
+        log(`[DEBUG] create_multiple: ${createMultiple}`);
+        console.log('[DEBUG] Full request payload:', {
+            user_count: userCount,
+            users_per_function: usersPerFunctionValue,
+            create_multiple: createMultiple
+        });
+
+        const requestPayload = {
+            access_key: accessKey,
+            secret_key: secretKey,
+            region: region,
+            ecr_uri: ecrUri,
+            s3_bucket: s3Bucket,
+            user_count: userCount,
+            users_per_function: usersPerFunctionValue,  // Use the value from input field
+            create_multiple: createMultiple,
+            // Naming configuration
+            lambda_prefix: naming.lambda_prefix,
+            ecr_repo_name: naming.ecr_repo_name,
+            dynamodb_table: naming.dynamodb_table
+        };
+
+        log(`[DEBUG] Request payload users_per_function: ${requestPayload.users_per_function}`);
+
+        fetch('/api/aws/create-lambdas', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestPayload)
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    log('PRODUCTION Lambda creation/update STARTED.');
+                    log(`📋 Job ID: ${data.creation_job_id}`);
+                    log(`TARGET: ${data.num_functions} function(s) across regions.`);
+
+                    if (data.debug_info) {
+                        log(`[DEBUG] Planned functions: ${data.debug_info.actual_functions_planned}`);
+                    }
+
+                    // Start polling
+                    pollLambdaCreationStatus(data.creation_job_id);
+
+                    alert(`Production Lambda creation started!\n\nJob ID: ${data.creation_job_id}\n\nPlease wait and check the log output for progress.\nThe process runs in the background.`);
+                } else {
+                    log(`ERROR creating production Lambda(s): ${data.error}`);
+                    alert(`Error: ${data.error}`);
+                }
+            })
+            .catch(error => {
+                log(`ERROR: ${error.message}`);
+                alert(`Error: ${error.message}`);
+            });
+    }
+
+    // Global flag to prevent duplicate invocations
+    let isProcessing = false;
+
+    // Check AWS Limits (Diagnostic Tool)
+    function checkAWSLimits() {
+
+        const creds = getAwsCredentials();
+        if (!creds) return;
+        const { access_key: accessKey, secret_key: secretKey, region } = creds;
+
+        log('🔍 Checking ALL AWS limits that could cause 10-user bottleneck...');
+        fetch('/api/aws/check-aws-limits', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                access_key: accessKey,
+                secret_key: secretKey,
+                region: region
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    log('='.repeat(60));
+                    log('📊 AWS LIMITS DIAGNOSTIC REPORT');
+                    log('='.repeat(60));
+
+                    const limits = data.limits;
+
+                    // Lambda Function Settings
+                    log('\n🔹 Lambda Function Settings:');
+                    if (limits.lambda_function.error) {
+                        log(`  ❌ Error: ${limits.lambda_function.error}`);
+                    } else {
+                        log(`  Function: ${limits.lambda_function.name || 'N/A'}`);
+                        log(`  State: ${limits.lambda_function.state || 'N/A'}`);
+
+                        if (limits.lambda_function.reserved_concurrency !== undefined) {
+                            if (limits.lambda_function.reserved_concurrency === null) {
+                                log(`  ✅ Reserved Concurrency: Unreserved (Good!)`);
+                            } else {
+                                log(`  ⚠️ Reserved Concurrency: ${limits.lambda_function.reserved_concurrency} (THIS IS THE LIMIT!)`);
+                            }
+                        }
+
+                        if (limits.lambda_function.recent_max_concurrent !== undefined) {
+                            log(`  Recent Max Concurrent: ${limits.lambda_function.recent_max_concurrent}`);
+                        }
+                    }
+
+                    // Account Limits
+                    log('\n🔹 Account-Level Limits:');
+                    if (limits.account_limits.error) {
+                        log(`  ❌ Error: ${limits.account_limits.error}`);
+                    } else {
+                        log(`  Unreserved Concurrent Executions: ${limits.account_limits.unreserved_concurrent_executions || 'N/A'}`);
+                        if (limits.account_limits.status) {
+                            log(`  ${limits.account_limits.status}`);
+                        }
+                    }
+
+                    // Service Quotas
+                    log('\n🔹 Service Quotas:');
+                    if (limits.service_quotas.error) {
+                        log(`  ⚠️ ${limits.service_quotas.error}`);
+                    } else if (limits.service_quotas.lambda_concurrent_executions) {
+                        log(`  Lambda Concurrent Executions Quota: ${limits.service_quotas.lambda_concurrent_executions}`);
+                    } else {
+                        log(`  Using default quota (1000)`);
+                    }
+
+                    // Recommendations
+                    log('\n🔹 Recommendations:');
+                    if (limits.recommendations && limits.recommendations.length > 0) {
+                        limits.recommendations.forEach(rec => log(`  ${rec}`));
+                    } else {
+                        log(`  ✅ No obvious limits found. Issue might be elsewhere.`);
+                    }
+
+                    log('='.repeat(60));
+
+                    // Show alert with summary
+                    const criticalIssues = limits.recommendations.filter(r => r.includes('CRITICAL')).length;
+                    if (criticalIssues > 0) {
+                        alert(`Found ${criticalIssues} CRITICAL limit(s)! Check the log output for details.`);
+                    } else {
+                        alert('No obvious AWS limits found. Check log output for full details.');
+                    }
+                } else {
+                    log(`ERROR: ${data.error}`);
+                    alert(`Error: ${data.error}`);
+                }
+            })
+            .catch(err => {
+                log(`ERROR: ${err.message}`);
+                alert(`Error: ${err.message}`);
+            });
+    }
+
+    // Fix Lambda Concurrency Limit
+    function fixLambdaConcurrency() {
+        const creds = getAwsCredentials();
+        if (!creds) return;
+        const { access_key: accessKey, secret_key: secretKey, region } = creds;
+
+        if (!confirm('This will remove the reserved concurrency limit (if set) to allow 1000+ concurrent executions. Continue?')) {
+            return;
+        }
+
+        log('🔧 Fixing Lambda concurrency limit...');
+        fetch('/api/aws/fix-lambda-concurrency', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                access_key: accessKey,
+                secret_key: secretKey,
+                region: region
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    log(`✓ ${data.message}`);
+                    if (data.previous_limit) {
+                        log(`Previous limit: ${data.previous_limit} → New limit: ${data.new_limit || data.current_limit}`);
+                    }
+                    alert('Lambda concurrency limit fixed! You can now process 1000+ users simultaneously.');
+                } else {
+                    log(`ERROR: ${data.error}`);
+                    alert(`Error: ${data.error}`);
+                }
+            })
+            .catch(err => {
+                log(`ERROR: ${err.message}`);
+                alert(`Error: ${err.message}`);
+            });
+    }
+
+    // Request Quota Increase
+    function requestQuotaIncrease() {
+        const creds = getAwsCredentials();
+        if (!creds) return;
+        const { access_key: accessKey, secret_key: secretKey, region } = creds;
+
+        const requestedLimit = prompt('Enter desired concurrent execution limit (default: 1000):', '1000');
+        if (!requestedLimit) {
+            return;
+        }
+
+        const limit = parseInt(requestedLimit);
+        if (isNaN(limit) || limit < 10) {
+            alert('Please enter a valid number >= 10');
+            return;
+        }
+
+        if (!confirm(`This will request AWS to increase your Lambda concurrent execution quota from 10 to ${limit}.\n\nAWS Support will review and approve (usually within 24 hours).\n\nContinue?`)) {
+            return;
+        }
+
+        log(`🚀 Requesting quota increase: 10 → ${limit}...`);
+        fetch('/api/aws/request-quota-increase', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                access_key: accessKey,
+                secret_key: secretKey,
+                region: region,
+                requested_limit: limit
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    log(`✓ ${data.message}`);
+                    if (data.request_id) {
+                        log(`Request ID: ${data.request_id}`);
+                        log(`Current quota: ${data.current_quota}`);
+                        log(`Requested quota: ${data.requested_quota}`);
+                        log(`Note: ${data.note || 'AWS Support will review and approve (usually within 24 hours)'}`);
+                    }
+                    alert(`Quota increase requested successfully!\n\nRequest ID: ${data.request_id || 'N/A'}\n\nAWS Support will review and approve (usually within 24 hours).`);
+                } else {
+                    log(`ERROR: ${data.error}`);
+                    alert(`Error: ${data.error}\n\nYou may need to request manually via AWS Support Center.`);
+                }
+            })
+            .catch(err => {
+                log(`ERROR: ${err.message}`);
+                alert(`Error: ${err.message}\n\nYou may need to request manually via AWS Support Center.`);
+            });
+    }
+
+    // Invoke Production Lambda
+    function invokeProductionLambda() {
+        // Prevent duplicate invocations
+        try {
+            if (isProcessing) {
+                log('⚠️ WARNING: A bulk job is already running.');
+                alert('A bulk job is already running. Please wait.');
+                return;
+            }
+
+            const creds = getAwsCredentials();
+            if (!creds) {
+                console.error('[FRONTEND] getAwsCredentials failed (returned null)');
+                return;
+            }
+            const { access_key: accessKey, secret_key: secretKey, region } = creds;
+
+            // Force execution mode to multiple
+            const executionMode = 'multiple';
+            const usersText = document.getElementById('multipleUsers').value.trim();
+
+            if (!usersText) {
+                alert('Please enter at least one account first.');
+                return;
+            }
+
+            // Parse users cleanly
+            const usersRaw = usersText.split('\n').filter(line => line.trim() && line.includes(':'));
+
+            // Log parsing results
+            console.log(`[FRONTEND] Parsed ${usersRaw.length} users from input`);
+
+            if (usersRaw.length === 0) {
+                alert('No valid users found. Format: email:password');
+                return;
+            }
+
+            // User limit removed - can now process unlimited users
+            console.log(`[FRONTEND] Processing ${usersRaw.length} users...`);
+            console.log('[FRONTEND] Bypassing confirmation to unblock user...');
+            console.log('[FRONTEND] Confirmation accepted. Starting job...');
+
+            // Set flag to prevent duplicate clicks and disable button
+            isProcessing = true;
+            const invokeBtn = document.getElementById('invokeButton');
+            if (invokeBtn) {
+                invokeBtn.disabled = true;
+                invokeBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
+            }
+            invokeMultipleAccounts(usersRaw);
+        } catch (e) {
+            console.error('[FRONTEND] CRITICAL ERROR in invokeProductionLambda:', e);
+            alert('Critical Error: ' + e.message);
+            isProcessing = false;
+            // Re-enable button on error
+            const invokeBtn = document.getElementById('invokeButton');
+            if (invokeBtn) {
+                invokeBtn.disabled = false;
+                invokeBtn.innerHTML = '<i class="fas fa-play me-2"></i>Invoke Production Lambda';
+            }
+        }
+    }
+
+    function invokeSingleAccount(userLine) {
+        const [email, password] = userLine.split(':', 2);
+        const creds = getAwsCredentials();
+        if (!creds) return;
+        const { access_key: accessKey, secret_key: secretKey, region } = creds;
+        const naming = getNamingConfig();
+
+        log(`Using account: ${email}`);
+        log(`Invoking Lambda with prefix: ${naming.lambda_prefix}...`);
+
+        fetch('/api/aws/invoke-lambda', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                access_key: accessKey,
+                secret_key: secretKey,
+                region: region,
+                email: email.trim(),
+                password: password.trim(),
+                lambda_prefix: naming.lambda_prefix
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    log('='.repeat(60));
+                    log('LAMBDA RESPONSE:');
+                    log(`Status: ${data.status || 'unknown'}`);
+                    log(`Step Completed: ${data.step_completed || 'unknown'}`);
+                    if (data.error_message) {
+                        log(`Error: ${data.error_message}`);
+                    }
+                    if (data.app_password) {
+                        log(`App Password: ${data.app_password.substring(0, 8)}****`);
+                        // Auto refresh list
+                        fetchGeneratedPasswords();
+                    }
+                    if (data.secret_key) {
+                        log(`Secret Key: ${data.secret_key}`);
+                    }
+                    log('='.repeat(60));
+                    alert('Lambda execution completed.\n\nResponse logged above.');
+                } else {
+                    log(`ERROR invoking Lambda: ${data.error}`);
+                    alert(`Error: ${data.error}`);
+                }
+            })
+            .catch(error => {
+                log(`ERROR: ${error.message}`);
+                alert(`Error: ${error.message}`);
+            });
+    }
+
+    // Updated to use new Bulk API
+    function invokeMultipleAccounts(users) {
+        const creds = getAwsCredentials();
+        if (!creds) return;
+        const { access_key: accessKey, secret_key: secretKey, region } = creds;
+
+        log('='.repeat(60));
+        log(`Starting bulk generation for ${users.length} accounts on the server...`);
+        log(`📊 Users to process: ${users.length}`);
+        log(`📋 First 5 users: ${users.slice(0, 5).join(', ')}`);
+        if (users.length > 5) {
+            log(`📋 Last 5 users: ${users.slice(-5).join(', ')}`);
+        }
+        log('='.repeat(60));
+
+        document.getElementById('multiStatus').textContent = `Starting job for ${users.length} users...`;
+        document.getElementById('resultsOutput').value = ''; // Clear previous results
+
+        const naming = getNamingConfig();
+        const usersPerFx = parseInt(document.getElementById('usersPerInvoke')?.value || document.getElementById('usersPerFunction')?.value || '12', 10) || 12;
+
+        log(`📦 Using Lambda prefix: ${naming.lambda_prefix}`);
+        log(`📦 Using DynamoDB table: ${naming.dynamodb_table}`);
+        log(`📦 Using Users per Function: ${usersPerFx}`);
+
+        if (usersPerFx === 10 && users.length > 10) {
+            log(`⚠️ WARNING: Users per Function is 10, but you have ${users.length} users. This counts as 2 batches!`);
+            log(`👉 Make sure to set "Users per Function" (under Create Lambda options) to ${users.length} if you want 1 batch.`);
+        }
+
+        fetch('/api/aws/bulk-generate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                access_key: accessKey,
+                secret_key: secretKey,
+                region: region,
+                users: users,
+                users_per_function: usersPerFx,
+                lambda_prefix: naming.lambda_prefix,
+                dynamodb_table: naming.dynamodb_table
+            })
+        })
+            .then(response => {
+                // Check if response is JSON
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    return response.text().then(text => {
+                        throw new Error(`Server returned HTML instead of JSON. Response: ${text.substring(0, 200)}`);
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    log(`✅ Job started: ${data.job_id}`);
+                    log(`📊 Processing ${users.length} users...`);
+                    pollJobStatus(data.job_id);
+                } else {
+                    log(`❌ ERROR starting bulk job: ${data.error}`);
+                    alert(`Error: ${data.error}`);
+                    isProcessing = false; // Reset flag on error
+                    // Re-enable button on error
+                    const invokeBtn = document.getElementById('invokeButton');
+                    if (invokeBtn) {
+                        invokeBtn.disabled = false;
+                        invokeBtn.innerHTML = '<i class="fas fa-play me-2"></i>Invoke Production Lambda';
+                    }
+                }
+            })
+            .catch(error => {
+                log(`❌ ERROR: ${error.message}`);
+                if (error.message.includes('HTML')) {
+                    alert(`Server Error: The server returned an HTML error page. This usually means a timeout or server crash. Check server logs.`);
+                } else {
+                    alert(`Error: ${error.message}`);
+                }
+                isProcessing = false; // Reset flag on error
+                // Re-enable button on error
+                const invokeBtn = document.getElementById('invokeButton');
+                if (invokeBtn) {
+                    invokeBtn.disabled = false;
+                    invokeBtn.innerHTML = '<i class="fas fa-play me-2"></i>Invoke Production Lambda';
+                }
+            });
+    }
+
+    function pollJobStatus(jobId) {
+        let pollCount = 0;
+        const maxPolls = 1800; // 60 minutes max (2 second intervals)
+        const statusInterval = setInterval(() => {
+            pollCount++;
+            if (pollCount > maxPolls) {
+                clearInterval(statusInterval);
+                log('⚠️ Polling timeout after 60 minutes. Job may still be running on server.');
+                isProcessing = false;
+                // Re-enable button on timeout
+                const invokeBtn = document.getElementById('invokeButton');
+                if (invokeBtn) {
+                    invokeBtn.disabled = false;
+                    invokeBtn.innerHTML = '<i class="fas fa-play me-2"></i>Invoke Production Lambda';
+                }
+                return;
+            }
+
+            fetch(`/api/aws/job-status/${jobId}`)
+                .then(response => {
+                    const contentType = response.headers.get('content-type');
+                    if (!contentType || !contentType.includes('application/json')) {
+                        return response.text().then(text => {
+                            throw new Error(`Server returned HTML instead of JSON. Response: ${text.substring(0, 200)}`);
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success) {
+                        const job = data.job;
+                        document.getElementById('multiStatus').textContent = `Processing: ${job.completed}/${job.total} completed (Success: ${job.success}, Failed: ${job.failed})`;
+
+                        // Update results in real-time from job data
+                        if (job.results && job.results.length > 0) {
+                            const successResults = job.results
+                                .filter(r => r.success && r.app_password)
+                                .map(r => `${r.email}:${r.app_password}`);
+
+                            if (successResults.length > 0) {
+                                document.getElementById('resultsOutput').value = successResults.join('\n');
+                            }
+                        }
+
+                        if (job.status === 'completed' || job.status === 'failed') {
+                            clearInterval(statusInterval);
+                            isProcessing = false; // Reset flag when job completes
+                            // Re-enable button when job completes
+                            const invokeBtn = document.getElementById('invokeButton');
+                            if (invokeBtn) {
+                                invokeBtn.disabled = false;
+                                invokeBtn.innerHTML = '<i class="fas fa-play me-2"></i>Invoke Production Lambda';
+                            }
+                            log('='.repeat(60));
+                            if (job.status === 'completed') {
+                                log('✅ BULK JOB COMPLETED');
+                                log(`Success: ${job.success}, Failed: ${job.failed}`);
+
+                                // Log errors
+                                job.results.forEach(r => {
+                                    if (!r.success) {
+                                        log(`❌ Failed: ${r.email} - ${r.error}`);
+                                    }
+                                });
+
+                                log('='.repeat(60));
+                                alert('Bulk generation completed. Check the results list.');
+                            } else {
+                                log('❌ BULK JOB FAILED');
+                                log(`Error: ${job.error || 'Unknown error'}`);
+                                log(`Processed: ${job.completed}/${job.total} before failure`);
+                                alert(`Bulk generation failed: ${job.error || 'Unknown error'}`);
+                            }
+                        }
+                    } else {
+                        log(`❌ Error getting job status: ${data.error}`);
+                    }
+                })
+                .catch(err => {
+                    log(`❌ Error polling job status: ${err.message}`);
+                    if (err.message.includes('HTML')) {
+                        log('⚠️ Server returned HTML error. Job may have crashed. Check server logs.');
+                    }
+                });
+        }, 2000);
+    }
+
+    function fetchFromDynamoDB() {
+        const creds = getAwsCredentials();
+        if (!creds) return;
+        const { access_key: accessKey, secret_key: secretKey, region } = creds;
+        const usersText = document.getElementById('multipleUsers').value.trim();
+
+        if (!usersText) {
+            alert('Please paste users in the "Multiple Accounts" field first.');
+            return;
+        }
+
+        // Extract emails from the format "email:password"
+        const emails = usersText.split('\n')
+            .filter(line => line.trim() && line.includes(':'))
+            .map(line => line.split(':')[0].trim());
+
+        if (emails.length === 0) {
+            alert('No valid users found. Format: email:password (one per line)');
+            return;
+        }
+
+        log(`Fetching ${emails.length} passwords from DynamoDB...`);
+
+        const naming = getNamingConfig();
+        fetch('/api/aws/fetch-from-dynamodb', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                access_key: accessKey,
+                secret_key: secretKey,
+                region: region,
+                emails: emails,
+                dynamodb_table: naming.dynamodb_table || 'gbot-app-passwords'
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const successResults = data.results.filter(r => r.success);
+                    const failedResults = data.results.filter(r => !r.success);
+
+                    // Format: email,password-without-dashes,smtp.gmail.com,587
+                    const passwords = successResults.map(r => {
+                        const cleanPassword = r.app_password.replace(/-/g, '');  // Remove dashes
+                        return `${r.email},${cleanPassword},smtp.gmail.com,587`;
+                    });
+                    document.getElementById('resultsOutput').value = passwords.join('\n');
+
+                    log(`✅ Fetched ${successResults.length} passwords from DynamoDB`);
+
+                    // Display table item counts to track data disappearance
+                    if (data.table_info) {
+                        const ti = data.table_info;
+                        log(`📊 TABLE STATUS: ${ti.table_name} - Before fetch: ${ti.items_before_fetch} items, After fetch: ${ti.items_after_fetch} items`);
+                        if (ti.items_after_fetch < ti.items_before_fetch) {
+                            log(`🚨 WARNING: DATA LOSS DETECTED! Items decreased from ${ti.items_before_fetch} to ${ti.items_after_fetch}!`);
+                        }
+                    }
+
+                    if (failedResults.length > 0) {
+                        log(`⚠️ ${failedResults.length} not found (may still be processing)`);
+                        failedResults.forEach(r => {
+                            log(`   - ${r.email}: ${r.error}`);
+                        });
+                    }
+
+                    alert(`Success: ${successResults.length}/${emails.length} passwords fetched`);
+                } else {
+                    log(`❌ ERROR fetching from DynamoDB: ${data.error}`);
+                    alert(`Error: ${data.error}`);
+                }
+            })
+            .catch(error => {
+                log(`❌ ERROR: ${error.message}`);
+                alert(`Error: ${error.message}`);
+            });
+    }
+
+    function fetchGeneratedPasswords() {
+        fetch('/api/aws/generated-passwords')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Format: email,password-without-dashes,smtp.gmail.com,587
+                    const lines = data.passwords.map(p => {
+                        const cleanPassword = p.app_password.replace(/-/g, '');  // Remove dashes
+                        return `${p.email},${cleanPassword},smtp.gmail.com,587`;
+                    });
+                    document.getElementById('resultsOutput').value = lines.join('\n');
+                }
+            })
+            .catch(err => console.error(err));
+    }
+
+    // Stop All Running Lambdas
+    function stopAllLambdas() {
+        const creds = getAwsCredentials();
+        if (!creds) return;
+        const { access_key: accessKey, secret_key: secretKey, region } = creds;
+        const naming = getNamingConfig();
+
+        if (!confirm(`Are you sure you want to stop all Lambda functions with prefix "${naming.lambda_prefix}"?\n\nThis will prevent new invocations but will not delete the functions.`)) {
+            return;
+        }
+
+        log(`Stopping all Lambda functions with prefix: ${naming.lambda_prefix}...`);
+
+        fetch('/api/aws/stop-all-lambdas', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                access_key: accessKey,
+                secret_key: secretKey,
+                region: region,
+                lambda_prefix: naming.lambda_prefix
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    log(`Lambda stop completed. Stopped: ${data.stopped_count} function(s), Errors: ${data.error_count}`);
+                    alert(`All Lambda functions stopped successfully. Stopped: ${data.stopped_count} function(s)`);
+                } else {
+                    log(`ERROR stopping Lambdas: ${data.error}`);
+                    alert(`Error: ${data.error}`);
+                }
+            })
+            .catch(error => {
+                log(`ERROR: ${error.message}`);
+                alert(`Error: ${error.message}`);
+            });
+    }
+
+    // Delete All Lambdas
+    function deleteAllLambdas() {
+        try {
+            const creds = getAwsCredentials();
+            if (!creds) {
+                console.error('[FRONTEND] getAwsCredentials failed (returned null)');
+                return;
+            }
+            const { access_key: accessKey, secret_key: secretKey, region } = creds;
+            const naming = getNamingConfig();
+
+            log('Bypassing confirmation for DELETE ALL...');
+
+            log(`Deleting all Lambdas with prefix: ${naming.lambda_prefix}...`);
+
+            fetch('/api/aws/delete-all-lambdas', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    access_key: accessKey,
+                    secret_key: secretKey,
+                    region: region,
+                    lambda_prefix: naming.lambda_prefix
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        log('Lambda cleanup completed.');
+                        alert('All Lambdas deleted successfully.');
+                    } else {
+                        log(`ERROR deleting Lambdas: ${data.error}`);
+                        alert(`Error: ${data.error}`);
+                    }
+                })
+                .catch(error => {
+                    log(`ERROR: ${error.message}`);
+                    alert(`Error: ${error.message}`);
+                });
+        } catch (e) {
+            console.error('[FRONTEND] CRITICAL ERROR in deleteAllLambdas:', e);
+            alert('Critical Error: ' + e.message);
+        }
+    }
+
+    // Delete S3 Content
+    function deleteS3Content() {
+        const creds = getAwsCredentials();
+        if (!creds) return;
+        const { access_key: accessKey, secret_key: secretKey, region } = creds;
+        const naming = getNamingConfig();
+
+        if (!confirm(`Are you sure you want to delete all contents from S3 bucket "${naming.delete_s3_bucket}"?\n\nThis action cannot be undone.`)) {
+            return;
+        }
+
+        log(`Deleting contents from S3 bucket: ${naming.delete_s3_bucket}...`);
+
+        fetch('/api/aws/delete-s3-content', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                access_key: accessKey,
+                secret_key: secretKey,
+                region: region,
+                bucket_name: naming.delete_s3_bucket
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    log(`S3 bucket contents deleted successfully.`);
+                    alert(`All contents deleted from S3 bucket`);
+                } else {
+                    log(`ERROR deleting S3 contents: ${data.error}`);
+                    alert(`Error: ${data.error}`);
+                }
+            })
+            .catch(error => {
+                log(`ERROR: ${error.message}`);
+                alert(`Error: ${error.message}`);
+            });
+    }
+
+    // Delete ECR Repo
+    function deleteECRRepo() {
+        const creds = getAwsCredentials();
+        if (!creds) return;
+        const { access_key: accessKey, secret_key: secretKey, region } = creds;
+        const naming = getNamingConfig();
+
+        if (!confirm(`Are you sure you want to delete ECR repository "${naming.delete_ecr_repo}" and all images?\n\nThis action cannot be undone.`)) {
+            return;
+        }
+
+        log(`Deleting ECR repository: ${naming.delete_ecr_repo}...`);
+
+        fetch('/api/aws/delete-ecr-repo', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                access_key: accessKey,
+                secret_key: secretKey,
+                region: region,
+                repo_name: naming.delete_ecr_repo
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    log(`ECR repository deleted successfully.`);
+                    alert(`ECR repository deleted`);
+                } else {
+                    log(`ERROR deleting ECR repository: ${data.error}`);
+                    alert(`Error: ${data.error}`);
+                }
+            })
+            .catch(error => {
+                log(`ERROR: ${error.message}`);
+                alert(`Error: ${error.message}`);
+            });
+    }
+
+    // Delete CloudWatch Logs
+    function deleteCloudWatchLogs() {
+        const creds = getAwsCredentials();
+        if (!creds) return;
+        const { access_key: accessKey, secret_key: secretKey, region } = creds;
+        const naming = getNamingConfig();
+
+        if (!confirm(`Are you sure you want to delete CloudWatch log groups with prefix "${naming.delete_log_prefix}"?\n\nThis action cannot be undone.`)) {
+            return;
+        }
+
+        log(`Deleting CloudWatch logs with prefix: ${naming.delete_log_prefix}...`);
+
+        fetch('/api/aws/delete-cloudwatch-logs', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                access_key: accessKey,
+                secret_key: secretKey,
+                region: region,
+                log_group_prefix: naming.delete_log_prefix
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    log(`CloudWatch log cleanup completed. Deleted ${data.deleted_count} log groups.`);
+                    alert(`Deleted ${data.deleted_count} log groups`);
+                } else {
+                    log(`ERROR deleting CloudWatch logs: ${data.error}`);
+                    alert(`Error: ${data.error}`);
+                }
+            })
+            .catch(error => {
+                log(`ERROR: ${error.message}`);
+                alert(`Error: ${error.message}`);
+            });
+    }
+
+    // Delete DynamoDB Table
+    function deleteDynamoDBTable() {
+        const creds = getAwsCredentials();
+        if (!creds) return;
+        const { access_key: accessKey, secret_key: secretKey, region } = creds;
+        const naming = getNamingConfig();
+
+        if (!confirm(`Are you sure you want to delete DynamoDB table "${naming.delete_dynamodb_table}" across all regions?\n\nThis will delete ALL stored app passwords. This action cannot be undone.`)) {
+            return;
+        }
+
+        log(`Deleting DynamoDB table: ${naming.delete_dynamodb_table} across all regions...`);
+
+        fetch('/api/aws/delete-dynamodb-table', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                access_key: accessKey,
+                secret_key: secretKey,
+                region: region,
+                table_name: naming.delete_dynamodb_table
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Show actual message from backend
+                    log(`✅ DynamoDB: ${data.message || 'Delete completed'}`);
+                    alert(data.message || 'DynamoDB table deleted successfully!');
+                } else {
+                    log(`❌ ERROR deleting DynamoDB table: ${data.error}`);
+                    alert(`Error: ${data.error}`);
+                }
+            })
+            .catch(error => {
+                log(`❌ ERROR: ${error.message}`);
+                alert(`Error: ${error.message}`);
+            });
+    }
+
+    // Empty DynamoDB Table (for current user)
+    function emptyDynamoDBTable() {
+        const creds = getAwsCredentials();
+        if (!creds) return;
+        const { access_key: accessKey, secret_key: secretKey } = creds;
+
+        // Get expected table name from config (shows user what will be emptied)
+        const naming = getNamingConfig();
+        const expectedTable = naming.dynamodb_table || '(user)-app-passwords';
+
+        if (!confirm(`⚠️ WARNING: This will DELETE ALL ITEMS from your DynamoDB table "${expectedTable}".\n\nThis is based on your logged-in username. This action cannot be undone.\n\nContinue?`)) {
+            return;
+        }
+
+        log(`🗑️ Emptying DynamoDB table: ${expectedTable}...`);
+
+        fetch('/api/aws/empty-dynamodb-table', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                access_key: accessKey,
+                secret_key: secretKey
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    log(`✅ ${data.message}`);
+                    alert(data.message);
+                    // Clear the results output
+                    document.getElementById('resultsOutput').value = '';
+                } else {
+                    log(`❌ ERROR emptying DynamoDB table: ${data.error}`);
+                    alert(`Error: ${data.error}`);
+                }
+            })
+            .catch(error => {
+                log(`❌ ERROR: ${error.message}`);
+                alert(`Error: ${error.message}`);
+            });
+    }
+
+    // EC2 Functions
+    function ec2CreateBuildBox() {
+        const creds = getAwsCredentials();
+        if (!creds) return;
+        const { access_key: accessKey, secret_key: secretKey, region } = creds;
+        const naming = getNamingConfig();
+
+        log(`Launching EC2 build box: ${naming.ec2_instance_name}...`);
+        log(`Using ECR repo: ${naming.ecr_repo_name}`);
+        log(`Using S3 bucket: ${naming.s3_bucket}`);
+
+        fetch('/api/aws/ec2-create-build-box', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                access_key: accessKey,
+                secret_key: secretKey,
+                region: region,
+                instance_name: naming.ec2_instance_name,
+                ecr_repo_name: naming.ecr_repo_name,
+                s3_bucket: naming.s3_bucket
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Update the input field with the instance name that was created
+                    if (data.instance_name) {
+                        const instanceNameInput = document.getElementById('ec2InstanceName');
+                        if (instanceNameInput) {
+                            instanceNameInput.value = data.instance_name;
+                            log(`✓ Instance name field updated to: ${data.instance_name}`);
+                        }
+                    }
+                    log('EC2 build box launch requested.');
+                    log(`Instance: ${data.instance_name || naming.ec2_instance_name}`);
+                    log(`ECR Repo: ${data.ecr_repo_name || naming.ecr_repo_name}`);
+                    log(`Prefix: ${data.prefix || 'N/A'}`);
+                    log('Wait ~5–10 minutes for Docker build & ECR push to complete, then create Lambdas from the Lambdas tab.');
+                    alert('EC2 build box launch requested.\n\nWait ~5–10 minutes for Docker build & ECR push to complete.');
+                } else {
+                    log(`ERROR creating EC2 build box: ${data.error}`);
+                    alert(`Error: ${data.error}`);
+                }
+            })
+            .catch(error => {
+                log(`ERROR: ${error.message}`);
+                alert(`Error: ${error.message}`);
+            });
+    }
+
+    function ec2ShowStatus() {
+        const creds = getAwsCredentials();
+        if (!creds) return;
+        const { access_key: accessKey, secret_key: secretKey, region } = creds;
+        const naming = getNamingConfig();
+
+        log(`Checking EC2 build box status: ${naming.ec2_instance_name}...`);
+
+        fetch('/api/aws/ec2-show-status', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                access_key: accessKey,
+                secret_key: secretKey,
+                region: region,
+                instance_name: naming.ec2_instance_name
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    log(`EC2 build box status: ${data.instance_id} | state=${data.state} | public_ip=${data.public_ip}`);
+                    if (data.build_status) {
+                        log(data.build_status);
+                    }
+                    if (data.console_output) {
+                        log('='.repeat(60));
+                        log('EC2 CONSOLE OUTPUT:');
+                        log(data.console_output);
+                        log('='.repeat(60));
+                    }
+                    alert(data.status_message || 'EC2 status retrieved. Check logs for details.');
+                } else {
+                    log(`ERROR checking EC2 status: ${data.error}`);
+                    alert(`Error: ${data.error}`);
+                }
+            })
+            .catch(error => {
+                log(`ERROR: ${error.message}`);
+                alert(`Error: ${error.message}`);
+            });
+    }
+
+    function ec2Terminate() {
+        const creds = getAwsCredentials();
+        if (!creds) return;
+        const { access_key: accessKey, secret_key: secretKey, region } = creds;
+        const naming = getNamingConfig();
+
+        if (!confirm(`Are you sure you want to terminate EC2 instance "${naming.ec2_instance_name}"?\n\nThis action cannot be undone.`)) {
+            return;
+        }
+
+        log(`Terminating EC2 build box: ${naming.ec2_instance_name}...`);
+
+        fetch('/api/aws/ec2-terminate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                access_key: accessKey,
+                secret_key: secretKey,
+                region: region,
+                instance_name: naming.ec2_instance_name
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    log(`Terminate requested for EC2 build box: ${data.instance_id}`);
+                    alert(`Terminate requested for ${data.instance_id}`);
+                } else {
+                    log(`ERROR terminating EC2 instance: ${data.error}`);
+                    alert(`Error: ${data.error}`);
+                }
+            })
+            .catch(error => {
+                log(`ERROR: ${error.message}`);
+                alert(`Error: ${error.message}`);
+            });
+    }
+
+    // Load AWS credentials from settings
+    // Load AWS credentials from settings
+    function loadAwsCredentials() {
+        fetch('/api/aws/get-config')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.config) {
+                    // Store credentials in hidden fields or use directly
+                    window.awsConfig = data.config;
+                    log(`AWS credentials loaded from settings`);
+
+                    // [MULTI-USER] Populate UI fields with user-scoped resource names from backend
+                    // This ensures the user sees 'Angel-chromium' etc. instead of defaults
+                    const config = data.config;
+
+                    // Helper to set value if element exists
+                    const setVal = (id, val) => {
+                        const el = document.getElementById(id);
+                        if (el && val) el.value = val;
+                    };
+
+                    // Core & Lambda
+                    setVal('s3BucketName', config.s3_bucket);
+                    setVal('ecrRepoName', config.ecr_repo_name);
+                    setVal('dynamodbTableName', config.dynamodb_table);
+                    setVal('lambdaPrefix', config.lambda_prefix);
+
+                    // EC2
+                    setVal('ec2InstanceName', config.instance_name ? (config.instance_name + '-ec2-build-box') : 'default-ec2-build-box');
+
+                    // Cleanup Tabs (pre-fill with same values)
+                    setVal('deleteS3BucketName', config.s3_bucket);
+                    setVal('deleteEcrRepoName', config.ecr_repo_name);
+                    setVal('deleteDynamodbTableName', config.dynamodb_table);
+
+                    // Derive log group from lambda prefix (e.g. Angel-chromium -> /aws/lambda/Angel)
+                    if (config.lambda_prefix) {
+                        const prefixPart = config.lambda_prefix.split('-')[0].split('_')[0];
+                        setVal('deleteLogGroupPrefix', `/aws/lambda/${prefixPart}`);
+                    }
+
+                    // Show instance name if configured
+                    if (data.config.instance_name && data.config.instance_name !== 'default') {
+                        log(`🏷️ Instance: ${data.config.instance_name} | Lambda: ${data.config.lambda_prefix || 'gbot-chromium'} | ECR: ${data.config.ecr_repo_name || 'gbot-app-password-worker'}`);
+                    }
+                } else {
+                    log('⚠️ No AWS credentials found. Please configure them in Settings.');
+                }
+            })
+            .catch(error => {
+                log(`ERROR loading AWS credentials: ${error.message}`);
+            });
+    }
+
+    // Toggle Lambda creation options
+    function toggleLambdaOptions() {
+        const createMultiple = document.getElementById('createMultipleLambdas').checked;
+        const optionsDiv = document.getElementById('lambdaOptions');
+        optionsDiv.style.display = createMultiple ? 'block' : 'none';
+        updateLambdaCalculation();
+    }
+
+    // Update Lambda calculation - automatically counts users from input field
+    function updateLambdaCalculation() {
+        const createMultiple = document.getElementById('createMultipleLambdas').checked;
+        const usersPerFunction = parseInt(document.getElementById('usersPerFunction')?.value || '10', 10) || 10; // Read from input field
+
+        if (createMultiple) {
+            // Automatically count users from the "Multiple Accounts" textarea
+            const usersText = document.getElementById('multipleUsers').value.trim();
+            const usersRaw = usersText.split('\n').filter(line => line.trim() && line.includes(':'));
+            const userCount = usersRaw.length;
+
+            // Update display
+            document.getElementById('detectedUserCount').textContent = userCount;
+
+            if (userCount > 0 && usersPerFunction > 0) {
+                const numFunctions = Math.ceil(userCount / usersPerFunction);
+                document.getElementById('lambdaCount').textContent = numFunctions;
+            } else {
+                document.getElementById('lambdaCount').textContent = '0';
+            }
+        } else {
+            document.getElementById('lambdaCount').textContent = '1';
+            document.getElementById('detectedUserCount').textContent = '0';
+        }
+    }
+
+    // Save Resource Naming Config to Database
+    async function saveNamingConfig() {
+        const creds = getAwsCredentials();
+        if (!creds) return;
+
+        const statusSpan = document.getElementById('namingConfigStatus');
+        if (statusSpan) statusSpan.textContent = 'Saving...';
+
+        const naming = getNamingConfig();
+
+        // Get instance_name from IAM Role Prefix field (this is the key prefix for all resources)
+        const instanceName = getSafeValue('iamRolePrefix', 'dev');
+
+        try {
+            const response = await fetch('/api/aws/save-config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    access_key_id: creds.access_key,
+                    secret_access_key: creds.secret_key,
+                    region: creds.region,
+                    // Include instance_name - this is the KEY field for resource naming!
+                    instance_name: instanceName,
+                    ecr_repo_name: naming.ecr_repo_name,
+                    s3_bucket: naming.s3_bucket,
+                    dynamodb_table: naming.dynamodb_table,
+                    lambda_prefix: naming.lambda_prefix
+                })
+            });
+            const data = await response.json();
+            if (data.success) {
+                log(`✅ Resource names saved: instance=${instanceName}, ECR=${naming.ecr_repo_name}, S3=${naming.s3_bucket}, DynamoDB=${naming.dynamodb_table}`);
+                if (statusSpan) statusSpan.textContent = '✅ Saved!';
+                setTimeout(() => { if (statusSpan) statusSpan.textContent = ''; }, 3000);
+            } else {
+                log(`❌ Error saving resource names: ${data.error}`);
+                if (statusSpan) statusSpan.textContent = '❌ Error!';
+                alert('Error saving: ' + data.error);
+            }
+        } catch (error) {
+            log(`❌ Failed to save resource names: ${error.message}`);
+            if (statusSpan) statusSpan.textContent = '❌ Failed!';
+            alert('Error: ' + error.message);
+        }
+    }
+
+    // Load Saved Naming Config from Database
+    async function loadNamingConfig() {
+        try {
+            const response = await fetch('/api/aws/get-naming-config');
+            const data = await response.json();
+            if (data.success && data.config) {
+                const config = data.config;
+                // Populate inputs if values exist
+
+                // Instance name (IAM Role Prefix) - this is the KEY prefix
+                if (config.instance_name && config.instance_name !== 'default') {
+                    const el = document.getElementById('iamRolePrefix');
+                    if (el) el.value = config.instance_name;
+                }
+
+                if (config.ecr_repo_name) {
+                    const el = document.getElementById('ecrRepoName');
+                    if (el) el.value = config.ecr_repo_name;
+                    const delEl = document.getElementById('deleteEcrRepoName');
+                    if (delEl) delEl.value = config.ecr_repo_name;
+                }
+                if (config.s3_bucket) {
+                    const el = document.getElementById('s3BucketName');
+                    if (el) el.value = config.s3_bucket;
+                    const delEl = document.getElementById('deleteS3BucketName');
+                    if (delEl) delEl.value = config.s3_bucket;
+                }
+                if (config.dynamodb_table) {
+                    const el = document.getElementById('dynamodbTableName');
+                    if (el) el.value = config.dynamodb_table;
+                    const delEl = document.getElementById('deleteDynamodbTableName');
+                    if (delEl) delEl.value = config.dynamodb_table;
+                }
+                if (config.lambda_prefix) {
+                    const el = document.getElementById('lambdaPrefix');
+                    if (el) el.value = config.lambda_prefix;
+                    const delEl = document.getElementById('deleteLogGroupPrefix');
+                    if (delEl) delEl.value = '/aws/lambda/' + config.lambda_prefix.split('-')[0];
+                }
+                log(`📦 Loaded resource config: instance=${config.instance_name || 'default'}, ECR=${config.ecr_repo_name}`);
+            }
+        } catch (error) {
+            console.log('Could not load naming config:', error);
+        }
+    }
+
+    // Add event listeners for calculation updates
+    document.addEventListener('DOMContentLoaded', function () {
+        // Add listener to multipleUsers textarea for auto-calculation when checkbox is checked
+        const multipleUsersInput = document.getElementById('multipleUsers');
+        if (multipleUsersInput) {
+            multipleUsersInput.addEventListener('input', function () {
+                if (document.getElementById('createMultipleLambdas').checked) {
+                    updateLambdaCalculation();
+                }
+            });
+        }
+
+        // Add listener to usersPerFunction input for auto-calculation
+        const usersPerFunctionInput = document.getElementById('usersPerFunction');
+        if (usersPerFunctionInput) {
+            usersPerFunctionInput.addEventListener('input', function () {
+                if (document.getElementById('createMultipleLambdas').checked) {
+                    updateLambdaCalculation();
+                }
+            });
+            usersPerFunctionInput.addEventListener('change', function () {
+                if (document.getElementById('createMultipleLambdas').checked) {
+                    updateLambdaCalculation();
+                }
+            });
+        }
+
+        // Load AWS credentials on page load
+        loadAwsCredentials();
+
+        // Load saved naming config on page load
+        loadNamingConfig();
+
+        // Sync Batch Size inputs
+        const invokeInput = document.getElementById('usersPerInvoke');
+        const createInput = document.getElementById('usersPerFunction');
+        if (invokeInput && createInput) {
+            invokeInput.addEventListener('input', (e) => {
+                createInput.value = e.target.value;
+                updateLambdaCalculation();
+            });
+            createInput.addEventListener('input', (e) => {
+                invokeInput.value = e.target.value;
+            });
+        }
+
+        // Initial calculation update
+        updateLambdaCalculation();
+    });
+
+    // Initialize
+    log('AWS Management page loaded. Ready.');
+    // Removed auto-fetch to keep results field clean for new jobs
+    // fetchGeneratedPasswords(); 
+</script>
+{% endblock %}

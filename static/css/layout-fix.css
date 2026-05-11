@@ -1,0 +1,880 @@
+/* ============================================
+   PROFESSIONAL DASHBOARD UI
+   Simple • Elegant • Professional
+   Theme-Aware Design
+   ============================================ */
+
+/* ========== BASE LAYOUT ========== */
+
+.main-container,
+.container,
+.container-fluid,
+.main-content,
+.glass-ui .main-container,
+.glass-ui .container,
+.glass-ui .container-fluid,
+body .main-container,
+body .container,
+body .container-fluid {
+    width: 100% !important;
+    max-width: none !important;
+    margin-right: 0 !important;
+}
+
+#main-content-wrapper {
+    width: 100% !important;
+    max-width: none !important;
+}
+
+/* Generous breathing room - theme-aware background */
+.main-container {
+    padding: 1.5rem !important;
+    background: var(--bg-app, #f8f9fa) !important;
+}
+
+@media (min-width: 768px) {
+    .main-container {
+        padding: 2rem !important;
+    }
+}
+
+@media (min-width: 1200px) {
+    .main-container {
+        padding: 2.5rem 3rem !important;
+    }
+}
+
+/* ========== THEME-AWARE CARDS ========== */
+
+.github-card,
+.glass-panel,
+.card,
+.modern-card {
+    background: var(--bg-panel, #ffffff) !important;
+    border: 1px solid var(--border-panel, #e1e4e8) !important;
+    border-radius: 10px !important;
+    padding: 0 !important;
+    margin-bottom: 1.75rem !important;
+    box-shadow:
+        0 1px 3px rgba(0, 0, 0, 0.08),
+        0 1px 2px rgba(0, 0, 0, 0.04) !important;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    overflow: hidden !important;
+}
+
+.draggable-card {
+    cursor: move !important;
+}
+
+.draggable-card:hover {
+    box-shadow:
+        0 4px 12px rgba(0, 0, 0, 0.12),
+        0 2px 4px rgba(0, 0, 0, 0.06) !important;
+    transform: translateY(-1px) !important;
+    border-color: var(--border-top, #cbd2d9) !important;
+}
+
+/* Theme-aware card headers */
+.github-card-header,
+.card-header,
+.glass-panel-header {
+    background: var(--glass-header-bg, linear-gradient(to bottom, #fafbfc, #ffffff)) !important;
+    border-bottom: 1px solid var(--border-panel, #e1e4e8) !important;
+    padding: 1.25rem 1.75rem !important;
+    margin: 0 !important;
+}
+
+.github-card-title,
+.card-title {
+    font-size: 1.0625rem !important;
+    font-weight: 600 !important;
+    color: var(--text-primary, #24292e) !important;
+    margin: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.625rem !important;
+    letter-spacing: -0.01em !important;
+}
+
+/* Card body - generous professional spacing */
+.github-card-body,
+.card-body,
+.glass-panel-body,
+.github-card>div:not(.github-card-header) {
+    padding: 1.75rem !important;
+}
+
+@media (min-width: 768px) {
+
+    .github-card-body,
+    .card-body,
+    .glass-panel-body,
+    .github-card>div:not(.github-card-header) {
+        padding: 2.25rem !important;
+    }
+}
+
+/* ========== THEME-AWARE FORM FIELDS ========== */
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+textarea,
+select,
+.form-control,
+.form-control-github,
+.glass-input {
+    width: 100% !important;
+    padding: 0.6875rem 1rem !important;
+    font-size: 0.9375rem !important;
+    line-height: 1.6 !important;
+    color: var(--text-primary, #24292e) !important;
+    background: var(--input-bg, #ffffff) !important;
+    border: 1px solid var(--input-border, #d1d5db) !important;
+    border-radius: 7px !important;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03) !important;
+}
+
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
+input[type="number"]:focus,
+textarea:focus,
+select:focus,
+.form-control:focus,
+.form-control-github:focus,
+.glass-input:focus {
+    outline: none !important;
+    border-color: var(--accent-primary, #5b6ab0) !important;
+    box-shadow:
+        0 0 0 3px var(--accent-glow, rgba(91, 106, 176, 0.12)),
+        0 1px 2px rgba(0, 0, 0, 0.03) !important;
+    background: var(--input-bg, #ffffff) !important;
+}
+
+/* Placeholder text */
+input::placeholder,
+textarea::placeholder {
+    color: var(--text-muted, #9ca3af) !important;
+    opacity: 1 !important;
+}
+
+textarea {
+    min-height: 100px !important;
+    resize: vertical !important;
+}
+
+/* Elegant select dropdown */
+select {
+    cursor: pointer !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E") !important;
+    background-position: right 0.75rem center !important;
+    background-repeat: no-repeat !important;
+    background-size: 1.25em 1.25em !important;
+    padding-right: 2.5rem !important;
+    appearance: none !important;
+}
+
+/* Professional labels */
+label,
+.form-label,
+.form-label-github {
+    display: block !important;
+    margin-bottom: 0.5rem !important;
+    font-size: 0.875rem !important;
+    font-weight: 600 !important;
+    color: var(--text-secondary, #485566) !important;
+    letter-spacing: -0.01em !important;
+}
+
+/* ========== SMART RESPONSIVE GRIDS ========== */
+
+.row.g-3,
+.row {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 1.5rem !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+@media (min-width: 768px) {
+
+    .row.g-3,
+    .row {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 1.75rem !important;
+    }
+
+    .row>.col-md-12,
+    .row>[class*="col-12"] {
+        grid-column: 1 / -1 !important;
+    }
+}
+
+@media (min-width: 1200px) {
+
+    .row.g-3,
+    .row {
+        gap: 2rem !important;
+    }
+}
+
+.col,
+[class*="col-"] {
+    width: 100% !important;
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+/* ========== THEME-AWARE BUTTONS ========== */
+
+button,
+.btn,
+.btn-github,
+.glass-button {
+    padding: 0.5625rem 1.125rem !important;
+    font-size: 0.9375rem !important;
+    font-weight: 600 !important;
+    border-radius: 7px !important;
+    border: 1px solid transparent !important;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    cursor: pointer !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 0.5rem !important;
+    white-space: nowrap !important;
+    letter-spacing: -0.01em !important;
+}
+
+/* Primary - Uses theme accent */
+.btn-primary,
+.btn-github-primary,
+.glass-button-primary {
+    background: var(--accent-primary, #5b6ab0) !important;
+    color: #ffffff !important;
+    border-color: transparent !important;
+    box-shadow:
+        0 1px 3px rgba(0, 0, 0, 0.12),
+        0 1px 2px rgba(0, 0, 0, 0.08) !important;
+}
+
+.btn-primary:hover,
+.btn-github-primary:hover,
+.glass-button-primary:hover {
+    background: var(--accent-secondary, #4a5a9e) !important;
+    transform: translateY(-1px) !important;
+    box-shadow:
+        0 4px 12px var(--accent-glow, rgba(91, 106, 176, 0.3)),
+        0 2px 4px rgba(0, 0, 0, 0.1) !important;
+}
+
+.btn-primary:active,
+.btn-github-primary:active,
+.glass-button-primary:active {
+    transform: translateY(0) !important;
+    box-shadow:
+        0 1px 3px rgba(0, 0, 0, 0.14),
+        0 1px 2px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Success - Professional green (theme-independent) */
+.btn-success,
+.glass-button-success {
+    background: linear-gradient(to bottom, #10b981, #059669) !important;
+    color: #ffffff !important;
+    border-color: transparent !important;
+    box-shadow:
+        0 1px 3px rgba(0, 0, 0, 0.12),
+        0 1px 2px rgba(0, 0, 0, 0.08) !important;
+}
+
+.btn-success:hover,
+.glass-button-success:hover {
+    background: linear-gradient(to bottom, #059669, #047857) !important;
+    transform: translateY(-1px) !important;
+    box-shadow:
+        0 4px 12px rgba(16, 185, 129, 0.3),
+        0 2px 4px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Danger - Refined red (theme-independent) */
+.btn-danger,
+.btn-github-danger,
+.glass-button-danger {
+    background: linear-gradient(to bottom, #ef4444, #dc2626) !important;
+    color: #ffffff !important;
+    border-color: transparent !important;
+    box-shadow:
+        0 1px 3px rgba(0, 0, 0, 0.12),
+        0 1px 2px rgba(0, 0, 0, 0.08) !important;
+}
+
+.btn-danger:hover,
+.btn-github-danger:hover,
+.glass-button-danger:hover {
+    background: linear-gradient(to bottom, #dc2626, #b91c1c) !important;
+    transform: translateY(-1px) !important;
+    box-shadow:
+        0 4px 12px rgba(239, 68, 68, 0.3),
+        0 2px 4px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Secondary - Theme-aware */
+.btn-secondary,
+.btn-github {
+    background: var(--bg-panel, #ffffff) !important;
+    color: var(--text-primary, #374151) !important;
+    border-color: var(--border-panel, #d1d5db) !important;
+    box-shadow:
+        0 1px 3px rgba(0, 0, 0, 0.06),
+        0 1px 2px rgba(0, 0, 0, 0.04) !important;
+}
+
+.btn-secondary:hover,
+.btn-github:hover {
+    background: var(--bg-modal, #f9fafb) !important;
+    border-color: var(--border-top, #9ca3af) !important;
+    transform: translateY(-1px) !important;
+    box-shadow:
+        0 2px 8px rgba(0, 0, 0, 0.08),
+        0 1px 4px rgba(0, 0, 0, 0.06) !important;
+}
+
+/* ========== PROFESSIONAL SPACING ========== */
+
+.form-group,
+.mb-3,
+.mb-4 {
+    margin-bottom: 1.5rem !important;
+}
+
+.input-group,
+.d-flex.gap-2 {
+    display: flex !important;
+    gap: 0.75rem !important;
+    align-items: stretch !important;
+    width: 100% !important;
+}
+
+.input-group>input,
+.input-group>select {
+    flex: 1 !important;
+}
+
+/* ========== REFINED ALERTS ========== */
+
+.alert,
+[class*="alert-"] {
+    padding: 1rem 1.25rem !important;
+    border-radius: 8px !important;
+    margin-bottom: 1rem !important;
+    border: 1px solid transparent !important;
+    font-size: 0.9375rem !important;
+}
+
+.alert-warning {
+    background: #fef3c7 !important;
+    color: #92400e !important;
+    border-color: #fcd34d !important;
+}
+
+.alert-info {
+    background: #dbeafe !important;
+    color: #1e40af !important;
+    border-color: #93c5fd !important;
+}
+
+/* ========== ELEGANT TYPOGRAPHY ========== */
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    color: var(--text-primary, #1f2937) !important;
+    font-weight: 600 !important;
+    line-height: 1.3 !important;
+    margin-bottom: 0.75rem !important;
+    letter-spacing: -0.02em !important;
+}
+
+h3 {
+    font-size: 1.25rem !important;
+}
+
+@media (min-width: 768px) {
+    h3 {
+        font-size: 1.5rem !important;
+    }
+}
+
+/* ========== DRAG & DROP REFINEMENT ========== */
+
+.sortable-ghost {
+    opacity: 0.4 !important;
+    background: var(--bg-modal, #f3f4f6) !important;
+    border: 2px dashed var(--border-top, #cbd2d9) !important;
+}
+
+.draggable-card.sortable-drag {
+    opacity: 0.9 !important;
+    transform: rotate(1.5deg) scale(1.02) !important;
+    box-shadow:
+        0 12px 32px rgba(0, 0, 0, 0.15),
+        0 4px 8px rgba(0, 0, 0, 0.1) !important;
+    cursor: grabbing !important;
+}
+
+.github-card-header {
+    cursor: grab !important;
+    user-select: none !important;
+}
+
+.github-card-header:active {
+    cursor: grabbing !important;
+}
+
+/* ========== CODE BLOCKS - Theme-aware ========== */
+
+.log-container,
+.activity-log,
+pre,
+code {
+    background: var(--input-bg, #f6f8fa) !important;
+    border: 1px solid var(--border-panel, #e1e4e8) !important;
+    border-radius: 7px !important;
+    padding: 1rem !important;
+    font-family: 'Consolas', 'Monaco', monospace !important;
+    font-size: 0.875rem !important;
+    overflow-x: auto !important;
+    color: var(--text-primary, #24292e) !important;
+}
+
+/* ========== UTILITIES ========== */
+
+.main-content {
+    flex-basis: auto !important;
+    flex-grow: 1 !important;
+}
+
+.tab-content {
+    max-width: none !important;
+    width: 100% !important;
+}
+
+/* ========== SUBTLE ANIMATIONS ========== */
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.github-card,
+.glass-panel {
+    animation: fadeIn 0.3s ease-out !important;
+}
+
+/* ========== PROFESSIONAL DIVIDERS ========== */
+
+hr,
+.divider {
+    border: 0 !important;
+    height: 1px !important;
+    background: var(--border-panel, linear-gradient(to right, transparent, #e1e4e8, transparent)) !important;
+    margin: 2rem 0 !important;
+}
+
+/* ========== SIDEBAR THEME SUPPORT ========== */
+/* Override Tailwind hardcoded colors to use theme variables */
+aside nav a {
+    color: var(--text-secondary) !important;
+}
+
+aside nav a:hover {
+    background: var(--bg-modal) !important;
+    color: var(--text-primary) !important;
+}
+
+aside nav a.bg-blue-50,
+aside nav a[class*='bg-blue'] {
+    background: var(--accent-primary) !important;
+    color: #ffffff !important;
+}
+
+aside nav a i {
+    color: var(--text-muted) !important;
+}
+
+aside nav a:hover i,
+aside nav a.bg-blue-50 i,
+aside nav a[class*='bg-blue'] i {
+    color: currentColor !important;
+}
+
+aside {
+    background: var(--bg-panel) !important;
+    border-color: var(--border-panel) !important;
+}
+
+
+
+/* ========== SETTINGS PAGE CARD INTERNAL PADDING ========== */
+.github-card {
+    padding: 24px !important;
+}
+
+.github-card .github-card-header {
+    margin: -24px -24px 20px -24px !important;
+    padding: 16px 24px !important;
+}
+
+
+
+/* ========== ACCOUNT SELECTION IMPROVEMENTS ========== */
+/* Account list item hover and selected states */
+.account-item {
+    padding: 12px 16px !important;
+    cursor: pointer !important;
+    border-radius: 6px !important;
+    transition: all 0.2s ease !important;
+    border: 1px solid transparent !important;
+    margin-bottom: 4px !important;
+}
+
+.account-item:hover {
+    background-color: var(--accent-primary) !important;
+    color: #ffffff !important;
+    border-color: var(--accent-primary) !important;
+    transform: translateX(4px);
+}
+
+.account-item.selected {
+    background-color: var(--accent-primary) !important;
+    color: #ffffff !important;
+    border-color: var(--accent-secondary) !important;
+    font-weight: 600 !important;
+}
+
+.account-item.selected::after {
+    content: '?';
+    float: right;
+    font-weight: bold;
+}
+
+
+
+/* ========== ACCOUNT SELECTION LAYOUT ========== */
+.account-management-area {
+    display: flex !important;
+    gap: 20px !important;
+    align-items: flex-start !important;
+}
+
+.search-and-list {
+    flex: 1 !important;
+    min-width: 0 !important;
+    /* Prevent flex overflow */
+}
+
+.account-actions {
+    width: 260px !important;
+    flex-shrink: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+    margin-top: 0 !important;
+}
+
+/* Auth Status Styling */
+#auth-status {
+    margin-top: 16px !important;
+    padding: 12px 16px !important;
+    border-radius: 6px !important;
+    background-color: rgba(16, 185, 129, 0.1) !important;
+    border: 1px solid rgba(16, 185, 129, 0.2) !important;
+    color: #047857 !important;
+    font-weight: 500 !important;
+}
+
+/* Badge style for individual users (to be implemented in JS) */
+.auth-user-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    background-color: #ffffff;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    border-radius: 4px;
+    margin: 0 4px;
+    font-size: 0.85em;
+    color: #059669;
+    font-weight: 600;
+}
+
+
+
+/* ========== USER LIST MODERNIZATION ========== */
+.user-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.stat-card {
+    background: var(--bg-panel);
+    border: 1px solid var(--border-panel);
+    border-radius: 8px;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.stat-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+}
+
+.stat-icon.bg-blue {
+    background: rgba(59, 130, 246, 0.1);
+    color: #3b82f6;
+}
+
+.stat-icon.bg-green {
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+}
+
+.stat-icon.bg-red {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+}
+
+.stat-icon.bg-orange {
+    background: rgba(245, 158, 11, 0.1);
+    color: #f59e0b;
+}
+
+.stat-content {
+    display: flex;
+    flex-direction: column;
+}
+
+.stat-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+}
+
+.stat-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.user-list-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.user-list-table th {
+    text-align: left;
+    padding: 12px 16px;
+    background: var(--bg-modal);
+    border-bottom: 1px solid var(--border-panel);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+}
+
+.user-list-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-panel);
+    vertical-align: middle;
+    color: var(--text-primary);
+}
+
+.user-list-table tr:hover td {
+    background: var(--bg-modal);
+}
+
+.avatar-circle {
+    width: 32px;
+    height: 32px;
+    background: var(--bg-modal);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: 14px;
+    border: 1px solid var(--border-panel);
+}
+
+
+
+
+
+/* ========== FINAL MODAL FIX (Shifted Strategy - CLEAN) ========== */
+@media (min-width: 992px) {
+
+    /* DEFAULT STATE: HIDDEN & SHIFTED */
+    .modal {
+        padding-left: 0 !important;
+        left: 260px !important;
+        width: calc(100% - 260px) !important;
+        /* Do NOT force display:flex globally. Instead... */
+    }
+
+    /* OPEN STATE: VISIBLE & CENTERED */
+    .modal[style*='block'],
+    .modal[style*='flex'],
+    .modal.show {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+
+    .modal-backdrop {
+        left: 260px !important;
+        width: calc(100% - 260px) !important;
+    }
+
+    /* Ensure content is centered and responsive */
+    .modal-dialog {
+        margin: auto !important;
+        max-width: 95% !important;
+    }
+}
+
+/* GLOBAL SAFETY: Ensure modals without 'show', 'block', or 'flex' are definitely hidden */
+.modal:not(.show):not([style*='block']):not([style*='flex']) {
+    display: none !important;
+}
+
+/* Fix for z-index to ensure it sits above everything else in the main area */
+.modal {
+    z-index: 1055 !important;
+}
+
+.modal-backdrop {
+    z-index: 1050 !important;
+}
+
+/* ========== MODAL TYPOGRAPHY POLISH ========== */
+/* Style code snippets in modals to look professional */
+.modal code, .glass-info-box code {
+    background: rgba(0, 0, 0, 0.06);
+    color: var(--accent-primary);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'SF Mono', 'Roboto Mono', 'Menlo', monospace;
+    font-size: 0.9em;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+/* Dark mode support for code snippets */
+[data-theme='dark'] .modal code,
+[data-theme='dark'] .glass-info-box code {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+
+
+/* ========== S3 MODAL CONTENT IMPROVEMENT ========== */
+/* Force better visibility for code snippets in info boxes */
+.glass-info-box code,
+.modal-body code {
+    background-color: rgba(27, 31, 35, 0.08) !important;
+    color: #0969da !important;
+    padding: 0.2em 0.4em !important;
+    margin: 0 !important;
+    font-size: 85% !important;
+    border-radius: 6px !important;
+    font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace !important;
+    word-break: break-word !important;
+    display: inline-block !important; /* Ensures padding is respected */
+    border: 1px solid rgba(27, 31, 35, 0.05) !important;
+}
+
+/* Specific spacing for the S3 instruction box */
+#s3ImportModal .glass-info-box {
+    padding: 16px !important;
+    line-height: 1.6 !important;
+}
+
+
+
+/* ========== HEADER & NAV POLISH ========== */
+/* Force header to be full width */
+.glass-header {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding-left: 24px !important;
+    padding-right: 24px !important;
+}
+
+/* Active state for sidebar dropdown items */
+.dropdown-item.active {
+    color: var(--accent-primary) !important;
+    background-color: rgba(37, 99, 235, 0.1) !important;
+    font-weight: 600 !important;
+}
+
+.dropdown-item.active i {
+    color: var(--accent-primary) !important;
+}
+
+
+/* Pulse Animation for Live Status */
+@keyframes statusPulse {
+    0% { opacity: 0.6; transform: scale(0.98); }
+    50% { opacity: 1; transform: scale(1); }
+    100% { opacity: 0.6; transform: scale(0.98); }
+}
+
+.status-pulse {
+    animation: statusPulse 1.5s infinite ease-in-out;
+    box-shadow: 0 0 8px rgba(9, 105, 218, 0.4);
+}
+
+.text-truncate-cell {
+    max-width: 140px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+}
+
+.compact-icon-header {
+    text-align: center !important;
+    width: 40px;
+}
+

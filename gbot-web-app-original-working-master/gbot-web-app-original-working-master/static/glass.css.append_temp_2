@@ -1,0 +1,52 @@
+
+/* Button Fixes */
+.btn-github {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 16px !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    line-height: 20px !important;
+    border-radius: 6px !important;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    height: auto !important; /* Force auto height */
+    min-height: 32px;
+}
+
+/* Primary Button Style */
+.btn-github-primary {
+    background-color: #1f883d;
+    color: #ffffff;
+    border: 1px solid rgba(27, 31, 36, 0.15);
+    box-shadow: 0 1px 0 rgba(27, 31, 36, 0.1);
+}
+
+.btn-github-primary:hover {
+    background-color: #1a7f37;
+}
+
+/* Warning Button Style */
+.btn-github-warning {
+    background-color: #9a6700; /* Darker orange/brown */
+    color: #ffffff;
+    border: 1px solid rgba(27, 31, 36, 0.15);
+}
+
+/* Danger Button Style */
+.btn-github-danger {
+    background-color: #d73a49;
+    color: #ffffff;
+    border: 1px solid rgba(27, 31, 36, 0.15);
+}
+
+/* Drag Handle Cursor */
+.draggable-card .github-card-header {
+    cursor: move; /* Fallback */
+    cursor: grab;
+}
+.draggable-card .github-card-header:active {
+    cursor: grabbing;
+}

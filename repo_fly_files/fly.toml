@@ -1,0 +1,22 @@
+# fly.toml app configuration file generated for gbot-fly-worker
+
+app = "gbot-fly-worker"
+primary_region = "yul" # Montreal, close to US East
+
+[build]
+  dockerfile = "Dockerfile.fly"
+
+[env]
+  PYTHONUNBUFFERED = "1"
+  # HEADLESS = "true" (already handled in code)
+
+[[vm]]
+  size = "performance-2x"
+  memory = "4gb"
+  cpus = 2
+  cpu_kind = "performance"
+
+# No [http_service] section generally needed for a worker-only machine that runs and exits.
+# However, if this image is deployed as a service, it might restart loop.
+# Since we use ephemeral machines launched via API/CLI for specific batches, 
+# this config primarily serves as the build definition and default resource template.

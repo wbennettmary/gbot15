@@ -1,0 +1,78 @@
+---
+alwaysApply: true
+---
+
+# Professional Project Rules for GBot SaaS (Google Workspace Manager)
+
+## Global Rules
+
+1. **Branching & Releases**
+   - `main`: always stable and deployable.  
+   - `dev`: daily integration branch.  
+   - Feature branches: `feat/*`, `fix/*`, `chore/*`.  
+   - Use semantic versioning (`vX.Y.Z`) for releases.
+
+2. **Commits & Pull Requests**
+   - Follow **Conventional Commits** (e.g., `feat(api): add user sync endpoint`).  
+   - PRs must include: short description, change list, test steps, and screenshots (if UI).  
+   - Minimum one reviewer required before merge.
+
+3. **Code Style & Tooling**
+   - Python: `black`, `isort`, `flake8`, `pytest`.  
+   - JavaScript/TypeScript: `eslint`, `prettier`, `tsc`.  
+   - `.editorconfig` for unified formatting.  
+   - Pre-commit hooks are mandatory.
+
+4. **Environment & Secrets**
+   - Never commit secrets or service-account JSONs.  
+   - Always include `.env.example` with documented variables.  
+   - Use environment variables for local testing; production secrets stored in deployment environment.
+
+5. **Database & Migrations**
+   - Use **PostgreSQL** by default.  
+   - All schema changes must go through **Alembic migrations**.  
+   - Include both upgrade and downgrade steps.
+
+6. **API Standards**
+   - Document APIs with **Swagger/OpenAPI** at `/docs`.  
+   - Update `pydantic` or schema definitions with every endpoint change.  
+   - Breaking changes require version bump and migration notes.
+
+7. **Logging & Monitoring**
+   - Use JSON-structured logs with `request_id`.  
+   - Add `/healthz` and `/readiness` endpoints.  
+   - Include request duration and external call timing logs.
+
+8. **Security**
+   - Enable CORS properly.  
+   - Add rate limiting on critical endpoints.  
+   - Sanitize and validate all inputs.  
+   - Perform regular dependency audits.
+
+9. **Docker & Local Development**
+   - Project must run with:
+     ```bash
+     make setup && make dev
+     ```
+   - Provide a `docker-compose.yml` for local stack (API, DB, Redis).  
+   - Use multi-stage Docker builds.
+
+10. **CI/CD**
+    - Every PR triggers lint + test + build checks.  
+    - Never deploy directly from a local machine.  
+    - Store build artifacts and logs for auditability.
+
+---
+
+## Cursor Workspace Rules
+
+- Never invent endpoints or file names. Propose options if unsure.  
+- Prefer small, reviewable diffs over large rewrites.  
+- Keep migrations, seeds, and environment variables updated.  
+- Every code change must include updated documentation and tests.  
+- Mock external APIs (Google Admin SDK, Namecheap, etc.) during testing.  
+- Minimum test coverage for changed files: **80%**.  
+- Never output or hardcode real keys, tokens, or passwords.  
+- Always include rollback steps and performance notes for new features.
+
+---

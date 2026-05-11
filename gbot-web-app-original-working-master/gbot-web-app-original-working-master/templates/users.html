@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+{% block title %}User Management - {{ session.get('user', 'Admin') }}{% endblock %}
+
+{% block content %}
+<div class="glass-container-fluid">
+    <!-- Header -->
+    <div class="glass-panel"
+        style="display: flex; justify-content: space-between; align-items: center; padding: 24px; margin-bottom: 24px; border-left: 4px solid var(--accent-primary);">
+        <div>
+            <h1
+                style="margin: 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center;">
+                <i class="fas fa-users" style="color: var(--accent-primary); margin-right: 12px;"></i>User Management
+            </h1>
+            <p style="margin: 4px 0 0 0; color: var(--text-secondary); font-size: 0.875rem;">Manage system access,
+                roles, and monitor user activity</p>
+        </div>
+        <div>
+            <button onclick="toggleAddUserModal()" class="glass-button glass-button-primary">
+                <i class="fas fa-plus" style="margin-right: 8px;"></i>Invite / Add User
+            </button>
+        </div>
+    </div>
+
+    <!-- Monday.com Style Data Table -->
+    <div class="glass-panel" style="padding: 0; overflow: hidden;">
+        <div class="table-responsive">
+            <table class="monday-table" style="width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr style="background: rgba(255,255,255,0.05); border-bottom: 2px solid var(--border-panel);">
+                        <th
+                            style="padding: 16px 24px; text-align: left; font-weight: 600; color: var(--text-secondary); width: 300px;">
+                            USER</th>
+                        <th
+                            style="padding: 16px 24px; text-align: center; font-weight: 600; color: var(--text-secondary); width: 150px;">
+                            STATUS</th>
+                        <th
+                            style="padding: 16px 24px; text-align: left; font-weight: 600; color: var(--text-secondary); width: 200px;">
+                            LAST SEEN</th>
+                        <th
+                            style="padding: 16px 24px; text-align: center; font-weight: 600; color: var(--text-secondary); width: 180px;">
+                            ROLE (PERMISSIONS)</th>
+                        <th
+                            style="padding: 16px 24px; text-align: right; font-weight: 600; color: var(--text-secondary);">
+                            ACTIONS</th>
+                    </tr>
+                </thead>
+                <tbody id="user-table-body">
+                    <!-- Rows will be populated by JS -->
+                    <tr>
+                        <td colspan="5" style="padding: 40px; text-align: center; color: var(--text-muted);">
+                            <i class="fas fa-spinner fa-spin" style="margin-right: 8px;"></i> Loading users...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Add User Modal -->
+<div id="addUserModal" class="modal-overlay"
+    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="glass-panel" style="width: 400px; padding: 24px; position: relative;">
+        <button onclick="toggleAddUserModal()"
+            style="position: absolute; top: 16px; right: 16px; background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.25rem;">&times;</button>
+
+        <h3 style="margin-top: 0; display: flex; align-items: center; gap: 10px;">
+            <i class="fas fa-user-plus" style="color: var(--accent-primary);"></i> Add New User
+        </h3>
+
+        <div style="margin-top: 24px;">
+            <div class="form-group-github" style="margin-bottom: 16px;">
+                <label class="form-label-github">Username</label>
+                <input type="text" id="new-username" class="glass-input" placeholder="e.g. john.doe" required>
+            </div>
+
+            <div class="form-group-github" style="margin-bottom: 16px;">
+                <label class="form-label-github">Password</label>
+                <input type="password" id="new-password" class="glass-input" placeholder="••••••••" required>
+            </div>
+
+            <div class="form-group-github" style="margin-bottom: 24px;">
+                <label class="form-label-github">Role</label>
+                <select id="new-role" class="glass-input">
+                    <option value="support">Support</option>
+                    <option value="mailer">Mailer</option>
+                    <option value="admin">Admin</option>
+                </select>
+            </div>
+
+            <button onclick="addUser()" class="glass-button glass-button-primary"
+                style="width: 100%; justify-content: center;">
+                Create Member
+            </button>
+        </div>
+    </div>
+</div>
+
+
+
+<script>
+    // Load users on page load
+    document.addEventListener('DOMContentLoaded', loadUsers);
+
+    function toggleAddUserModal() {
+        const modal = document.getElementById('addUserModal');
+        modal.style.display = modal.style.display === 'flex' ? 'none' : 'flex';
+    }
+
+    function loadUsers() {
+        fetch('/api/list-users')
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    renderTable(data.users);
+                } else {
+                    document.getElementById('user-table-body').innerHTML = `<tr><td colspan="5" style="text-align:center; padding: 20px; color: var(--accent-danger);">Error: ${data.error}</td></tr>`;
+                }
+            })
+            .catch(err => console.error(err));
+    }
+
+    function renderTable(users) {
+        const tbody = document.getElementById('user-table-body');
+
+        if (users.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding: 40px; color: var(--text-muted);">No users found.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = users.map(user => {
+            // Pick avatar color based on name
+            const colors = ['#a8a8a8', '#ff5ac4', '#00c875', '#fdab3d', '#579bfc'];
+            const colorIndex = user.username.charCodeAt(0) % colors.length;
+            const bg = colors[colorIndex];
+
+            // Status Logic
+            const isOnline = user.status === 'active';
+            const statusClass = isOnline ? 'status-active' : 'status-inactive';
+            const statusText = isOnline ? 'ACTIVE' : 'OFFLINE';
+            const statusIcon = isOnline ? 'fa-circle' : 'fa-moon';
+
+            return `
+            <tr>
+                <td style="padding: 16px 24px;">
+                    <div style="display: flex; align-items: center;">
+                        <div class="avatar-circle" style="background-color: ${bg}; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
+                            ${user.username.substring(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                            <div style="font-weight: 600; font-size: 0.95rem;">${user.username}</div>
+                            <div style="font-size: 0.75rem; color: var(--text-muted);">ID: ${user.username}</div>
+                        </div>
+                    </div>
+                </td>
+                <td style="padding: 16px 24px; text-align: center;">
+                    <span class="status-badge ${statusClass}">
+                        <i class="fas ${statusIcon}" style="margin-right: 6px; font-size: 0.6em;"></i>${statusText}
+                    </span>
+                </td>
+                <td style="padding: 16px 24px;">
+                    <div style="color: var(--text-secondary); font-size: 0.9rem;">
+                        <i class="far fa-clock" style="margin-right: 8px;"></i>${user.last_login}
+                    </div>
+                </td>
+                <td style="padding: 16px 24px; text-align: center;">
+                    <button class="role-dropdown role-${user.role}" 
+                        onclick="cycleRole('${user.username}', '${user.role}')" 
+                        title="Click to change role">
+                        ${user.role.toUpperCase()}
+                    </button>
+                    ${user.role === 'admin' ? '<i class="fas fa-crown" style="margin-left:8px; color:#f1c40f;" title="Admin Access"></i>' : ''}
+                </td>
+                <td style="padding: 16px 24px; text-align: right;">
+                    <button onclick="changePassword('${user.username}')" class="glass-button" style="padding: 8px; margin-right: 8px;" title="Reset Password">
+                        <i class="fas fa-key"></i>
+                    </button>
+                    <button onclick="deleteUser('${user.username}')" class="glass-button glass-button-danger" style="padding: 8px;" title="Delete User">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </td>
+            </tr>
+            `;
+        }).join('');
+    }
+
+    function addUser() {
+        const username = document.getElementById('new-username').value;
+        const password = document.getElementById('new-password').value;
+        const role = document.getElementById('new-role').value;
+
+        if (!username || !password) return alert("Please fill all fields");
+
+        fetch('/api/add-user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password, role })
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    toggleAddUserModal();
+                    loadUsers(); // Refresh table
+                } else {
+                    alert("Error: " + data.error);
+                }
+            });
+    }
+
+    function cycleRole(username, currentRole) {
+        const roles = ['support', 'mailer', 'admin'];
+        const nextIndex = (roles.indexOf(currentRole) + 1) % roles.length;
+        const newRole = roles[nextIndex];
+
+        if (currentRole === 'admin' && username === '{{ session.get("user") }}') {
+            if (!confirm("⚠️ Warning: You are about to remove your own Admin privileges. Continue?")) return;
+        }
+
+        fetch('/api/edit-user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, role: newRole })
+        }).then(res => res.json()).then(data => {
+            if (data.success) loadUsers();
+            else alert("Failed: " + data.error);
+        });
+    }
+
+    function deleteUser(username) {
+        if (confirm(`Are you sure you want to delete ${username}? This cannot be undone.`)) {
+            fetch('/api/delete-user', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username })
+            }).then(res => res.json()).then(data => {
+                if (data.success) loadUsers();
+                else alert("Failed: " + data.error);
+            });
+        }
+    }
+
+    function changePassword(username) {
+        const newPass = prompt(`Enter new password for ${username}:`);
+        if (newPass) {
+            fetch('/api/edit-user', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password: newPass })
+            }).then(res => res.json()).then(data => {
+                if (data.success) alert("Password updated!");
+                else alert("Failed: " + data.error);
+            });
+        }
+    }
+
+    // Auto-refresh stats every 60s
+    setInterval(loadUsers, 60000);
+</script>
+{% endblock %}

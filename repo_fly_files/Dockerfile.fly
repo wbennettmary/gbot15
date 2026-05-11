@@ -1,0 +1,50 @@
+FROM python:3.10-slim
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    wget \
+    gnupg \
+    unzip \
+    curl \
+    make \
+    gcc \
+    python3-dev \
+    libpq-dev \
+    xvfb \
+    libxi6 \
+    libgconf-2-4 \
+    libnss3 \
+    libxss1 \
+    libasound2 \
+    fonts-liberation \
+    xdg-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Google Chrome
+RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg \
+    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list \
+    && apt-get update \
+    && apt-get install -y google-chrome-stable \
+    && rm -rf /var/lib/apt/lists/*
+
+# Check Chrome version
+RUN google-chrome --version
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements and install
+COPY requirements.fly.txt .
+RUN pip install --no-cache-dir -r requirements.fly.txt
+
+# Copy application code
+COPY fly_worker.py .
+COPY fly_main.py .
+
+# Run the Flask wrapper
+CMD ["python", "-u", "fly_main.py"]

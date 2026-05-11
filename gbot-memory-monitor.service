@@ -1,0 +1,27 @@
+[Unit]
+Description=GBot Memory Monitor (Auto-restart on high memory usage)
+After=gbot.service
+Wants=gbot.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/gbot-web-app
+Environment=PATH=/opt/gbot-web-app/venv/bin
+Environment=PYTHONPATH=/opt/gbot-web-app
+ExecStart=/opt/gbot-web-app/venv/bin/python memory_monitor.py
+Restart=always
+RestartSec=30
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=gbot-memory-monitor
+
+[Install]
+WantedBy=multi-user.target

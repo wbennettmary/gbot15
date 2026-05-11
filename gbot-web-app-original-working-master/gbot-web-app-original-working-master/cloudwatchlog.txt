@@ -1,0 +1,1081 @@
+No older events at this moment. 
+Retry
+2025-12-26T18:42:33.798Z
+START RequestId: 3bf1a915-fef0-42f1-b7b4-3fb24d431696 Version: $LATEST
+
+START RequestId: 3bf1a915-fef0-42f1-b7b4-3fb24d431696 Version: $LATEST
+2025-12-26T18:42:33.799Z
+[INFO]	2025-12-26T18:42:33.799Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	============================================================
+
+[INFO] 2025-12-26T18:42:33.799Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 ============================================================
+2025-12-26T18:42:33.799Z
+[INFO]	2025-12-26T18:42:33.799Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Handler invoked
+
+[INFO] 2025-12-26T18:42:33.799Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Handler invoked
+2025-12-26T18:42:33.799Z
+[INFO]	2025-12-26T18:42:33.799Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Event type: <class 'dict'>
+
+[INFO] 2025-12-26T18:42:33.799Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Event type: <class 'dict'>
+2025-12-26T18:42:33.799Z
+[INFO]	2025-12-26T18:42:33.799Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Event content: {'users': [{'email': 'anthonyjones7320@yklqssgbjeympegr.boldvisiongroup.co.uk', 'password': 'bemTeTKw3JU3hEja'}, {'email': 'barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk', 'password': 'bemTeTKw3JU3hEja'}, {'email': 'barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk', 'password': 'bemTeTKw3JU3hEja'}]}
+
+[INFO] 2025-12-26T18:42:33.799Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Event content: {'users': [{'email': 'anthonyjones7320@yklqssgbjeympegr.boldvisiongroup.co.uk', 'password': 'bemTeTKw3JU3hEja'}, {'email': 'barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk', 'password': 'bemTeTKw3JU3hEja'}, {'email': 'barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk', 'password': 'bemTeTKw3JU3hEja'}]}
+2025-12-26T18:42:33.799Z
+[INFO]	2025-12-26T18:42:33.799Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Context: LambdaContext([aws_request_id=3bf1a915-fef0-42f1-b7b4-3fb24d431696,log_group_name=/aws/lambda/gbot-chromium-euwest1-1,log_stream_name=2025/12/26/[$LATEST]d8d9209fb40e42bfa57208b9cbf60927,function_name=gbot-chromium-euwest1-1,memory_limit_in_mb=2048,function_version=$LATEST,invoked_function_arn=arn:aws:lambda:eu-west-1:470147111686:function:gbot-chromium-euwest1-1,client_context=None,identity=CognitoIdentity([cognito_identity_id=None,cognito_identity_pool_id=None]),tenant_id=None])
+[INFO] 2025-12-26T18:42:33.799Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Context: LambdaContext([aws_request_id=3bf1a915-fef0-42f1-b7b4-3fb24d431696,log_group_name=/aws/lambda/gbot-chromium-euwest1-1,log_stream_name=2025/12/26/[$LATEST]d8d9209fb40e42bfa57208b9cbf60927,function_name=gbot-chromium-euwest1-1,memory_limit_in_mb=2048,function_version=$LATEST,invoked_function_arn=arn:aws:lambda:eu-west-1:470147111686:function:gbot-chromium-euwest1-1,client_context=None,identity=CognitoIdentity([cognito_identity_id=None,cognito_identity_pool_id=None]),tenant_id=None])
+2025-12-26T18:42:33.799Z
+[INFO]	2025-12-26T18:42:33.799Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	============================================================
+[INFO] 2025-12-26T18:42:33.799Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 ============================================================
+2025-12-26T18:42:33.799Z
+[INFO]	2025-12-26T18:42:33.799Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] MAX_CONCURRENT_USERS setting: 3
+[INFO] 2025-12-26T18:42:33.799Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] MAX_CONCURRENT_USERS setting: 3
+2025-12-26T18:42:33.799Z
+[INFO]	2025-12-26T18:42:33.799Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Batch processing mode: 3 user(s) (MAX: 3)
+[INFO] 2025-12-26T18:42:33.799Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Batch processing mode: 3 user(s) (MAX: 3)
+2025-12-26T18:42:33.799Z
+[INFO]	2025-12-26T18:42:33.799Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Starting PARALLEL processing of 3 user(s)
+[INFO] 2025-12-26T18:42:33.799Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Starting PARALLEL processing of 3 user(s)
+2025-12-26T18:42:33.799Z
+[INFO]	2025-12-26T18:42:33.799Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Ensuring DynamoDB table exists: gbot-app-passwords
+[INFO] 2025-12-26T18:42:33.799Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Ensuring DynamoDB table exists: gbot-app-passwords
+2025-12-26T18:42:33.816Z
+[INFO]	2025-12-26T18:42:33.815Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	Found credentials in environment variables.
+[INFO] 2025-12-26T18:42:33.815Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 Found credentials in environment variables.
+2025-12-26T18:42:34.002Z
+[INFO]	2025-12-26T18:42:34.002Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[DYNAMODB] Table gbot-app-passwords already exists
+[INFO] 2025-12-26T18:42:34.002Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [DYNAMODB] Table gbot-app-passwords already exists
+2025-12-26T18:42:34.003Z
+[INFO]	2025-12-26T18:42:34.003Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Using 3 concurrent workers for 3 users (processing all users in parallel for maximum speed)
+[INFO] 2025-12-26T18:42:34.003Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Using 3 concurrent workers for 3 users (processing all users in parallel for maximum speed)
+2025-12-26T18:42:34.004Z
+[INFO]	2025-12-26T18:42:34.004Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[PROXY] Loaded 20 proxy/proxies from environment
+[INFO] 2025-12-26T18:42:34.004Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [PROXY] Loaded 20 proxy/proxies from environment
+2025-12-26T18:42:34.004Z
+[INFO]	2025-12-26T18:42:34.004Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[PROXY] [anthonyjones7320@yklqssgbjeympegr.boldvisiongroup.co.uk] Using proxy: 96.62.181.178:7390
+[INFO] 2025-12-26T18:42:34.004Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [PROXY] [anthonyjones7320@yklqssgbjeympegr.boldvisiongroup.co.uk] Using proxy: 96.62.181.178:7390
+2025-12-26T18:42:34.004Z
+[INFO]	2025-12-26T18:42:34.004Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] [THREAD] Starting parallel processing of user 1/3: anthonyjones7320@yklqssgbjeympegr.boldvisiongroup.co.uk
+[INFO] 2025-12-26T18:42:34.004Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] [THREAD] Starting parallel processing of user 1/3: anthonyjones7320@yklqssgbjeympegr.boldvisiongroup.co.uk
+2025-12-26T18:42:34.004Z
+[INFO]	2025-12-26T18:42:34.004Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[PROXY] [barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk] Using proxy: 192.46.189.192:6185
+[INFO] 2025-12-26T18:42:34.004Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [PROXY] [barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk] Using proxy: 192.46.189.192:6185
+2025-12-26T18:42:34.004Z
+[INFO]	2025-12-26T18:42:34.004Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] [THREAD] Staggering Chrome start for user 2: waiting 15.0s
+[INFO] 2025-12-26T18:42:34.004Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] [THREAD] Staggering Chrome start for user 2: waiting 15.0s
+2025-12-26T18:42:34.005Z
+[INFO]	2025-12-26T18:42:34.005Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[PROXY] [barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk] Using proxy: 9.142.199.27:5194
+[INFO] 2025-12-26T18:42:34.005Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [PROXY] [barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk] Using proxy: 9.142.199.27:5194
+2025-12-26T18:42:34.005Z
+[INFO]	2025-12-26T18:42:34.005Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] [THREAD] Staggering Chrome start for user 3: waiting 30.0s
+[INFO] 2025-12-26T18:42:34.005Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] [THREAD] Staggering Chrome start for user 3: waiting 30.0s
+2025-12-26T18:42:34.006Z
+[WARNING]	2025-12-26T18:42:34.005Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Error cleaning up processes: [Errno 2] No such file or directory: 'pkill'
+[WARNING] 2025-12-26T18:42:34.005Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Error cleaning up processes: [Errno 2] No such file or directory: 'pkill'
+2025-12-26T18:42:34.063Z
+[INFO]	2025-12-26T18:42:34.063Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[ANTI-DETECT] selenium-stealth library loaded successfully
+[INFO] 2025-12-26T18:42:34.063Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [ANTI-DETECT] selenium-stealth library loaded successfully
+2025-12-26T18:42:34.064Z
+[INFO]	2025-12-26T18:42:34.064Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Checking /opt directory contents...
+[INFO] 2025-12-26T18:42:34.064Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Checking /opt directory contents...
+2025-12-26T18:42:34.064Z
+[INFO]	2025-12-26T18:42:34.064Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Contents of /opt: ['chrome', 'LICENSE.chromedriver', 'THIRD_PARTY_NOTICES.chromedriver', 'chromedriver']
+[INFO] 2025-12-26T18:42:34.064Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Contents of /opt: ['chrome', 'LICENSE.chromedriver', 'THIRD_PARTY_NOTICES.chromedriver', 'chromedriver']
+2025-12-26T18:42:34.064Z
+[INFO]	2025-12-26T18:42:34.064Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Contents of /opt/chrome: ['ABOUT', 'MEIPreload', 'PrivacySandboxAttestationsPreloaded', 'WidevineCdm', 'chrome', 'chrome-wrapper', 'chrome_100_percent.pak', 'chrome_200_percent.pak', 'chrome_crashpad_handler', 'chrome_sandbox', 'deb.deps', 'hyphen-data', 'icudtl.dat', 'libEGL.so', 'libGLESv2.so', 'libvk_swiftshader.so', 'libvulkan.so.1', 'locales', 'product_logo_48.png', 'resources', 'resources.pak', 'rpm.deps', 'v8_context_snapshot.bin', 'vk_swiftshader_icd.json', 'xdg-mime', 'xdg-settings']
+[INFO] 2025-12-26T18:42:34.064Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Contents of /opt/chrome: ['ABOUT', 'MEIPreload', 'PrivacySandboxAttestationsPreloaded', 'WidevineCdm', 'chrome', 'chrome-wrapper', 'chrome_100_percent.pak', 'chrome_200_percent.pak', 'chrome_crashpad_handler', 'chrome_sandbox', 'deb.deps', 'hyphen-data', 'icudtl.dat', 'libEGL.so', 'libGLESv2.so', 'libvk_swiftshader.so', 'libvulkan.so.1', 'locales', 'product_logo_48.png', 'resources', 'resources.pak', 'rpm.deps', 'v8_context_snapshot.bin', 'vk_swiftshader_icd.json', 'xdg-mime', 'xdg-settings']
+2025-12-26T18:42:34.064Z
+[INFO]	2025-12-26T18:42:34.064Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Found Chrome binary at: /opt/chrome/chrome
+[INFO] 2025-12-26T18:42:34.064Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Found Chrome binary at: /opt/chrome/chrome
+2025-12-26T18:42:34.064Z
+[INFO]	2025-12-26T18:42:34.064Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Found ChromeDriver at: /opt/chromedriver
+[INFO] 2025-12-26T18:42:34.064Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Found ChromeDriver at: /opt/chromedriver
+2025-12-26T18:42:34.065Z
+[INFO]	2025-12-26T18:42:34.064Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[PROXY] Using proxy: 82.29.143.169:7883
+[INFO] 2025-12-26T18:42:34.064Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [PROXY] Using proxy: 82.29.143.169:7883
+2025-12-26T18:42:34.065Z
+[INFO]	2025-12-26T18:42:34.065Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Initializing Chrome with minimal options...
+[INFO] 2025-12-26T18:42:34.065Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Initializing Chrome with minimal options...
+2025-12-26T18:42:34.065Z
+[INFO]	2025-12-26T18:42:34.065Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] ChromeDriver: /opt/chromedriver, Chrome: /opt/chrome/chrome
+[INFO] 2025-12-26T18:42:34.065Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] ChromeDriver: /opt/chromedriver, Chrome: /opt/chrome/chrome
+2025-12-26T18:42:34.066Z
+[WARNING]	2025-12-26T18:42:34.066Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[PROXY] selenium-wire not available, using regular selenium
+[WARNING] 2025-12-26T18:42:34.066Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [PROXY] selenium-wire not available, using regular selenium
+2025-12-26T18:42:39.202Z
+[INFO]	2025-12-26T18:42:39.202Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[ANTI-DETECT] ✓ selenium-stealth applied
+[INFO] 2025-12-26T18:42:39.202Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [ANTI-DETECT] ✓ selenium-stealth applied
+2025-12-26T18:42:39.202Z
+[INFO]	2025-12-26T18:42:39.202Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] ✓ Chrome driver created successfully
+[INFO] 2025-12-26T18:42:39.202Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] ✓ Chrome driver created successfully
+2025-12-26T18:42:39.202Z
+[INFO]	2025-12-26T18:42:39.202Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Chrome driver started for anthonyjones7320@yklqssgbjeympegr.boldvisiongroup.co.uk
+[INFO] 2025-12-26T18:42:39.202Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Chrome driver started for anthonyjones7320@yklqssgbjeympegr.boldvisiongroup.co.uk
+2025-12-26T18:42:39.202Z
+[INFO]	2025-12-26T18:42:39.202Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Login started for anthonyjones7320@yklqssgbjeympegr.boldvisiongroup.co.uk
+[INFO] 2025-12-26T18:42:39.202Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Login started for anthonyjones7320@yklqssgbjeympegr.boldvisiongroup.co.uk
+2025-12-26T18:42:39.202Z
+[INFO]	2025-12-26T18:42:39.202Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Navigating to Google login page (English)...
+[INFO] 2025-12-26T18:42:39.202Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Navigating to Google login page (English)...
+2025-12-26T18:42:40.691Z
+[INFO]	2025-12-26T18:42:40.691Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Navigation to Google login page completed
+[INFO] 2025-12-26T18:42:40.691Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Navigation to Google login page completed
+2025-12-26T18:42:43.849Z
+[INFO]	2025-12-26T18:42:43.849Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Page stabilized, proceeding with login
+[INFO] 2025-12-26T18:42:43.849Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Page stabilized, proceeding with login
+2025-12-26T18:42:43.849Z
+[INFO]	2025-12-26T18:42:43.849Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Email submission attempt 1/3
+[INFO] 2025-12-26T18:42:43.849Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Email submission attempt 1/3
+2025-12-26T18:42:43.849Z
+[INFO]	2025-12-26T18:42:43.849Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Locating email input field...
+[INFO] 2025-12-26T18:42:43.849Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Locating email input field...
+2025-12-26T18:42:45.385Z
+[INFO]	2025-12-26T18:42:45.385Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Clearing and typing email...
+[INFO] 2025-12-26T18:42:45.385Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Clearing and typing email...
+2025-12-26T18:42:49.005Z
+[INFO]	2025-12-26T18:42:49.005Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] [THREAD] Starting parallel processing of user 2/3: barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk
+[INFO] 2025-12-26T18:42:49.005Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] [THREAD] Starting parallel processing of user 2/3: barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk
+2025-12-26T18:42:49.006Z
+[WARNING]	2025-12-26T18:42:49.006Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Error cleaning up processes: [Errno 2] No such file or directory: 'pkill'
+[WARNING] 2025-12-26T18:42:49.006Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Error cleaning up processes: [Errno 2] No such file or directory: 'pkill'
+2025-12-26T18:42:49.006Z
+[INFO]	2025-12-26T18:42:49.006Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[ANTI-DETECT] selenium-stealth library loaded successfully
+[INFO] 2025-12-26T18:42:49.006Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [ANTI-DETECT] selenium-stealth library loaded successfully
+2025-12-26T18:42:49.006Z
+[INFO]	2025-12-26T18:42:49.006Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Checking /opt directory contents...
+[INFO] 2025-12-26T18:42:49.006Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Checking /opt directory contents...
+2025-12-26T18:42:49.006Z
+[INFO]	2025-12-26T18:42:49.006Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Contents of /opt: ['chrome', 'LICENSE.chromedriver', 'THIRD_PARTY_NOTICES.chromedriver', 'chromedriver']
+[INFO] 2025-12-26T18:42:49.006Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Contents of /opt: ['chrome', 'LICENSE.chromedriver', 'THIRD_PARTY_NOTICES.chromedriver', 'chromedriver']
+2025-12-26T18:42:49.006Z
+[INFO]	2025-12-26T18:42:49.006Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Contents of /opt/chrome: ['ABOUT', 'MEIPreload', 'PrivacySandboxAttestationsPreloaded', 'WidevineCdm', 'chrome', 'chrome-wrapper', 'chrome_100_percent.pak', 'chrome_200_percent.pak', 'chrome_crashpad_handler', 'chrome_sandbox', 'deb.deps', 'hyphen-data', 'icudtl.dat', 'libEGL.so', 'libGLESv2.so', 'libvk_swiftshader.so', 'libvulkan.so.1', 'locales', 'product_logo_48.png', 'resources', 'resources.pak', 'rpm.deps', 'v8_context_snapshot.bin', 'vk_swiftshader_icd.json', 'xdg-mime', 'xdg-settings']
+[INFO] 2025-12-26T18:42:49.006Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Contents of /opt/chrome: ['ABOUT', 'MEIPreload', 'PrivacySandboxAttestationsPreloaded', 'WidevineCdm', 'chrome', 'chrome-wrapper', 'chrome_100_percent.pak', 'chrome_200_percent.pak', 'chrome_crashpad_handler', 'chrome_sandbox', 'deb.deps', 'hyphen-data', 'icudtl.dat', 'libEGL.so', 'libGLESv2.so', 'libvk_swiftshader.so', 'libvulkan.so.1', 'locales', 'product_logo_48.png', 'resources', 'resources.pak', 'rpm.deps', 'v8_context_snapshot.bin', 'vk_swiftshader_icd.json', 'xdg-mime', 'xdg-settings']
+2025-12-26T18:42:49.006Z
+[INFO]	2025-12-26T18:42:49.006Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Found Chrome binary at: /opt/chrome/chrome
+[INFO] 2025-12-26T18:42:49.006Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Found Chrome binary at: /opt/chrome/chrome
+2025-12-26T18:42:49.006Z
+[INFO]	2025-12-26T18:42:49.006Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Found ChromeDriver at: /opt/chromedriver
+[INFO] 2025-12-26T18:42:49.006Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Found ChromeDriver at: /opt/chromedriver
+2025-12-26T18:42:49.006Z
+[INFO]	2025-12-26T18:42:49.006Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[PROXY] Using proxy: 216.98.255.100:6722
+[INFO] 2025-12-26T18:42:49.006Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [PROXY] Using proxy: 216.98.255.100:6722
+2025-12-26T18:42:49.006Z
+[INFO]	2025-12-26T18:42:49.006Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Initializing Chrome with minimal options...
+[INFO] 2025-12-26T18:42:49.006Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Initializing Chrome with minimal options...
+2025-12-26T18:42:49.006Z
+[INFO]	2025-12-26T18:42:49.006Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] ChromeDriver: /opt/chromedriver, Chrome: /opt/chrome/chrome
+[INFO] 2025-12-26T18:42:49.006Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] ChromeDriver: /opt/chromedriver, Chrome: /opt/chrome/chrome
+2025-12-26T18:42:49.007Z
+[WARNING]	2025-12-26T18:42:49.007Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[PROXY] selenium-wire not available, using regular selenium
+[WARNING] 2025-12-26T18:42:49.007Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [PROXY] selenium-wire not available, using regular selenium
+2025-12-26T18:42:50.895Z
+[INFO]	2025-12-26T18:42:50.895Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[ANTI-DETECT] ✓ selenium-stealth applied
+[INFO] 2025-12-26T18:42:50.895Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [ANTI-DETECT] ✓ selenium-stealth applied
+2025-12-26T18:42:50.895Z
+[INFO]	2025-12-26T18:42:50.895Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] ✓ Chrome driver created successfully
+[INFO] 2025-12-26T18:42:50.895Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] ✓ Chrome driver created successfully
+2025-12-26T18:42:50.895Z
+[INFO]	2025-12-26T18:42:50.895Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Chrome driver started for barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk
+[INFO] 2025-12-26T18:42:50.895Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Chrome driver started for barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk
+2025-12-26T18:42:50.895Z
+[INFO]	2025-12-26T18:42:50.895Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Login started for barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk
+[INFO] 2025-12-26T18:42:50.895Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Login started for barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk
+2025-12-26T18:42:50.895Z
+[INFO]	2025-12-26T18:42:50.895Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Navigating to Google login page (English)...
+[INFO] 2025-12-26T18:42:50.895Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Navigating to Google login page (English)...
+2025-12-26T18:42:52.472Z
+[INFO]	2025-12-26T18:42:52.471Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Navigation to Google login page completed
+[INFO] 2025-12-26T18:42:52.471Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Navigation to Google login page completed
+2025-12-26T18:42:55.939Z
+[INFO]	2025-12-26T18:42:55.939Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Page stabilized, proceeding with login
+[INFO] 2025-12-26T18:42:55.939Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Page stabilized, proceeding with login
+2025-12-26T18:42:55.939Z
+[INFO]	2025-12-26T18:42:55.939Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Email submission attempt 1/3
+[INFO] 2025-12-26T18:42:55.939Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Email submission attempt 1/3
+2025-12-26T18:42:55.939Z
+[INFO]	2025-12-26T18:42:55.939Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Locating email input field...
+[INFO] 2025-12-26T18:42:55.939Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Locating email input field...
+2025-12-26T18:42:57.995Z
+[INFO]	2025-12-26T18:42:57.995Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Clearing and typing email...
+[INFO] 2025-12-26T18:42:57.995Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Clearing and typing email...
+2025-12-26T18:42:58.406Z
+[INFO]	2025-12-26T18:42:58.406Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Email entered with human-like typing
+[INFO] 2025-12-26T18:42:58.406Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Email entered with human-like typing
+2025-12-26T18:42:59.103Z
+[INFO]	2025-12-26T18:42:59.103Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Locating 'Next' button...
+[INFO] 2025-12-26T18:42:59.103Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Locating 'Next' button...
+2025-12-26T18:42:59.158Z
+[INFO]	2025-12-26T18:42:59.158Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Found Next button with xpath: //div[@id='identifierNext']//button
+[INFO] 2025-12-26T18:42:59.158Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Found Next button with xpath: //div[@id='identifierNext']//button
+2025-12-26T18:42:59.158Z
+[INFO]	2025-12-26T18:42:59.158Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Clicking 'Next' button (Attempt 1)...
+[INFO] 2025-12-26T18:42:59.158Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Clicking 'Next' button (Attempt 1)...
+2025-12-26T18:43:03.659Z
+[ERROR]	2025-12-26T18:43:03.659Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] ✗ Secure Browser Block detected!
+[ERROR] 2025-12-26T18:43:03.659Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] ✗ Secure Browser Block detected!
+2025-12-26T18:43:03.659Z
+[WARNING]	2025-12-26T18:43:03.659Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Login failed with error: SECURE_BROWSER_BLOCK - Secure Browser Block detected
+[WARNING] 2025-12-26T18:43:03.659Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Login failed with error: SECURE_BROWSER_BLOCK - Secure Browser Block detected
+2025-12-26T18:43:03.659Z
+[WARNING]	2025-12-26T18:43:03.659Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Retrying with fresh browser (Attempt 1/3)...
+[WARNING] 2025-12-26T18:43:03.659Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Retrying with fresh browser (Attempt 1/3)...
+2025-12-26T18:43:03.732Z
+[WARNING]	2025-12-26T18:43:03.732Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Error cleaning up processes: [Errno 2] No such file or directory: 'pkill'
+[WARNING] 2025-12-26T18:43:03.732Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Error cleaning up processes: [Errno 2] No such file or directory: 'pkill'
+2025-12-26T18:43:03.732Z
+[WARNING]	2025-12-26T18:43:03.732Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Error cleaning up processes: [Errno 2] No such file or directory: 'pkill'
+[WARNING] 2025-12-26T18:43:03.732Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Error cleaning up processes: [Errno 2] No such file or directory: 'pkill'
+2025-12-26T18:43:03.732Z
+[INFO]	2025-12-26T18:43:03.732Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Restarting browser (Attempt 2/3)...
+[INFO] 2025-12-26T18:43:03.732Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Restarting browser (Attempt 2/3)...
+2025-12-26T18:43:03.732Z
+[INFO]	2025-12-26T18:43:03.732Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[ANTI-DETECT] selenium-stealth library loaded successfully
+[INFO] 2025-12-26T18:43:03.732Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [ANTI-DETECT] selenium-stealth library loaded successfully
+2025-12-26T18:43:03.733Z
+[INFO]	2025-12-26T18:43:03.732Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Checking /opt directory contents...
+[INFO] 2025-12-26T18:43:03.732Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Checking /opt directory contents...
+2025-12-26T18:43:03.733Z
+[INFO]	2025-12-26T18:43:03.733Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Contents of /opt: ['chrome', 'LICENSE.chromedriver', 'THIRD_PARTY_NOTICES.chromedriver', 'chromedriver']
+[INFO] 2025-12-26T18:43:03.733Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Contents of /opt: ['chrome', 'LICENSE.chromedriver', 'THIRD_PARTY_NOTICES.chromedriver', 'chromedriver']
+2025-12-26T18:43:03.733Z
+[INFO]	2025-12-26T18:43:03.733Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Contents of /opt/chrome: ['ABOUT', 'MEIPreload', 'PrivacySandboxAttestationsPreloaded', 'WidevineCdm', 'chrome', 'chrome-wrapper', 'chrome_100_percent.pak', 'chrome_200_percent.pak', 'chrome_crashpad_handler', 'chrome_sandbox', 'deb.deps', 'hyphen-data', 'icudtl.dat', 'libEGL.so', 'libGLESv2.so', 'libvk_swiftshader.so', 'libvulkan.so.1', 'locales', 'product_logo_48.png', 'resources', 'resources.pak', 'rpm.deps', 'v8_context_snapshot.bin', 'vk_swiftshader_icd.json', 'xdg-mime', 'xdg-settings']
+[INFO] 2025-12-26T18:43:03.733Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Contents of /opt/chrome: ['ABOUT', 'MEIPreload', 'PrivacySandboxAttestationsPreloaded', 'WidevineCdm', 'chrome', 'chrome-wrapper', 'chrome_100_percent.pak', 'chrome_200_percent.pak', 'chrome_crashpad_handler', 'chrome_sandbox', 'deb.deps', 'hyphen-data', 'icudtl.dat', 'libEGL.so', 'libGLESv2.so', 'libvk_swiftshader.so', 'libvulkan.so.1', 'locales', 'product_logo_48.png', 'resources', 'resources.pak', 'rpm.deps', 'v8_context_snapshot.bin', 'vk_swiftshader_icd.json', 'xdg-mime', 'xdg-settings']
+2025-12-26T18:43:03.733Z
+[INFO]	2025-12-26T18:43:03.733Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Found Chrome binary at: /opt/chrome/chrome
+[INFO] 2025-12-26T18:43:03.733Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Found Chrome binary at: /opt/chrome/chrome
+2025-12-26T18:43:03.733Z
+[INFO]	2025-12-26T18:43:03.733Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Found ChromeDriver at: /opt/chromedriver
+[INFO] 2025-12-26T18:43:03.733Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Found ChromeDriver at: /opt/chromedriver
+2025-12-26T18:43:03.733Z
+[INFO]	2025-12-26T18:43:03.733Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[PROXY] Using proxy: 9.142.211.195:5360
+[INFO] 2025-12-26T18:43:03.733Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [PROXY] Using proxy: 9.142.211.195:5360
+2025-12-26T18:43:03.733Z
+[INFO]	2025-12-26T18:43:03.733Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Initializing Chrome with minimal options...
+[INFO] 2025-12-26T18:43:03.733Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Initializing Chrome with minimal options...
+2025-12-26T18:43:03.733Z
+[INFO]	2025-12-26T18:43:03.733Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] ChromeDriver: /opt/chromedriver, Chrome: /opt/chrome/chrome
+[INFO] 2025-12-26T18:43:03.733Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] ChromeDriver: /opt/chromedriver, Chrome: /opt/chrome/chrome
+2025-12-26T18:43:03.734Z
+[WARNING]	2025-12-26T18:43:03.733Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[PROXY] selenium-wire not available, using regular selenium
+[WARNING] 2025-12-26T18:43:03.733Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [PROXY] selenium-wire not available, using regular selenium
+2025-12-26T18:43:04.008Z
+[INFO]	2025-12-26T18:43:04.008Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] [THREAD] Starting parallel processing of user 3/3: barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk
+[INFO] 2025-12-26T18:43:04.008Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] [THREAD] Starting parallel processing of user 3/3: barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk
+2025-12-26T18:43:04.009Z
+[WARNING]	2025-12-26T18:43:04.009Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Error cleaning up processes: [Errno 2] No such file or directory: 'pkill'
+[WARNING] 2025-12-26T18:43:04.009Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Error cleaning up processes: [Errno 2] No such file or directory: 'pkill'
+2025-12-26T18:43:04.009Z
+[INFO]	2025-12-26T18:43:04.009Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[ANTI-DETECT] selenium-stealth library loaded successfully
+[INFO] 2025-12-26T18:43:04.009Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [ANTI-DETECT] selenium-stealth library loaded successfully
+2025-12-26T18:43:04.009Z
+[INFO]	2025-12-26T18:43:04.009Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Checking /opt directory contents...
+[INFO] 2025-12-26T18:43:04.009Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Checking /opt directory contents...
+2025-12-26T18:43:04.009Z
+[INFO]	2025-12-26T18:43:04.009Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Contents of /opt: ['chrome', 'LICENSE.chromedriver', 'THIRD_PARTY_NOTICES.chromedriver', 'chromedriver']
+[INFO] 2025-12-26T18:43:04.009Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Contents of /opt: ['chrome', 'LICENSE.chromedriver', 'THIRD_PARTY_NOTICES.chromedriver', 'chromedriver']
+2025-12-26T18:43:04.009Z
+[INFO]	2025-12-26T18:43:04.009Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Contents of /opt/chrome: ['ABOUT', 'MEIPreload', 'PrivacySandboxAttestationsPreloaded', 'WidevineCdm', 'chrome', 'chrome-wrapper', 'chrome_100_percent.pak', 'chrome_200_percent.pak', 'chrome_crashpad_handler', 'chrome_sandbox', 'deb.deps', 'hyphen-data', 'icudtl.dat', 'libEGL.so', 'libGLESv2.so', 'libvk_swiftshader.so', 'libvulkan.so.1', 'locales', 'product_logo_48.png', 'resources', 'resources.pak', 'rpm.deps', 'v8_context_snapshot.bin', 'vk_swiftshader_icd.json', 'xdg-mime', 'xdg-settings']
+[INFO] 2025-12-26T18:43:04.009Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Contents of /opt/chrome: ['ABOUT', 'MEIPreload', 'PrivacySandboxAttestationsPreloaded', 'WidevineCdm', 'chrome', 'chrome-wrapper', 'chrome_100_percent.pak', 'chrome_200_percent.pak', 'chrome_crashpad_handler', 'chrome_sandbox', 'deb.deps', 'hyphen-data', 'icudtl.dat', 'libEGL.so', 'libGLESv2.so', 'libvk_swiftshader.so', 'libvulkan.so.1', 'locales', 'product_logo_48.png', 'resources', 'resources.pak', 'rpm.deps', 'v8_context_snapshot.bin', 'vk_swiftshader_icd.json', 'xdg-mime', 'xdg-settings']
+2025-12-26T18:43:04.009Z
+[INFO]	2025-12-26T18:43:04.009Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Found Chrome binary at: /opt/chrome/chrome
+[INFO] 2025-12-26T18:43:04.009Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Found Chrome binary at: /opt/chrome/chrome
+2025-12-26T18:43:04.009Z
+[INFO]	2025-12-26T18:43:04.009Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Found ChromeDriver at: /opt/chromedriver
+[INFO] 2025-12-26T18:43:04.009Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Found ChromeDriver at: /opt/chromedriver
+2025-12-26T18:43:04.009Z
+[INFO]	2025-12-26T18:43:04.009Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[PROXY] Using proxy: 82.22.93.127:7834
+[INFO] 2025-12-26T18:43:04.009Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [PROXY] Using proxy: 82.22.93.127:7834
+2025-12-26T18:43:04.009Z
+[INFO]	2025-12-26T18:43:04.009Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Initializing Chrome with minimal options...
+[INFO] 2025-12-26T18:43:04.009Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Initializing Chrome with minimal options...
+2025-12-26T18:43:04.009Z
+[INFO]	2025-12-26T18:43:04.009Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] ChromeDriver: /opt/chromedriver, Chrome: /opt/chrome/chrome
+[INFO] 2025-12-26T18:43:04.009Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] ChromeDriver: /opt/chromedriver, Chrome: /opt/chrome/chrome
+2025-12-26T18:43:04.010Z
+[WARNING]	2025-12-26T18:43:04.010Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[PROXY] selenium-wire not available, using regular selenium
+[WARNING] 2025-12-26T18:43:04.010Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [PROXY] selenium-wire not available, using regular selenium
+2025-12-26T18:43:05.951Z
+[INFO]	2025-12-26T18:43:05.951Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[ANTI-DETECT] ✓ selenium-stealth applied
+[INFO] 2025-12-26T18:43:05.951Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [ANTI-DETECT] ✓ selenium-stealth applied
+2025-12-26T18:43:05.951Z
+[INFO]	2025-12-26T18:43:05.951Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] ✓ Chrome driver created successfully
+[INFO] 2025-12-26T18:43:05.951Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] ✓ Chrome driver created successfully
+2025-12-26T18:43:05.951Z
+[INFO]	2025-12-26T18:43:05.951Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Chrome driver started for anthonyjones7320@yklqssgbjeympegr.boldvisiongroup.co.uk
+[INFO] 2025-12-26T18:43:05.951Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Chrome driver started for anthonyjones7320@yklqssgbjeympegr.boldvisiongroup.co.uk
+2025-12-26T18:43:05.951Z
+[INFO]	2025-12-26T18:43:05.951Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Login started for anthonyjones7320@yklqssgbjeympegr.boldvisiongroup.co.uk
+[INFO] 2025-12-26T18:43:05.951Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Login started for anthonyjones7320@yklqssgbjeympegr.boldvisiongroup.co.uk
+2025-12-26T18:43:05.951Z
+[INFO]	2025-12-26T18:43:05.951Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Navigating to Google login page (English)...
+[INFO] 2025-12-26T18:43:05.951Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Navigating to Google login page (English)...
+2025-12-26T18:43:06.475Z
+[INFO]	2025-12-26T18:43:06.475Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[ANTI-DETECT] ✓ selenium-stealth applied
+[INFO] 2025-12-26T18:43:06.475Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [ANTI-DETECT] ✓ selenium-stealth applied
+2025-12-26T18:43:06.476Z
+[INFO]	2025-12-26T18:43:06.475Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] ✓ Chrome driver created successfully
+[INFO] 2025-12-26T18:43:06.475Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] ✓ Chrome driver created successfully
+2025-12-26T18:43:06.476Z
+[INFO]	2025-12-26T18:43:06.476Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Chrome driver started for barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk
+[INFO] 2025-12-26T18:43:06.476Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Chrome driver started for barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk
+2025-12-26T18:43:06.476Z
+[INFO]	2025-12-26T18:43:06.476Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Login started for barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk
+[INFO] 2025-12-26T18:43:06.476Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Login started for barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk
+2025-12-26T18:43:06.476Z
+[INFO]	2025-12-26T18:43:06.476Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Navigating to Google login page (English)...
+[INFO] 2025-12-26T18:43:06.476Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Navigating to Google login page (English)...
+2025-12-26T18:43:08.876Z
+[INFO]	2025-12-26T18:43:08.876Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Navigation to Google login page completed
+[INFO] 2025-12-26T18:43:08.876Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Navigation to Google login page completed
+2025-12-26T18:43:09.636Z
+[INFO]	2025-12-26T18:43:09.635Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Navigation to Google login page completed
+[INFO] 2025-12-26T18:43:09.635Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Navigation to Google login page completed
+2025-12-26T18:43:12.534Z
+[INFO]	2025-12-26T18:43:12.534Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Page stabilized, proceeding with login
+[INFO] 2025-12-26T18:43:12.534Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Page stabilized, proceeding with login
+2025-12-26T18:43:12.534Z
+[INFO]	2025-12-26T18:43:12.534Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Email submission attempt 1/3
+[INFO] 2025-12-26T18:43:12.534Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Email submission attempt 1/3
+2025-12-26T18:43:12.534Z
+[INFO]	2025-12-26T18:43:12.534Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Locating email input field...
+[INFO] 2025-12-26T18:43:12.534Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Locating email input field...
+2025-12-26T18:43:12.648Z
+[INFO]	2025-12-26T18:43:12.648Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Page stabilized, proceeding with login
+[INFO] 2025-12-26T18:43:12.648Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Page stabilized, proceeding with login
+2025-12-26T18:43:12.648Z
+[INFO]	2025-12-26T18:43:12.648Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Email submission attempt 1/3
+[INFO] 2025-12-26T18:43:12.648Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Email submission attempt 1/3
+2025-12-26T18:43:12.648Z
+[INFO]	2025-12-26T18:43:12.648Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Locating email input field...
+[INFO] 2025-12-26T18:43:12.648Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Locating email input field...
+2025-12-26T18:43:14.241Z
+[INFO]	2025-12-26T18:43:14.241Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Email entered with human-like typing
+[INFO] 2025-12-26T18:43:14.241Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Email entered with human-like typing
+2025-12-26T18:43:14.307Z
+[INFO]	2025-12-26T18:43:14.306Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Clearing and typing email...
+[INFO] 2025-12-26T18:43:14.306Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Clearing and typing email...
+2025-12-26T18:43:14.415Z
+[INFO]	2025-12-26T18:43:14.414Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Clearing and typing email...
+[INFO] 2025-12-26T18:43:14.414Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Clearing and typing email...
+2025-12-26T18:43:14.970Z
+[INFO]	2025-12-26T18:43:14.969Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Locating 'Next' button...
+[INFO] 2025-12-26T18:43:14.969Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Locating 'Next' button...
+2025-12-26T18:43:15.060Z
+[INFO]	2025-12-26T18:43:15.060Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Found Next button with xpath: //div[@id='identifierNext']//button
+[INFO] 2025-12-26T18:43:15.060Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Found Next button with xpath: //div[@id='identifierNext']//button
+2025-12-26T18:43:15.060Z
+[INFO]	2025-12-26T18:43:15.060Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Clicking 'Next' button (Attempt 1)...
+[INFO] 2025-12-26T18:43:15.060Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Clicking 'Next' button (Attempt 1)...
+2025-12-26T18:43:19.908Z
+[ERROR]	2025-12-26T18:43:19.908Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] ✗ Secure Browser Block detected!
+[ERROR] 2025-12-26T18:43:19.908Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] ✗ Secure Browser Block detected!
+2025-12-26T18:43:19.908Z
+[WARNING]	2025-12-26T18:43:19.908Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Login failed with error: SECURE_BROWSER_BLOCK - Secure Browser Block detected
+[WARNING] 2025-12-26T18:43:19.908Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Login failed with error: SECURE_BROWSER_BLOCK - Secure Browser Block detected
+2025-12-26T18:43:19.908Z
+[WARNING]	2025-12-26T18:43:19.908Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Retrying with fresh browser (Attempt 1/3)...
+[WARNING] 2025-12-26T18:43:19.908Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Retrying with fresh browser (Attempt 1/3)...
+2025-12-26T18:43:19.970Z
+[WARNING]	2025-12-26T18:43:19.970Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Error cleaning up processes: [Errno 2] No such file or directory: 'pkill'
+[WARNING] 2025-12-26T18:43:19.970Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Error cleaning up processes: [Errno 2] No such file or directory: 'pkill'
+2025-12-26T18:43:19.971Z
+[WARNING]	2025-12-26T18:43:19.971Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Error cleaning up processes: [Errno 2] No such file or directory: 'pkill'
+[WARNING] 2025-12-26T18:43:19.971Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Error cleaning up processes: [Errno 2] No such file or directory: 'pkill'
+2025-12-26T18:43:19.971Z
+[INFO]	2025-12-26T18:43:19.971Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Restarting browser (Attempt 2/3)...
+[INFO] 2025-12-26T18:43:19.971Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Restarting browser (Attempt 2/3)...
+2025-12-26T18:43:19.971Z
+[INFO]	2025-12-26T18:43:19.971Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[ANTI-DETECT] selenium-stealth library loaded successfully
+[INFO] 2025-12-26T18:43:19.971Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [ANTI-DETECT] selenium-stealth library loaded successfully
+2025-12-26T18:43:19.971Z
+[INFO]	2025-12-26T18:43:19.971Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Checking /opt directory contents...
+[INFO] 2025-12-26T18:43:19.971Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Checking /opt directory contents...
+2025-12-26T18:43:19.971Z
+[INFO]	2025-12-26T18:43:19.971Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Contents of /opt: ['chrome', 'LICENSE.chromedriver', 'THIRD_PARTY_NOTICES.chromedriver', 'chromedriver']
+[INFO] 2025-12-26T18:43:19.971Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Contents of /opt: ['chrome', 'LICENSE.chromedriver', 'THIRD_PARTY_NOTICES.chromedriver', 'chromedriver']
+2025-12-26T18:43:19.971Z
+[INFO]	2025-12-26T18:43:19.971Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Contents of /opt/chrome: ['ABOUT', 'MEIPreload', 'PrivacySandboxAttestationsPreloaded', 'WidevineCdm', 'chrome', 'chrome-wrapper', 'chrome_100_percent.pak', 'chrome_200_percent.pak', 'chrome_crashpad_handler', 'chrome_sandbox', 'deb.deps', 'hyphen-data', 'icudtl.dat', 'libEGL.so', 'libGLESv2.so', 'libvk_swiftshader.so', 'libvulkan.so.1', 'locales', 'product_logo_48.png', 'resources', 'resources.pak', 'rpm.deps', 'v8_context_snapshot.bin', 'vk_swiftshader_icd.json', 'xdg-mime', 'xdg-settings']
+[INFO] 2025-12-26T18:43:19.971Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Contents of /opt/chrome: ['ABOUT', 'MEIPreload', 'PrivacySandboxAttestationsPreloaded', 'WidevineCdm', 'chrome', 'chrome-wrapper', 'chrome_100_percent.pak', 'chrome_200_percent.pak', 'chrome_crashpad_handler', 'chrome_sandbox', 'deb.deps', 'hyphen-data', 'icudtl.dat', 'libEGL.so', 'libGLESv2.so', 'libvk_swiftshader.so', 'libvulkan.so.1', 'locales', 'product_logo_48.png', 'resources', 'resources.pak', 'rpm.deps', 'v8_context_snapshot.bin', 'vk_swiftshader_icd.json', 'xdg-mime', 'xdg-settings']
+2025-12-26T18:43:19.972Z
+[INFO]	2025-12-26T18:43:19.972Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Found Chrome binary at: /opt/chrome/chrome
+[INFO] 2025-12-26T18:43:19.972Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Found Chrome binary at: /opt/chrome/chrome
+2025-12-26T18:43:19.972Z
+[INFO]	2025-12-26T18:43:19.972Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Found ChromeDriver at: /opt/chromedriver
+[INFO] 2025-12-26T18:43:19.972Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Found ChromeDriver at: /opt/chromedriver
+2025-12-26T18:43:19.972Z
+[INFO]	2025-12-26T18:43:19.972Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[PROXY] Using proxy: 82.29.143.98:7812
+[INFO] 2025-12-26T18:43:19.972Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [PROXY] Using proxy: 82.29.143.98:7812
+2025-12-26T18:43:19.972Z
+[INFO]	2025-12-26T18:43:19.972Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Initializing Chrome with minimal options...
+[INFO] 2025-12-26T18:43:19.972Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Initializing Chrome with minimal options...
+2025-12-26T18:43:19.972Z
+[INFO]	2025-12-26T18:43:19.972Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] ChromeDriver: /opt/chromedriver, Chrome: /opt/chrome/chrome
+[INFO] 2025-12-26T18:43:19.972Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] ChromeDriver: /opt/chromedriver, Chrome: /opt/chrome/chrome
+2025-12-26T18:43:19.973Z
+[WARNING]	2025-12-26T18:43:19.973Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[PROXY] selenium-wire not available, using regular selenium
+[WARNING] 2025-12-26T18:43:19.973Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [PROXY] selenium-wire not available, using regular selenium
+2025-12-26T18:43:22.098Z
+[INFO]	2025-12-26T18:43:22.098Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[ANTI-DETECT] ✓ selenium-stealth applied
+[INFO] 2025-12-26T18:43:22.098Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [ANTI-DETECT] ✓ selenium-stealth applied
+2025-12-26T18:43:22.098Z
+[INFO]	2025-12-26T18:43:22.098Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] ✓ Chrome driver created successfully
+[INFO] 2025-12-26T18:43:22.098Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] ✓ Chrome driver created successfully
+2025-12-26T18:43:22.098Z
+[INFO]	2025-12-26T18:43:22.098Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Chrome driver started for barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk
+[INFO] 2025-12-26T18:43:22.098Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Chrome driver started for barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk
+2025-12-26T18:43:22.098Z
+[INFO]	2025-12-26T18:43:22.098Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Login started for barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk
+[INFO] 2025-12-26T18:43:22.098Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Login started for barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk
+2025-12-26T18:43:22.098Z
+[INFO]	2025-12-26T18:43:22.098Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Navigating to Google login page (English)...
+[INFO] 2025-12-26T18:43:22.098Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Navigating to Google login page (English)...
+2025-12-26T18:43:24.109Z
+[INFO]	2025-12-26T18:43:24.109Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Navigation to Google login page completed
+[INFO] 2025-12-26T18:43:24.109Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Navigation to Google login page completed
+2025-12-26T18:43:27.400Z
+[INFO]	2025-12-26T18:43:27.400Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Page stabilized, proceeding with login
+[INFO] 2025-12-26T18:43:27.400Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Page stabilized, proceeding with login
+2025-12-26T18:43:27.400Z
+[INFO]	2025-12-26T18:43:27.400Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Email submission attempt 1/3
+[INFO] 2025-12-26T18:43:27.400Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Email submission attempt 1/3
+2025-12-26T18:43:27.401Z
+[INFO]	2025-12-26T18:43:27.400Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Locating email input field...
+[INFO] 2025-12-26T18:43:27.400Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Locating email input field...
+2025-12-26T18:43:28.938Z
+[INFO]	2025-12-26T18:43:28.937Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Clearing and typing email...
+[INFO] 2025-12-26T18:43:28.937Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Clearing and typing email...
+2025-12-26T18:43:29.147Z
+[INFO]	2025-12-26T18:43:29.147Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Email entered with human-like typing
+[INFO] 2025-12-26T18:43:29.147Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Email entered with human-like typing
+2025-12-26T18:43:29.554Z
+[INFO]	2025-12-26T18:43:29.554Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Email entered with human-like typing
+[INFO] 2025-12-26T18:43:29.554Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Email entered with human-like typing
+2025-12-26T18:43:29.795Z
+[INFO]	2025-12-26T18:43:29.795Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Locating 'Next' button...
+[INFO] 2025-12-26T18:43:29.795Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Locating 'Next' button...
+2025-12-26T18:43:29.832Z
+[INFO]	2025-12-26T18:43:29.832Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Found Next button with xpath: //div[@id='identifierNext']//button
+[INFO] 2025-12-26T18:43:29.832Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Found Next button with xpath: //div[@id='identifierNext']//button
+2025-12-26T18:43:29.832Z
+[INFO]	2025-12-26T18:43:29.832Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Clicking 'Next' button (Attempt 1)...
+[INFO] 2025-12-26T18:43:29.832Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Clicking 'Next' button (Attempt 1)...
+2025-12-26T18:43:30.072Z
+[INFO]	2025-12-26T18:43:30.072Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Locating 'Next' button...
+[INFO] 2025-12-26T18:43:30.072Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Locating 'Next' button...
+2025-12-26T18:43:30.175Z
+[INFO]	2025-12-26T18:43:30.175Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Found Next button with xpath: //div[@id='identifierNext']//button
+[INFO] 2025-12-26T18:43:30.175Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Found Next button with xpath: //div[@id='identifierNext']//button
+2025-12-26T18:43:30.175Z
+[INFO]	2025-12-26T18:43:30.175Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Clicking 'Next' button (Attempt 1)...
+[INFO] 2025-12-26T18:43:30.175Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Clicking 'Next' button (Attempt 1)...
+2025-12-26T18:43:34.473Z
+[ERROR]	2025-12-26T18:43:34.473Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] ✗ Secure Browser Block detected!
+[ERROR] 2025-12-26T18:43:34.473Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] ✗ Secure Browser Block detected!
+2025-12-26T18:43:34.473Z
+[WARNING]	2025-12-26T18:43:34.473Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Login failed with error: SECURE_BROWSER_BLOCK - Secure Browser Block detected
+[WARNING] 2025-12-26T18:43:34.473Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Login failed with error: SECURE_BROWSER_BLOCK - Secure Browser Block detected
+2025-12-26T18:43:34.473Z
+[WARNING]	2025-12-26T18:43:34.473Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Retrying with fresh browser (Attempt 1/3)...
+[WARNING] 2025-12-26T18:43:34.473Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Retrying with fresh browser (Attempt 1/3)...
+2025-12-26T18:43:34.903Z
+[ERROR]	2025-12-26T18:43:34.902Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] ✗ Secure Browser Block detected!
+[ERROR] 2025-12-26T18:43:34.902Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] ✗ Secure Browser Block detected!
+2025-12-26T18:43:34.903Z
+[WARNING]	2025-12-26T18:43:34.903Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Login failed with error: SECURE_BROWSER_BLOCK - Secure Browser Block detected
+[WARNING] 2025-12-26T18:43:34.903Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Login failed with error: SECURE_BROWSER_BLOCK - Secure Browser Block detected
+2025-12-26T18:43:34.903Z
+[WARNING]	2025-12-26T18:43:34.903Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Retrying with fresh browser (Attempt 2/3)...
+[WARNING] 2025-12-26T18:43:34.903Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Retrying with fresh browser (Attempt 2/3)...
+2025-12-26T18:43:34.969Z
+[WARNING]	2025-12-26T18:43:34.969Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Error cleaning up processes: [Errno 2] No such file or directory: 'pkill'
+[WARNING] 2025-12-26T18:43:34.969Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Error cleaning up processes: [Errno 2] No such file or directory: 'pkill'
+2025-12-26T18:43:34.970Z
+[WARNING]	2025-12-26T18:43:34.970Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Error cleaning up processes: [Errno 2] No such file or directory: 'pkill'
+[WARNING] 2025-12-26T18:43:34.970Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Error cleaning up processes: [Errno 2] No such file or directory: 'pkill'
+2025-12-26T18:43:34.970Z
+[INFO]	2025-12-26T18:43:34.970Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Restarting browser (Attempt 3/3)...
+[INFO] 2025-12-26T18:43:34.970Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Restarting browser (Attempt 3/3)...
+2025-12-26T18:43:34.970Z
+[INFO]	2025-12-26T18:43:34.970Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[ANTI-DETECT] selenium-stealth library loaded successfully
+[INFO] 2025-12-26T18:43:34.970Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [ANTI-DETECT] selenium-stealth library loaded successfully
+2025-12-26T18:43:34.970Z
+[INFO]	2025-12-26T18:43:34.970Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Checking /opt directory contents...
+[INFO] 2025-12-26T18:43:34.970Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Checking /opt directory contents...
+2025-12-26T18:43:34.970Z
+[INFO]	2025-12-26T18:43:34.970Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Contents of /opt: ['chrome', 'LICENSE.chromedriver', 'THIRD_PARTY_NOTICES.chromedriver', 'chromedriver']
+[INFO] 2025-12-26T18:43:34.970Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Contents of /opt: ['chrome', 'LICENSE.chromedriver', 'THIRD_PARTY_NOTICES.chromedriver', 'chromedriver']
+2025-12-26T18:43:34.970Z
+[INFO]	2025-12-26T18:43:34.970Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Contents of /opt/chrome: ['ABOUT', 'MEIPreload', 'PrivacySandboxAttestationsPreloaded', 'WidevineCdm', 'chrome', 'chrome-wrapper', 'chrome_100_percent.pak', 'chrome_200_percent.pak', 'chrome_crashpad_handler', 'chrome_sandbox', 'deb.deps', 'hyphen-data', 'icudtl.dat', 'libEGL.so', 'libGLESv2.so', 'libvk_swiftshader.so', 'libvulkan.so.1', 'locales', 'product_logo_48.png', 'resources', 'resources.pak', 'rpm.deps', 'v8_context_snapshot.bin', 'vk_swiftshader_icd.json', 'xdg-mime', 'xdg-settings']
+[INFO] 2025-12-26T18:43:34.970Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Contents of /opt/chrome: ['ABOUT', 'MEIPreload', 'PrivacySandboxAttestationsPreloaded', 'WidevineCdm', 'chrome', 'chrome-wrapper', 'chrome_100_percent.pak', 'chrome_200_percent.pak', 'chrome_crashpad_handler', 'chrome_sandbox', 'deb.deps', 'hyphen-data', 'icudtl.dat', 'libEGL.so', 'libGLESv2.so', 'libvk_swiftshader.so', 'libvulkan.so.1', 'locales', 'product_logo_48.png', 'resources', 'resources.pak', 'rpm.deps', 'v8_context_snapshot.bin', 'vk_swiftshader_icd.json', 'xdg-mime', 'xdg-settings']
+2025-12-26T18:43:34.970Z
+[INFO]	2025-12-26T18:43:34.970Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Found Chrome binary at: /opt/chrome/chrome
+[INFO] 2025-12-26T18:43:34.970Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Found Chrome binary at: /opt/chrome/chrome
+2025-12-26T18:43:34.970Z
+[INFO]	2025-12-26T18:43:34.970Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Found ChromeDriver at: /opt/chromedriver
+[INFO] 2025-12-26T18:43:34.970Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Found ChromeDriver at: /opt/chromedriver
+2025-12-26T18:43:34.970Z
+[INFO]	2025-12-26T18:43:34.970Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[PROXY] Using proxy: 96.62.181.244:7456
+[INFO] 2025-12-26T18:43:34.970Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [PROXY] Using proxy: 96.62.181.244:7456
+2025-12-26T18:43:34.970Z
+[INFO]	2025-12-26T18:43:34.970Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Initializing Chrome with minimal options...
+[INFO] 2025-12-26T18:43:34.970Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Initializing Chrome with minimal options...
+2025-12-26T18:43:34.970Z
+[INFO]	2025-12-26T18:43:34.970Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] ChromeDriver: /opt/chromedriver, Chrome: /opt/chrome/chrome
+[INFO] 2025-12-26T18:43:34.970Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] ChromeDriver: /opt/chromedriver, Chrome: /opt/chrome/chrome
+2025-12-26T18:43:34.971Z
+[WARNING]	2025-12-26T18:43:34.971Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[PROXY] selenium-wire not available, using regular selenium
+[WARNING] 2025-12-26T18:43:34.971Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [PROXY] selenium-wire not available, using regular selenium
+2025-12-26T18:43:35.534Z
+[WARNING]	2025-12-26T18:43:35.534Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Error cleaning up processes: [Errno 2] No such file or directory: 'pkill'
+[WARNING] 2025-12-26T18:43:35.534Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Error cleaning up processes: [Errno 2] No such file or directory: 'pkill'
+2025-12-26T18:43:35.535Z
+[WARNING]	2025-12-26T18:43:35.535Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Error cleaning up processes: [Errno 2] No such file or directory: 'pkill'
+[WARNING] 2025-12-26T18:43:35.535Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Error cleaning up processes: [Errno 2] No such file or directory: 'pkill'
+2025-12-26T18:43:35.535Z
+[INFO]	2025-12-26T18:43:35.535Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Restarting browser (Attempt 2/3)...
+[INFO] 2025-12-26T18:43:35.535Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Restarting browser (Attempt 2/3)...
+2025-12-26T18:43:35.535Z
+[INFO]	2025-12-26T18:43:35.535Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[ANTI-DETECT] selenium-stealth library loaded successfully
+[INFO] 2025-12-26T18:43:35.535Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [ANTI-DETECT] selenium-stealth library loaded successfully
+2025-12-26T18:43:35.535Z
+[INFO]	2025-12-26T18:43:35.535Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Checking /opt directory contents...
+[INFO] 2025-12-26T18:43:35.535Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Checking /opt directory contents...
+2025-12-26T18:43:35.535Z
+[INFO]	2025-12-26T18:43:35.535Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Contents of /opt: ['chrome', 'LICENSE.chromedriver', 'THIRD_PARTY_NOTICES.chromedriver', 'chromedriver']
+[INFO] 2025-12-26T18:43:35.535Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Contents of /opt: ['chrome', 'LICENSE.chromedriver', 'THIRD_PARTY_NOTICES.chromedriver', 'chromedriver']
+2025-12-26T18:43:35.536Z
+[INFO]	2025-12-26T18:43:35.535Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Contents of /opt/chrome: ['ABOUT', 'MEIPreload', 'PrivacySandboxAttestationsPreloaded', 'WidevineCdm', 'chrome', 'chrome-wrapper', 'chrome_100_percent.pak', 'chrome_200_percent.pak', 'chrome_crashpad_handler', 'chrome_sandbox', 'deb.deps', 'hyphen-data', 'icudtl.dat', 'libEGL.so', 'libGLESv2.so', 'libvk_swiftshader.so', 'libvulkan.so.1', 'locales', 'product_logo_48.png', 'resources', 'resources.pak', 'rpm.deps', 'v8_context_snapshot.bin', 'vk_swiftshader_icd.json', 'xdg-mime', 'xdg-settings']
+[INFO] 2025-12-26T18:43:35.535Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Contents of /opt/chrome: ['ABOUT', 'MEIPreload', 'PrivacySandboxAttestationsPreloaded', 'WidevineCdm', 'chrome', 'chrome-wrapper', 'chrome_100_percent.pak', 'chrome_200_percent.pak', 'chrome_crashpad_handler', 'chrome_sandbox', 'deb.deps', 'hyphen-data', 'icudtl.dat', 'libEGL.so', 'libGLESv2.so', 'libvk_swiftshader.so', 'libvulkan.so.1', 'locales', 'product_logo_48.png', 'resources', 'resources.pak', 'rpm.deps', 'v8_context_snapshot.bin', 'vk_swiftshader_icd.json', 'xdg-mime', 'xdg-settings']
+2025-12-26T18:43:35.536Z
+[INFO]	2025-12-26T18:43:35.536Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Found Chrome binary at: /opt/chrome/chrome
+[INFO] 2025-12-26T18:43:35.536Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Found Chrome binary at: /opt/chrome/chrome
+2025-12-26T18:43:35.536Z
+[INFO]	2025-12-26T18:43:35.536Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Found ChromeDriver at: /opt/chromedriver
+[INFO] 2025-12-26T18:43:35.536Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Found ChromeDriver at: /opt/chromedriver
+2025-12-26T18:43:35.536Z
+[INFO]	2025-12-26T18:43:35.536Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[PROXY] Using proxy: 208.66.76.169:6093
+[INFO] 2025-12-26T18:43:35.536Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [PROXY] Using proxy: 208.66.76.169:6093
+2025-12-26T18:43:35.536Z
+[INFO]	2025-12-26T18:43:35.536Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Initializing Chrome with minimal options...
+[INFO] 2025-12-26T18:43:35.536Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Initializing Chrome with minimal options...
+2025-12-26T18:43:35.536Z
+[INFO]	2025-12-26T18:43:35.536Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] ChromeDriver: /opt/chromedriver, Chrome: /opt/chrome/chrome
+[INFO] 2025-12-26T18:43:35.536Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] ChromeDriver: /opt/chromedriver, Chrome: /opt/chrome/chrome
+2025-12-26T18:43:35.537Z
+[WARNING]	2025-12-26T18:43:35.537Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[PROXY] selenium-wire not available, using regular selenium
+[WARNING] 2025-12-26T18:43:35.537Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [PROXY] selenium-wire not available, using regular selenium
+2025-12-26T18:43:36.898Z
+[INFO]	2025-12-26T18:43:36.898Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[ANTI-DETECT] ✓ selenium-stealth applied
+[INFO] 2025-12-26T18:43:36.898Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [ANTI-DETECT] ✓ selenium-stealth applied
+2025-12-26T18:43:36.898Z
+[INFO]	2025-12-26T18:43:36.898Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] ✓ Chrome driver created successfully
+[INFO] 2025-12-26T18:43:36.898Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] ✓ Chrome driver created successfully
+2025-12-26T18:43:36.898Z
+[INFO]	2025-12-26T18:43:36.898Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Chrome driver started for anthonyjones7320@yklqssgbjeympegr.boldvisiongroup.co.uk
+[INFO] 2025-12-26T18:43:36.898Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Chrome driver started for anthonyjones7320@yklqssgbjeympegr.boldvisiongroup.co.uk
+2025-12-26T18:43:36.898Z
+[INFO]	2025-12-26T18:43:36.898Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Login started for anthonyjones7320@yklqssgbjeympegr.boldvisiongroup.co.uk
+[INFO] 2025-12-26T18:43:36.898Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Login started for anthonyjones7320@yklqssgbjeympegr.boldvisiongroup.co.uk
+2025-12-26T18:43:36.898Z
+[INFO]	2025-12-26T18:43:36.898Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Navigating to Google login page (English)...
+[INFO] 2025-12-26T18:43:36.898Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Navigating to Google login page (English)...
+2025-12-26T18:43:37.714Z
+[INFO]	2025-12-26T18:43:37.714Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[ANTI-DETECT] ✓ selenium-stealth applied
+[INFO] 2025-12-26T18:43:37.714Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [ANTI-DETECT] ✓ selenium-stealth applied
+2025-12-26T18:43:37.714Z
+[INFO]	2025-12-26T18:43:37.714Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] ✓ Chrome driver created successfully
+[INFO] 2025-12-26T18:43:37.714Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] ✓ Chrome driver created successfully
+2025-12-26T18:43:37.714Z
+[INFO]	2025-12-26T18:43:37.714Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Chrome driver started for barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk
+[INFO] 2025-12-26T18:43:37.714Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Chrome driver started for barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk
+2025-12-26T18:43:37.714Z
+[INFO]	2025-12-26T18:43:37.714Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Login started for barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk
+[INFO] 2025-12-26T18:43:37.714Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Login started for barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk
+2025-12-26T18:43:37.714Z
+[INFO]	2025-12-26T18:43:37.714Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Navigating to Google login page (English)...
+[INFO] 2025-12-26T18:43:37.714Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Navigating to Google login page (English)...
+2025-12-26T18:43:40.928Z
+[INFO]	2025-12-26T18:43:40.928Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Navigation to Google login page completed
+[INFO] 2025-12-26T18:43:40.928Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Navigation to Google login page completed
+2025-12-26T18:43:41.000Z
+[INFO]	2025-12-26T18:43:41.000Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Navigation to Google login page completed
+[INFO] 2025-12-26T18:43:41.000Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Navigation to Google login page completed
+2025-12-26T18:43:42.809Z
+[INFO]	2025-12-26T18:43:42.809Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Email entered with human-like typing
+[INFO] 2025-12-26T18:43:42.809Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Email entered with human-like typing
+2025-12-26T18:43:43.357Z
+[INFO]	2025-12-26T18:43:43.357Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Locating 'Next' button...
+[INFO] 2025-12-26T18:43:43.357Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Locating 'Next' button...
+2025-12-26T18:43:43.394Z
+[INFO]	2025-12-26T18:43:43.394Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Found Next button with xpath: //div[@id='identifierNext']//button
+[INFO] 2025-12-26T18:43:43.394Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Found Next button with xpath: //div[@id='identifierNext']//button
+2025-12-26T18:43:43.394Z
+[INFO]	2025-12-26T18:43:43.394Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Clicking 'Next' button (Attempt 1)...
+[INFO] 2025-12-26T18:43:43.394Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Clicking 'Next' button (Attempt 1)...
+2025-12-26T18:43:43.788Z
+[INFO]	2025-12-26T18:43:43.788Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Page stabilized, proceeding with login
+[INFO] 2025-12-26T18:43:43.788Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Page stabilized, proceeding with login
+2025-12-26T18:43:43.788Z
+[INFO]	2025-12-26T18:43:43.788Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Email submission attempt 1/3
+[INFO] 2025-12-26T18:43:43.788Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Email submission attempt 1/3
+2025-12-26T18:43:43.788Z
+[INFO]	2025-12-26T18:43:43.788Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Locating email input field...
+[INFO] 2025-12-26T18:43:43.788Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Locating email input field...
+2025-12-26T18:43:44.482Z
+[INFO]	2025-12-26T18:43:44.482Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Page stabilized, proceeding with login
+[INFO] 2025-12-26T18:43:44.482Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Page stabilized, proceeding with login
+2025-12-26T18:43:44.483Z
+[INFO]	2025-12-26T18:43:44.482Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Email submission attempt 1/3
+[INFO] 2025-12-26T18:43:44.482Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Email submission attempt 1/3
+2025-12-26T18:43:44.483Z
+[INFO]	2025-12-26T18:43:44.482Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Locating email input field...
+[INFO] 2025-12-26T18:43:44.482Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Locating email input field...
+2025-12-26T18:43:45.335Z
+[INFO]	2025-12-26T18:43:45.335Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Clearing and typing email...
+[INFO] 2025-12-26T18:43:45.335Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Clearing and typing email...
+2025-12-26T18:43:46.520Z
+[INFO]	2025-12-26T18:43:46.520Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Clearing and typing email...
+[INFO] 2025-12-26T18:43:46.520Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Clearing and typing email...
+2025-12-26T18:43:46.778Z
+[INFO]	2025-12-26T18:43:46.778Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] ✓ Transitioned to password page/challenge
+[INFO] 2025-12-26T18:43:46.778Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] ✓ Transitioned to password page/challenge
+2025-12-26T18:43:46.778Z
+[INFO]	2025-12-26T18:43:46.778Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Waiting for page transition...
+[INFO] 2025-12-26T18:43:46.778Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Waiting for page transition...
+2025-12-26T18:43:50.600Z
+[INFO]	2025-12-26T18:43:50.600Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] After email submission - URL: https://accounts.google.com/v3/signin/challenge/pwd?TL=AHE1sGUuevYfVO4XvYCi5xufezcrJUV-ng-P7sGURC0gt..., Title: Welcome
+[INFO] 2025-12-26T18:43:50.600Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] After email submission - URL: https://accounts.google.com/v3/signin/challenge/pwd?TL=AHE1sGUuevYfVO4XvYCi5xufezcrJUV-ng-P7sGURC0gt..., Title: Welcome
+2025-12-26T18:43:54.331Z
+[INFO]	2025-12-26T18:43:54.330Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Waiting 6.4s for password field to appear (after CAPTCHA solve)...
+[INFO] 2025-12-26T18:43:54.330Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Waiting 6.4s for password field to appear (after CAPTCHA solve)...
+2025-12-26T18:43:57.303Z
+[INFO]	2025-12-26T18:43:57.302Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Email entered with human-like typing
+[INFO] 2025-12-26T18:43:57.302Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Email entered with human-like typing
+2025-12-26T18:43:58.136Z
+[INFO]	2025-12-26T18:43:58.136Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Email entered with human-like typing
+[INFO] 2025-12-26T18:43:58.136Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Email entered with human-like typing
+2025-12-26T18:43:58.181Z
+[INFO]	2025-12-26T18:43:58.181Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Locating 'Next' button...
+[INFO] 2025-12-26T18:43:58.181Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Locating 'Next' button...
+2025-12-26T18:43:58.218Z
+[INFO]	2025-12-26T18:43:58.218Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Found Next button with xpath: //div[@id='identifierNext']//button
+[INFO] 2025-12-26T18:43:58.218Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Found Next button with xpath: //div[@id='identifierNext']//button
+2025-12-26T18:43:58.218Z
+[INFO]	2025-12-26T18:43:58.218Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Clicking 'Next' button (Attempt 1)...
+[INFO] 2025-12-26T18:43:58.218Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Clicking 'Next' button (Attempt 1)...
+2025-12-26T18:43:59.099Z
+[INFO]	2025-12-26T18:43:59.099Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Locating 'Next' button...
+[INFO] 2025-12-26T18:43:59.099Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Locating 'Next' button...
+2025-12-26T18:43:59.141Z
+[INFO]	2025-12-26T18:43:59.141Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Found Next button with xpath: //div[@id='identifierNext']//button
+[INFO] 2025-12-26T18:43:59.141Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Found Next button with xpath: //div[@id='identifierNext']//button
+2025-12-26T18:43:59.141Z
+[INFO]	2025-12-26T18:43:59.141Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Clicking 'Next' button (Attempt 1)...
+[INFO] 2025-12-26T18:43:59.141Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Clicking 'Next' button (Attempt 1)...
+2025-12-26T18:44:00.715Z
+[INFO]	2025-12-26T18:44:00.715Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] ✓ Page redirected to password challenge page after CAPTCHA!
+[INFO] 2025-12-26T18:44:00.715Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] ✓ Page redirected to password challenge page after CAPTCHA!
+2025-12-26T18:44:00.715Z
+[INFO]	2025-12-26T18:44:00.715Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Trying to find password input using By.NAME='Passwd' (primary method)
+[INFO] 2025-12-26T18:44:00.715Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Trying to find password input using By.NAME='Passwd' (primary method)
+2025-12-26T18:44:00.971Z
+[INFO]	2025-12-26T18:44:00.971Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Found password input using By.NAME='Passwd'
+[INFO] 2025-12-26T18:44:00.971Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Found password input using By.NAME='Passwd'
+2025-12-26T18:44:01.435Z
+[INFO]	2025-12-26T18:44:01.435Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] ✓ Transitioned to password page/challenge
+[INFO] 2025-12-26T18:44:01.435Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] ✓ Transitioned to password page/challenge
+2025-12-26T18:44:01.435Z
+[INFO]	2025-12-26T18:44:01.435Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Waiting for page transition...
+[INFO] 2025-12-26T18:44:01.435Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Waiting for page transition...
+2025-12-26T18:44:03.700Z
+[ERROR]	2025-12-26T18:44:03.700Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] ✗ Secure Browser Block detected!
+[ERROR] 2025-12-26T18:44:03.700Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] ✗ Secure Browser Block detected!
+2025-12-26T18:44:03.700Z
+[WARNING]	2025-12-26T18:44:03.700Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Login failed with error: SECURE_BROWSER_BLOCK - Secure Browser Block detected
+[WARNING] 2025-12-26T18:44:03.700Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Login failed with error: SECURE_BROWSER_BLOCK - Secure Browser Block detected
+2025-12-26T18:44:03.700Z
+[WARNING]	2025-12-26T18:44:03.700Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Retrying with fresh browser (Attempt 3/3)...
+[WARNING] 2025-12-26T18:44:03.700Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Retrying with fresh browser (Attempt 3/3)...
+2025-12-26T18:44:04.740Z
+[INFO]	2025-12-26T18:44:04.739Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] After email submission - URL: https://accounts.google.com/v3/signin/challenge/pwd?TL=AHE1sGUuMf3M2jSZ0tVcUS3ht7uPP8rMuYJz3L7hH1wdF..., Title: Welcome
+[INFO] 2025-12-26T18:44:04.739Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] After email submission - URL: https://accounts.google.com/v3/signin/challenge/pwd?TL=AHE1sGUuMf3M2jSZ0tVcUS3ht7uPP8rMuYJz3L7hH1wdF..., Title: Welcome
+2025-12-26T18:44:04.769Z
+[WARNING]	2025-12-26T18:44:04.769Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Error cleaning up processes: [Errno 2] No such file or directory: 'pkill'
+[WARNING] 2025-12-26T18:44:04.769Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Error cleaning up processes: [Errno 2] No such file or directory: 'pkill'
+2025-12-26T18:44:04.769Z
+[INFO]	2025-12-26T18:44:04.769Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] [THREAD] Completed user 1/3: anthonyjones7320@yklqssgbjeympegr.boldvisiongroup.co.uk - Status: failed
+[INFO] 2025-12-26T18:44:04.769Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] [THREAD] Completed user 1/3: anthonyjones7320@yklqssgbjeympegr.boldvisiongroup.co.uk - Status: failed
+2025-12-26T18:44:05.925Z
+[INFO]	2025-12-26T18:44:05.925Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Password entered using human-like typing simulation
+[INFO] 2025-12-26T18:44:05.925Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Password entered using human-like typing simulation
+2025-12-26T18:44:05.932Z
+[INFO]	2025-12-26T18:44:05.932Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Password entered successfully
+[INFO] 2025-12-26T18:44:05.932Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Password entered successfully
+2025-12-26T18:44:06.434Z
+[INFO]	2025-12-26T18:44:06.434Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Password submitted using Enter key
+[INFO] 2025-12-26T18:44:06.434Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Password submitted using Enter key
+2025-12-26T18:44:08.226Z
+[INFO]	2025-12-26T18:44:08.225Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Waiting 6.7s for password field to appear (after CAPTCHA solve)...
+[INFO] 2025-12-26T18:44:08.225Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Waiting 6.7s for password field to appear (after CAPTCHA solve)...
+2025-12-26T18:44:11.579Z
+[INFO]	2025-12-26T18:44:11.579Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Post-login check 1/30: URL = https://accounts.google.com/speedbump/gaplustos?TL=AHE1sGUuevYfVO4XvYCi5xufezcrJUV-ng-P7sGURC0gtRFIhnfyZjJOV3gejP69&checkConnection=youtube%3A164&checkedDomains=youtube&dsh=S-1576571621%3A1766774602160319&flowEntry=ServiceLogin&flowName=GlifWebSignIn&hl=en&ifkv=Ac2yZaVnw-BI58qLCOHt4TAJet6D-z4OxBQgVvg5OkwCvHv6mjEimqkbLeVdvz1f6yxHRC0AKaqu&pstMsg=1
+[INFO] 2025-12-26T18:44:11.579Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Post-login check 1/30: URL = https://accounts.google.com/speedbump/gaplustos?TL=AHE1sGUuevYfVO4XvYCi5xufezcrJUV-ng-P7sGURC0gtRFIhnfyZjJOV3gejP69&checkConnection=youtube%3A164&checkedDomains=youtube&dsh=S-1576571621%3A1766774602160319&flowEntry=ServiceLogin&flowName=GlifWebSignIn&hl=en&ifkv=Ac2yZaVnw-BI58qLCOHt4TAJet6D-z4OxBQgVvg5OkwCvHv6mjEimqkbLeVdvz1f6yxHRC0AKaqu&pstMsg=1
+2025-12-26T18:44:11.672Z
+[INFO]	2025-12-26T18:44:11.672Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Speedbump page detected (1/5): https://accounts.google.com/speedbump/gaplustos?TL=AHE1sGUuevYfVO4XvYCi5xufezcrJUV-ng-P7sGURC0gtRFIhnfyZjJOV3gejP69&checkConnection=youtube%3A164&checkedDomains=youtube&dsh=S-1576571621%3A1766774602160319&flowEntry=ServiceLogin&flowName=GlifWebSignIn&hl=en&ifkv=Ac2yZaVnw-BI58qLCOHt4TAJet6D-z4OxBQgVvg5OkwCvHv6mjEimqkbLeVdvz1f6yxHRC0AKaqu&pstMsg=1
+[INFO] 2025-12-26T18:44:11.672Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Speedbump page detected (1/5): https://accounts.google.com/speedbump/gaplustos?TL=AHE1sGUuevYfVO4XvYCi5xufezcrJUV-ng-P7sGURC0gtRFIhnfyZjJOV3gejP69&checkConnection=youtube%3A164&checkedDomains=youtube&dsh=S-1576571621%3A1766774602160319&flowEntry=ServiceLogin&flowName=GlifWebSignIn&hl=en&ifkv=Ac2yZaVnw-BI58qLCOHt4TAJet6D-z4OxBQgVvg5OkwCvHv6mjEimqkbLeVdvz1f6yxHRC0AKaqu&pstMsg=1
+2025-12-26T18:44:11.672Z
+[INFO]	2025-12-26T18:44:11.672Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Google+ TOS speedbump detected, clicking confirm with JavaScript...
+[INFO] 2025-12-26T18:44:11.672Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Google+ TOS speedbump detected, clicking confirm with JavaScript...
+2025-12-26T18:44:13.434Z
+[INFO]	2025-12-26T18:44:13.433Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Clicked #confirm button via JavaScript
+[INFO] 2025-12-26T18:44:13.433Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Clicked #confirm button via JavaScript
+2025-12-26T18:44:14.913Z
+[INFO]	2025-12-26T18:44:14.912Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] ✓ Page redirected to password challenge page after CAPTCHA!
+[INFO] 2025-12-26T18:44:14.912Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] ✓ Page redirected to password challenge page after CAPTCHA!
+2025-12-26T18:44:14.913Z
+[INFO]	2025-12-26T18:44:14.913Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Trying to find password input using By.NAME='Passwd' (primary method)
+[INFO] 2025-12-26T18:44:14.913Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Trying to find password input using By.NAME='Passwd' (primary method)
+2025-12-26T18:44:15.214Z
+[INFO]	2025-12-26T18:44:15.213Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Found password input using By.NAME='Passwd'
+[INFO] 2025-12-26T18:44:15.213Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Found password input using By.NAME='Passwd'
+2025-12-26T18:44:17.439Z
+[INFO]	2025-12-26T18:44:17.439Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Post-login check 2/30: URL = https://myaccount.google.com/interstitials/twosvrequired?hl=en&continue=https://accounts.google.com/ServiceLogin?continue%3Dhttps://accounts.google.com/ManageAccount?nc%253D1%26hl%3Den%26authuser%3D0%26passive%3Dtrue%26sarp%3D1%26aodrpl%3D1%26checkedDomains%3Dyoutube%26checkConnection%3Dyoutube:164%26pstMsg%3D1&tsvesd=1782326652&tsvenfd=0&pli=1
+[INFO] 2025-12-26T18:44:17.439Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Post-login check 2/30: URL = https://myaccount.google.com/interstitials/twosvrequired?hl=en&continue=https://accounts.google.com/ServiceLogin?continue%3Dhttps://accounts.google.com/ManageAccount?nc%253D1%26hl%3Den%26authuser%3D0%26passive%3Dtrue%26sarp%3D1%26aodrpl%3D1%26checkedDomains%3Dyoutube%26checkConnection%3Dyoutube:164%26pstMsg%3D1&tsvesd=1782326652&tsvenfd=0&pli=1
+2025-12-26T18:44:17.615Z
+[INFO]	2025-12-26T18:44:17.614Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Login success - reached account page
+[INFO] 2025-12-26T18:44:17.614Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Login success - reached account page
+2025-12-26T18:44:19.584Z
+[INFO]	2025-12-26T18:44:19.584Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Setting up Authenticator for barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk
+[INFO] 2025-12-26T18:44:19.584Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Setting up Authenticator for barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk
+2025-12-26T18:44:19.584Z
+[INFO]	2025-12-26T18:44:19.584Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Navigating to Authenticator setup page...
+[INFO] 2025-12-26T18:44:19.584Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Navigating to Authenticator setup page...
+2025-12-26T18:44:21.629Z
+[INFO]	2025-12-26T18:44:21.628Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Password entered using human-like typing simulation
+[INFO] 2025-12-26T18:44:21.628Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Password entered using human-like typing simulation
+2025-12-26T18:44:21.637Z
+[INFO]	2025-12-26T18:44:21.637Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Password entered successfully
+[INFO] 2025-12-26T18:44:21.637Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Password entered successfully
+2025-12-26T18:44:22.232Z
+[INFO]	2025-12-26T18:44:22.232Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Password submitted using Enter key
+[INFO] 2025-12-26T18:44:22.232Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Password submitted using Enter key
+2025-12-26T18:44:26.659Z
+[INFO]	2025-12-26T18:44:26.659Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Looking for 'Set up authenticator' button...
+[INFO] 2025-12-26T18:44:26.659Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Looking for 'Set up authenticator' button...
+2025-12-26T18:44:27.190Z
+[INFO]	2025-12-26T18:44:27.190Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Post-login check 1/30: URL = https://accounts.google.com/speedbump/gaplustos?TL=AHE1sGUuMf3M2jSZ0tVcUS3ht7uPP8rMuYJz3L7hH1wdFZsOaChnrjRhE_UTm4-T&checkConnection=youtube%3A259&checkedDomains=youtube&dsh=S-485178234%3A1766774617771018&flowEntry=ServiceLogin&flowName=GlifWebSignIn&hl=en&ifkv=Ac2yZaUeKyUH4wMweVpDyL2LpWIlj4TtZIJocbO81FiJDr90glXOcEQoMOcY6l37VEVV7DgARQL_ZQ&pstMsg=1
+[INFO] 2025-12-26T18:44:27.190Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Post-login check 1/30: URL = https://accounts.google.com/speedbump/gaplustos?TL=AHE1sGUuMf3M2jSZ0tVcUS3ht7uPP8rMuYJz3L7hH1wdFZsOaChnrjRhE_UTm4-T&checkConnection=youtube%3A259&checkedDomains=youtube&dsh=S-485178234%3A1766774617771018&flowEntry=ServiceLogin&flowName=GlifWebSignIn&hl=en&ifkv=Ac2yZaUeKyUH4wMweVpDyL2LpWIlj4TtZIJocbO81FiJDr90glXOcEQoMOcY6l37VEVV7DgARQL_ZQ&pstMsg=1
+2025-12-26T18:44:27.278Z
+[INFO]	2025-12-26T18:44:27.278Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Speedbump page detected (1/5): https://accounts.google.com/speedbump/gaplustos?TL=AHE1sGUuMf3M2jSZ0tVcUS3ht7uPP8rMuYJz3L7hH1wdFZsOaChnrjRhE_UTm4-T&checkConnection=youtube%3A259&checkedDomains=youtube&dsh=S-485178234%3A1766774617771018&flowEntry=ServiceLogin&flowName=GlifWebSignIn&hl=en&ifkv=Ac2yZaUeKyUH4wMweVpDyL2LpWIlj4TtZIJocbO81FiJDr90glXOcEQoMOcY6l37VEVV7DgARQL_ZQ&pstMsg=1
+[INFO] 2025-12-26T18:44:27.278Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Speedbump page detected (1/5): https://accounts.google.com/speedbump/gaplustos?TL=AHE1sGUuMf3M2jSZ0tVcUS3ht7uPP8rMuYJz3L7hH1wdFZsOaChnrjRhE_UTm4-T&checkConnection=youtube%3A259&checkedDomains=youtube&dsh=S-485178234%3A1766774617771018&flowEntry=ServiceLogin&flowName=GlifWebSignIn&hl=en&ifkv=Ac2yZaUeKyUH4wMweVpDyL2LpWIlj4TtZIJocbO81FiJDr90glXOcEQoMOcY6l37VEVV7DgARQL_ZQ&pstMsg=1
+2025-12-26T18:44:27.278Z
+[INFO]	2025-12-26T18:44:27.278Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Google+ TOS speedbump detected, clicking confirm with JavaScript...
+[INFO] 2025-12-26T18:44:27.278Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Google+ TOS speedbump detected, clicking confirm with JavaScript...
+2025-12-26T18:44:29.151Z
+[INFO]	2025-12-26T18:44:29.151Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Clicked #confirm button via JavaScript
+[INFO] 2025-12-26T18:44:29.151Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Clicked #confirm button via JavaScript
+2025-12-26T18:44:29.843Z
+[INFO]	2025-12-26T18:44:29.843Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Clicked 'Set up authenticator' button using: /html/body/c-wiz/div/div[2]/div[3]/c-wiz/div/div/div[3]/div[2]/div/div/div/button
+[INFO] 2025-12-26T18:44:29.843Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Clicked 'Set up authenticator' button using: /html/body/c-wiz/div/div[2]/div[3]/c-wiz/div/div/div[3]/div[2]/div/div/div/button
+2025-12-26T18:44:31.843Z
+[INFO]	2025-12-26T18:44:31.843Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Looking for 'Can't scan it?' link...
+[INFO] 2025-12-26T18:44:31.843Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Looking for 'Can't scan it?' link...
+2025-12-26T18:44:33.157Z
+[INFO]	2025-12-26T18:44:33.157Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Post-login check 2/30: URL = https://myaccount.google.com/interstitials/twosvrequired?hl=en&continue=https://accounts.google.com/ServiceLogin?continue%3Dhttps://accounts.google.com/ManageAccount?nc%253D1%26hl%3Den%26authuser%3D0%26passive%3Dtrue%26sarp%3D1%26aodrpl%3D1%26checkedDomains%3Dyoutube%26checkConnection%3Dyoutube:259%26pstMsg%3D1&tsvesd=1782326668&tsvenfd=0&pli=1
+[INFO] 2025-12-26T18:44:33.157Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Post-login check 2/30: URL = https://myaccount.google.com/interstitials/twosvrequired?hl=en&continue=https://accounts.google.com/ServiceLogin?continue%3Dhttps://accounts.google.com/ManageAccount?nc%253D1%26hl%3Den%26authuser%3D0%26passive%3Dtrue%26sarp%3D1%26aodrpl%3D1%26checkedDomains%3Dyoutube%26checkConnection%3Dyoutube:259%26pstMsg%3D1&tsvesd=1782326668&tsvenfd=0&pli=1
+2025-12-26T18:44:33.311Z
+[INFO]	2025-12-26T18:44:33.311Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Login success - reached account page
+[INFO] 2025-12-26T18:44:33.311Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Login success - reached account page
+2025-12-26T18:44:33.447Z
+[INFO]	2025-12-26T18:44:33.447Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Found 'Can't scan it?' button at div[11]
+[INFO] 2025-12-26T18:44:33.447Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Found 'Can't scan it?' button at div[11]
+2025-12-26T18:44:33.464Z
+[INFO]	2025-12-26T18:44:33.463Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Clicked 'Can't scan it?' link using div[11]
+[INFO] 2025-12-26T18:44:33.463Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Clicked 'Can't scan it?' link using div[11]
+2025-12-26T18:44:34.464Z
+[INFO]	2025-12-26T18:44:34.464Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Extracting secret key...
+[INFO] 2025-12-26T18:44:34.464Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Extracting secret key...
+2025-12-26T18:44:34.641Z
+[INFO]	2025-12-26T18:44:34.641Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Setting up Authenticator for barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk
+[INFO] 2025-12-26T18:44:34.641Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Setting up Authenticator for barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk
+2025-12-26T18:44:34.641Z
+[INFO]	2025-12-26T18:44:34.641Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Navigating to Authenticator setup page...
+[INFO] 2025-12-26T18:44:34.641Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Navigating to Authenticator setup page...
+2025-12-26T18:44:37.629Z
+[ERROR]	2025-12-26T18:44:37.629Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[SELENIUM] Timeout waiting for XPath: /html/body/div[9]/div/div[2]/span/div/div/ol/li[2]/div/strong
+[ERROR] 2025-12-26T18:44:37.629Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [SELENIUM] Timeout waiting for XPath: /html/body/div[9]/div/div[2]/span/div/div/ol/li[2]/div/strong
+2025-12-26T18:44:40.732Z
+[ERROR]	2025-12-26T18:44:40.732Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[SELENIUM] Timeout waiting for XPath: /html/body/div[10]/div/div[2]/span/div/div/ol/li[2]/div/strong
+[ERROR] 2025-12-26T18:44:40.732Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [SELENIUM] Timeout waiting for XPath: /html/body/div[10]/div/div[2]/span/div/div/ol/li[2]/div/strong
+2025-12-26T18:44:40.761Z
+[INFO]	2025-12-26T18:44:40.760Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Extracted secret key using div[11]: Y25O****WF4F
+[INFO] 2025-12-26T18:44:40.760Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Extracted secret key using div[11]: Y25O****WF4F
+2025-12-26T18:44:40.761Z
+[INFO]	2025-12-26T18:44:40.761Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Secret key successfully extracted: Y25O****WF4F
+[INFO] 2025-12-26T18:44:40.761Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Secret key successfully extracted: Y25O****WF4F
+2025-12-26T18:44:40.761Z
+[INFO]	2025-12-26T18:44:40.761Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Clicking 'Next' button to proceed to verification...
+[INFO] 2025-12-26T18:44:40.761Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Clicking 'Next' button to proceed to verification...
+2025-12-26T18:44:41.741Z
+[INFO]	2025-12-26T18:44:41.741Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Looking for 'Set up authenticator' button...
+[INFO] 2025-12-26T18:44:41.741Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Looking for 'Set up authenticator' button...
+2025-12-26T18:44:44.889Z
+[INFO]	2025-12-26T18:44:44.889Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Clicked 'Set up authenticator' button using: /html/body/c-wiz/div/div[2]/div[3]/c-wiz/div/div/div[3]/div[2]/div/div/div/button
+[INFO] 2025-12-26T18:44:44.889Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Clicked 'Set up authenticator' button using: /html/body/c-wiz/div/div[2]/div[3]/c-wiz/div/div/div[3]/div[2]/div/div/div/button
+2025-12-26T18:44:44.944Z
+[INFO]	2025-12-26T18:44:44.944Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Clicked 'Next' button using div[11]
+[INFO] 2025-12-26T18:44:44.944Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Clicked 'Next' button using div[11]
+2025-12-26T18:44:46.889Z
+[INFO]	2025-12-26T18:44:46.889Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Looking for 'Can't scan it?' link...
+[INFO] 2025-12-26T18:44:46.889Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Looking for 'Can't scan it?' link...
+2025-12-26T18:44:46.944Z
+[ERROR]	2025-12-26T18:44:46.944Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[SFTP] Missing SFTP credentials in environment.
+[ERROR] 2025-12-26T18:44:46.944Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [SFTP] Missing SFTP credentials in environment.
+2025-12-26T18:44:46.944Z
+[WARNING]	2025-12-26T18:44:46.944Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[SFTP] Could not upload secret to SFTP, continuing anyway...
+[WARNING] 2025-12-26T18:44:46.944Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [SFTP] Could not upload secret to SFTP, continuing anyway...
+2025-12-26T18:44:46.944Z
+[INFO]	2025-12-26T18:44:46.944Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Verifying Authenticator setup for barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk
+[INFO] 2025-12-26T18:44:46.944Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Verifying Authenticator setup for barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk
+2025-12-26T18:44:46.944Z
+[INFO]	2025-12-26T18:44:46.944Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Generated TOTP code for verification: 008488
+[INFO] 2025-12-26T18:44:46.944Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Generated TOTP code for verification: 008488
+2025-12-26T18:44:48.501Z
+[INFO]	2025-12-26T18:44:48.501Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Found 'Can't scan it?' button at div[11]
+[INFO] 2025-12-26T18:44:48.501Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Found 'Can't scan it?' button at div[11]
+2025-12-26T18:44:48.524Z
+[INFO]	2025-12-26T18:44:48.524Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Clicked 'Can't scan it?' link using div[11]
+[INFO] 2025-12-26T18:44:48.524Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Clicked 'Can't scan it?' link using div[11]
+2025-12-26T18:44:49.524Z
+[INFO]	2025-12-26T18:44:49.524Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Extracting secret key...
+[INFO] 2025-12-26T18:44:49.524Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Extracting secret key...
+2025-12-26T18:44:52.228Z
+[INFO]	2025-12-26T18:44:52.227Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Found OTP input using div[11]
+[INFO] 2025-12-26T18:44:52.227Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Found OTP input using div[11]
+2025-12-26T18:44:52.625Z
+[ERROR]	2025-12-26T18:44:52.625Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[SELENIUM] Timeout waiting for XPath: /html/body/div[9]/div/div[2]/span/div/div/ol/li[2]/div/strong
+[ERROR] 2025-12-26T18:44:52.625Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [SELENIUM] Timeout waiting for XPath: /html/body/div[9]/div/div[2]/span/div/div/ol/li[2]/div/strong
+2025-12-26T18:44:52.821Z
+[INFO]	2025-12-26T18:44:52.821Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Entered TOTP code
+[INFO] 2025-12-26T18:44:52.821Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Entered TOTP code
+2025-12-26T18:44:55.722Z
+[ERROR]	2025-12-26T18:44:55.722Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[SELENIUM] Timeout waiting for XPath: /html/body/div[10]/div/div[2]/span/div/div/ol/li[2]/div/strong
+[ERROR] 2025-12-26T18:44:55.722Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [SELENIUM] Timeout waiting for XPath: /html/body/div[10]/div/div[2]/span/div/div/ol/li[2]/div/strong
+2025-12-26T18:44:55.750Z
+[INFO]	2025-12-26T18:44:55.749Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Extracted secret key using div[11]: KY6F****EXM5
+[INFO] 2025-12-26T18:44:55.749Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Extracted secret key using div[11]: KY6F****EXM5
+2025-12-26T18:44:55.750Z
+[INFO]	2025-12-26T18:44:55.750Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Secret key successfully extracted: KY6F****EXM5
+[INFO] 2025-12-26T18:44:55.750Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Secret key successfully extracted: KY6F****EXM5
+2025-12-26T18:44:55.750Z
+[INFO]	2025-12-26T18:44:55.750Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Clicking 'Next' button to proceed to verification...
+[INFO] 2025-12-26T18:44:55.750Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Clicking 'Next' button to proceed to verification...
+2025-12-26T18:44:55.938Z
+[INFO]	2025-12-26T18:44:55.938Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Clicked Verify button using div[11]
+[INFO] 2025-12-26T18:44:55.938Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Clicked Verify button using div[11]
+2025-12-26T18:44:58.939Z
+[INFO]	2025-12-26T18:44:58.939Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Authenticator verified successfully
+[INFO] 2025-12-26T18:44:58.939Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Authenticator verified successfully
+2025-12-26T18:44:58.939Z
+[INFO]	2025-12-26T18:44:58.939Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Navigating to 2-Step Verification page for barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk...
+[INFO] 2025-12-26T18:44:58.939Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Navigating to 2-Step Verification page for barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk...
+2025-12-26T18:45:00.052Z
+[INFO]	2025-12-26T18:45:00.052Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Clicked 'Next' button using div[11]
+[INFO] 2025-12-26T18:45:00.052Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Clicked 'Next' button using div[11]
+2025-12-26T18:45:02.053Z
+[ERROR]	2025-12-26T18:45:02.053Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[SFTP] Missing SFTP credentials in environment.
+[ERROR] 2025-12-26T18:45:02.053Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [SFTP] Missing SFTP credentials in environment.
+2025-12-26T18:45:02.053Z
+[WARNING]	2025-12-26T18:45:02.053Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[SFTP] Could not upload secret to SFTP, continuing anyway...
+[WARNING] 2025-12-26T18:45:02.053Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [SFTP] Could not upload secret to SFTP, continuing anyway...
+2025-12-26T18:45:02.053Z
+[INFO]	2025-12-26T18:45:02.053Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Verifying Authenticator setup for barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk
+[INFO] 2025-12-26T18:45:02.053Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Verifying Authenticator setup for barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk
+2025-12-26T18:45:02.053Z
+[INFO]	2025-12-26T18:45:02.053Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Generated TOTP code for verification: 942892
+[INFO] 2025-12-26T18:45:02.053Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Generated TOTP code for verification: 942892
+2025-12-26T18:45:07.401Z
+[INFO]	2025-12-26T18:45:07.401Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Found OTP input using div[11]
+[INFO] 2025-12-26T18:45:07.401Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Found OTP input using div[11]
+2025-12-26T18:45:08.011Z
+[INFO]	2025-12-26T18:45:08.011Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Entered TOTP code
+[INFO] 2025-12-26T18:45:08.011Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Entered TOTP code
+2025-12-26T18:45:11.146Z
+[INFO]	2025-12-26T18:45:11.146Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Clicked Verify button using div[11]
+[INFO] 2025-12-26T18:45:11.146Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Clicked Verify button using div[11]
+2025-12-26T18:45:12.396Z
+[ERROR]	2025-12-26T18:45:12.395Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[SELENIUM] Timeout waiting for clickable XPath: /html/body/c-wiz/div/div[2]/div[3]/c-wiz/div/div[2]/div[4]/div/button
+[ERROR] 2025-12-26T18:45:12.395Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [SELENIUM] Timeout waiting for clickable XPath: /html/body/c-wiz/div/div[2]/div[3]/c-wiz/div/div[2]/div[4]/div/button
+2025-12-26T18:45:14.146Z
+[INFO]	2025-12-26T18:45:14.146Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Authenticator verified successfully
+[INFO] 2025-12-26T18:45:14.146Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Authenticator verified successfully
+2025-12-26T18:45:14.146Z
+[INFO]	2025-12-26T18:45:14.146Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Navigating to 2-Step Verification page for barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk...
+[INFO] 2025-12-26T18:45:14.146Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Navigating to 2-Step Verification page for barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk...
+2025-12-26T18:45:17.654Z
+[ERROR]	2025-12-26T18:45:17.654Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[SELENIUM] Timeout waiting for clickable XPath: /html/body/c-wiz/div/div[2]/div[2]/c-wiz/div/div[2]/div[4]/div/button
+[ERROR] 2025-12-26T18:45:17.654Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [SELENIUM] Timeout waiting for clickable XPath: /html/body/c-wiz/div/div[2]/div[2]/c-wiz/div/div[2]/div[4]/div/button
+2025-12-26T18:45:22.840Z
+[ERROR]	2025-12-26T18:45:22.839Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[SELENIUM] Timeout waiting for clickable XPath: /html/body/c-wiz/div/div[2]/div[2]/c-wiz/div/div[2]/div[4]/div/button/span[6]
+[ERROR] 2025-12-26T18:45:22.839Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [SELENIUM] Timeout waiting for clickable XPath: /html/body/c-wiz/div/div[2]/div[2]/c-wiz/div/div[2]/div[4]/div/button/span[6]
+2025-12-26T18:45:27.540Z
+[ERROR]	2025-12-26T18:45:27.540Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[SELENIUM] Timeout waiting for clickable XPath: /html/body/c-wiz/div/div[2]/div[3]/c-wiz/div/div[2]/div[4]/div/button
+[ERROR] 2025-12-26T18:45:27.540Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [SELENIUM] Timeout waiting for clickable XPath: /html/body/c-wiz/div/div[2]/div[3]/c-wiz/div/div[2]/div[4]/div/button
+2025-12-26T18:45:28.021Z
+[ERROR]	2025-12-26T18:45:28.020Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[SELENIUM] Timeout waiting for clickable XPath: /html/body/c-wiz/div/div[2]/div[3]/c-wiz/div/div[2]/div[4]/div/button/span[6]
+[ERROR] 2025-12-26T18:45:28.020Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [SELENIUM] Timeout waiting for clickable XPath: /html/body/c-wiz/div/div[2]/div[3]/c-wiz/div/div[2]/div[4]/div/button/span[6]
+2025-12-26T18:45:28.095Z
+[INFO]	2025-12-26T18:45:28.095Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Clicked on 'Turn On 2-Step Verification' using xpath: //button[contains(., 'Turn on')]
+[INFO] 2025-12-26T18:45:28.095Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Clicked on 'Turn On 2-Step Verification' using xpath: //button[contains(., 'Turn on')]
+2025-12-26T18:45:32.702Z
+[ERROR]	2025-12-26T18:45:32.702Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[SELENIUM] Timeout waiting for clickable XPath: /html/body/c-wiz/div/div[2]/div[2]/c-wiz/div/div[2]/div[4]/div/button
+[ERROR] 2025-12-26T18:45:32.702Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [SELENIUM] Timeout waiting for clickable XPath: /html/body/c-wiz/div/div[2]/div[2]/c-wiz/div/div[2]/div[4]/div/button
+2025-12-26T18:45:35.262Z
+[ERROR]	2025-12-26T18:45:35.262Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[SELENIUM] Timeout waiting for clickable XPath: //button//span[contains(text(), "Skip")]
+[ERROR] 2025-12-26T18:45:35.262Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [SELENIUM] Timeout waiting for clickable XPath: //button//span[contains(text(), "Skip")]
+2025-12-26T18:45:35.262Z
+[INFO]	2025-12-26T18:45:35.262Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] 2-Step Verification enabled successfully for barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk
+[INFO] 2025-12-26T18:45:35.262Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] 2-Step Verification enabled successfully for barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk
+2025-12-26T18:45:35.262Z
+[INFO]	2025-12-26T18:45:35.262Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Waiting for app password authorization (may take up to 30 seconds)...
+[INFO] 2025-12-26T18:45:35.262Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Waiting for app password authorization (may take up to 30 seconds)...
+2025-12-26T18:45:37.854Z
+[ERROR]	2025-12-26T18:45:37.854Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[SELENIUM] Timeout waiting for clickable XPath: /html/body/c-wiz/div/div[2]/div[2]/c-wiz/div/div[2]/div[4]/div/button/span[6]
+[ERROR] 2025-12-26T18:45:37.854Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [SELENIUM] Timeout waiting for clickable XPath: /html/body/c-wiz/div/div[2]/div[2]/c-wiz/div/div[2]/div[4]/div/button/span[6]
+2025-12-26T18:45:40.262Z
+[INFO]	2025-12-26T18:45:40.262Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Generating App Password for barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk
+[INFO] 2025-12-26T18:45:40.262Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Generating App Password for barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk
+2025-12-26T18:45:40.262Z
+[INFO]	2025-12-26T18:45:40.262Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Waiting for app password page to be ready (may take up to 30 seconds after enabling 2SV)...
+[INFO] 2025-12-26T18:45:40.262Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Waiting for app password page to be ready (may take up to 30 seconds after enabling 2SV)...
+2025-12-26T18:45:43.040Z
+[ERROR]	2025-12-26T18:45:43.040Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[SELENIUM] Timeout waiting for clickable XPath: /html/body/c-wiz/div/div[2]/div[3]/c-wiz/div/div[2]/div[4]/div/button/span[6]
+[ERROR] 2025-12-26T18:45:43.040Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [SELENIUM] Timeout waiting for clickable XPath: /html/body/c-wiz/div/div[2]/div[3]/c-wiz/div/div[2]/div[4]/div/button/span[6]
+2025-12-26T18:45:43.090Z
+[INFO]	2025-12-26T18:45:43.090Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Clicked on 'Turn On 2-Step Verification' using xpath: //button[contains(., 'Turn on')]
+[INFO] 2025-12-26T18:45:43.090Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Clicked on 'Turn On 2-Step Verification' using xpath: //button[contains(., 'Turn on')]
+2025-12-26T18:45:47.371Z
+[INFO]	2025-12-26T18:45:47.370Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] App passwords page loaded
+[INFO] 2025-12-26T18:45:47.370Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] App passwords page loaded
+2025-12-26T18:45:47.904Z
+[INFO]	2025-12-26T18:45:47.903Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Found app name input field: /html/body/c-wiz/div/div[2]/div[3]/c-wiz/div/div[4]/div/div[3]/div/div[1]/div/div/div[1]/span[3]/input
+[INFO] 2025-12-26T18:45:47.903Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Found app name input field: /html/body/c-wiz/div/div[2]/div[3]/c-wiz/div/div[4]/div/div[3]/div/div[1]/div/div/div[1]/span[3]/input
+2025-12-26T18:45:47.904Z
+[INFO]	2025-12-26T18:45:47.904Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Generated app name: App-1766774747
+[INFO] 2025-12-26T18:45:47.904Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Generated app name: App-1766774747
+2025-12-26T18:45:48.021Z
+[INFO]	2025-12-26T18:45:48.021Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Entered app name using regular method
+[INFO] 2025-12-26T18:45:48.021Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Entered app name using regular method
+2025-12-26T18:45:49.021Z
+[INFO]	2025-12-26T18:45:49.021Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Attempting to click Generate button (Attempt 1)...
+[INFO] 2025-12-26T18:45:49.021Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Attempting to click Generate button (Attempt 1)...
+2025-12-26T18:45:49.093Z
+[INFO]	2025-12-26T18:45:49.093Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Clicked Generate button: /html/body/c-wiz[1]/div/div[2]/div[3]/c-wiz/div/div[4]/div/div[3]/div/div[2]/div/div/div/button
+[INFO] 2025-12-26T18:45:49.093Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Clicked Generate button: /html/body/c-wiz[1]/div/div[2]/div[3]/c-wiz/div/div[4]/div/div[3]/div/div[2]/div/div/div/button
+2025-12-26T18:45:50.283Z
+[ERROR]	2025-12-26T18:45:50.283Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[SELENIUM] Timeout waiting for clickable XPath: //button//span[contains(text(), "Skip")]
+[ERROR] 2025-12-26T18:45:50.283Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [SELENIUM] Timeout waiting for clickable XPath: //button//span[contains(text(), "Skip")]
+2025-12-26T18:45:50.283Z
+[INFO]	2025-12-26T18:45:50.283Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] 2-Step Verification enabled successfully for barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk
+[INFO] 2025-12-26T18:45:50.283Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] 2-Step Verification enabled successfully for barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk
+2025-12-26T18:45:50.283Z
+[INFO]	2025-12-26T18:45:50.283Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Waiting for app password authorization (may take up to 30 seconds)...
+[INFO] 2025-12-26T18:45:50.283Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Waiting for app password authorization (may take up to 30 seconds)...
+2025-12-26T18:45:51.093Z
+[INFO]	2025-12-26T18:45:51.093Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Waiting for app password dialog to appear...
+[INFO] 2025-12-26T18:45:51.093Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Waiting for app password dialog to appear...
+2025-12-26T18:45:51.107Z
+[INFO]	2025-12-26T18:45:51.107Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] App password dialog detected: //div[@aria-modal='true']
+[INFO] 2025-12-26T18:45:51.107Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] App password dialog detected: //div[@aria-modal='true']
+2025-12-26T18:45:51.107Z
+[INFO]	2025-12-26T18:45:51.107Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Attempting to extract password from span elements...
+[INFO] 2025-12-26T18:45:51.107Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Attempting to extract password from span elements...
+2025-12-26T18:45:51.275Z
+[INFO]	2025-12-26T18:45:51.275Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Extracted app password from spans: jodi****npbw
+[INFO] 2025-12-26T18:45:51.275Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Extracted app password from spans: jodi****npbw
+2025-12-26T18:45:51.275Z
+[INFO]	2025-12-26T18:45:51.275Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] App Password generated successfully
+[INFO] 2025-12-26T18:45:51.275Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] App Password generated successfully
+2025-12-26T18:45:51.300Z
+[INFO]	2025-12-26T18:45:51.300Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[DYNAMODB] Using DynamoDB region: eu-west-1 (centralized storage)
+[INFO] 2025-12-26T18:45:51.300Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [DYNAMODB] Using DynamoDB region: eu-west-1 (centralized storage)
+2025-12-26T18:45:51.338Z
+[INFO]	2025-12-26T18:45:51.338Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[DYNAMODB] Successfully saved barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk to gbot-app-passwords
+[INFO] 2025-12-26T18:45:51.338Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [DYNAMODB] Successfully saved barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk to gbot-app-passwords
+2025-12-26T18:45:51.338Z
+[INFO]	2025-12-26T18:45:51.338Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[DYNAMODB] ✓ Password saved successfully for barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk
+[INFO] 2025-12-26T18:45:51.338Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [DYNAMODB] ✓ Password saved successfully for barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk
+2025-12-26T18:45:51.338Z
+[INFO]	2025-12-26T18:45:51.338Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] All steps completed successfully for barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk in 197.54 seconds
+[INFO] 2025-12-26T18:45:51.338Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] All steps completed successfully for barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk in 197.54 seconds
+2025-12-26T18:45:51.404Z
+[INFO]	2025-12-26T18:45:51.404Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Chrome driver closed for barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk
+[INFO] 2025-12-26T18:45:51.404Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Chrome driver closed for barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk
+2025-12-26T18:45:51.404Z
+[INFO]	2025-12-26T18:45:51.404Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] [THREAD] Completed user 2/3: barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk - Status: success
+[INFO] 2025-12-26T18:45:51.404Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] [THREAD] Completed user 2/3: barbaraclark5980@yklqssgbjeympegr.boldvisiongroup.co.uk - Status: success
+2025-12-26T18:45:55.284Z
+[INFO]	2025-12-26T18:45:55.283Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Generating App Password for barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk
+[INFO] 2025-12-26T18:45:55.283Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Generating App Password for barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk
+2025-12-26T18:45:55.284Z
+[INFO]	2025-12-26T18:45:55.284Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Waiting for app password page to be ready (may take up to 30 seconds after enabling 2SV)...
+[INFO] 2025-12-26T18:45:55.284Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Waiting for app password page to be ready (may take up to 30 seconds after enabling 2SV)...
+2025-12-26T18:46:03.030Z
+[INFO]	2025-12-26T18:46:03.030Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] App passwords page loaded
+[INFO] 2025-12-26T18:46:03.030Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] App passwords page loaded
+2025-12-26T18:46:03.581Z
+[INFO]	2025-12-26T18:46:03.580Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Found app name input field: /html/body/c-wiz/div/div[2]/div[3]/c-wiz/div/div[4]/div/div[3]/div/div[1]/div/div/div[1]/span[3]/input
+[INFO] 2025-12-26T18:46:03.580Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Found app name input field: /html/body/c-wiz/div/div[2]/div[3]/c-wiz/div/div[4]/div/div[3]/div/div[1]/div/div/div[1]/span[3]/input
+2025-12-26T18:46:03.581Z
+[INFO]	2025-12-26T18:46:03.581Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Generated app name: App-1766774763
+[INFO] 2025-12-26T18:46:03.581Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Generated app name: App-1766774763
+2025-12-26T18:46:03.758Z
+[INFO]	2025-12-26T18:46:03.758Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Entered app name using regular method
+[INFO] 2025-12-26T18:46:03.758Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Entered app name using regular method
+2025-12-26T18:46:04.758Z
+[INFO]	2025-12-26T18:46:04.758Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Attempting to click Generate button (Attempt 1)...
+[INFO] 2025-12-26T18:46:04.758Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Attempting to click Generate button (Attempt 1)...
+2025-12-26T18:46:04.884Z
+[INFO]	2025-12-26T18:46:04.873Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Clicked Generate button: /html/body/c-wiz[1]/div/div[2]/div[3]/c-wiz/div/div[4]/div/div[3]/div/div[2]/div/div/div/button
+[INFO] 2025-12-26T18:46:04.873Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Clicked Generate button: /html/body/c-wiz[1]/div/div[2]/div[3]/c-wiz/div/div[4]/div/div[3]/div/div[2]/div/div/div/button
+2025-12-26T18:46:06.874Z
+[INFO]	2025-12-26T18:46:06.874Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Waiting for app password dialog to appear...
+[INFO] 2025-12-26T18:46:06.874Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Waiting for app password dialog to appear...
+2025-12-26T18:46:06.892Z
+[INFO]	2025-12-26T18:46:06.892Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] App password dialog detected: //div[@aria-modal='true']
+[INFO] 2025-12-26T18:46:06.892Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] App password dialog detected: //div[@aria-modal='true']
+2025-12-26T18:46:06.892Z
+[INFO]	2025-12-26T18:46:06.892Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Attempting to extract password from span elements...
+[INFO] 2025-12-26T18:46:06.892Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Attempting to extract password from span elements...
+2025-12-26T18:46:07.179Z
+[INFO]	2025-12-26T18:46:07.179Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] Extracted app password from spans: xbqu****plrh
+[INFO] 2025-12-26T18:46:07.179Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] Extracted app password from spans: xbqu****plrh
+2025-12-26T18:46:07.179Z
+[INFO]	2025-12-26T18:46:07.179Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[STEP] App Password generated successfully
+[INFO] 2025-12-26T18:46:07.179Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [STEP] App Password generated successfully
+2025-12-26T18:46:07.189Z
+[INFO]	2025-12-26T18:46:07.188Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[DYNAMODB] Successfully saved barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk to gbot-app-passwords
+[INFO] 2025-12-26T18:46:07.188Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [DYNAMODB] Successfully saved barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk to gbot-app-passwords
+2025-12-26T18:46:07.189Z
+[INFO]	2025-12-26T18:46:07.188Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[DYNAMODB] ✓ Password saved successfully for barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk
+[INFO] 2025-12-26T18:46:07.188Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [DYNAMODB] ✓ Password saved successfully for barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk
+2025-12-26T18:46:07.189Z
+[INFO]	2025-12-26T18:46:07.188Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] All steps completed successfully for barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk in 213.39 seconds
+[INFO] 2025-12-26T18:46:07.188Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] All steps completed successfully for barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk in 213.39 seconds
+2025-12-26T18:46:08.303Z
+[INFO]	2025-12-26T18:46:08.303Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Chrome driver closed for barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk
+[INFO] 2025-12-26T18:46:08.303Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Chrome driver closed for barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk
+2025-12-26T18:46:08.303Z
+[INFO]	2025-12-26T18:46:08.303Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] [THREAD] Completed user 3/3: barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk - Status: success
+[INFO] 2025-12-26T18:46:08.303Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] [THREAD] Completed user 3/3: barbarasanchez4073@yklqssgbjeympegr.boldvisiongroup.co.uk - Status: success
+2025-12-26T18:46:08.304Z
+[INFO]	2025-12-26T18:46:08.304Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] All 3 users processed in parallel
+[INFO] 2025-12-26T18:46:08.304Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] All 3 users processed in parallel
+2025-12-26T18:46:08.304Z
+[INFO]	2025-12-26T18:46:08.304Z	3bf1a915-fef0-42f1-b7b4-3fb24d431696	[LAMBDA] Batch processing completed: 2 success, 1 failed in 214.51s
+[INFO] 2025-12-26T18:46:08.304Z 3bf1a915-fef0-42f1-b7b4-3fb24d431696 [LAMBDA] Batch processing completed: 2 success, 1 failed in 214.51s
+2025-12-26T18:46:08.306Z
+END RequestId: 3bf1a915-fef0-42f1-b7b4-3fb24d431696
+END RequestId: 3bf1a915-fef0-42f1-b7b4-3fb24d431696
+2025-12-26T18:46:08.307Z
+REPORT RequestId: 3bf1a915-fef0-42f1-b7b4-3fb24d431696	Duration: 214507.82 ms	Billed Duration: 217335 ms	Memory Size: 2048 MB	Max Memory Used: 1202 MB	Init Duration: 2827.14 ms	
+REPORT RequestId: 3bf1a915-fef0-42f1-b7b4-3fb24d431696 Duration: 214507.82 ms Billed Duration: 217335 ms Memory Size: 2048 MB Max Memory Used: 1202 MB Init Duration: 2827.14 ms

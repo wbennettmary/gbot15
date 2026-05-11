@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en" data-color-mode="light" data-light-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emergency Access - GBot Web App</title>
+    <!-- GitHub Primer CSS -->
+    <link href="https://unpkg.com/@primer/css@^20.2.4/dist/primer.css" rel="stylesheet">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+            background-color: #f6f8fa;
+            min-height: 100vh;
+            margin: 0;
+            color: #24292f;
+        }
+        .emergency-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 24px;
+        }
+        .emergency-card {
+            background-color: #ffffff;
+            border: 1px solid #d0d7de;
+            border-radius: 12px;
+            padding: 0;
+            max-width: 480px;
+            width: 100%;
+            box-shadow: 0 8px 24px rgba(16, 22, 26, 0.1);
+        }
+        .emergency-header {
+            background-color: #da3633;
+            color: #ffffff;
+            padding: 24px;
+            border-radius: 12px 12px 0 0;
+            text-align: center;
+            border-bottom: 1px solid #d0d7de;
+        }
+        .emergency-title {
+            font-size: 24px;
+            font-weight: 600;
+            margin: 0 0 8px 0;
+        }
+        .emergency-subtitle {
+            font-size: 16px;
+            margin: 0;
+            opacity: 0.9;
+        }
+        .emergency-body {
+            padding: 32px;
+        }
+        .form-group-github {
+            margin-bottom: 16px;
+        }
+        .form-label-github {
+            display: block;
+            font-weight: 600;
+            font-size: 14px;
+            color: #24292f;
+            margin-bottom: 8px;
+        }
+        .form-control-github {
+            background-color: #f6f8fa;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 14px;
+            color: #24292f;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .form-control-github:focus {
+            border-color: #0969da;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.3);
+        }
+        .input-group-github {
+            display: flex;
+            gap: 8px;
+        }
+        .input-group-github .form-control-github {
+            flex: 1;
+        }
+        .btn-github {
+            background-color: #f6f8fa;
+            border: 1px solid #d0d7de;
+            color: #24292f;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 14px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+        .btn-github:hover {
+            background-color: #f3f4f6;
+            border-color: #afb8c1;
+            color: #24292f;
+            text-decoration: none;
+        }
+        .btn-github-danger {
+            background-color: #da3633;
+            border: 1px solid #da3633;
+            color: #ffffff;
+        }
+        .btn-github-danger:hover {
+            background-color: #b62324;
+            border-color: #b62324;
+            color: #ffffff;
+        }
+        .btn-emergency {
+            width: 100%;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: 600;
+        }
+        .form-text {
+            font-size: 12px;
+            color: #656d76;
+            margin-top: 6px;
+        }
+        .alert-github {
+            padding: 16px;
+            border-radius: 6px;
+            border: 1px solid;
+            margin: 16px 0;
+            font-size: 14px;
+        }
+        .alert-success {
+            background-color: #dafbe1;
+            border-color: #2da44e;
+            color: #1a7f37;
+        }
+        .alert-danger {
+            background-color: #ffebe9;
+            border-color: #da3633;
+            color: #cf222e;
+        }
+        .alert-warning {
+            background-color: #fff8c5;
+            border-color: #d1242f;
+            color: #7d4e00;
+        }
+        .alert-info {
+            background-color: #dbeafe;
+            border-color: #0969da;
+            color: #0969da;
+        }
+        .note-box {
+            background-color: #dbeafe;
+            border: 1px solid #0969da;
+            border-radius: 6px;
+            padding: 16px;
+            margin-top: 24px;
+            font-size: 12px;
+            color: #0969da;
+        }
+    </style>
+</head>
+<body>
+    <div class="emergency-container">
+        <div class="emergency-card">
+            <div class="emergency-header">
+                <i class="fas fa-exclamation-triangle" style="font-size: 32px; margin-bottom: 16px;"></i>
+                <h1 class="emergency-title">Emergency Access</h1>
+                <p class="emergency-subtitle">GBot Web Application</p>
+            </div>
+            <div class="emergency-body">
+                <div style="text-align: center; margin-bottom: 24px;">
+                    <p style="color: #656d76; margin: 0;">
+                        You are accessing this application from an IP address that is not whitelisted. 
+                        Use this emergency access to add your IP to the whitelist.
+                    </p>
+                </div>
+                <form id="emergency-form">
+                    <div class="form-group-github">
+                        <label for="current_ip" class="form-label-github">
+                            <i class="fas fa-globe"></i> Your Current IP Address
+                        </label>
+                        <div class="input-group-github">
+                            <input type="text" class="form-control-github" id="current_ip" readonly placeholder="Detecting...">
+                            <button class="btn-github" type="button" onclick="detectIP()">
+                                <i class="fas fa-search"></i> Detect
+                            </button>
+                        </div>
+                        <div class="form-text">
+                            <i class="fas fa-info-circle"></i> This will be automatically detected
+                        </div>
+                    </div>
+                    <div class="form-group-github">
+                        <label for="emergency_key" class="form-label-github">
+                            <i class="fas fa-key"></i> Emergency Access Key
+                        </label>
+                        <input type="text" class="form-control-github" id="emergency_key" 
+                               placeholder="Enter your WHITELIST_TOKEN or SECRET_KEY" required>
+                        <div class="form-text">
+                            <strong>Instructions:</strong><br>
+                            • Use <code>WHITELIST_TOKEN</code> to automatically whitelist your current IP<br>
+                            • Use <code>SECRET_KEY</code> to manually add an IP address<br>
+                            • Both keys are found in your <code>.env</code> file
+                        </div>
+                    </div>
+                    <button type="submit" class="btn-github btn-github-danger btn-emergency">
+                        <i class="fas fa-shield-alt"></i>
+                        Grant Emergency Access
+                    </button>
+                </form>
+                <div id="status-container"></div>
+                <div class="note-box">
+                    <i class="fas fa-info-circle"></i>
+                    <strong>Note:</strong> This emergency access is only for initial setup. 
+                    Once your IP is whitelisted, you can access the main application normally.
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            detectIP();
+            $("#emergency-form").submit(function(e) {
+                e.preventDefault();
+                grantEmergencyAccess();
+            });
+        });
+        function detectIP() {
+            $("#current_ip").val("Detecting...");
+            $.ajax({
+                url: "https://api.ipify.org?format=json",
+                type: "GET",
+                timeout: 5000,
+                success: function(data) { $("#current_ip").val(data.ip); },
+                error: function() {
+                    $.ajax({
+                        url: "https://ipinfo.io/ip",
+                        type: "GET",
+                        timeout: 5000,
+                        success: function(ip) { $("#current_ip").val(ip.trim()); },
+                        error: function() {
+                            $("#current_ip").val("Could not detect");
+                            showStatus("Could not automatically detect your IP address. Please enter it manually.", "warning");
+                        }
+                    });
+                }
+            });
+        }
+        function grantEmergencyAccess() {
+            var ipAddress = $("#current_ip").val().trim();
+            var emergencyKey = $("#emergency_key").val().trim();
+            if (!ipAddress || ipAddress === "Could not detect" || ipAddress === "Detecting...") {
+                showStatus("Please wait for IP detection to complete or enter your IP manually.", "warning");
+                return;
+            }
+            if (!emergencyKey) {
+                showStatus("Please enter the emergency access key.", "warning");
+                return;
+            }
+            showStatus("Granting emergency access...", "info");
+            $.ajax({
+                url: "/api/emergency-add-ip",
+                type: "POST",
+                contentType: "application/json",
+                data: JSON.stringify({ ip_address: ipAddress, emergency_key: emergencyKey }),
+                success: function(response) {
+                    if (response.success) {
+                        showStatus("✅ Emergency access granted! Your IP has been whitelisted. Redirecting to main application...", "success");
+                        setTimeout(function() { window.location.href = "/dashboard"; }, 2000);
+                    } else {
+                        showStatus("❌ " + response.error, "danger");
+                    }
+                },
+                error: function(xhr, status, error) {
+                    if (xhr.status === 403) {
+                        showStatus("❌ Access denied. Please check your emergency access key.", "danger");
+                    } else {
+                        showStatus("❌ Network error: " + error, "danger");
+                    }
+                }
+            });
+        }
+        function showStatus(message, type) {
+            var alertClass = type === "success" ? "alert-success" : type === "danger" ? "alert-danger" : type === "warning" ? "alert-warning" : "alert-info";
+            var icon = type === "success" ? "fas fa-check-circle" : 
+                      type === "danger" ? "fas fa-exclamation-circle" : 
+                      type === "warning" ? "fas fa-exclamation-triangle" : "fas fa-info-circle";
+            var statusHtml = "<div class=\"alert-github " + alertClass + "\" style=\"display: flex; align-items: center; gap: 8px;\">" +
+                            "<i class=\"" + icon + "\"></i>" +
+                            "<span>" + message + "</span>" +
+                            "</div>";
+            $("#status-container").html(statusHtml);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,927 @@
+{% extends "base.html" %}
+
+{% block title %}List Management - GBot Web{% endblock %}
+
+{% block content %}
+<div class="glass-container-fluid">
+    <!-- Header -->
+    <div class="glass-panel d-flex justify-content-between align-items-center mb-4 p-4"
+        style="border-left: 4px solid var(--accent-primary);">
+        <div>
+            <h1 class="d-flex align-items-center m-0 fs-4 fw-bold" style="color: var(--text-primary);">
+                <i class="fas fa-clipboard-list me-3" style="color: var(--accent-primary);"></i>List Management
+            </h1>
+            <p class="m-0 mt-1 text-muted small">Manage Workspace account lists with 14-day lifecycle and 24h usage
+                tracking</p>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <!-- Grid Configuration -->
+            <div class="d-flex align-items-center gap-1">
+                <span class="text-muted" style="font-size: 12px;">Columns:</span>
+                <select id="gridColumns" class="glass-input"
+                    style="width: 45px; padding: 4px 6px; border-radius: 6px; font-size: 12px; height: 28px; line-height: 1;"
+                    onchange="updateGridColumns()">
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4" selected>4</option>
+                    <option value="5">5</option>
+                </select>
+            </div>
+
+            <button onclick="openAddModal()" class="glass-button glass-button-primary"
+                style="padding: 6px 12px; font-size: 12px; height: 28px;">
+                <i class="fas fa-plus me-1"></i>Add New List
+            </button>
+        </div>
+
+    </div>
+
+    <!-- Lists Grid -->
+    <div id="listsGrid" class="lists-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px;">
+        <!-- Lists will be loaded dynamically -->
+    </div>
+
+    <!-- Empty State -->
+    <div id="emptyState" class="glass-panel text-center py-5" style="display: none;">
+        <i class="fas fa-clipboard-list fa-4x mb-4" style="color: var(--text-muted); opacity: 0.5;"></i>
+        <h4 class="text-muted mb-3">No Lists Yet</h4>
+        <p class="text-muted mb-4">Create your first workspace account list to get started.</p>
+        <button onclick="openAddModal()" class="glass-button glass-button-primary">
+            <i class="fas fa-plus me-2"></i>Create First List
+        </button>
+    </div>
+</div>
+
+<!-- Add/Edit Modal -->
+<div id="listModal" class="modal-overlay" style="display: none;">
+    <div class="glass-panel" style="width: 600px; max-height: 90vh; overflow-y: auto;">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h4 class="m-0" id="modalTitle">
+                <i class="fas fa-clipboard-list me-2" style="color: var(--accent-primary);"></i>Add New List
+            </h4>
+            <button onclick="closeModal()" class="glass-button" style="padding: 8px 12px;">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <form id="listForm" onsubmit="event.preventDefault(); saveList();">
+            <input type="hidden" id="listId" value="">
+
+            <div class="mb-3">
+                <label class="form-label text-muted small">LIST NAME</label>
+                <input type="text" id="listName" class="glass-input w-100" placeholder="e.g., Campaign January 2026"
+                    required>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label text-muted small">DAYS TO KEEP LIST (Editable)</label>
+                <input type="number" id="remainingDays" class="glass-input w-100" value="14" min="1" max="30">
+                <small class="text-muted">You can edit this to extend/shorten the life of this list</small>
+            </div>
+
+            <div class="mb-4">
+                <label class="form-label text-muted small d-flex justify-content-between align-items-center">
+                    <span>ACCOUNT LIST <span id="accountCount" class="text-info">(0 accounts)</span></span>
+                    <button type="button" onclick="copyAccounts()" class="glass-button btn-sm"
+                        style="padding: 4px 8px;">
+                        <i class="fas fa-copy me-1"></i>Copy
+                    </button>
+                </label>
+                <textarea id="rawAccounts" class="glass-input w-100 font-monospace" rows="6"
+                    placeholder="admin@domain.com,password&#10;user@domain.com,password123&#10;..."
+                    oninput="updateAccountCount()"></textarea>
+                <small class="text-muted">One account per line: email,password</small>
+            </div>
+
+            <!-- Timer Actions (shown when editing) -->
+            <div id="timerActions" class="mb-4 pt-4 border-top border-white-10" style="display: none;">
+                <h6 class="text-muted mb-3"><i class="fas fa-clock me-2"></i>24H TIMER (Manual Set)</h6>
+
+                <!-- Current timer display -->
+                <div id="currentTimerDisplay" class="mb-3 p-2 rounded" style="background: rgba(255,255,255,0.05);">
+                    <small class="text-muted">Current 24h Timer:</small>
+                    <span id="modalTimerValue" class="ms-2 font-monospace" style="color: var(--accent-warning);">Not
+                        started</span>
+                </div>
+
+                <!-- Custom timer input -->
+                <div class="mb-3">
+                    <label class="form-label text-muted small">SET CUSTOM 24H TIMER (HH:MM:SS)</label>
+                    <div class="d-flex gap-2 align-items-center">
+                        <input type="number" id="timerHours" class="glass-input"
+                            style="width: 70px; text-align: center;" min="0" max="23" value="23" placeholder="HH">
+                        <span class="text-muted">:</span>
+                        <input type="number" id="timerMinutes" class="glass-input"
+                            style="width: 70px; text-align: center;" min="0" max="59" value="59" placeholder="MM">
+                        <span class="text-muted">:</span>
+                        <input type="number" id="timerSeconds" class="glass-input"
+                            style="width: 70px; text-align: center;" min="0" max="59" value="59" placeholder="SS">
+                    </div>
+                </div>
+
+                <div class="d-flex gap-2">
+                    <button type="button" onclick="setCustomTimer()"
+                        class="glass-button glass-button-warning flex-grow-1">
+                        <i class="fas fa-clock me-2"></i>Set Custom Timer
+                    </button>
+                    <button type="button" onclick="startTimer()" class="glass-button flex-grow-1">
+                        <i class="fas fa-play me-2"></i>Full 24h
+                    </button>
+                    <button type="button" onclick="resetTimer()" class="glass-button">
+                        <i class="fas fa-undo"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="glass-button glass-button-primary flex-grow-1">
+                    <i class="fas fa-save me-2"></i>Save List
+                </button>
+                <button type="button" onclick="closeModal()" class="glass-button">Cancel</button>
+            </div>
+        </form>
+
+
+        <!-- Delete Action (shown when editing) -->
+        <div id="deleteAction" class="mt-4 pt-4 border-top border-white-10" style="display: none;">
+            <button type="button" onclick="deleteCurrentList()" class="glass-button glass-button-danger w-100">
+                <i class="fas fa-trash me-2"></i>Delete This List
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Status Toast Container -->
+<div id="toastContainer" class="position-fixed bottom-0 end-0 p-3" style="z-index: 1100"></div>
+
+<style>
+    /* List Card Base Styles */
+    .list-card {
+        background: var(--bg-panel);
+        border: 1px solid var(--border-panel);
+        border-radius: 16px;
+        padding: 20px;
+        cursor: pointer;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .list-card:hover {
+        transform: translateY(-4px);
+        border-color: var(--accent-primary);
+    }
+
+    /* Status Glow Effects */
+    .list-card--ready {
+        box-shadow: 0 0 20px rgba(16, 185, 129, 0.2), 0 4px 16px rgba(0, 0, 0, 0.2);
+        border-color: rgba(16, 185, 129, 0.3);
+    }
+
+    .list-card--ready:hover {
+        box-shadow: 0 0 30px rgba(16, 185, 129, 0.3), 0 8px 24px rgba(0, 0, 0, 0.3);
+    }
+
+    .list-card--in-use {
+        box-shadow: 0 0 20px rgba(245, 158, 11, 0.25), 0 4px 16px rgba(0, 0, 0, 0.2);
+        border-color: rgba(245, 158, 11, 0.4);
+        animation: pulseOrange 2s infinite;
+    }
+
+    .list-card--in-use:hover {
+        box-shadow: 0 0 35px rgba(245, 158, 11, 0.4), 0 8px 24px rgba(0, 0, 0, 0.3);
+    }
+
+    .list-card--expired {
+        box-shadow: 0 0 20px rgba(239, 68, 68, 0.2), 0 4px 16px rgba(0, 0, 0, 0.2);
+        border-color: rgba(239, 68, 68, 0.4);
+        opacity: 0.6;
+    }
+
+    .list-card--expired:hover {
+        transform: none;
+        cursor: not-allowed;
+    }
+
+    @keyframes pulseOrange {
+
+        0%,
+        100% {
+            box-shadow: 0 0 20px rgba(245, 158, 11, 0.25), 0 4px 16px rgba(0, 0, 0, 0.2);
+        }
+
+        50% {
+            box-shadow: 0 0 35px rgba(245, 158, 11, 0.4), 0 6px 20px rgba(0, 0, 0, 0.25);
+        }
+    }
+
+    /* Status Badge */
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .status-badge--ready {
+        background: rgba(16, 185, 129, 0.15);
+        color: #10b981;
+        border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .status-badge--in-use {
+        background: rgba(245, 158, 11, 0.15);
+        color: #f59e0b;
+        border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    .status-badge--expired {
+        background: rgba(239, 68, 68, 0.15);
+        color: #ef4444;
+        border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    /* Timer Display */
+    .timer-display {
+        font-family: 'Geist Mono', 'SF Mono', 'Monaco', monospace;
+        font-size: 13px;
+        color: var(--text-secondary);
+    }
+
+    .timer-display.warning {
+        color: #f59e0b;
+    }
+
+    .timer-display.danger {
+        color: #ef4444;
+    }
+
+    /* Card Header */
+    .list-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 16px;
+    }
+
+    .list-card-name {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin: 0;
+        word-break: break-word;
+    }
+
+    /* Card Stats */
+    .list-card-stats {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+
+    .stat-item {
+        text-align: center;
+        padding: 10px;
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 8px;
+    }
+
+    .stat-value {
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+
+    .stat-label {
+        font-size: 10px;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        letter-spacing: 0.5px;
+    }
+
+    /* Card Actions */
+    .list-card-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 1px solid var(--border-panel);
+    }
+
+    .card-action-btn {
+        flex: 1;
+        padding: 8px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--border-panel);
+        border-radius: 8px;
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-size: 12px;
+    }
+
+    .card-action-btn:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: var(--text-primary);
+    }
+
+    .card-action-btn.start-btn:hover {
+        background: rgba(245, 158, 11, 0.15);
+        color: #f59e0b;
+        border-color: rgba(245, 158, 11, 0.3);
+    }
+
+    .card-action-btn.copy-btn:hover {
+        background: rgba(99, 102, 241, 0.15);
+        color: #6366f1;
+        border-color: rgba(99, 102, 241, 0.3);
+    }
+
+    .card-action-btn.delete-btn:hover {
+        background: rgba(239, 68, 68, 0.15);
+        color: #ef4444;
+        border-color: rgba(239, 68, 68, 0.3);
+    }
+
+    .card-action-btn.expire-btn:hover {
+        background: rgba(156, 163, 175, 0.15);
+        color: #9ca3af;
+        border-color: rgba(156, 163, 175, 0.3);
+    }
+
+    /* Modal Overlay */
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(4px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1050;
+        animation: fadeIn 0.2s ease;
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+        }
+
+        to {
+            opacity: 1;
+        }
+    }
+
+    /* Responsive Grid */
+    @media (max-width: 1400px) {
+        .lists-grid {
+            grid-template-columns: repeat(3, 1fr) !important;
+        }
+    }
+
+    @media (max-width: 1000px) {
+        .lists-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+        }
+    }
+
+    @media (max-width: 600px) {
+        .lists-grid {
+            grid-template-columns: 1fr !important;
+        }
+    }
+</style>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let lists = [];
+    let editingListId = null;
+    let countdownIntervals = {};
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+        loadLists();
+        // Refresh lists every 30 seconds
+        setInterval(loadLists, 30000);
+    });
+
+    // Load all lists
+    async function loadLists() {
+        try {
+            const response = await fetch('/api/lists');
+            const data = await response.json();
+
+            if (data.success) {
+                lists = data.lists;
+                renderLists();
+            } else {
+                showToast('Error loading lists: ' + data.error, 'error');
+            }
+        } catch (error) {
+            showToast('Failed to load lists', 'error');
+            console.error('Error:', error);
+        }
+    }
+
+    // Render all list cards
+    function renderLists() {
+        const grid = document.getElementById('listsGrid');
+        const emptyState = document.getElementById('emptyState');
+
+        // Clear existing intervals
+        Object.values(countdownIntervals).forEach(clearInterval);
+        countdownIntervals = {};
+
+        if (lists.length === 0) {
+            grid.style.display = 'none';
+            emptyState.style.display = 'block';
+            return;
+        }
+
+        grid.style.display = 'grid';
+        emptyState.style.display = 'none';
+
+        // Sort lists: non-expired first, expired at bottom
+        const sortedLists = [...lists].sort((a, b) => {
+            const aExpired = a.status === 'expired' ? 1 : 0;
+            const bExpired = b.status === 'expired' ? 1 : 0;
+            return aExpired - bExpired;
+        });
+
+        grid.innerHTML = sortedLists.map(list => createListCard(list)).join('');
+
+        // Start countdown timers
+        sortedLists.forEach(list => {
+            startCountdown(list.id, list.lifetime_expires_at, list.active_24h_expires_at);
+        });
+    }
+
+    // Create HTML for a list card
+    function createListCard(list) {
+        const statusClass = `list-card--${list.status.replace('_', '-')}`;
+        const statusLabel = list.status === 'in_use' ? 'USED' : list.status.toUpperCase();
+
+
+        return `
+            <div class="list-card ${statusClass}" onclick="openEditModal(${list.id})" data-list-id="${list.id}">
+                <div class="list-card-header">
+                    <h5 class="list-card-name">${escapeHtml(list.name)}</h5>
+                    <span class="status-badge status-badge--${list.status.replace('_', '-')}">${statusLabel}</span>
+                </div>
+                
+                <div class="list-card-stats">
+                    <div class="stat-item">
+                        <div class="stat-value">${list.account_count}</div>
+                        <div class="stat-label">Accounts</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value timer-display" id="lifetime-${list.id}">--:--:--</div>
+                        <div class="stat-label">14-Day Expires</div>
+                    </div>
+                </div>
+                
+                ${list.active_24h_expires_at ? `
+                <div class="stat-item mb-3" style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.2);">
+                    <div class="stat-value timer-display warning" id="timer24h-${list.id}">--:--:--</div>
+                    <div class="stat-label">24h Timer</div>
+                </div>
+                ` : ''}
+                
+                <div class="text-muted small mb-2">
+                    <i class="fas fa-calendar me-1"></i>Created: ${formatDate(list.created_at)}
+                </div>
+                
+                <div class="list-card-actions" onclick="event.stopPropagation();">
+                    ${list.status !== 'expired' && !list.active_24h_expires_at ? `
+                    <button class="card-action-btn start-btn" onclick="quickStartTimer(${list.id})" title="Start 24h Timer">
+                        <i class="fas fa-play"></i>
+                    </button>
+                    ` : ''}
+                    ${list.status !== 'expired' ? `
+                    <button class="card-action-btn expire-btn" onclick="quickExpire(${list.id})" title="Mark as Expired">
+                        <i class="fas fa-ban"></i>
+                    </button>
+                    ` : ''}
+                    <button class="card-action-btn copy-btn" onclick="quickCopy(${list.id})" title="Copy Accounts">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                    <button class="card-action-btn delete-btn" onclick="quickDelete(${list.id})" title="Delete List">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    // Start countdown timers for a list
+    function startCountdown(listId, lifetimeExpires, timer24hExpires) {
+        const updateTimers = () => {
+            const now = new Date();
+
+            // Update lifetime timer
+            if (lifetimeExpires) {
+                const lifetimeEl = document.getElementById(`lifetime-${listId}`);
+                if (lifetimeEl) {
+                    const remaining = new Date(lifetimeExpires) - now;
+                    if (remaining > 0) {
+                        lifetimeEl.textContent = formatDuration(remaining);
+                        if (remaining < 86400000) lifetimeEl.classList.add('warning'); // Less than 1 day
+                        if (remaining < 3600000) lifetimeEl.classList.add('danger'); // Less than 1 hour
+                    } else {
+                        lifetimeEl.textContent = 'EXPIRED';
+                        lifetimeEl.classList.add('danger');
+                    }
+                }
+            }
+
+            // Update 24h timer
+            if (timer24hExpires) {
+                const timer24hEl = document.getElementById(`timer24h-${listId}`);
+                if (timer24hEl) {
+                    const remaining = new Date(timer24hExpires) - now;
+                    if (remaining > 0) {
+                        timer24hEl.textContent = formatDuration(remaining);
+                    } else {
+                        timer24hEl.textContent = 'READY';
+                        timer24hEl.classList.remove('warning');
+                        timer24hEl.classList.add('text-success');
+                    }
+                }
+            }
+        };
+
+        updateTimers();
+        countdownIntervals[listId] = setInterval(updateTimers, 1000);
+    }
+
+    // Format duration in days, hours, minutes, seconds
+    function formatDuration(ms) {
+        if (ms <= 0) return '00:00:00';
+
+        const days = Math.floor(ms / 86400000);
+        const hours = Math.floor((ms % 86400000) / 3600000);
+        const minutes = Math.floor((ms % 3600000) / 60000);
+        const seconds = Math.floor((ms % 60000) / 1000);
+
+        if (days > 0) {
+            return `${days}d ${hours}h ${minutes}m`;
+        }
+        return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+
+    // Format date
+    function formatDate(isoString) {
+        if (!isoString) return 'Unknown';
+        const date = new Date(isoString);
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    // Escape HTML
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // Update grid columns
+    function updateGridColumns() {
+        const columns = document.getElementById('gridColumns').value;
+        document.getElementById('listsGrid').style.gridTemplateColumns = `repeat(${columns}, 1fr)`;
+    }
+
+    // Open add modal
+    function openAddModal() {
+        editingListId = null;
+        document.getElementById('modalTitle').innerHTML = '<i class="fas fa-plus me-2" style="color: var(--accent-primary);"></i>Add New List';
+        document.getElementById('listId').value = '';
+        document.getElementById('listName').value = '';
+        document.getElementById('remainingDays').value = '14';
+        document.getElementById('rawAccounts').value = '';
+        document.getElementById('accountCount').textContent = '(0 accounts)';
+        document.getElementById('timerActions').style.display = 'none';
+        document.getElementById('deleteAction').style.display = 'none';
+        document.getElementById('listModal').style.display = 'flex';
+    }
+
+    // Open edit modal
+    function openEditModal(listId) {
+        const list = lists.find(l => l.id === listId);
+        if (!list) return;
+
+        editingListId = listId;
+        document.getElementById('modalTitle').innerHTML = '<i class="fas fa-edit me-2" style="color: var(--accent-primary);"></i>Edit List';
+        document.getElementById('listId').value = list.id;
+        document.getElementById('listName').value = list.name;
+
+        // Calculate remaining days
+        const now = new Date();
+        const expires = new Date(list.lifetime_expires_at);
+        const remainingDays = Math.max(1, Math.ceil((expires - now) / 86400000));
+        document.getElementById('remainingDays').value = remainingDays;
+
+        // Store original value to detect changes
+        document.getElementById('remainingDays').dataset.originalValue = remainingDays;
+
+        document.getElementById('rawAccounts').value = list.raw_accounts;
+        updateAccountCount();
+
+        // Update 24h timer display and inputs
+        if (list.active_24h_expires_at) {
+            const timerExpires = new Date(list.active_24h_expires_at);
+            const timerRemaining = Math.max(0, timerExpires - now);
+            const hours = Math.floor(timerRemaining / 3600000);
+            const minutes = Math.floor((timerRemaining % 3600000) / 60000);
+            const seconds = Math.floor((timerRemaining % 60000) / 1000);
+
+            document.getElementById('modalTimerValue').textContent =
+                `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            document.getElementById('modalTimerValue').style.color = 'var(--accent-warning)';
+
+            // Populate inputs with current values
+            document.getElementById('timerHours').value = hours;
+            document.getElementById('timerMinutes').value = minutes;
+            document.getElementById('timerSeconds').value = seconds;
+        } else {
+            document.getElementById('modalTimerValue').textContent = 'Not started';
+            document.getElementById('modalTimerValue').style.color = 'var(--text-muted)';
+            // Default to full 24h
+            document.getElementById('timerHours').value = 23;
+            document.getElementById('timerMinutes').value = 59;
+            document.getElementById('timerSeconds').value = 59;
+        }
+
+        document.getElementById('timerActions').style.display = 'block';
+        document.getElementById('deleteAction').style.display = 'block';
+        document.getElementById('listModal').style.display = 'flex';
+    }
+
+
+
+    // Close modal
+    function closeModal() {
+        document.getElementById('listModal').style.display = 'none';
+        editingListId = null;
+    }
+
+    // Update account count display
+    function updateAccountCount() {
+        const text = document.getElementById('rawAccounts').value;
+        // Support both comma and colon as separators
+        const count = text.split('\n').filter(line => line.trim() && (line.includes(',') || line.includes(':'))).length;
+        document.getElementById('accountCount').textContent = `(${count} account${count !== 1 ? 's' : ''})`;
+    }
+
+    // Save list (create or update)
+    async function saveList() {
+        const name = document.getElementById('listName').value.trim();
+        const remainingDaysInput = document.getElementById('remainingDays');
+        const remainingDays = parseInt(remainingDaysInput.value);
+        const rawAccounts = document.getElementById('rawAccounts').value.trim();
+
+        if (!name || !rawAccounts) {
+            showToast('Please fill in all required fields', 'error');
+            return;
+        }
+
+        // Build payload based on whether we're creating or editing
+        let payload;
+        if (editingListId) {
+            // For edits, only include remaining_days if it was actually changed
+            const originalValue = parseInt(remainingDaysInput.dataset.originalValue || '0');
+            payload = { name, raw_accounts: rawAccounts };
+
+            if (remainingDays !== originalValue) {
+                payload.remaining_days = remainingDays;
+                console.log(`Remaining days changed from ${originalValue} to ${remainingDays}`);
+            }
+        } else {
+            // For new lists, always include remaining_days
+            payload = { name, remaining_days: remainingDays, raw_accounts: rawAccounts };
+        }
+
+        try {
+            let response;
+            if (editingListId) {
+                response = await fetch(`/api/lists/${editingListId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+            } else {
+                response = await fetch('/api/lists', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+            }
+
+            const data = await response.json();
+
+            if (data.success) {
+                showToast(data.message, 'success');
+                closeModal();
+                loadLists();
+            } else {
+                showToast('Error: ' + data.error, 'error');
+            }
+        } catch (error) {
+            showToast('Failed to save list', 'error');
+            console.error('Error:', error);
+        }
+    }
+
+
+    // Copy accounts
+    function copyAccounts() {
+        const text = document.getElementById('rawAccounts').value;
+        navigator.clipboard.writeText(text).then(() => {
+            showToast('Accounts copied to clipboard', 'success');
+        }).catch(() => {
+            showToast('Failed to copy', 'error');
+        });
+    }
+
+    // Quick copy from card
+    function quickCopy(listId) {
+        const list = lists.find(l => l.id === listId);
+        if (list) {
+            navigator.clipboard.writeText(list.raw_accounts).then(() => {
+                showToast(`${list.account_count} accounts copied`, 'success');
+            }).catch(() => {
+                showToast('Failed to copy', 'error');
+            });
+        }
+    }
+
+    // Quick delete from card
+    async function quickDelete(listId) {
+        const list = lists.find(l => l.id === listId);
+        if (!list) return;
+
+        if (!confirm(`Delete "${list.name}"?\n\nThis action cannot be undone.`)) return;
+
+        try {
+            const response = await fetch(`/api/lists/${listId}`, { method: 'DELETE' });
+            const data = await response.json();
+
+            if (data.success) {
+                showToast(data.message, 'success');
+                loadLists();
+            } else {
+                showToast('Error: ' + data.error, 'error');
+            }
+        } catch (error) {
+            showToast('Failed to delete list', 'error');
+        }
+    }
+
+    // Quick start timer from card
+    async function quickStartTimer(listId) {
+        try {
+            const response = await fetch(`/api/lists/${listId}/start-timer`, { method: 'POST' });
+            const data = await response.json();
+
+            if (data.success) {
+                showToast(data.message, 'success');
+                loadLists();
+            } else {
+                showToast('Error: ' + data.error, 'error');
+            }
+        } catch (error) {
+            showToast('Failed to start timer', 'error');
+        }
+    }
+
+    // Quick expire from card
+    async function quickExpire(listId) {
+        const list = lists.find(l => l.id === listId);
+        if (!list) return;
+
+        if (!confirm(`Mark "${list.name}" as expired?\n\nThis will move it to the bottom of the list.`)) return;
+
+        try {
+            const response = await fetch(`/api/lists/${listId}/expire`, { method: 'POST' });
+            const data = await response.json();
+
+            if (data.success) {
+                showToast(data.message, 'success');
+                loadLists();
+            } else {
+                showToast('Error: ' + data.error, 'error');
+            }
+        } catch (error) {
+            showToast('Failed to expire list', 'error');
+        }
+    }
+
+    // Set custom 24h timer (from modal)
+    async function setCustomTimer() {
+        if (!editingListId) return;
+
+        const hours = parseInt(document.getElementById('timerHours').value) || 0;
+        const minutes = parseInt(document.getElementById('timerMinutes').value) || 0;
+        const seconds = parseInt(document.getElementById('timerSeconds').value) || 0;
+
+        const totalSeconds = (hours * 3600) + (minutes * 60) + seconds;
+
+        if (totalSeconds <= 0) {
+            showToast('Please enter a valid time', 'error');
+            return;
+        }
+
+        if (totalSeconds > 86400) {
+            showToast('Timer cannot exceed 24 hours', 'error');
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/lists/${editingListId}/set-timer`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ seconds: totalSeconds })
+            });
+            const data = await response.json();
+
+            if (data.success) {
+                showToast(`Timer set to ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`, 'success');
+                closeModal();
+                loadLists();
+            } else {
+                showToast('Error: ' + data.error, 'error');
+            }
+        } catch (error) {
+            showToast('Failed to set timer', 'error');
+        }
+    }
+
+    // Start full 24h timer (from modal)
+    async function startTimer() {
+        if (!editingListId) return;
+        await quickStartTimer(editingListId);
+        closeModal();
+    }
+
+
+    // Reset timer (from modal)
+    async function resetTimer() {
+        if (!editingListId) return;
+
+        try {
+            const response = await fetch(`/api/lists/${editingListId}/reset-timer`, { method: 'POST' });
+            const data = await response.json();
+
+            if (data.success) {
+                showToast(data.message, 'success');
+                closeModal();
+                loadLists();
+            } else {
+                showToast('Error: ' + data.error, 'error');
+            }
+        } catch (error) {
+            showToast('Failed to reset timer', 'error');
+        }
+    }
+
+    // Delete current list (from modal)
+    async function deleteCurrentList() {
+        if (!editingListId) return;
+        closeModal();
+        await quickDelete(editingListId);
+    }
+
+    // Show toast notification
+    function showToast(message, type = 'info') {
+        const container = document.getElementById('toastContainer');
+        const colorClass = type === 'success' ? 'glass-success-box' : (type === 'error' ? 'glass-error-box' : 'glass-info-box');
+        const icon = type === 'success' ? 'fa-check-circle' : (type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle');
+
+        const toast = document.createElement('div');
+        toast.className = `glass-panel mb-2 p-3`;
+        toast.style.minWidth = '300px';
+        toast.style.animation = 'fadeIn 0.2s ease';
+        toast.innerHTML = `
+            <div class="d-flex align-items-center">
+                <i class="fas ${icon} me-3 fs-5" style="color: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#6366f1'};"></i>
+                <div class="fw-medium">${message}</div>
+                <button type="button" class="btn-close btn-close-white ms-auto" onclick="this.parentElement.parentElement.remove()"></button>
+            </div>
+        `;
+
+        container.appendChild(toast);
+        setTimeout(() => {
+            toast.style.animation = 'fadeIn 0.2s ease reverse';
+            setTimeout(() => toast.remove(), 200);
+        }, 3000);
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,25 @@
+
+/* Responsive Button Row */
+.button-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 16px;
+    align-items: center;
+}
+
+/* Ensure buttons inside don't shrink too much but aren't huge */
+.button-row .btn-github,
+.button-row .glass-button {
+    flex: 0 1 auto;
+    min-width: max-content;
+}
+
+/* Mobile check: On very small screens, let them stretch */
+@media (max-width: 600px) {
+    .button-row .btn-github,
+    .button-row .glass-button {
+        flex: 1 1 100%;
+        width: 100%;
+    }
+}

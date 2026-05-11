@@ -1,0 +1,22 @@
+
+__pycache__/
+
+# Backup files and SSH keys
+do_app_passwords_backup/
+*.pem
+*.key
+*.pyc
+*.pyo
+.DS_Store
+Thumbs.db
+*.log
+
+# Never commit production .env (use .env.example as template)
+.env
+.env.backup.*
+
+# Virtual environment
+venv/
+
+# Instance folder
+instance/

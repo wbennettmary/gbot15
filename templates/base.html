@@ -1,0 +1,2263 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}GBot Web{% endblock %}</title>
+
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS (Pinned v3.4.1) -->
+    <script src="https://cdn.tailwindcss.com/3.4.1"></script>
+
+    <!-- CRITICAL: Apply theme IMMEDIATELY to prevent flash -->
+    <script>
+        (function () {
+            const savedTheme = localStorage.getItem('selectedTheme') || 'ios';
+            console.log('🎨 [THEME DEBUG] Applying theme from localStorage:', savedTheme);
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            console.log('🎨 [THEME DEBUG] data-theme attribute set to:', document.documentElement.getAttribute('data-theme'));
+        })();
+    </script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: {
+                            800: '#1e293b',
+                            900: '#0f172a',
+                        },
+                        indigo: {
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Custom Glassmorphism Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='glass.css') }}?v=2026.1.31.21">
+
+    <!-- PROFESSIONAL UI POLISH -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/layout-fix.css') }}?v=2026.2.2.14">
+
+    <!-- Bootstrap CSS (Restoring for legacy grid layout compatibility) -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- GitHub Primer CSS -->
+    <link href="https://unpkg.com/@primer/css@^21.0.0/dist/primer.css" rel="stylesheet">
+
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+    <!-- SortableJS (for Drag & Drop) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+
+    <!-- Bootstrap JS (for modal compatibility) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- EMERGENCY MODAL FIX - Run immediately -->
+    <script>
+            // Run this immediately, before any other scripts
+            (function () {
+                console.log('Emergency modal fix running immediately...');
+
+                // Force hide problematic modals immediately
+                function emergencyHideModals() {
+                    const problematicModals = ['testConnectionModal', 'deleteConfirmModal'];
+                    problematicModals.forEach(function (modalId) {
+                        const modal = document.getElementById(modalId);
+                        if (modal) {
+                            modal.style.display = 'none';
+                            modal.style.visibility = 'hidden';
+                            modal.style.opacity = '0';
+                            modal.style.pointerEvents = 'none';
+                            modal.classList.remove('show');
+                        }
+                    });
+
+                    // Remove modal backdrops
+                    const backdrops = document.querySelectorAll('.modal-backdrop');
+                    backdrops.forEach(function (backdrop) {
+                        backdrop.remove();
+                    });
+
+                    // Fix body
+                    document.body.classList.remove('modal-open');
+                    document.body.style.overflow = '';
+                    document.body.style.paddingRight = '';
+
+                    console.log('Emergency modal fix applied');
+                }
+
+                // Run immediately
+                emergencyHideModals();
+
+                // Run when DOM is ready
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', emergencyHideModals);
+                } else {
+                    emergencyHideModals();
+                }
+
+                // Run periodically to catch any modals that try to show
+                setInterval(emergencyHideModals, 100);
+            })();
+    </script>
+
+    <!-- Professional GitHub Theme -->
+    <style>
+        :root {
+            /* Modern Minimalist Light Theme - Blue Palette */
+            --color-canvas-default: #ffffff;
+            --color-canvas-subtle: #f8fafc;
+            /* slate-50 */
+            --color-canvas-inset: #f1f5f9;
+            /* slate-100 */
+            --color-border-default: #e2e8f0;
+            /* slate-200 */
+            --color-border-muted: #cbd5e1;
+            /* slate-300 */
+            --color-border-subtle: rgba(0, 0, 0, 0.06);
+            --color-fg-default: #0f172a;
+            /* slate-900 */
+            --color-fg-muted: #64748b;
+            /* slate-500 */
+            --color-fg-subtle: #94a3b8;
+            /* slate-400 */
+            --color-accent-fg: #3b82f6;
+            /* blue-500 */
+            --color-accent-emphasis: #2563eb;
+            /* blue-600 */
+            --color-accent-purple: #8b5cf6;
+            --color-success-fg: #10b981;
+            --color-success-emphasis: #059669;
+            --color-danger-fg: #ef4444;
+            --color-danger-emphasis: #dc2626;
+            --color-warning-fg: #f59e0b;
+            --color-warning-emphasis: #d97706;
+            --color-header-bg: #ffffff;
+            --color-header-text: #0f172a;
+            --color-btn-text: #0f172a;
+            --color-btn-bg: #ffffff;
+            --color-btn-border: #e2e8f0;
+            --color-btn-hover-bg: #f8fafc;
+            --color-btn-hover-border: #cbd5e1;
+            --color-btn-primary-text: #ffffff;
+            --color-btn-primary-bg: #3b82f6;
+            /* blue-500 */
+            --color-btn-primary-border: #3b82f6;
+            --color-btn-primary-hover-bg: #2563eb;
+            /* blue-600 */
+            --color-btn-danger-text: #ffffff;
+            --color-btn-danger-bg: #ef4444;
+            --color-btn-danger-border: #ef4444;
+            --color-btn-danger-hover-bg: #dc2626;
+            --color-input-bg: #ffffff;
+            --color-input-border: #e2e8f0;
+            --color-shadow: rgba(0, 0, 0, 0.03);
+            --color-shadow-medium: rgba(0, 0, 0, 0.06);
+            --color-shadow-large: rgba(0, 0, 0, 0.1);
+            --radius-sm: 6px;
+            --radius-md: 8px;
+            --radius-lg: 12px;
+            --spacing-xs: 4px;
+            --spacing-sm: 8px;
+            --spacing-md: 16px;
+            --spacing-lg: 24px;
+            --spacing-xl: 32px;
+        }
+
+        [data-color-mode="dark"] {
+            /* Modern ClickUp-like Dark Theme */
+            --color-canvas-default: #1a1d29;
+            --color-canvas-subtle: #161922;
+            --color-canvas-inset: #0f1117;
+            --color-border-default: #2d3142;
+            --color-border-muted: #252836;
+            --color-border-subtle: rgba(255, 255, 255, 0.1);
+            --color-fg-default: #e4e6eb;
+            --color-fg-muted: #9ca3af;
+            --color-fg-subtle: #6b7280;
+            --color-accent-fg: #818cf8;
+            --color-accent-emphasis: #6366f1;
+            --color-accent-purple: #a78bfa;
+            --color-success-fg: #34d399;
+            --color-success-emphasis: #10b981;
+            --color-danger-fg: #f87171;
+            --color-danger-emphasis: #ef4444;
+            --color-warning-fg: #fbbf24;
+            --color-warning-emphasis: #f59e0b;
+            --color-header-bg: #1a1d29;
+            --color-header-text: #e4e6eb;
+            --color-btn-text: #e4e6eb;
+            --color-btn-bg: #252836;
+            --color-btn-border: #2d3142;
+            --color-btn-hover-bg: #2d3142;
+            --color-btn-hover-border: #3d4154;
+            --color-btn-primary-text: #ffffff;
+            --color-btn-primary-bg: #6366f1;
+            --color-btn-primary-border: #6366f1;
+            --color-btn-primary-hover-bg: #4f46e5;
+            --color-btn-danger-text: #ffffff;
+            --color-btn-danger-bg: #ef4444;
+            --color-btn-danger-border: #ef4444;
+            --color-btn-danger-hover-bg: #dc2626;
+            --color-input-bg: #161922;
+            --color-input-border: #2d3142;
+            --color-shadow: rgba(0, 0, 0, 0.3);
+            --color-shadow-medium: rgba(0, 0, 0, 0.4);
+            --color-shadow-large: rgba(0, 0, 0, 0.5);
+            --radius-sm: 6px;
+            --radius-md: 8px;
+            --radius-lg: 12px;
+            --spacing-xs: 4px;
+            --spacing-sm: 8px;
+            --spacing-md: 16px;
+            --spacing-lg: 24px;
+            --spacing-xl: 32px;
+        }
+
+        /* Force dark theme on ALL elements */
+        [data-color-mode="dark"] * {
+            border-color: var(--color-border-default) !important;
+        }
+
+        [data-color-mode="dark"] .form-control {
+            background-color: var(--color-input-bg) !important;
+            border-color: var(--color-input-border) !important;
+            color: var(--color-fg-default) !important;
+        }
+
+        [data-color-mode="dark"] button,
+        [data-color-mode="dark"] .btn,
+        [data-color-mode="dark"] .btn-github {
+            background-color: var(--color-btn-bg) !important;
+            border-color: var(--color-btn-border) !important;
+            color: var(--color-btn-text) !important;
+        }
+
+        [data-color-mode="dark"] .btn-primary,
+        [data-color-mode="dark"] .btn-github-primary {
+            background-color: var(--color-btn-primary-bg) !important;
+            border-color: var(--color-btn-primary-border) !important;
+            color: var(--color-btn-primary-text) !important;
+        }
+
+        [data-color-mode="dark"] .btn-danger,
+        [data-color-mode="dark"] .btn-github-danger {
+            background-color: var(--color-btn-danger-bg) !important;
+            border-color: var(--color-btn-danger-border) !important;
+            color: var(--color-btn-danger-text) !important;
+        }
+
+        [data-color-mode="dark"] div,
+        [data-color-mode="dark"] p,
+        [data-color-mode="dark"] span,
+        [data-color-mode="dark"] h1,
+        [data-color-mode="dark"] h2,
+        [data-color-mode="dark"] h3,
+        [data-color-mode="dark"] h4,
+        [data-color-mode="dark"] h5,
+        [data-color-mode="dark"] h6,
+        [data-color-mode="dark"] label {
+            color: var(--color-fg-default) !important;
+        }
+
+        [data-color-mode="dark"] .card,
+        [data-color-mode="dark"] .github-card {
+            background-color: var(--color-canvas-default) !important;
+            border-color: var(--color-border-default) !important;
+        }
+
+        /* Force dark theme for ALL possible elements */
+        [data-color-mode="dark"] .section,
+        [data-color-mode="dark"] .data-display,
+        [data-color-mode="dark"] .status-box,
+        [data-color-mode="dark"] .count-display,
+        [data-color-mode="dark"] .status-info,
+        [data-color-mode="dark"] .account-list,
+        [data-color-mode="dark"] .search-input,
+        [data-color-mode="dark"] .results-log,
+        [data-color-mode="dark"] .domain-list,
+        [data-color-mode="dark"] .csv-preview,
+        [data-color-mode="dark"] .download-area {
+            background-color: var(--color-canvas-subtle) !important;
+            border-color: var(--color-border-default) !important;
+            color: var(--color-fg-default) !important;
+        }
+
+        [data-color-mode="dark"] .account-item {
+            background-color: transparent !important;
+            color: var(--color-fg-default) !important;
+        }
+
+        [data-color-mode="dark"] .account-item:hover {
+            background-color: var(--color-canvas-default) !important;
+        }
+
+        [data-color-mode="dark"] .account-item.selected {
+            background-color: var(--color-accent-emphasis) !important;
+            color: #ffffff !important;
+        }
+
+        [data-color-mode="dark"] .action-button {
+            background-color: var(--color-btn-bg) !important;
+            border-color: var(--color-btn-border) !important;
+            color: var(--color-btn-text) !important;
+        }
+
+        [data-color-mode="dark"] .action-button:hover {
+            background-color: var(--color-btn-hover-bg) !important;
+        }
+
+        [data-color-mode="dark"] .delete-button {
+            background-color: var(--color-btn-danger-bg) !important;
+            border-color: var(--color-btn-danger-border) !important;
+            color: var(--color-btn-danger-text) !important;
+        }
+
+        [data-color-mode="dark"] .delete-button:hover {
+            background-color: var(--color-btn-danger-hover-bg) !important;
+        }
+
+        /* Force specific background for main containers */
+        [data-color-mode="dark"] .main-container,
+        [data-color-mode="dark"] .tab-content {
+            background-color: var(--color-canvas-default) !important;
+        }
+
+        /* Force tab navigation styling */
+        [data-color-mode="dark"] .tab-navigation {
+            background-color: var(--color-canvas-default) !important;
+            border-color: var(--color-border-default) !important;
+        }
+
+        [data-color-mode="dark"] .tab-button {
+            background: transparent !important;
+            color: var(--color-fg-muted) !important;
+            border: 1px solid transparent !important;
+            border-bottom: 3px solid transparent !important;
+        }
+
+        [data-color-mode="dark"] .tab-button:hover {
+            color: var(--color-fg-default) !important;
+            border-bottom-color: var(--color-border-muted) !important;
+            background: rgba(240, 246, 252, 0.05) !important;
+        }
+
+        [data-color-mode="dark"] .tab-button.active {
+            background: linear-gradient(135deg, rgba(9, 105, 218, 0.15) 0%, rgba(5, 80, 174, 0.08) 100%) !important;
+            color: var(--color-fg-default) !important;
+            border: 1px solid rgba(9, 105, 218, 0.3) !important;
+            border-bottom: 4px solid #0969da !important;
+            box-shadow: 0 4px 12px rgba(9, 105, 218, 0.2) !important;
+            transform: translateY(-1px) !important;
+            position: relative !important;
+        }
+
+        [data-color-mode="dark"] .tab-button.active::after {
+            content: '' !important;
+            position: absolute !important;
+            bottom: -4px !important;
+            left: 0 !important;
+            right: 0 !important;
+            height: 2px !important;
+            background: linear-gradient(90deg, #0969da 0%, #0550ae 100%) !important;
+            border-radius: 1px !important;
+        }
+
+        [data-color-mode="dark"] .tab-button.active i {
+            color: #0969da !important;
+        }
+
+        /* Complete dark mode coverage for ALL pages */
+        [data-color-mode="dark"] {
+            color-scheme: dark;
+        }
+
+        /* Force dark mode on Users page and all other pages */
+        [data-color-mode="dark"] .container,
+        [data-color-mode="dark"] .row,
+        [data-color-mode="dark"] .col,
+        [data-color-mode="dark"] .card-body,
+        [data-color-mode="dark"] .list-group,
+        [data-color-mode="dark"] .list-group-item,
+        [data-color-mode="dark"] .table,
+        [data-color-mode="dark"] .table td,
+        [data-color-mode="dark"] .table th,
+        [data-color-mode="dark"] .table-responsive {
+            background-color: var(--color-canvas-default) !important;
+            border-color: var(--color-border-default) !important;
+            color: var(--color-fg-default) !important;
+        }
+
+        /* Bootstrap components dark mode */
+        [data-color-mode="dark"] .btn-primary {
+            background-color: var(--color-btn-primary-bg) !important;
+            border-color: var(--color-btn-primary-border) !important;
+            color: var(--color-btn-primary-text) !important;
+        }
+
+        [data-color-mode="dark"] .btn-danger {
+            background-color: var(--color-btn-danger-bg) !important;
+            border-color: var(--color-btn-danger-border) !important;
+            color: var(--color-btn-danger-text) !important;
+        }
+
+        [data-color-mode="dark"] .btn-secondary,
+        [data-color-mode="dark"] .btn {
+            background-color: var(--color-btn-bg) !important;
+            border-color: var(--color-btn-border) !important;
+            color: var(--color-btn-text) !important;
+        }
+
+        /* Users page specific styling */
+        [data-color-mode="dark"] .user-item,
+        [data-color-mode="dark"] .user-card,
+        [data-color-mode="dark"] .badge {
+            background-color: var(--color-canvas-subtle) !important;
+            border-color: var(--color-border-default) !important;
+            color: var(--color-fg-default) !important;
+        }
+
+        [data-color-mode="dark"] .badge-primary {
+            background-color: var(--color-accent-emphasis) !important;
+            color: #ffffff !important;
+        }
+
+        [data-color-mode="dark"] .badge-success {
+            background-color: var(--color-success-emphasis) !important;
+            color: #ffffff !important;
+        }
+
+        [data-color-mode="dark"] .badge-danger {
+            background-color: var(--color-danger-emphasis) !important;
+            color: #ffffff !important;
+        }
+
+        /* Whitelist page specific styling */
+        [data-color-mode="dark"] .alert,
+        [data-color-mode="dark"] .alert-info,
+        [data-color-mode="dark"] .alert-success,
+        [data-color-mode="dark"] .alert-danger,
+        [data-color-mode="dark"] .alert-warning {
+            border-color: var(--color-border-default) !important;
+            color: var(--color-fg-default) !important;
+        }
+
+        [data-color-mode="dark"] .alert-info {
+            background-color: rgba(9, 105, 218, 0.1) !important;
+            border-color: var(--color-accent-emphasis) !important;
+            color: var(--color-accent-fg) !important;
+        }
+
+        [data-color-mode="dark"] .alert-success {
+            background-color: rgba(45, 164, 78, 0.1) !important;
+            border-color: var(--color-success-emphasis) !important;
+            color: var(--color-success-fg) !important;
+        }
+
+        [data-color-mode="dark"] .alert-danger {
+            background-color: rgba(218, 54, 51, 0.1) !important;
+            border-color: var(--color-danger-emphasis) !important;
+            color: var(--color-danger-fg) !important;
+        }
+
+        [data-color-mode="dark"] .alert-warning {
+            background-color: rgba(251, 133, 0, 0.1) !important;
+            border-color: var(--color-warning-emphasis) !important;
+            color: var(--color-warning-fg) !important;
+        }
+
+        /* Force all white backgrounds to dark */
+        [data-color-mode="dark"] *[style*="background: white"],
+        [data-color-mode="dark"] *[style*="background-color: white"],
+        [data-color-mode="dark"] *[style*="background: #fff"],
+        [data-color-mode="dark"] *[style*="background-color: #fff"],
+        [data-color-mode="dark"] *[style*="background: #ffffff"],
+        [data-color-mode="dark"] *[style*="background-color: #ffffff"] {
+            background-color: var(--color-canvas-default) !important;
+        }
+
+        /* Specific fixes for Domain Summary and Users List sections */
+        [data-color-mode="dark"] .domain-summary,
+        [data-color-mode="dark"] .domain-summary *,
+        [data-color-mode="dark"] .domain-summary-header,
+        [data-color-mode="dark"] .domain-summary-header *,
+        [data-color-mode="dark"] .users-list-section,
+        [data-color-mode="dark"] .users-list-section *,
+        [data-color-mode="dark"] .users-list-header,
+        [data-color-mode="dark"] .users-list-header *,
+        [data-color-mode="dark"] .users-list-content,
+        [data-color-mode="dark"] .users-list-content *,
+        [data-color-mode="dark"] .status-box,
+        [data-color-mode="dark"] .status-box *,
+        [data-color-mode="dark"] .count-display,
+        [data-color-mode="dark"] .count-display *,
+        [data-color-mode="dark"] .status-info,
+        [data-color-mode="dark"] .status-info * {
+            background-color: var(--color-canvas-default) !important;
+            color: var(--color-fg-default) !important;
+            border-color: var(--color-border-default) !important;
+        }
+
+        /* Force white backgrounds in dark mode to be dark */
+        [data-color-mode="dark"] [style*="background: white"],
+        [data-color-mode="dark"] [style*="background-color: white"],
+        [data-color-mode="dark"] [style*="background: #fff"],
+        [data-color-mode="dark"] [style*="background-color: #fff"],
+        [data-color-mode="dark"] [style*="background: #ffffff"],
+        [data-color-mode="dark"] [style*="background-color: #ffffff"] {
+            background-color: var(--color-canvas-default) !important;
+            color: var(--color-fg-default) !important;
+        }
+
+        /* Force light grey text in dark mode to be white */
+        [data-color-mode="dark"] [style*="color: #656d76"],
+        [data-color-mode="dark"] [style*="color: #8b949e"],
+        [data-color-mode="dark"] [style*="color: #6a737d"],
+        [data-color-mode="dark"] [style*="color: #7d8590"],
+        [data-color-mode="dark"] [style*="color: #8c959f"] {
+            color: var(--color-fg-default) !important;
+        }
+
+        /* Additional specific fixes for common white background elements */
+        [data-color-mode="dark"] .card,
+        [data-color-mode="dark"] .card-header,
+        [data-color-mode="dark"] .card-body,
+        [data-color-mode="dark"] .card-footer,
+        [data-color-mode="dark"] .github-card,
+        [data-color-mode="dark"] .github-card-header,
+        [data-color-mode="dark"] .github-card-body,
+        [data-color-mode="dark"] .github-card-footer,
+        [data-color-mode="dark"] .section,
+        [data-color-mode="dark"] .section-header,
+        [data-color-mode="dark"] .section-content,
+        [data-color-mode="dark"] .container,
+        [data-color-mode="dark"] .container-fluid,
+        [data-color-mode="dark"] .row,
+        [data-color-mode="dark"] .col,
+        [data-color-mode="dark"] .col-*,
+        [data-color-mode="dark"] .grid-container,
+        [data-color-mode="dark"] .grid-item,
+        [data-color-mode="dark"] .summary-card,
+        [data-color-mode="dark"] .stats-container,
+        [data-color-mode="dark"] .details-container {
+            background-color: var(--color-canvas-default) !important;
+            color: var(--color-fg-default) !important;
+            border-color: var(--color-border-default) !important;
+        }
+
+        /* Force all text elements to be white in dark mode */
+        [data-color-mode="dark"] .card *,
+        [data-color-mode="dark"] .github-card *,
+        [data-color-mode="dark"] .section *,
+        [data-color-mode="dark"] .container *,
+        [data-color-mode="dark"] .row *,
+        [data-color-mode="dark"] .col *,
+        [data-color-mode="dark"] .grid-container *,
+        [data-color-mode="dark"] .grid-item *,
+        [data-color-mode="dark"] .summary-card *,
+        [data-color-mode="dark"] .stats-container *,
+        [data-color-mode="dark"] .details-container * {
+            color: var(--color-fg-default) !important;
+        }
+
+        /* Comprehensive dark mode override for any remaining white backgrounds */
+        [data-color-mode="dark"] div[style*="background"],
+        [data-color-mode="dark"] section[style*="background"],
+        [data-color-mode="dark"] article[style*="background"],
+        [data-color-mode="dark"] aside[style*="background"],
+        [data-color-mode="dark"] header[style*="background"],
+        [data-color-mode="dark"] main[style*="background"],
+        [data-color-mode="dark"] footer[style*="background"] {
+            background-color: var(--color-canvas-default) !important;
+            color: var(--color-fg-default) !important;
+        }
+
+        /* Force all child elements to inherit proper colors */
+        [data-color-mode="dark"] div[style*="background"] *,
+        [data-color-mode="dark"] section[style*="background"] *,
+        [data-color-mode="dark"] article[style*="background"] *,
+        [data-color-mode="dark"] aside[style*="background"] *,
+        [data-color-mode="dark"] header[style*="background"] *,
+        [data-color-mode="dark"] main[style*="background"] *,
+        [data-color-mode="dark"] footer[style*="background"] * {
+            color: var(--color-fg-default) !important;
+        }
+
+        /* NUCLEAR OPTION - Force specific problematic elements to dark */
+        [data-color-mode="dark"] div[style*="background-color: white"],
+        [data-color-mode="dark"] div[style*="background: white"],
+        [data-color-mode="dark"] section[style*="background-color: white"],
+        [data-color-mode="dark"] section[style*="background: white"],
+        [data-color-mode="dark"] .github-card[style*="background"],
+        [data-color-mode="dark"] .card[style*="background"],
+        [data-color-mode="dark"] .container[style*="background"] {
+            background-color: #1a1a1a !important;
+            color: #ffffff !important;
+        }
+
+        /* Override specific white background elements */
+        [data-color-mode="dark"] div[style*="background: white"],
+        [data-color-mode="dark"] div[style*="background-color: white"],
+        [data-color-mode="dark"] div[style*="background: #fff"],
+        [data-color-mode="dark"] div[style*="background-color: #fff"],
+        [data-color-mode="dark"] div[style*="background: #ffffff"],
+        [data-color-mode="dark"] div[style*="background-color: #ffffff"],
+        [data-color-mode="dark"] section[style*="background: white"],
+        [data-color-mode="dark"] section[style*="background-color: white"],
+        [data-color-mode="dark"] section[style*="background: #fff"],
+        [data-color-mode="dark"] section[style*="background-color: #fff"],
+        [data-color-mode="dark"] section[style*="background: #ffffff"],
+        [data-color-mode="dark"] section[style*="background-color: #ffffff"] {
+            background-color: var(--color-canvas-default) !important;
+            color: var(--color-fg-default) !important;
+        }
+
+        /* Force all text in white backgrounds to be white */
+        [data-color-mode="dark"] div[style*="background: white"] *,
+        [data-color-mode="dark"] div[style*="background-color: white"] *,
+        [data-color-mode="dark"] div[style*="background: #fff"] *,
+        [data-color-mode="dark"] div[style*="background-color: #fff"] *,
+        [data-color-mode="dark"] section[style*="background: white"] *,
+        [data-color-mode="dark"] section[style*="background-color: white"] *,
+        [data-color-mode="dark"] section[style*="background: #fff"] *,
+        [data-color-mode="dark"] section[style*="background-color: #fff"] * {
+            color: var(--color-fg-default) !important;
+        }
+
+        /* Target specific classes that might be causing white backgrounds */
+        [data-color-mode="dark"] .github-card,
+        [data-color-mode="dark"] .github-card-header,
+        [data-color-mode="dark"] .github-card-body,
+        [data-color-mode="dark"] .github-card-footer,
+        [data-color-mode="dark"] .card,
+        [data-color-mode="dark"] .card-header,
+        [data-color-mode="dark"] .card-body,
+        [data-color-mode="dark"] .card-footer,
+        [data-color-mode="dark"] .container,
+        [data-color-mode="dark"] .container-fluid,
+        [data-color-mode="dark"] .row,
+        [data-color-mode="dark"] .col,
+        [data-color-mode="dark"] .col-*,
+        [data-color-mode="dark"] .grid-container,
+        [data-color-mode="dark"] .grid-item,
+        [data-color-mode="dark"] .summary-card,
+        [data-color-mode="dark"] .stats-container,
+        [data-color-mode="dark"] .details-container,
+        [data-color-mode="dark"] .domain-summary,
+        [data-color-mode="dark"] .users-list-section,
+        [data-color-mode="dark"] .users-list-content,
+        [data-color-mode="dark"] .status-box,
+        [data-color-mode="dark"] .count-display,
+        [data-color-mode="dark"] .status-info {
+            background-color: #1a1a1a !important;
+            color: #ffffff !important;
+            border-color: #333333 !important;
+        }
+
+        /* Force all child elements to be white text */
+        [data-color-mode="dark"] .github-card *,
+        [data-color-mode="dark"] .card *,
+        [data-color-mode="dark"] .container *,
+        [data-color-mode="dark"] .row *,
+        [data-color-mode="dark"] .col *,
+        [data-color-mode="dark"] .grid-container *,
+        [data-color-mode="dark"] .grid-item *,
+        [data-color-mode="dark"] .summary-card *,
+        [data-color-mode="dark"] .stats-container *,
+        [data-color-mode="dark"] .details-container *,
+        [data-color-mode="dark"] .domain-summary *,
+        [data-color-mode="dark"] .users-list-section *,
+        [data-color-mode="dark"] .users-list-content *,
+        [data-color-mode="dark"] .status-box *,
+        [data-color-mode="dark"] .count-display *,
+        [data-color-mode="dark"] .status-info * {
+            color: #ffffff !important;
+        }
+
+        /* FINAL NUCLEAR OPTION - Override ANY white background with hard-coded dark */
+        [data-color-mode="dark"] *[style*="background-color: white"],
+        [data-color-mode="dark"] *[style*="background: white"],
+        [data-color-mode="dark"] *[style*="background-color: #fff"],
+        [data-color-mode="dark"] *[style*="background: #fff"],
+        [data-color-mode="dark"] *[style*="background-color: #ffffff"],
+        [data-color-mode="dark"] *[style*="background: #ffffff"] {
+            background-color: #1a1a1a !important;
+            color: #ffffff !important;
+        }
+
+        /* Force ALL elements with white backgrounds to have white text */
+        [data-color-mode="dark"] *[style*="background-color: white"] *,
+        [data-color-mode="dark"] *[style*="background: white"] *,
+        [data-color-mode="dark"] *[style*="background-color: #fff"] *,
+        [data-color-mode="dark"] *[style*="background: #fff"] *,
+        [data-color-mode="dark"] *[style*="background-color: #ffffff"] *,
+        [data-color-mode="dark"] *[style*="background: #ffffff"] * {
+            color: #ffffff !important;
+        }
+
+        /* SPECIFIC FIXES for the exact HTML structure provided */
+        /* Domain Summary grid containers */
+        [data-color-mode="dark"] div[style*="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr))"] {
+            background-color: #1a1a1a !important;
+        }
+
+        [data-color-mode="dark"] div[style*="text-align: center; padding: 8px; background: white"] {
+            background-color: #2a2a2a !important;
+            color: #ffffff !important;
+            border: 1px solid #444444 !important;
+        }
+
+        [data-color-mode="dark"] div[style*="text-align: center; padding: 8px; background: white"] div {
+            color: #ffffff !important;
+        }
+
+        [data-color-mode="dark"] div[style*="color: #666"] {
+            color: #cccccc !important;
+        }
+
+        /* Users List section fixes */
+        [data-color-mode="dark"] .github-card-header[style*="background: linear-gradient(135deg, #f6f8fa 0%, #e1e8ed 100%)"] {
+            background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%) !important;
+            border-bottom-color: #444444 !important;
+        }
+
+        [data-color-mode="dark"] .github-card-title[style*="color: #24292f"] {
+            color: #ffffff !important;
+        }
+
+        [data-color-mode="dark"] div[style*="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)"] {
+            background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%) !important;
+            border-color: #444444 !important;
+        }
+
+        /* Status boxes with gradients */
+        [data-color-mode="dark"] div[style*="background: linear-gradient(135deg, #f6f8fa 0%, #e9ecef 100%)"] {
+            background: linear-gradient(135deg, #3a3a3a 0%, #2a2a2a 100%) !important;
+            border-color: #555555 !important;
+        }
+
+        [data-color-mode="dark"] div[style*="background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)"] {
+            background: linear-gradient(135deg, #1a4d1a 0%, #0d3d0d 100%) !important;
+            border-color: #2d5a2d !important;
+        }
+
+        [data-color-mode="dark"] div[style*="background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)"] {
+            background: linear-gradient(135deg, #4d1a1a 0%, #3d0d0d 100%) !important;
+            border-color: #5a2d2d !important;
+        }
+
+        [data-color-mode="dark"] div[style*="background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)"] {
+            background: linear-gradient(135deg, #1a2a4d 0%, #0d1a3d 100%) !important;
+            border-color: #2d3a5a !important;
+        }
+
+        /* Force all text in these elements to be white */
+        [data-color-mode="dark"] div[style*="background: linear-gradient"] span,
+        [data-color-mode="dark"] div[style*="background: linear-gradient"] div {
+            color: #ffffff !important;
+        }
+
+        /* Icons in dark mode */
+        [data-color-mode="dark"] .fas {
+            color: #ffffff !important;
+        }
+
+        /* Force all black text on white backgrounds to appropriate dark mode colors */
+        [data-color-mode="dark"] *[style*="color: black"],
+        [data-color-mode="dark"] *[style*="color: #000"],
+        [data-color-mode="dark"] *[style*="color: #000000"] {
+            color: var(--color-fg-default) !important;
+        }
+
+        /* Ensure all containers have proper dark backgrounds */
+        [data-color-mode="dark"] .content,
+        [data-color-mode="dark"] .page-content,
+        [data-color-mode="dark"] .main-content,
+        [data-color-mode="dark"] .container-fluid {
+            background-color: var(--color-canvas-default) !important;
+            color: var(--color-fg-default) !important;
+        }
+
+        /* Override specific inline styles in dark mode */
+        [data-color-mode="dark"] *[style*="background: #fff8c5"],
+        [data-color-mode="dark"] *[style*="background-color: #fff8c5"] {
+            background-color: rgba(251, 133, 0, 0.1) !important;
+        }
+
+        [data-color-mode="dark"] *[style*="color: #656d76"] {
+            color: var(--color-fg-muted) !important;
+        }
+
+        [data-color-mode="dark"] *[style*="color: #7d4e00"] {
+            color: var(--color-warning-fg) !important;
+        }
+
+        [data-color-mode="dark"] *[style*="background: #f6f8fa"],
+        [data-color-mode="dark"] *[style*="background-color: #f6f8fa"] {
+            background-color: var(--color-canvas-subtle) !important;
+        }
+
+        /* Force all elements with inline styles to be dark mode friendly */
+        [data-color-mode="dark"] [style] {
+            background-color: var(--color-canvas-default) !important;
+            color: var(--color-fg-default) !important;
+        }
+
+        /* EMERGENCY FIX: Completely disable problematic modals */
+        #testConnectionModal,
+        #deleteConfirmModal {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+
+        /* Hide modal backdrops */
+        .modal-backdrop {
+            display: none !important;
+        }
+
+        /* Ensure body is not locked */
+        body.modal-open {
+            overflow: auto !important;
+            padding-right: 0 !important;
+        }
+
+        /* Button colors are preserved through specific selectors below */
+
+        /* Fix specific GitHub card styles in templates */
+        [data-color-mode="dark"] .github-card[style*="background"] {
+            background-color: var(--color-canvas-default) !important;
+        }
+
+        /* Comprehensive dark mode for all containers and cards */
+        [data-color-mode="dark"] .github-card,
+        [data-color-mode="dark"] .github-card-header,
+        [data-color-mode="dark"] .github-card-body,
+        [data-color-mode="dark"] .card,
+        [data-color-mode="dark"] .container,
+        [data-color-mode="dark"] .section,
+        [data-color-mode="dark"] .data-display,
+        [data-color-mode="dark"] .status-box,
+        [data-color-mode="dark"] .count-display,
+        [data-color-mode="dark"] .status-info,
+        [data-color-mode="dark"] .account-list,
+        [data-color-mode="dark"] .search-input,
+        [data-color-mode="dark"] .results-log,
+        [data-color-mode="dark"] .domain-list,
+        [data-color-mode="dark"] .domain-summary,
+        [data-color-mode="dark"] .domain-details,
+        [data-color-mode="dark"] .summary-card,
+        [data-color-mode="dark"] .stats-container,
+        [data-color-mode="dark"] .details-container {
+            background-color: var(--color-canvas-default) !important;
+            color: var(--color-fg-default) !important;
+            border-color: var(--color-border-default) !important;
+        }
+
+        /* Dark mode text colors */
+        [data-color-mode="dark"] .github-card-title,
+        [data-color-mode="dark"] .github-card-header h1,
+        [data-color-mode="dark"] .github-card-header h2,
+        [data-color-mode="dark"] .github-card-header h3,
+        [data-color-mode="dark"] .github-card-header h4,
+        [data-color-mode="dark"] .github-card-header h5,
+        [data-color-mode="dark"] .github-card-header h6,
+        [data-color-mode="dark"] .github-card-body,
+        [data-color-mode="dark"] .github-card-body p,
+        [data-color-mode="dark"] .github-card-body span,
+        [data-color-mode="dark"] .github-card-body div,
+        [data-color-mode="dark"] .github-card-body td,
+        [data-color-mode="dark"] .github-card-body th,
+        [data-color-mode="dark"] .github-card-body label,
+        [data-color-mode="dark"] .github-card-body small {
+            color: var(--color-fg-default) !important;
+        }
+
+        /* Dark mode for specific elements that might have light text */
+        [data-color-mode="dark"] .text-muted,
+        [data-color-mode="dark"] .text-secondary,
+        [data-color-mode="dark"] .text-light,
+        [data-color-mode="dark"] .text-gray,
+        [data-color-mode="dark"] .text-grey {
+            color: var(--color-fg-muted) !important;
+        }
+
+        /* Dark mode for tables and lists */
+        [data-color-mode="dark"] table,
+        [data-color-mode="dark"] .table,
+        [data-color-mode="dark"] .table th,
+        [data-color-mode="dark"] .table td,
+        [data-color-mode="dark"] .table tr,
+        [data-color-mode="dark"] .list-group,
+        [data-color-mode="dark"] .list-group-item,
+        [data-color-mode="dark"] .list-item,
+        [data-color-mode="dark"] .domain-item,
+        [data-color-mode="dark"] .user-item,
+        [data-color-mode="dark"] .account-item {
+            background-color: var(--color-canvas-default) !important;
+            color: var(--color-fg-default) !important;
+            border-color: var(--color-border-default) !important;
+        }
+
+        /* Dark mode for form elements */
+        [data-color-mode="dark"] .form-control,
+        [data-color-mode="dark"] .form-control-github,
+        [data-color-mode="dark"] .form-select,
+        [data-color-mode="dark"] input,
+        [data-color-mode="dark"] textarea,
+        [data-color-mode="dark"] select {
+            background-color: var(--color-canvas-subtle) !important;
+            color: var(--color-fg-default) !important;
+            border-color: var(--color-border-default) !important;
+        }
+
+        /* Dark mode for buttons */
+        [data-color-mode="dark"] .btn-github,
+        [data-color-mode="dark"] .btn-github-primary,
+        [data-color-mode="dark"] .btn-github-secondary {
+            background-color: var(--color-btn-bg) !important;
+            color: var(--color-btn-text) !important;
+            border-color: var(--color-btn-border) !important;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html {
+            background-color: var(--color-canvas-default);
+            transition: background-color 0.3s ease;
+            min-height: 100vh;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Roboto", "Helvetica Neue", Arial, sans-serif;
+            font-size: 14px;
+            line-height: 1.6;
+            font-weight: 400;
+            letter-spacing: -0.01em;
+            background-color: var(--color-canvas-subtle);
+            color: var(--color-fg-default);
+            margin: 0;
+            min-height: 100vh;
+            transition: all 0.3s ease;
+            width: 100%;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* Ensure all containers inherit background and cover full width */
+        .main-container {
+            background-color: var(--color-canvas-subtle);
+            width: 100%;
+            min-height: calc(100vh - 80px);
+            padding: var(--spacing-lg);
+        }
+
+        /* Force full-width background coverage */
+        [data-color-mode="dark"] html,
+        [data-color-mode="dark"] body {
+            background-color: var(--color-canvas-default) !important;
+        }
+
+        /* Add dark blue-purple gradient for dark mode side areas */
+        [data-color-mode="dark"] body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background:
+                radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.08) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(255, 119, 198, 0.08) 0%, transparent 50%),
+                linear-gradient(135deg, #0d1117 0%, #161b22 30%, #1a1f2e 70%, #1e2337 100%);
+            z-index: -1;
+        }
+
+        /* Enhanced main container with better styling */
+        [data-color-mode="dark"] .main-container {
+            background-color: var(--color-canvas-default) !important;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Sidebar Layout */
+        body {
+            display: flex;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+        }
+
+        /* ============================================
+           SIDEBAR - COMPLETE REFACTOR (TAILWIND PORT)
+           ============================================ */
+        /* Note: We rely on Tailwind utility classes now, matching Sidebar.tsx */
+
+        .sidebar-transition {
+            transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+    </style>
+
+    <!-- Modern Minimalist Theme (Moved to end for priority) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/modern-theme.css') }}?v=2026.1.31.3">
+</head>
+
+<body>
+    <!-- Mobile Header (Visible only on small screens) -->
+    <div class="md:hidden flex items-center justify-between p-4 sticky top-0 z-40 w-full"
+        style="background-color: var(--color-canvas-default); border-bottom: 1px solid var(--color-border-default);">
+        <div class="flex items-center gap-2">
+            <button onclick="toggleMobileSidebar()" class="p-2 text-slate-500 hover:text-blue-600 rounded-md">
+                <i class="fas fa-bars text-xl"></i>
+            </button>
+            <span class="font-bold text-lg tracking-tight" style="color: var(--color-fg-default);">GBot Admin</span>
+        </div>
+        <div class="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs">
+            GBot
+        </div>
+    </div>
+
+    <!-- Sidebar Component (Ported from Sidebar.tsx) -->
+    <!-- Added md:translate-x-0 for desktop visibility, -translate-x-full for mobile hidden by default -->
+    <div id="app-sidebar"
+        class="flex h-screen flex-col transition-transform duration-300 fixed left-0 top-0 z-50 w-72 sidebar-transition transform -translate-x-full md:translate-x-0"
+        style="background-color: var(--color-canvas-default); border-right: 1px solid var(--color-border-default);">
+
+        <!-- Brand Header (Desktop) -->
+        <div class="flex h-20 items-center justify-between px-6"
+            style="border-bottom: 1px solid var(--color-border-default);">
+            <div id="sidebar-brand-expanded" class="flex flex-col">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-robot text-2xl text-blue-600"></i>
+                    <span
+                        class="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent tracking-tight font-inter">
+                        GBot
+                    </span>
+                </div>
+                <span class="text-[10px] text-slate-400 font-medium tracking-widest uppercase mt-1">
+                    v2.1.0 (Stable)
+                </span>
+            </div>
+
+            <div id="sidebar-brand-collapsed" class="hidden w-full flex justify-center">
+                <div class="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold">
+                    <i class="fas fa-robot text-sm"></i>
+                </div>
+            </div>
+
+            <!-- Mobile Close Button -->
+            <button onclick="toggleMobileSidebar()"
+                class="md:hidden p-2 text-slate-400 hover:text-slate-600 transition-colors">
+                <i class="fas fa-times text-lg"></i>
+            </button>
+        </div>
+
+        <!-- Desktop Collapse Toggle (Hidden on Mobile) -->
+        <button onclick="toggleSidebar()"
+            class="hidden md:flex absolute -right-3 top-24 h-6 w-6 rounded-full bg-white border border-slate-200 items-center justify-center text-slate-500 shadow-sm hover:text-blue-600 transition-colors z-10 cursor-pointer">
+            <i id="sidebar-toggle-icon" class="fas fa-chevron-left text-xs"></i>
+        </button>
+
+        <!-- Navigation Links (RESTORED ORIGINAL APP LINKS) -->
+        <nav class="flex-1 space-y-1.5 px-3 py-6 overflow-y-auto custom-scrollbar">
+
+            <!-- Dashboard with Dropdown (Mapped to Original Tabs) -->
+            <div class="nav-item-wrapper">
+                <a href="/dashboard"
+                    class="group flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all duration-200 {{ 'bg-blue-50 text-blue-700 shadow-sm' if request.endpoint == 'dashboard' else 'text-slate-500 hover:bg-slate-50 hover:text-slate-900' }}">
+                    <i
+                        class="fas fa-chart-bar h-5 w-5 flex items-center justify-center transition-colors {{ 'text-blue-600' if request.endpoint == 'dashboard' else 'text-slate-400 group-hover:text-slate-600' }}"></i>
+                    <span class="truncate nav-text">Dashboard</span>
+                    {% if request.endpoint == 'dashboard' %}
+                    <div class="ml-auto w-1.5 h-1.5 rounded-full bg-blue-600 nav-dot"></div>
+                    {% endif %}
+                </a>
+                <!-- Sub-items for Dashboard Tabs (Visible if on Dashboard) -->
+                {% if request.endpoint == 'dashboard' %}
+                <div class="mt-1 ml-4 border-l border-slate-200 pl-2 flex flex-col gap-1 nav-text">
+                    <a href="/dashboard#tab1" onclick="handleDashboardTabClick(event, 'tab1')"
+                        class="dropdown-item text-xs text-slate-500 hover:text-blue-600 py-1 px-2 rounded-md hover:bg-slate-50 flex items-center gap-2">
+                        <i class="fas fa-user-friends text-[10px]"></i> Users & Accounts
+                    </a>
+                    <a href="/dashboard#tab2" onclick="handleDashboardTabClick(event, 'tab2')"
+                        class="dropdown-item text-xs text-slate-500 hover:text-blue-600 py-1 px-2 rounded-md hover:bg-slate-50 flex items-center gap-2">
+                        <i class="fas fa-user-plus text-[10px]"></i> User Actions
+                    </a>
+                    <a href="/dashboard#tab3" onclick="handleDashboardTabClick(event, 'tab3')"
+                        class="dropdown-item text-xs text-slate-500 hover:text-blue-600 py-1 px-2 rounded-md hover:bg-slate-50 flex items-center gap-2">
+                        <i class="fas fa-exchange-alt text-[10px]"></i> DNS & SMTP
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Users -->
+            {% if 'users' in user_permissions or user_permissions is not defined %}
+            <a href="/users"
+                class="group flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all duration-200 {{ 'bg-blue-50 text-blue-700 shadow-sm' if request.endpoint == 'users' else 'text-slate-500 hover:bg-slate-50 hover:text-slate-900' }}">
+                <i
+                    class="fas fa-users h-5 w-5 flex items-center justify-center transition-colors {{ 'text-blue-600' if request.endpoint == 'users' else 'text-slate-400 group-hover:text-slate-600' }}"></i>
+                <span class="truncate nav-text">Users</span>
+            </a>
+            {% endif %}
+
+            <!-- IP Whitelist -->
+            {% if 'whitelist' in user_permissions or user_permissions is not defined %}
+            <a href="/whitelist"
+                class="group flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all duration-200 {{ 'bg-blue-50 text-blue-700 shadow-sm' if request.endpoint == 'whitelist' else 'text-slate-500 hover:bg-slate-50 hover:text-slate-900' }}">
+                <i
+                    class="fas fa-shield-alt h-5 w-5 flex items-center justify-center transition-colors {{ 'text-blue-600' if request.endpoint == 'whitelist' else 'text-slate-400 group-hover:text-slate-600' }}"></i>
+                <span class="truncate nav-text">IP Whitelist</span>
+            </a>
+            {% endif %}
+
+            <!-- AWS Management -->
+            {% if 'aws_management' in user_permissions or user_permissions is not defined %}
+            <a href="/aws"
+                class="group flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all duration-200 {{ 'bg-blue-50 text-blue-700 shadow-sm' if 'aws' in request.path else 'text-slate-500 hover:bg-slate-50 hover:text-slate-900' }}">
+                <i
+                    class="fas fa-cloud h-5 w-5 flex items-center justify-center transition-colors {{ 'text-blue-600' if 'aws' in request.path else 'text-slate-400 group-hover:text-slate-600' }}"></i>
+                <span class="truncate nav-text">AWS Management</span>
+            </a>
+            {% endif %}
+
+            <!-- DigitalOcean Management -->
+            {% if 'digitalocean_management' in user_permissions or user_permissions is not defined %}
+            <a href="/digitalocean"
+                class="group flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all duration-200 {{ 'bg-blue-50 text-blue-700 shadow-sm' if 'digitalocean' in request.path else 'text-slate-500 hover:bg-slate-50 hover:text-slate-900' }}">
+                <i
+                    class="fab fa-digital-ocean h-5 w-5 flex items-center justify-center transition-colors {{ 'text-blue-600' if 'digitalocean' in request.path else 'text-slate-400 group-hover:text-slate-600' }}"></i>
+                <span class="truncate nav-text">DigitalOcean Management</span>
+            </a>
+            {% endif %}
+
+            <!-- List Management -->
+            {% if 'list_management' in user_permissions or user_permissions is not defined %}
+            <a href="/list-management"
+                class="group flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all duration-200 {{ 'bg-blue-50 text-blue-700 shadow-sm' if request.endpoint == 'list_management' else 'text-slate-500 hover:bg-slate-50 hover:text-slate-900' }}">
+                <i
+                    class="fas fa-clipboard-list h-5 w-5 flex items-center justify-center transition-colors {{ 'text-blue-600' if request.endpoint == 'list_management' else 'text-slate-400 group-hover:text-slate-600' }}"></i>
+                <span class="truncate nav-text">List Management</span>
+            </a>
+            {% endif %}
+
+            <!-- Settings -->
+            {% if 'settings' in user_permissions or user_permissions is not defined %}
+            <a href="/settings"
+                class="group flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all duration-200 {{ 'bg-blue-50 text-blue-700 shadow-sm' if request.endpoint == 'settings' else 'text-slate-500 hover:bg-slate-50 hover:text-slate-900' }}">
+                <i
+                    class="fas fa-cog h-5 w-5 flex items-center justify-center transition-colors {{ 'text-blue-600' if request.endpoint == 'settings' else 'text-slate-400 group-hover:text-slate-600' }}"></i>
+                <span class="truncate nav-text">Settings</span>
+            </a>
+            {% endif %}
+
+        </nav>
+
+        <!-- Footer / User Info & Logout -->
+        <div class="p-4 border-t border-slate-100 bg-slate-50/50">
+            <div id="sidebar-footer-expanded" class="flex flex-col gap-3">
+
+                <!-- System Status (Combined with User Info) -->
+                <div class="flex items-center gap-3 p-2 rounded-lg bg-white border border-slate-100 shadow-sm">
+                    <div class="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
+                        <i class="fas fa-user-circle text-lg"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-xs font-semibold text-slate-900 truncate">{{ user if user else 'Guest' }}</p>
+                        <p class="text-[10px] text-slate-500 truncate">{{ role if role else 'User' }}</p>
+                    </div>
+                </div>
+
+                <!-- Logout Button -->
+                <a href="{{ url_for('logout') }}"
+                    class="flex items-center justify-center gap-2 p-2 rounded-lg text-xs font-medium text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors w-full border border-transparent hover:border-red-100">
+                    <i class="fas fa-sign-out-alt"></i>
+                    <span>Logout</span>
+                </a>
+            </div>
+
+            <div id="sidebar-footer-collapsed" class="hidden flex flex-col items-center gap-4">
+                <div class="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600"
+                    title="{{ user }}">
+                    <i class="fas fa-user text-xs"></i>
+                </div>
+                <a href="{{ url_for('logout') }}" class="text-red-500 hover:text-red-700" title="Logout">
+                    <i class="fas fa-sign-out-alt"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content Wrapper -->
+    <!-- Margin is dynamically controlled by JavaScript based on sidebar state -->
+    <div id="main-content-wrapper" class="transition-all duration-300 ml-72 p-4 md:p-8 bg-white min-h-screen">
+        <!-- Navigation Logic Script -->
+        <script>
+            // Mobile Sidebar Toggle
+            function toggleMobileSidebar() {
+                const sidebar = document.getElementById('app-sidebar');
+                if (sidebar.classList.contains('-translate-x-full')) {
+                    sidebar.classList.remove('-translate-x-full');
+                } else {
+                    sidebar.classList.add('-translate-x-full');
+                }
+            }
+
+            // Tab switching logic (Placeholder for now)
+            function showTab(tabId) {
+                console.log("Switching to tab:", tabId);
+                // Implement tab logic if needed, or rely on distinct pages
+            }
+        </script>
+        <!-- New Glass Header -->
+        <header class="glass-header">
+            <div class="glass-header-left">
+                <div class="header-title">
+                    <span class="text-muted">Admin</span>
+                    <i class="fas fa-chevron-right" style="font-size: 0.75rem;"></i>
+                    <span class="active">{{ self.title() if self.title() else 'Dashboard' }}</span>
+                </div>
+            </div>
+            <div class="glass-header-right">
+                <!-- Search Bar -->
+                <div class="header-search">
+                    <i class="fas fa-search"></i>
+                    <input type="text" placeholder="Search resources..." class="glass-input">
+                </div>
+
+                <!-- Theme Selector -->
+                <div class="theme-palette">
+                    <button class="theme-btn" onclick="setTheme('ios')" data-set-theme="ios" title="iOS (Apple Design)">
+                        <i class="fab fa-apple"></i>
+                    </button>
+                    <button class="theme-btn" onclick="setTheme('gmail')" data-set-theme="gmail"
+                        title="Gmail (Google Material)">
+                        <i class="fab fa-google"></i>
+                    </button>
+                    <button class="theme-btn" onclick="setTheme('yahoo')" data-set-theme="yahoo"
+                        title="Yahoo (Purple Brand)">
+                        <i class="fab fa-yahoo"></i>
+                    </button>
+                    <button class="theme-btn" onclick="setTheme('dark')" data-set-theme="dark" title="Dark Mode">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                    <button class="theme-btn" onclick="setTheme('aurora')" data-set-theme="aurora"
+                        title="Aurora (Light Mode)">
+                        <i class="fas fa-sun"></i>
+                    </button>
+                </div>
+
+                <!-- Notifications -->
+                <div class="notification-wrapper" style="position: relative;">
+                    <button class="header-icon-btn" id="notificationBtn" onclick="toggleNotificationDropdown()">
+                        <i class="fas fa-bell"></i>
+                        <span class="notification-badge" id="notificationBadge" style="display: none;">0</span>
+                    </button>
+                    <div class="notification-dropdown glass-panel" id="notificationDropdown"
+                        style="display: none; position: absolute; top: 100%; right: 0; width: 350px; max-height: 400px; overflow-y: auto; z-index: 1100; margin-top: 8px; padding: 0;">
+                        <div class="notification-header"
+                            style="padding: 12px 16px; border-bottom: 1px solid var(--border-panel); display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-weight: 600; color: var(--text-primary);">Notifications</span>
+                            <button onclick="markAllNotificationsRead()" class="glass-button glass-button-sm"
+                                style="padding: 4px 8px; font-size: 0.75rem;">
+                                Mark all read
+                            </button>
+                        </div>
+                        <div class="notification-list" id="notificationList" style="padding: 8px 0;">
+                            <div class="text-center text-muted p-3">Loading...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Profile -->
+                <div class="profile-btn" title="{{ user }}">
+                    {{ user[:2].upper() if user else 'AD' }}
+                </div>
+            </div>
+        </header>
+        <!-- Flash messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="main-container">
+            {% for category, message in messages %}
+            <div class="alert-github alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <div class="main-container">
+            {% block content %}{% endblock %}
+        </div>
+    </div>
+    </div>
+
+    <!-- Responsive Sidebar Script -->
+    <script>
+        function toggleSidebar() {
+            // Check if mobile (using same breakpoint as CSS 992px)
+            if (window.innerWidth < 992) {
+                // Mobile behavior
+                const sidebar = document.querySelector('.glass-sidebar') || document.getElementById('sidebar');
+                const overlay = document.querySelector('.glass-sidebar-overlay');
+                if (sidebar) sidebar.classList.toggle('active');
+                if (overlay) overlay.classList.toggle('active');
+            } else {
+                // Desktop behavior
+                const sidebar = document.getElementById('sidebar');
+                const toggleIcon = document.getElementById('sidebarToggleIcon');
+
+                if (sidebar) {
+                    sidebar.classList.toggle('collapsed');
+                    const isCollapsed = sidebar.classList.contains('collapsed');
+                    localStorage.setItem('sidebarCollapsed', isCollapsed);
+
+                    if (toggleIcon) {
+                        toggleIcon.className = isCollapsed ? 'fas fa-angle-double-right' : 'fas fa-angle-double-left';
+                    }
+                }
+            }
+        }
+
+        // Close sidebar when clicking a link on mobile
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.addEventListener('click', () => {
+                if (window.innerWidth < 992) {
+                    toggleSidebar();
+                }
+            });
+        });
+    </script>
+
+    <!-- Theme Toggle Script -->
+    <script>
+        // Theme Management
+        function setTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+        }
+
+        // Dashboard Dropdown Toggle - Clean Implementation
+        function toggleDashboardDropdown(event) {
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+
+            const wrapper = document.querySelector('aside.sidebar .nav-item-wrapper');
+            const navItem = wrapper ? wrapper.querySelector('.nav-item.has-dropdown') : null;
+            const dropdown = document.getElementById('dashboardDropdown');
+
+            if (!wrapper || !navItem || !dropdown) {
+                console.error('Sidebar dropdown elements not found', { wrapper, navItem, dropdown });
+                return;
+            }
+
+            const isOpen = wrapper.classList.contains('is-open');
+            console.log('Toggling dropdown, current state:', isOpen);
+
+            if (isOpen) {
+                // Close dropdown
+                wrapper.classList.remove('is-open');
+                navItem.classList.remove('is-open');
+                dropdown.classList.remove('is-open');
+                console.log('Dropdown closed');
+            } else {
+                // Open dropdown
+                wrapper.classList.add('is-open');
+                navItem.classList.add('is-open');
+                dropdown.classList.add('is-open');
+                console.log('Dropdown opened');
+            }
+        }
+
+        function handleDashboardClick(event) {
+            // If clicking on Dashboard link (not dropdown toggle), redirect to tab1
+            if (!event.target.closest('.dropdown-toggle')) {
+                event.preventDefault();
+                window.location.href = '/dashboard#tab1';
+            }
+        }
+
+        function handleDashboardTabClick(event, tabId) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            console.log('handleDashboardTabClick called with tabId:', tabId);
+
+            // Navigate to dashboard if not already there
+            if (window.location.pathname !== '/dashboard') {
+                console.log('Navigating to dashboard with tab:', tabId);
+                window.location.href = '/dashboard#' + tabId;
+                return;
+            }
+
+            // Update URL hash
+            window.location.hash = tabId;
+            console.log('Updated hash to:', tabId);
+
+            // Call showTab function if it exists
+            if (typeof showTab === 'function') {
+                console.log('Calling showTab directly');
+                showTab(tabId);
+            } else {
+                console.log('showTab not found, waiting...');
+                // Fallback: wait for showTab to be available
+                let attempts = 0;
+                const maxAttempts = 10;
+                const checkShowTab = setInterval(() => {
+                    attempts++;
+                    if (typeof showTab === 'function') {
+                        console.log('showTab found after', attempts * 100, 'ms');
+                        clearInterval(checkShowTab);
+                        showTab(tabId);
+                    } else if (attempts >= maxAttempts) {
+                        console.error('showTab function not found after', maxAttempts * 100, 'ms');
+                        clearInterval(checkShowTab);
+                        // Force show the tab by manipulating DOM directly
+                        const tabs = document.querySelectorAll('.tab-content');
+                        tabs.forEach(tab => {
+                            tab.classList.remove('active');
+                            tab.style.display = 'none';
+                        });
+                        const selectedTab = document.getElementById(tabId);
+                        if (selectedTab) {
+                            selectedTab.classList.add('active');
+                            selectedTab.style.display = 'block';
+                            console.log('Manually showed tab:', tabId);
+                        }
+                    }
+                }, 100);
+            }
+
+            // Update active state in dropdown
+            const dropdownItems = document.querySelectorAll('.dropdown-item');
+            dropdownItems.forEach(item => {
+                item.classList.remove('active');
+                if (item.getAttribute('onclick') && item.getAttribute('onclick').includes(tabId)) {
+                    item.classList.add('active');
+                }
+            });
+        }
+
+        // Initialize sidebar state
+        document.addEventListener('DOMContentLoaded', function () {
+            const sidebar = document.getElementById('sidebar');
+            const toggleIcon = document.getElementById('sidebarToggleIcon');
+            const savedState = localStorage.getItem('sidebarCollapsed');
+            if (sidebar && savedState === 'true') {
+                sidebar.classList.add('collapsed');
+                if (toggleIcon) {
+                    toggleIcon.className = 'fas fa-angle-double-right';
+                }
+            } else if (toggleIcon) {
+                toggleIcon.className = 'fas fa-angle-double-left';
+            }
+
+            // Handle hash navigation for dashboard tabs
+            if (window.location.hash) {
+                const tabId = window.location.hash.substring(1);
+                if (typeof showTab === 'function') {
+                    setTimeout(() => showTab(tabId), 100);
+                }
+            }
+
+            // Auto-open dashboard dropdown if on dashboard page
+            if (window.location.pathname === '/dashboard') {
+                const wrapper = document.querySelector('aside.sidebar .nav-item-wrapper');
+                const navItem = wrapper ? wrapper.querySelector('.nav-item.has-dropdown') : null;
+                const dropdown = document.getElementById('dashboardDropdown');
+
+                if (wrapper && navItem && dropdown) {
+                    wrapper.classList.add('is-open');
+                    navItem.classList.add('is-open');
+                    dropdown.classList.add('is-open');
+                    console.log('Auto-opened dashboard dropdown');
+                } else {
+                    console.error('Could not auto-open dropdown', { wrapper, navItem, dropdown });
+                }
+            }
+
+            // Update active dropdown item based on current tab
+            if (window.location.pathname === '/dashboard') {
+                const hash = window.location.hash.substring(1);
+                if (hash) {
+                    const dropdownItems = document.querySelectorAll('.dropdown-item');
+                    dropdownItems.forEach(item => {
+                        item.classList.remove('active');
+                        if (item.getAttribute('onclick') && item.getAttribute('onclick').includes(hash)) {
+                            item.classList.add('active');
+                        }
+                    });
+                }
+            }
+        });
+
+        // Theme management
+        // Theme management
+        const themes = ['nebula', 'midnight', 'aurora', 'forest', 'crimson'];
+
+        function getPreferredTheme() {
+            const stored = localStorage.getItem('theme');
+            if (stored && themes.includes(stored)) return stored;
+            return 'nebula'; // Default to Antigravity Nebula
+        }
+
+        function setTheme(theme) {
+            if (!themes.includes(theme)) theme = 'nebula';
+
+            // Set the attribute for CSS to pick up
+            document.documentElement.setAttribute('data-color-mode', theme);
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+
+            // Update active state on palette buttons
+            const buttons = document.querySelectorAll('.theme-btn');
+            buttons.forEach(btn => {
+                const btnTheme = btn.getAttribute('data-set-theme');
+                if (btnTheme === theme) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+        }
+
+        // Initialize theme on page load
+        document.addEventListener('DOMContentLoaded', function () {
+            setTheme(getPreferredTheme());
+
+            // Listen for system theme changes
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function (e) {
+                if (!localStorage.getItem('theme')) {
+                    setTheme(e.matches ? 'dark' : 'light');
+                }
+            });
+
+            // IMMEDIATELY force close any stuck modals on page load
+            function forceCloseAllModalsImmediate() {
+                // Close Bootstrap modals
+                const bootstrapModals = document.querySelectorAll('.modal.show');
+                bootstrapModals.forEach(function (modal) {
+                    const modalInstance = bootstrap.Modal.getInstance(modal);
+                    if (modalInstance) {
+                        modalInstance.hide();
+                    }
+                });
+
+                // Remove modal backdrops
+                const backdrops = document.querySelectorAll('.modal-backdrop');
+                backdrops.forEach(function (backdrop) {
+                    backdrop.remove();
+                });
+
+                // Force hide any modals with display: block
+                const stuckModals = document.querySelectorAll('.modal[style*="display: block"]');
+                stuckModals.forEach(function (modal) {
+                    modal.style.display = 'none';
+                });
+
+                // Remove any body classes that might be stuck
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+
+                console.log('IMMEDIATELY cleared stuck modals on page load');
+            }
+
+            // Run immediately
+            forceCloseAllModalsImmediate();
+
+            // Run again after a short delay
+            setTimeout(forceCloseAllModalsImmediate, 50);
+            setTimeout(forceCloseAllModalsImmediate, 100);
+            setTimeout(forceCloseAllModalsImmediate, 200);
+            setTimeout(forceCloseAllModalsImmediate, 500);
+        });
+
+        // Make toggleTheme globally available
+        window.toggleTheme = toggleTheme;
+
+        // Global function to force close all modals
+        window.forceCloseAllModals = function () {
+            // Close Bootstrap modals
+            const bootstrapModals = document.querySelectorAll('.modal.show');
+            bootstrapModals.forEach(function (modal) {
+                const modalInstance = bootstrap.Modal.getInstance(modal);
+                if (modalInstance) {
+                    modalInstance.hide();
+                }
+            });
+
+            // Remove modal backdrops
+            const backdrops = document.querySelectorAll('.modal-backdrop');
+            backdrops.forEach(function (backdrop) {
+                backdrop.remove();
+            });
+
+            // Force hide any modals with display: block
+            const stuckModals = document.querySelectorAll('.modal[style*="display: block"]');
+            stuckModals.forEach(function (modal) {
+                modal.style.display = 'none';
+            });
+
+            // Remove any body classes that might be stuck
+            document.body.classList.remove('modal-open');
+            document.body.style.overflow = '';
+            document.body.style.paddingRight = '';
+
+            console.log('Force closed all modals');
+        };
+
+        // Add keyboard shortcut to force close modals (Escape key)
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') {
+                window.forceCloseAllModals();
+            }
+        });
+
+        // EMERGENCY FIX: Completely disable problematic modals
+        document.addEventListener('DOMContentLoaded', function () {
+            // Override Bootstrap Modal functions to prevent showing
+            if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                const originalShow = bootstrap.Modal.prototype.show;
+                bootstrap.Modal.prototype.show = function () {
+                    console.log('Modal show attempt blocked for:', this._element.id);
+                    // Don't show the modal
+                    return;
+                };
+
+                const originalHide = bootstrap.Modal.prototype.hide;
+                bootstrap.Modal.prototype.hide = function () {
+                    console.log('Modal hide called for:', this._element.id);
+                    // Force hide
+                    this._element.style.display = 'none';
+                    this._element.classList.remove('show');
+                    document.body.classList.remove('modal-open');
+                    document.body.style.overflow = '';
+                    document.body.style.paddingRight = '';
+
+                    // Remove backdrop
+                    const backdrops = document.querySelectorAll('.modal-backdrop');
+                    backdrops.forEach(backdrop => backdrop.remove());
+                };
+            }
+
+            // Override jQuery modal functions if they exist
+            if (typeof $ !== 'undefined' && $.fn.modal) {
+                $.fn.modal = function () {
+                    console.log('jQuery modal call blocked');
+                    return this;
+                };
+            }
+
+            // Force hide specific problematic modals
+            const problematicModals = ['testConnectionModal', 'deleteConfirmModal'];
+            problematicModals.forEach(function (modalId) {
+                const modal = document.getElementById(modalId);
+                if (modal) {
+                    modal.style.display = 'none';
+                    modal.style.visibility = 'hidden';
+                    modal.style.opacity = '0';
+                    modal.style.pointerEvents = 'none';
+                }
+            });
+
+            console.log('Emergency modal blocking activated');
+        });
+    </script>
+
+    <!-- Notification System Script -->
+    <script>
+        // Notification System
+        let notificationDropdownOpen = false;
+
+        function toggleNotificationDropdown() {
+            const dropdown = document.getElementById('notificationDropdown');
+            notificationDropdownOpen = !notificationDropdownOpen;
+            dropdown.style.display = notificationDropdownOpen ? 'block' : 'none';
+
+            if (notificationDropdownOpen) {
+                loadNotifications();
+            }
+        }
+
+        function loadNotifications() {
+            fetch('/api/notifications')
+                .then(res => res.json())
+                .then(data => {
+                    const list = document.getElementById('notificationList');
+                    const badge = document.getElementById('notificationBadge');
+
+                    // Update badge
+                    if (data.unread_count > 0) {
+                        badge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
+                        badge.style.display = 'flex';
+                    } else {
+                        badge.style.display = 'none';
+                    }
+
+                    // Render notifications
+                    if (data.notifications && data.notifications.length > 0) {
+                        list.innerHTML = data.notifications.map(n => `
+                            <div class="notification-item" style="padding: 10px 16px; border-bottom: 1px solid var(--border-panel); display: flex; align-items: flex-start; gap: 12px; ${n.is_read ? 'opacity: 0.6;' : ''}">
+                                <div style="width: 32px; height: 32px; border-radius: 50%; background: rgba(59, 130, 246, 0.15); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                    <i class="fas ${n.icon || 'fa-bell'}" style="font-size: 0.85rem; color: var(--accent-primary);"></i>
+                                </div>
+                                <div style="flex: 1; min-width: 0;">
+                                    <div style="font-weight: 500; color: var(--text-primary); font-size: 0.875rem;">${n.title}</div>
+                                    <div style="color: var(--text-secondary); font-size: 0.75rem; margin-top: 2px;">${n.message}</div>
+                                    <div style="color: var(--text-muted); font-size: 0.7rem; margin-top: 4px;">${n.time_ago}</div>
+                                </div>
+                                ${!n.is_read ? '<div style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent-primary);"></div>' : ''}
+                            </div>
+                        `).join('');
+                    } else {
+                        list.innerHTML = '<div class="text-center text-muted p-4"><i class="fas fa-bell-slash fa-2x mb-2 opacity-50"></i><p class="m-0">No notifications yet</p></div>';
+                    }
+                })
+                .catch(err => {
+                    console.error('Error loading notifications:', err);
+                    document.getElementById('notificationList').innerHTML = '<div class="text-center text-danger p-3">Error loading notifications</div>';
+                });
+        }
+
+        function markAllNotificationsRead() {
+            fetch('/api/notifications/mark-read', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mark_all: true })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        loadNotifications();
+                    }
+                })
+                .catch(err => console.error('Error marking notifications read:', err));
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function (e) {
+            const wrapper = document.querySelector('.notification-wrapper');
+            if (wrapper && !wrapper.contains(e.target)) {
+                document.getElementById('notificationDropdown').style.display = 'none';
+                notificationDropdownOpen = false;
+            }
+        });
+
+        // Load notifications on page load and poll every 30 seconds
+        document.addEventListener('DOMContentLoaded', function () {
+            loadNotifications();
+            setInterval(loadNotifications, 30000);
+        });
+    </script>
+
+    {% block scripts %}{% endblock %}
+
+    <!-- Scroll to Top Button -->
+    <button class="scroll-to-top" id="scrollToTop" onclick="scrollToTop()" title="Scroll to top">
+        <i class="fas fa-arrow-up"></i>
+    </button>
+
+    <script>
+        // Scroll to Top Button
+        function scrollToTop() {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        }
+
+        // Show/hide scroll to top button
+        window.addEventListener('scroll', function () {
+            const scrollButton = document.getElementById('scrollToTop');
+            if (scrollButton) {
+                if (window.pageYOffset > 300) {
+                    scrollButton.classList.add('visible');
+                } else {
+                    scrollButton.classList.remove('visible');
+                }
+            }
+        });
+
+        // Initialize scroll button on page load
+        document.addEventListener('DOMContentLoaded', function () {
+            const scrollButton = document.getElementById('scrollToTop');
+            if (scrollButton && window.pageYOffset > 300) {
+                scrollButton.classList.add('visible');
+            }
+        });
+
+        let currentTlds = [];
+
+        async function executeNicheDomainGen() {
+            const fab = document.querySelector('.fab-longtail');
+            if (fab) {
+                fab.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            }
+
+            try {
+                const response = await fetch('/api/domain-gen-config');
+                const data = await response.json();
+                if (data.success) {
+                    currentTlds = data.tlds;
+                    renderTlds();
+                    document.getElementById('domainGenModal').style.display = 'flex';
+                } else {
+                    alert("Error loading TLD config: " + data.error);
+                }
+            } catch (err) {
+                console.error("TLD Config Error:", err);
+                alert("Failed to load configuration");
+            } finally {
+                if (fab) {
+                    fab.innerHTML = '<i class="fas fa-magic"></i>';
+                }
+            }
+        }
+
+        function closeDomainGenModal() {
+            document.getElementById('domainGenModal').style.display = 'none';
+        }
+
+        function renderTlds() {
+            const displayArea = document.getElementById('tldDisplayArea');
+            const editableArea = document.getElementById('tldListEditable');
+            
+            let html = '';
+            currentTlds.forEach(tld => {
+                const displayTld = tld.startsWith('.') ? tld : '.' + tld;
+                html += `<span style="padding: 2px 8px; background: rgba(168, 85, 247, 0.15); color: #A855F7; border-radius: 4px; font-size: 0.75rem; font-weight: 600; border: 1px solid rgba(168, 85, 247, 0.3);">${displayTld}</span>`;
+            });
+            displayArea.innerHTML = html || '<span style="color: var(--text-muted); font-size: 0.8rem;">No TLDs defined</span>';
+            
+            let editHtml = '';
+            currentTlds.forEach((tld, index) => {
+                const displayTld = tld.startsWith('.') ? tld : '.' + tld;
+                editHtml += `<span onclick="removeTld(${index})" style="padding: 2px 8px; background: rgba(255,255,255,0.05); color: var(--text-primary); border-radius: 4px; font-size: 0.75rem; cursor: pointer; border: 1px solid var(--border-panel); transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px;">${displayTld} <i class="fas fa-times" style="font-size: 0.6rem; opacity: 0.5;"></i></span>`;
+            });
+            editableArea.innerHTML = editHtml;
+        }
+
+        function toggleTldManager() {
+            const editor = document.getElementById('tldEditorArea');
+            const btn = document.getElementById('tldManagerBtn');
+            if (editor.style.display === 'none') {
+                editor.style.display = 'block';
+                btn.textContent = 'Hide Editor';
+            } else {
+                editor.style.display = 'none';
+                btn.textContent = 'Edit TLDs';
+            }
+        }
+
+        function addNewTld() {
+            const input = document.getElementById('newTldInput');
+            let tld = input.value.trim().toLowerCase();
+            if (!tld) return;
+            if (!tld.startsWith('.')) tld = '.' + tld;
+            if (!currentTlds.includes(tld)) {
+                currentTlds.push(tld);
+                renderTlds();
+                input.value = '';
+            }
+        }
+
+        function removeTld(index) {
+            currentTlds.splice(index, 1);
+            renderTlds();
+        }
+
+        async function startDomainGen() {
+            const count = parseInt(document.getElementById('domainGenCount').value);
+            if (isNaN(count) || count <= 0) {
+                alert("Please enter a valid number.");
+                return;
+            }
+            
+            const startBtn = event.target;
+            const originalText = startBtn.innerHTML;
+            startBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Starting...';
+            startBtn.disabled = true;
+
+            // Save TLDs first to ensure persistence
+            try {
+                await fetch('/api/domain-gen-config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tlds: currentTlds })
+                });
+            } catch (err) {
+                console.error("Save TLD Error:", err);
+            }
+            
+            const fab = document.querySelector('.fab-longtail');
+            if (fab) {
+                fab.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                fab.style.pointerEvents = 'none';
+            }
+
+            try {
+                const response = await fetch('/api/generate-niche-domains', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ count: count, tlds: currentTlds })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    alert("✅ Success!\n" + data.message);
+                    closeDomainGenModal();
+                } else {
+                    alert("❌ Error: " + data.error);
+                }
+            } catch (err) {
+                console.error("Domain Gen Error:", err);
+                alert("❌ System Error: " + err.message);
+            } finally {
+                startBtn.innerHTML = originalText;
+                startBtn.disabled = false;
+                if (fab) {
+                    fab.innerHTML = '<i class="fas fa-magic"></i>';
+                    fab.style.pointerEvents = 'auto';
+                }
+            }
+        }
+    </script>
+    </div>
+    <!-- GLOBAL FLOATING DOMAIN MANAGER -->
+    <div class="domain-fab-container">
+        <!-- Main Toggle Icon -->
+        <div class="domain-fab-main" onclick="toggleDomainFab()">
+            <i class="fas fa-globe"></i>
+        </div>
+
+        <!-- Options Menu -->
+        <div class="domain-fab-options" id="domain-fab-options">
+            <!-- Cloudflare Option -->
+            <div class="domain-fab-option fab-cloudflare" onclick="openCloudflareDomainsModal()"
+                data-tooltip="Cloudflare Domains">
+                <i class="fas fa-cloud"></i>
+            </div>
+            <!-- Namecheap Option -->
+            <div class="domain-fab-option fab-namecheap" onclick="openNamecheapDomainsModal()"
+                data-tooltip="Namecheap Domains">
+                <i class="fas fa-cubes"></i>
+            </div>
+            <!-- Longtail Generator Option -->
+            <div class="domain-fab-option fab-longtail" onclick="executeNicheDomainGen()"
+                data-tooltip="Generate Longtail Domains">
+                <i class="fas fa-magic"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- GLOBAL DOMAIN MODALS -->
+    <!-- Domain Generation Modal -->
+    <div id="domainGenModal" class="glass-modal-backdrop" style="display: none; position: fixed; inset: 0; z-index: 20000; align-items: center; justify-content: center; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px);">
+        <div class="glass-modal-content" style="width: 450px; max-width: 90%; background: var(--bg-panel); border-radius: 1.5rem; padding: 2rem; border: 1px solid var(--border-panel); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                <h3 style="margin: 0; font-size: 1.25rem; color: var(--text-primary);"><i class="fas fa-magic" style="margin-right: 10px; color: #A855F7;"></i> Domain Generator</h3>
+                <button onclick="closeDomainGenModal()" style="background: none; border: none; color: var(--text-muted); cursor: pointer;"><i class="fas fa-times"></i></button>
+            </div>
+            
+            <div style="margin-bottom: 1.5rem;">
+                <label style="display: block; margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--text-secondary);">Number of domains to check</label>
+                <input type="number" id="domainGenCount" value="40" min="1" max="100" class="glass-input" style="width: 100%;">
+            </div>
+            
+            <div style="margin-bottom: 1.5rem;">
+                <label style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--text-secondary);">
+                    Managed TLDs
+                    <button onclick="toggleTldManager()" id="tldManagerBtn" class="glass-button" style="padding: 2px 8px; font-size: 0.7rem; min-height: auto; height: 24px;">Edit TLDs</button>
+                </label>
+                
+                <div id="tldDisplayArea" style="display: flex; flex-wrap: wrap; gap: 6px; padding: 10px; background: rgba(255,255,255,0.03); border-radius: 8px; border: 1px solid var(--border-panel); min-height: 40px;">
+                    <!-- TLDs will be injected here -->
+                </div>
+                
+                <div id="tldEditorArea" style="display: none; margin-top: 10px;">
+                    <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+                        <input type="text" id="newTldInput" placeholder="e.g. shop" class="glass-input" style="flex: 1; min-height: 36px; font-size: 0.8rem;">
+                        <button onclick="addNewTld()" class="glass-button" style="min-height: 36px; padding: 0 15px;">Add</button>
+                    </div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 5px;">Current list (click to remove):</div>
+                    <div id="tldListEditable" style="display: flex; flex-wrap: wrap; gap: 6px;"></div>
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 10px; margin-top: 2rem;">
+                <button onclick="closeDomainGenModal()" class="glass-button" style="flex: 1; background: transparent;">Cancel</button>
+                <button onclick="startDomainGen()" class="glass-button-primary" style="flex: 1; background: #A855F7 !important; color: white !important; font-weight: 600;">Generate & Notify</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cloudflare Domains Modal -->
+    <div id="cloudflareDomainsModal" class="modal domain-modal-global" style="display: none;">
+        <div class="modal-content"
+            style="max-width: 800px; width: 90%; background: var(--bg-modal) !important; backdrop-filter: blur(28px) !important; border: 1px solid var(--border-panel) !important;">
+            <div class="modal-header">
+                <h2><i class="fas fa-cloud"></i> Cloudflare Domains</h2>
+                <span class="close" onclick="closeCloudflareDomainsModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="cloudflare-domains-loading" style="text-align: center; padding: 40px; display: none;">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 48px; color: #0969da;"></i>
+                    <p style="margin-top: 16px; color: var(--text-muted);">Fetching domains from Cloudflare...</p>
+                </div>
+
+                <div id="cloudflare-domains-content" style="display: none;">
+                    <div style="margin-bottom: 12px;">
+                        <input type="text" id="cloudflare-search" placeholder="Search domains..."
+                            class="form-control-github" style="width: 100%; padding: 8px; font-size: 13px;"
+                            onkeyup="filterCloudflareDomains()">
+                    </div>
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <span id="cloudflare-domains-count"
+                            style="font-weight: 600; color: var(--text-primary);"></span>
+                        <button onclick="copyCloudflareDomains()" class="btn-github">
+                            <i class="fas fa-copy"></i> Copy All
+                        </button>
+                    </div>
+
+                    <div
+                        style="max-height: 400px; overflow-y: auto; border: 1px solid var(--border-subtle); border-radius: 6px;">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <thead style="background: var(--bg-panel); position: sticky; top: 0;">
+                                <tr>
+                                    <th
+                                        style="padding: 12px; text-align: left; border-bottom: 1px solid var(--border-subtle); color: var(--text-primary);">
+                                        Domain</th>
+                                    <th
+                                        style="padding: 12px; text-align: left; border-bottom: 1px solid var(--border-subtle); color: var(--text-primary);">
+                                        Status</th>
+                                    <th
+                                        style="padding: 12px; text-align: left; border-bottom: 1px solid var(--border-subtle); color: var(--text-primary);">
+                                        ID
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody id="cloudflare-domains-list"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="cloudflare-domains-error"
+                    style="display: none; padding: 16px; background-color: rgba(207, 34, 46, 0.1); border: 1px solid rgba(207, 34, 46, 0.4); border-radius: 6px; color: #cf222e;">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Namecheap Domains Modal -->
+    <div id="namecheapDomainsModal" class="modal domain-modal-global" style="display: none;">
+        <div class="modal-content"
+            style="max-width: 800px; width: 90%; background: var(--bg-modal) !important; backdrop-filter: blur(28px) !important; border: 1px solid var(--border-panel) !important;">
+            <div class="modal-header">
+                <h2><i class="fas fa-globe"></i> Namecheap Domains</h2>
+                <span class="close" onclick="closeNamecheapDomainsModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="namecheap-domains-loading" style="text-align: center; padding: 40px; display: none;">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 48px; color: #0969da;"></i>
+                    <p style="margin-top: 16px; color: var(--text-muted);">Fetching domains from Namecheap...</p>
+                </div>
+                <div id="namecheap-domains-content" style="display: none;">
+                    <div style="margin-bottom: 12px;">
+                        <input type="text" id="namecheap-search" placeholder="Search domains..."
+                            class="form-control-github" style="width: 100%; padding: 8px; font-size: 13px;"
+                            onkeyup="filterNamecheapDomains()">
+                    </div>
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <p style="margin: 0; color: var(--text-muted); font-size: 13px;">
+                            <strong id="namecheap-domains-count" style="color: var(--text-primary);">0</strong>
+                            domain(s) found
+                        </p>
+                        <button onclick="copyAllNamecheapDomains()" class="btn-github"
+                            style="padding: 6px 12px; font-size: 13px;">
+                            <i class="fas fa-copy"></i> Copy All
+                        </button>
+                    </div>
+                    <div id="namecheap-domains-list"
+                        style="max-height: 400px; overflow-y: auto; border: 1px solid var(--border-subtle); border-radius: 6px;">
+                    </div>
+                </div>
+
+                <div id="namecheap-domains-error" style="display: none; margin-top: 16px;">
+                    <div
+                        style="padding: 12px; background-color: rgba(207, 34, 46, 0.1); border: 1px solid rgba(207, 34, 46, 0.4); border-radius: 6px; color: #cf222e; font-size: 13px;">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <span id="namecheap-domains-error-message"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="border-top: 1px solid var(--border-panel); padding: 16px;">
+                <button onclick="closeNamecheapDomainsModal()" class="btn-github">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Global Domain Manager Script -->
+    <script src="{{ url_for('static', filename='js/domain_manager.js') }}"></script>
+
+    <!-- Sidebar Toggle Script (Tailwind Version) -->
+    <script>
+        function toggleSidebar() {
+            const sidebar = document.getElementById('app-sidebar');
+            const mainContent = document.getElementById('main-content-wrapper');
+            const brandExpanded = document.getElementById('sidebar-brand-expanded');
+            const brandCollapsed = document.getElementById('sidebar-brand-collapsed');
+            const footerExpanded = document.getElementById('sidebar-footer-expanded');
+            const footerCollapsed = document.getElementById('sidebar-footer-collapsed');
+            const toggleIcon = document.getElementById('sidebar-toggle-icon');
+            const navTexts = document.querySelectorAll('.nav-text');
+            const navDots = document.querySelectorAll('.nav-dot');
+
+            const isCollapsed = sidebar.classList.contains('w-20');
+
+            if (isCollapsed) {
+                // Expand
+                sidebar.classList.remove('w-20');
+                sidebar.classList.add('w-72');
+                mainContent.classList.remove('ml-20');
+                mainContent.classList.add('ml-72');
+
+                brandExpanded.classList.remove('hidden');
+                brandCollapsed.classList.add('hidden');
+
+                footerExpanded.classList.remove('hidden');
+                footerCollapsed.classList.add('hidden');
+
+                navTexts.forEach(el => el.classList.remove('hidden'));
+                navDots.forEach(el => el.classList.remove('hidden'));
+
+                toggleIcon.classList.remove('fa-chevron-right');
+                toggleIcon.classList.add('fa-chevron-left');
+
+                // Save state
+                localStorage.setItem('sidebarCollapsed', 'false');
+            } else {
+                // Collapse
+                sidebar.classList.remove('w-72');
+                sidebar.classList.add('w-20');
+                mainContent.classList.remove('ml-72');
+                mainContent.classList.add('ml-20');
+
+                brandExpanded.classList.add('hidden');
+                brandCollapsed.classList.remove('hidden');
+
+                footerExpanded.classList.add('hidden');
+                footerCollapsed.classList.remove('hidden');
+
+                navTexts.forEach(el => el.classList.add('hidden'));
+                navDots.forEach(el => el.classList.add('hidden'));
+
+                toggleIcon.classList.remove('fa-chevron-left');
+                toggleIcon.classList.add('fa-chevron-right');
+
+                // Save state
+                localStorage.setItem('sidebarCollapsed', 'true');
+            }
+        }
+
+        // Restore state on load
+        document.addEventListener('DOMContentLoaded', () => {
+            const collapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+            if (collapsed) {
+                // Apply collapsed state immediately without animation
+                const sidebar = document.getElementById('app-sidebar');
+                const mainContent = document.getElementById('main-content-wrapper');
+
+                sidebar.classList.add('no-transition');
+                mainContent.classList.add('no-transition');
+
+                // Trigger toggle logic (inverted because we start expanded)
+                sidebar.classList.add('w-20'); // Force start state for toggle logic to flip? 
+                // Actually easier to just call toggleSidebar if state doesn't match
+                // But toggleSidebar toggles. Let's just manually set.
+
+                sidebar.classList.remove('w-72');
+                sidebar.classList.add('w-20');
+
+                mainContent.classList.remove('ml-72');
+                mainContent.classList.add('ml-20');
+
+                document.getElementById('sidebar-brand-expanded').classList.add('hidden');
+                document.getElementById('sidebar-brand-collapsed').classList.remove('hidden');
+
+                document.getElementById('sidebar-footer-expanded').classList.add('hidden');
+                document.getElementById('sidebar-footer-collapsed').classList.remove('hidden');
+
+                document.querySelectorAll('.nav-text').forEach(el => el.classList.add('hidden'));
+                document.querySelectorAll('.nav-dot').forEach(el => el.classList.add('hidden'));
+
+                const icon = document.getElementById('sidebar-toggle-icon');
+                icon.classList.remove('fa-chevron-left');
+                icon.classList.add('fa-chevron-right');
+
+                // Restore transitions after brief timeout
+                setTimeout(() => {
+                    sidebar.classList.remove('no-transition');
+                    mainContent.classList.remove('no-transition');
+                }, 100);
+            }
+        });
+
+        // ========== THEME SWITCHING ==========
+        function setTheme(themeName) {
+            console.log('🔵 [THEME] setTheme called with:', themeName);
+
+            // Set the data-theme attribute on the document root
+            document.documentElement.setAttribute('data-theme', themeName);
+            console.log('🔵 [THEME] Set data-theme attribute to:', document.documentElement.getAttribute('data-theme'));
+
+            // Save to localStorage
+            localStorage.setItem('selectedTheme', themeName);
+            console.log('🔵 [THEME] Saved to localStorage:', localStorage.getItem('selectedTheme'));
+
+            // Update active button state
+            document.querySelectorAll('.theme-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            const activeBtn = document.querySelector(`[data-set-theme="${themeName}"]`);
+            if (activeBtn) {
+                activeBtn.classList.add('active');
+            }
+
+            console.log('✅ [THEME] Theme switched to:', themeName);
+        }
+
+        // Update button states after DOM loads
+        document.addEventListener('DOMContentLoaded', function () {
+            const savedTheme = localStorage.getItem('selectedTheme') || 'ios';
+            console.log('🟢 [THEME] DOM loaded, saved theme is:', savedTheme);
+            const activeBtn = document.querySelector(`[data-set-theme="${savedTheme}"]`);
+            if (activeBtn) {
+                activeBtn.classList.add('active');
+            }
+        });
+    </script>
+</body>
+
+</html>
