@@ -166,7 +166,7 @@ class SimpleDomainService:
     
     def verify_domain(self, domain: str) -> Tuple[bool, str]:
         """
-        Verify domain ownership via Site Verification API.
+        Verify domain ownership and confirm it in Google Workspace.
         
         Args:
             domain: Domain to verify
@@ -202,10 +202,10 @@ class SimpleDomainService:
                     
                     # Additional check: Verify the response contains confirmation
                     if result.get('id') or result.get('site', {}).get('identifier') == domain:
-                        return True, "Domain verified successfully"
+                        return self._confirm_workspace_verification(domain)
                     else:
                         logger.warning(f"[VERIFY] Unexpected response: {result}")
-                        return True, "Verification completed (response received)"
+                        return self._confirm_workspace_verification(domain)
                     
                 except HttpError as e:
                     error_str = str(e)
@@ -226,7 +226,7 @@ class SimpleDomainService:
                     elif status == 409:
                         # Already verified - this is success!
                         logger.info(f"[VERIFY] ✅ {domain} already verified (409)")
-                        return True, "Domain already verified"
+                        return self._confirm_workspace_verification(domain)
                     
                     elif status == 403:
                         # Permission denied
@@ -254,6 +254,47 @@ class SimpleDomainService:
         except Exception as e:
             logger.error(f"[VERIFY] Exception for {domain}: {e}", exc_info=True)
             return False, f"Error: {str(e)}"
+
+    def _confirm_workspace_verification(self, domain: str) -> Tuple[bool, str]:
+        """
+        Confirm the Admin SDK domain record is marked verified after Site Verification.
+        """
+        try:
+            admin_service = self._get_admin_service()
+            max_checks = 12
+
+            for check in range(1, max_checks + 1):
+                try:
+                    domain_info = admin_service.domains().get(
+                        customer='my_customer',
+                        domainName=domain
+                    ).execute()
+
+                    if domain_info.get('verified', False):
+                        logger.info(f"[VERIFY] ✅ Workspace account shows {domain} as verified")
+                        return True, "Domain verified successfully in Workspace"
+
+                    logger.info(f"[VERIFY] Workspace still shows {domain} as unverified (check {check}/{max_checks})")
+                    if check < max_checks:
+                        time.sleep(10)
+
+                except HttpError as e:
+                    status = e.resp.status
+                    if status == 404:
+                        logger.warning(f"[VERIFY] {domain} is not found in Workspace during verification confirmation")
+                        return False, "Site Verification succeeded, but the domain is not found in Workspace"
+
+                    logger.warning(f"[VERIFY] Workspace verification check HTTP {status}: {e}")
+                    if check < max_checks:
+                        time.sleep(5)
+                        continue
+                    return False, f"Site Verification succeeded, but Workspace status check failed: {str(e)}"
+
+            return False, "Site Verification succeeded, but Workspace has not marked the domain verified yet"
+
+        except Exception as e:
+            logger.error(f"[VERIFY] Workspace confirmation error for {domain}: {e}", exc_info=True)
+            return False, f"Site Verification succeeded, but Workspace confirmation failed: {str(e)}"
     
     def full_process(self, input_domain: str) -> Dict:
         """

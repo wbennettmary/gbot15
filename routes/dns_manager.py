@@ -579,9 +579,24 @@ def verify_single_domain(job_id: str, domain: str, account_name: str, stop_event
             operation.message = 'Calling verification API...'
             db.session.commit()
             
-            # Initialize Google service and verify
-            google_service = GoogleDomainsService(account_name=account_name)
-            verify_result = google_service.verify_domain(domain)
+            # Initialize service and verify. Prefer the same ServiceAccount path used
+            # by add-and-verify so admin_email lookups work here too.
+            service_account = ServiceAccount.query.filter_by(name=account_name).first()
+            if not service_account:
+                service_account = ServiceAccount.query.filter_by(admin_email=account_name).first()
+
+            if service_account:
+                from services.simple_domain_service import SimpleDomainService
+                simple_service = SimpleDomainService(service_account.json_content, service_account.admin_email)
+                is_verified, verify_msg = simple_service.verify_domain(domain)
+                verify_result = {
+                    'verified': is_verified,
+                    'status': 'verified' if is_verified else 'failed',
+                    'error': None if is_verified else verify_msg
+                }
+            else:
+                google_service = GoogleDomainsService(account_name=account_name)
+                verify_result = google_service.verify_domain(domain)
             
             logger.info(f"Verification result for {domain}: {verify_result}")
             
@@ -1086,4 +1101,3 @@ def cloudflare_delete_txt_records():
     except Exception as e:
         logger.error(f"Error in delete-txt-records endpoint: {e}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
-
