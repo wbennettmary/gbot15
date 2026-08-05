@@ -863,8 +863,8 @@ def verify_single_domain(job_id: str, domain: str, account_name: str, stop_event
                         is_verified, verify_msg = simple_service._confirm_workspace_verification(domain)
                 else:
                     is_verified, verify_msg = simple_service.verify_domain(domain)
-                    if not is_verified and oauth_fallback_error and '503' in str(verify_msg):
-                        verify_msg = f"{verify_msg}. OAuth admin fallback was unavailable: {oauth_fallback_error}"
+                    if not is_verified and oauth_fallback_error:
+                        verify_msg = f"{verify_msg}. OAuth admin fallback details: {oauth_fallback_error}"
                 verify_result = {
                     'verified': is_verified,
                     'status': 'verified' if is_verified else 'failed',
