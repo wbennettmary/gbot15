@@ -1576,15 +1576,20 @@ def api_import_account_from_s3():
             response = s3_client.get_object(Bucket=primary_bucket, Key=s3_key)
             json_content_str = response['Body'].read().decode('utf-8')
             json_content = json.loads(json_content_str)
-        except Exception as p_err:
-            app.logger.info(f"Not found or error in primary ({p_err}), trying fallback s3://{fallback_bucket}/{s3_key}")
+        except s3_client.exceptions.NoSuchKey:
+            app.logger.info(f"Not found in primary, trying fallback s3://{fallback_bucket}/{s3_key}")
             try:
                 response = s3_client.get_object(Bucket=fallback_bucket, Key=s3_key)
                 json_content_str = response['Body'].read().decode('utf-8')
                 json_content = json.loads(json_content_str)
+            except s3_client.exceptions.NoSuchKey:
+                return jsonify({'success': False, 'error': f'JSON file not found in either S3 bucket: {s3_key}'})
             except Exception as f_err:
                 app.logger.error(f"Fallback S3 fetch error: {f_err}")
-                return jsonify({'success': False, 'error': f'JSON file not found in either S3 bucket or access denied. Primary error: {str(p_err)}. Fallback error: {str(f_err)}'})
+                return jsonify({'success': False, 'error': f'Error fetching from fallback S3: {str(f_err)}'})
+        except Exception as p_err:
+            app.logger.error(f"Primary S3 fetch error: {p_err}")
+            return jsonify({'success': False, 'error': f'Error fetching from primary S3: {str(p_err)}'})
         
         # Validate JSON content
         required_keys = ['type', 'project_id', 'private_key_id', 'private_key', 'client_email']
@@ -3549,19 +3554,19 @@ def api_bulk_randomize_user_aliases():
                 update_progress(task_id, 0, len(authenticated_accounts), "randomizing", f"Randomizing aliases for {len(authenticated_accounts)} accounts...")
 
                 def generate_unique_identity(existing_aliases_set):
-                    """Generate a unique long-tail identity (names and username)"""
+                    """Generate a unique long-tail identity (names and username) using creation logic (firstlastname####)"""
                     fake = Faker()
                     for _ in range(20):  # Up to 20 attempts to avoid collision
                         f_name = fake.first_name()
                         l_name = fake.last_name()
                         
-                        # Clean names for email local part
+                        # Clean names to ensure valid email local part, removing spaces, single quotes, hyphens
                         clean_f = f_name.lower().replace("'", "").replace("-", "").replace(" ", "")
                         clean_l = l_name.lower().replace("'", "").replace("-", "").replace(" ", "")
                         
-                        # Alphabet only, use dots, ensuring uniqueness for 1M+ users
-                        random_suffix = ''.join(random.choices(string.ascii_lowercase, k=8))
-                        candidate_local = f"{clean_f}.{clean_l}.{random_suffix}"
+                        # Use a 4-digit number like in the Bulk Account Management creation
+                        random_num = ''.join(random.choices(string.digits, k=4))
+                        candidate_local = f"{clean_f}{clean_l}{random_num}"
                         
                         if candidate_local not in existing_aliases_set:
                             existing_aliases_set.add(candidate_local)
@@ -3570,10 +3575,11 @@ def api_bulk_randomize_user_aliases():
                     # Fallback
                     fallback_f = "User"
                     fallback_l = ''.join(random.choices(string.ascii_uppercase, k=4))
-                    random_suffix = ''.join(random.choices(string.ascii_lowercase, k=8))
-                    fallback_local = f"user.{fallback_l.lower()}.{random_suffix}"
+                    random_num = ''.join(random.choices(string.digits, k=4))
+                    fallback_local = f"user{fallback_l.lower()}{random_num}"
                     existing_aliases_set.add(fallback_local)
                     return fallback_f, fallback_l, fallback_local
+
 
                 def randomize_aliases_for_account(account_name):
                     with app.app_context():
