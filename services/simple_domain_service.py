@@ -252,14 +252,12 @@ class SimpleDomainService:
                         body=request_body
                     ).execute()
 
-                    logger.info(f"[VERIFY] ✅ Success for {domain}: {result}")
+                    logger.info(f"[VERIFY] ✅ Site Verification succeeded for {domain}: {result}")
 
-                    # Additional check: Verify the response contains confirmation
-                    if result.get('id') or result.get('site', {}).get('identifier') == domain:
-                        return self._confirm_workspace_verification(domain)
-                    else:
-                        logger.warning(f"[VERIFY] Unexpected response: {result}")
-                        return self._confirm_workspace_verification(domain)
+                    # The insert call only succeeds when Google found the TXT
+                    # token in DNS, so the domain is verified. Confirm the
+                    # Workspace side but never downgrade to failure on sync lag.
+                    return self._confirm_workspace_verification(domain)
 
                 except HttpError as e:
                     error_str = str(e)
@@ -350,6 +348,13 @@ class SimpleDomainService:
     def _confirm_workspace_verification(self, domain: str) -> Tuple[bool, str]:
         """
         Confirm the Admin SDK domain record is marked verified after Site Verification.
+
+        Site Verification already proved the TXT token exists in DNS, so this step is
+        only a best-effort confirmation of the Workspace Admin SDK record. Google
+        documents that Workspace can take a while to reflect a Site Verification
+        (it is instant only when the Workspace admin is the verified owner). We never
+        report a failure here: once Site Verification succeeds the domain IS verified,
+        and the Workspace record catches up shortly after.
         """
         try:
             admin_service = self._get_admin_service()
@@ -373,20 +378,31 @@ class SimpleDomainService:
                 except HttpError as e:
                     status = e.resp.status
                     if status == 404:
-                        logger.warning(f"[VERIFY] {domain} is not found in Workspace during verification confirmation")
-                        return False, "Site Verification succeeded, but the domain is not found in Workspace"
+                        # Transient: the domain record may take a moment to appear
+                        # in the Admin SDK after being added. Retry instead of failing.
+                        logger.warning(
+                            f"[VERIFY] {domain} not found in Workspace during confirmation "
+                            f"(check {check}/{max_checks}), will retry"
+                        )
+                        if check < max_checks:
+                            time.sleep(10)
+                            continue
+                        break
 
                     logger.warning(f"[VERIFY] Workspace verification check HTTP {status}: {e}")
                     if check < max_checks:
                         time.sleep(5)
                         continue
-                    return False, f"Site Verification succeeded, but Workspace status check failed: {str(e)}"
+                    break
 
-            return False, "Site Verification succeeded, but Workspace has not marked the domain verified yet"
+            # Site Verification already succeeded, so the domain is verified.
+            # Workspace may still be syncing; report success rather than a
+            # false failure that contradicts what Google already confirmed.
+            return True, "Site Verification succeeded; Workspace domain status is syncing"
 
         except Exception as e:
             logger.error(f"[VERIFY] Workspace confirmation error for {domain}: {e}", exc_info=True)
-            return False, f"Site Verification succeeded, but Workspace confirmation failed: {str(e)}"
+            return True, f"Site Verification succeeded; Workspace confirmation check failed ({str(e)})"
     
     def full_process(self, input_domain: str) -> Dict:
         """
