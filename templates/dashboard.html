@@ -12824,6 +12824,16 @@
                     return;
                 }
 
+                if (domains.some(domain => domain.includes(','))) {
+                    domainVerificationInProgress = false;
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="fas fa-play"></i> Start Process';
+                    }
+                    alert('This process accepts one domain per line. Use Bulk Multi-Account Domain Verification for account_name,domain entries.');
+                    return;
+                }
+
                 const dryRun = document.getElementById('domain-verification-dry-run').checked;
                 const skipVerified = document.getElementById('domain-verification-skip-verified').checked;
 

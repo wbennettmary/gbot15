@@ -439,6 +439,14 @@ def add_and_verify_domains():
         seen = set()
         for domain in domains:
             domain = domain.strip().lower()
+            if ',' in domain:
+                return jsonify({
+                    'success': False,
+                    'error': (
+                        'This domain workflow accepts one domain per line. '
+                        'Use the Bulk Multi-Account Domain Verification panel for account_name,domain entries.'
+                    )
+                }), 400
             if domain and domain not in seen:
                 normalized_domains.append(domain)
                 seen.add(domain)
