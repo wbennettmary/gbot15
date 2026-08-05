@@ -33,6 +33,145 @@ def login_required(f):
 # Store active jobs
 active_jobs = {}
 job_lock = threading.Lock()
+SITE_VERIFICATION_SCOPE = 'https://www.googleapis.com/auth/siteverification'
+
+def _get_oauth_site_verification_credentials(account_name: str, admin_email: str = None):
+    """Return OAuth user credentials for Site Verification when available."""
+    try:
+        from google.oauth2.credentials import Credentials
+        import google.auth.transport.requests
+
+        account = None
+        for candidate in (account_name, admin_email):
+            if candidate:
+                account = GoogleAccount.query.filter(GoogleAccount.account_name.ilike(candidate)).first()
+                if account:
+                    break
+
+        if not account or not account.tokens:
+            return None, 'No stored OAuth admin token found for Site Verification fallback'
+
+        token_row = account.tokens[0]
+        scopes = [scope.name for scope in token_row.scopes]
+        if SITE_VERIFICATION_SCOPE not in scopes:
+            return None, 'Stored OAuth admin token does not include the Site Verification scope'
+
+        creds = Credentials(
+            token=token_row.token,
+            refresh_token=token_row.refresh_token,
+            token_uri=token_row.token_uri,
+            client_id=account.client_id,
+            client_secret=account.client_secret,
+            scopes=scopes
+        )
+
+        if creds.expired and creds.refresh_token:
+            creds.refresh(google.auth.transport.requests.Request())
+            token_row.token = creds.token
+            db.session.commit()
+
+        if not creds.valid:
+            return None, 'Stored OAuth admin token is invalid or expired'
+
+        return creds, f'Using OAuth admin token: {account.account_name}'
+
+    except Exception as e:
+        logger.warning(f"OAuth Site Verification credential lookup failed: {e}", exc_info=True)
+        return None, f'OAuth Site Verification credential lookup failed: {str(e)}'
+
+def _domain_txt_location(domain: str):
+    """Return apex zone and TXT host for a domain."""
+    apex = to_apex(domain)
+    if domain == apex:
+        return apex, '@'
+    suffix = f'.{apex}'
+    if domain.endswith(suffix):
+        return apex, domain[:-len(suffix)]
+    return apex, '@'
+
+def _get_oauth_verification_token(domain: str, account_name: str, admin_email: str = None):
+    """Get a Google verification TXT value tied to the OAuth admin user."""
+    from googleapiclient.discovery import build
+    from googleapiclient.errors import HttpError
+
+    creds, auth_msg = _get_oauth_site_verification_credentials(account_name, admin_email)
+    if not creds:
+        return {'success': False, 'error': auth_msg}
+
+    service = build('siteVerification', 'v1', credentials=creds)
+    body = {
+        'verificationMethod': 'DNS_TXT',
+        'site': {
+            'type': 'INET_DOMAIN',
+            'identifier': domain
+        }
+    }
+
+    last_error = None
+    for attempt in range(3):
+        try:
+            response = service.webResource().getToken(body=body).execute()
+            token = response.get('token', '')
+            if not token:
+                return {'success': False, 'error': 'OAuth Site Verification returned an empty token'}
+
+            txt_value = token if token.startswith('google-site-verification=') else f'google-site-verification={token}'
+            apex, txt_host = _domain_txt_location(domain)
+            return {
+                'success': True,
+                'token': txt_value,
+                'apex_domain': apex,
+                'txt_host': txt_host,
+                'service': service,
+                'message': auth_msg
+            }
+
+        except HttpError as e:
+            last_error = e
+            if e.resp.status == 503 and attempt < 2:
+                time.sleep(2 + (attempt * 2))
+                continue
+            break
+
+    return {'success': False, 'error': f'OAuth Site Verification token request failed: {str(last_error)}'}
+
+def _verify_domain_with_oauth_service(domain: str, service, admin_email: str = None):
+    """Trigger Site Verification insert through an OAuth admin service."""
+    from googleapiclient.errors import HttpError
+
+    body = {
+        'site': {
+            'type': 'INET_DOMAIN',
+            'identifier': domain
+        }
+    }
+    if admin_email:
+        body['owners'] = [admin_email]
+
+    max_attempts = 8
+    for attempt in range(max_attempts):
+        try:
+            result = service.webResource().insert(
+                verificationMethod='DNS_TXT',
+                body=body
+            ).execute()
+            logger.info(f"OAuth Site Verification succeeded for {domain}: {result}")
+            return True, 'Domain verified through OAuth admin Site Verification'
+
+        except HttpError as e:
+            error_str = str(e)
+            status = e.resp.status
+            if status == 409 or 'already verified' in error_str.lower() or 'already exists' in error_str.lower():
+                return True, 'Domain already verified through OAuth admin Site Verification'
+            if status == 400 and attempt < max_attempts - 1:
+                time.sleep(15 * (attempt + 1))
+                continue
+            if status == 503 and attempt < max_attempts - 1:
+                time.sleep(5 * (attempt + 1))
+                continue
+            return False, f'OAuth Site Verification failed: {error_str}'
+
+    return False, 'OAuth Site Verification failed after maximum retries'
 
 def process_domain_verification(job_id: str, domain: str, account_name: str, dry_run: bool, skip_verified: bool, provider: str = 'namecheap', stop_event=None):
     """
@@ -142,6 +281,24 @@ def process_domain_verification(job_id: str, domain: str, account_name: str, dry
 
             if stop_event and stop_event.is_set(): return
 
+            oauth_verification = None
+            oauth_fallback_error = None
+            if not dry_run:
+                oauth_token = _get_oauth_verification_token(domain, account_name, sa.admin_email)
+                if oauth_token.get('success'):
+                    oauth_verification = oauth_token
+                    apex = oauth_token['apex_domain']
+                    txt_host = oauth_token['txt_host']
+                    token = oauth_token['token']
+                    operation.apex_domain = apex
+                    operation.txt_record_value = token
+                    operation.raw_log.append(log_entry('token', 'success', f"OAuth Site Verification token refreshed. {oauth_token.get('message', '')}"))
+                    db.session.commit()
+                else:
+                    oauth_fallback_error = oauth_token.get('error')
+                    operation.raw_log.append(log_entry('token', 'pending', f"OAuth Site Verification fallback unavailable: {oauth_token.get('error')}"))
+                    db.session.commit()
+
             # Step 3: Create DNS Record
             if dry_run:
                 operation.dns_status = 'dry-run'
@@ -188,8 +345,21 @@ def process_domain_verification(job_id: str, domain: str, account_name: str, dry
                     operation.message = f"Verifying... (Attempt {attempt}/{max_attempts})"
                     db.session.commit()
                     
-                    # Use SimpleDomainService to verify
-                    is_verified, v_msg = svc.verify_domain(domain)
+                    # Prefer OAuth admin verification when available; it matches
+                    # the browser path and avoids service-account insert 503s.
+                    if oauth_verification:
+                        is_verified, v_msg = _verify_domain_with_oauth_service(
+                            domain,
+                            oauth_verification['service'],
+                            sa.admin_email
+                        )
+                        if is_verified:
+                            is_verified, confirm_msg = svc._confirm_workspace_verification(domain)
+                            v_msg = confirm_msg
+                    else:
+                        is_verified, v_msg = svc.verify_domain(domain)
+                        if not is_verified and oauth_fallback_error and '503' in str(v_msg):
+                            v_msg = f"{v_msg}. OAuth admin fallback was unavailable: {oauth_fallback_error}"
                     
                     if is_verified:
                         verified = True
@@ -610,6 +780,33 @@ def verify_single_domain(job_id: str, domain: str, account_name: str, stop_event
                     db.session.commit()
                     return {'verified': False, 'status': 'failed', 'error': operation.message}
 
+                oauth_fallback_error = None
+                oauth_verification = _get_oauth_verification_token(domain, account_name, service_account.admin_email)
+                if oauth_verification.get('success'):
+                    token = oauth_verification['token']
+                    token_result['apex_domain'] = oauth_verification['apex_domain']
+                    token_result['txt_host'] = oauth_verification['txt_host']
+                    if operation.raw_log is None:
+                        operation.raw_log = []
+                    operation.raw_log.append({
+                        'step': 'token',
+                        'status': 'success',
+                        'message': f"OAuth Site Verification token refreshed. {oauth_verification.get('message', '')}",
+                        'timestamp': datetime.now().isoformat()
+                    })
+                    db.session.commit()
+                else:
+                    oauth_fallback_error = oauth_verification.get('error')
+                    if operation.raw_log is None:
+                        operation.raw_log = []
+                    operation.raw_log.append({
+                        'step': 'token',
+                        'status': 'pending',
+                        'message': f"OAuth Site Verification fallback unavailable: {oauth_verification.get('error')}",
+                        'timestamp': datetime.now().isoformat()
+                    })
+                    db.session.commit()
+
                 try:
                     apex = token_result.get('apex_domain', domain)
                     txt_host = token_result.get('txt_host', '@')
@@ -629,7 +826,18 @@ def verify_single_domain(job_id: str, domain: str, account_name: str, stop_event
                     db.session.commit()
                     return {'verified': False, 'status': 'failed', 'error': operation.message}
 
-                is_verified, verify_msg = simple_service.verify_domain(domain)
+                if oauth_verification.get('success'):
+                    is_verified, verify_msg = _verify_domain_with_oauth_service(
+                        domain,
+                        oauth_verification['service'],
+                        service_account.admin_email
+                    )
+                    if is_verified:
+                        is_verified, verify_msg = simple_service._confirm_workspace_verification(domain)
+                else:
+                    is_verified, verify_msg = simple_service.verify_domain(domain)
+                    if not is_verified and oauth_fallback_error and '503' in str(verify_msg):
+                        verify_msg = f"{verify_msg}. OAuth admin fallback was unavailable: {oauth_fallback_error}"
                 verify_result = {
                     'verified': is_verified,
                     'status': 'verified' if is_verified else 'failed',
