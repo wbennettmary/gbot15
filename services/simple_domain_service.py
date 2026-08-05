@@ -497,9 +497,12 @@ class SimpleDomainService:
             logger.error(f"[FULL_PROCESS] Token failed for {input_domain}: {token_msg}")
             return result
         
-        # Note: DNS record creation should be done by caller
-        # We just return the token here
+        # Step 3: Verify domain
+        logger.info(f"[FULL_PROCESS] Triggering domain verification for {input_domain}")
+        verified, verify_msg = self.verify_domain(input_domain)
+        result['verify_success'] = verified
+        result['verify_message'] = verify_msg
         
-        result['overall_success'] = True
-        logger.info(f"[FULL_PROCESS] Complete for {input_domain}")
+        result['overall_success'] = verified
+        logger.info(f"[FULL_PROCESS] Complete for {input_domain}: verified={verified}")
         return result
