@@ -426,11 +426,9 @@ class GoogleDomainsService:
                     }
                 }
                 
-                # Note: owners field is not required and may cause issues
-                # Only add if we want to explicitly set owners
-                # if admin_email:
-                #     verification_resource['owners'] = [admin_email]
-                #     logger.info(f"Using admin email as owner: {admin_email}")
+                if admin_email:
+                    verification_resource['owners'] = [admin_email]
+                    logger.info(f"Using admin email as verification owner: {admin_email}")
                 
                 # Retry with exponential backoff for webResource().insert()
                 # Increased to 8 retries to handle slow DNS propagation (total wait ~540s)
@@ -464,6 +462,7 @@ class GoogleDomainsService:
                         # 409 means already verified - that's success!
                         if status == 409 or 'already exists' in error_str.lower() or 'already verified' in error_str.lower():
                             logger.info(f"✅ Domain {verification_domain} already verified in Site Verification (409)")
+                            self._ensure_workspace_admin_owner(verification_domain)
                             site_verification_success = True
                             break
                         
@@ -586,6 +585,45 @@ class GoogleDomainsService:
                 'status': 'failed', 
                 'error': f'Verification error: {str(e)}'
             }
+
+    def _ensure_workspace_admin_owner(self, domain: str) -> bool:
+        """
+        Add the Workspace admin as a direct Site Verification owner when the
+        resource already exists.
+        """
+        try:
+            service_account_row = ServiceAccount.query.filter_by(name=self.account_name).first()
+            admin_email = service_account_row.admin_email if service_account_row else self.account_name
+            if not admin_email or '@' not in admin_email:
+                return False
+
+            service = self._get_site_verification_service()
+            resources = service.webResource().list().execute().get('items', [])
+
+            for resource in resources:
+                site = resource.get('site', {})
+                identifier = (site.get('identifier') or '').lower()
+                if site.get('type') == 'INET_DOMAIN' and identifier == domain.lower():
+                    current_owners = resource.get('owners') or []
+                    owners = list(dict.fromkeys(current_owners + [admin_email]))
+                    if owners == current_owners:
+                        logger.info(f"Workspace admin owner already present for {domain}")
+                        return True
+
+                    resource['owners'] = owners
+                    service.webResource().update(
+                        id=resource.get('id'),
+                        body=resource
+                    ).execute()
+                    logger.info(f"Added Workspace admin owner for {domain}: {admin_email}")
+                    return True
+
+            logger.warning(f"Existing Site Verification resource not found for {domain}")
+            return False
+
+        except Exception as e:
+            logger.warning(f"Could not update Site Verification owners for {domain}: {e}")
+            return False
     
     def is_verified(self, apex: str) -> bool:
         """

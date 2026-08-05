@@ -187,6 +187,8 @@ class SimpleDomainService:
                     'identifier': domain
                 }
             }
+            if self.admin_email:
+                request_body['owners'] = [self.admin_email]
             
             # Try to verify with retries for DNS propagation
             max_attempts = 8  # Increased to give DNS more time to propagate
@@ -226,6 +228,7 @@ class SimpleDomainService:
                     elif status == 409:
                         # Already verified - this is success!
                         logger.info(f"[VERIFY] ✅ {domain} already verified (409)")
+                        self._ensure_workspace_admin_owner(domain)
                         return self._confirm_workspace_verification(domain)
                     
                     elif status == 403:
@@ -254,6 +257,43 @@ class SimpleDomainService:
         except Exception as e:
             logger.error(f"[VERIFY] Exception for {domain}: {e}", exc_info=True)
             return False, f"Error: {str(e)}"
+
+    def _ensure_workspace_admin_owner(self, domain: str) -> bool:
+        """
+        Add the Workspace admin as a direct Site Verification owner when the
+        resource already exists. This helps Workspace consume the verified state.
+        """
+        if not self.admin_email:
+            return False
+
+        try:
+            service = self._get_site_verification_service()
+            resources = service.webResource().list().execute().get('items', [])
+
+            for resource in resources:
+                site = resource.get('site', {})
+                identifier = (site.get('identifier') or '').lower()
+                if site.get('type') == 'INET_DOMAIN' and identifier == domain.lower():
+                    current_owners = resource.get('owners') or []
+                    owners = list(dict.fromkeys(current_owners + [self.admin_email]))
+                    if owners == current_owners:
+                        logger.info(f"[VERIFY] Workspace admin owner already present for {domain}")
+                        return True
+
+                    resource['owners'] = owners
+                    service.webResource().update(
+                        id=resource.get('id'),
+                        body=resource
+                    ).execute()
+                    logger.info(f"[VERIFY] Added Workspace admin owner for {domain}: {self.admin_email}")
+                    return True
+
+            logger.warning(f"[VERIFY] Existing Site Verification resource not found for {domain}")
+            return False
+
+        except Exception as e:
+            logger.warning(f"[VERIFY] Could not update Site Verification owners for {domain}: {e}")
+            return False
 
     def _confirm_workspace_verification(self, domain: str) -> Tuple[bool, str]:
         """

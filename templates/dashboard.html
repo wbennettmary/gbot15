@@ -13432,6 +13432,8 @@
                                         logBulkDomain(`✅ ${result.domain}: Added to Workspace`);
                                     } else if (result.workspace === 'failed') {
                                         logBulkDomain(`❌ ${result.domain}: Workspace add failed - ${result.message || 'Unknown error'}`);
+                                    } else if (result.workspace === 'skipped' && result.dns === 'skipped' && result.verify === 'pending') {
+                                        logBulkDomain(`🔄 ${result.domain}: Verification in progress...`);
                                     } else if (result.dns === 'success' && result.verify === 'pending') {
                                         logBulkDomain(`✅ ${result.domain}: TXT record created, waiting for verification...`);
                                     } else if (result.dns === 'failed') {
@@ -13440,7 +13442,7 @@
                                         logBulkDomain(`✅ ${result.domain}: Domain verified successfully!`);
                                     } else if (result.verify === 'failed') {
                                         logBulkDomain(`❌ ${result.domain}: Verification failed - ${result.message || 'Unknown error'}`);
-                                    } else if (result.workspace === 'skipped' || result.verify === 'skipped') {
+                                    } else if (result.verify === 'skipped') {
                                         logBulkDomain(`⏭️ ${result.domain}: Skipped (already verified)`);
                                     }
                                 }
