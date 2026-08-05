@@ -353,8 +353,10 @@ def process_domain_verification(job_id: str, domain: str, account_name: str, dry
             if stop_event and stop_event.is_set(): return
             
             if not dry_run:
-                # Wait for propagation (short wait initially)
-                time.sleep(10)
+                # Wait 60 seconds for DNS propagation before starting verification loop
+                operation.message = "Waiting 60s for DNS propagation..."
+                db.session.commit()
+                time.sleep(60)
                 
                 verified = False
                 max_attempts = 10
@@ -1047,12 +1049,14 @@ def start_bulk_multi_account():
                                 
                                 # ========== STEP 4: Verify Domain ==========
                                 entry['verifyStatus'] = 'running'
-                                entry['message'] = 'Verifying domain...'
+                                entry['message'] = 'Waiting 60s for DNS propagation before verifying domain...'
+                                logger.info(f"[BULK] Waiting 60s for DNS TXT propagation on {domain}...")
                                 
-                                # Wait for DNS propagation
+                                # Wait 60 seconds for DNS propagation
                                 import time
-                                time.sleep(10)
+                                time.sleep(60)
                                 
+                                entry['message'] = 'Verifying domain with Google...'
                                 verified, verify_msg = svc.verify_domain(domain)
                                 
                                 if verified:

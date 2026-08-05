@@ -423,6 +423,7 @@ class SimpleDomainService:
             admin_service = self._get_admin_service()
             max_checks = 12
 
+            # Check Workspace Admin SDK domain status
             for check in range(1, max_checks + 1):
                 try:
                     domain_info = admin_service.domains().get(
@@ -431,41 +432,27 @@ class SimpleDomainService:
                     ).execute()
 
                     if domain_info.get('verified', False):
-                        logger.info(f"[VERIFY] ✅ Workspace account shows {domain} as verified")
-                        return True, "Domain verified successfully in Workspace"
+                        logger.info(f"[VERIFY] ✅ Workspace account confirms {domain} is verified")
+                        return True, "Domain verified successfully in Google Workspace"
 
-                    logger.info(f"[VERIFY] Workspace still shows {domain} as unverified (check {check}/{max_checks})")
+                    logger.info(f"[VERIFY] Workspace Admin SDK status for {domain}: unverified (check {check}/{max_checks})")
                     if check < max_checks:
-                        time.sleep(10)
+                        time.sleep(5)
 
                 except HttpError as e:
                     status = e.resp.status
-                    if status == 404:
-                        # Transient: the domain record may take a moment to appear
-                        # in the Admin SDK after being added. Retry instead of failing.
-                        logger.warning(
-                            f"[VERIFY] {domain} not found in Workspace during confirmation "
-                            f"(check {check}/{max_checks}), will retry"
-                        )
-                        if check < max_checks:
-                            time.sleep(10)
-                            continue
-                        break
-
-                    logger.warning(f"[VERIFY] Workspace verification check HTTP {status}: {e}")
+                    logger.warning(f"[VERIFY] Workspace verification check HTTP {status} for {domain}: {e}")
                     if check < max_checks:
                         time.sleep(5)
                         continue
                     break
 
-            # Site Verification already succeeded, so the domain is verified.
-            # Workspace may still be syncing; report success rather than a
-            # false failure that contradicts what Google already confirmed.
-            return True, "Site Verification succeeded; Workspace domain status is syncing"
+            logger.warning(f"[VERIFY] Workspace Admin SDK for {domain} is NOT marked verified.")
+            return False, f"Domain {domain} is not verified in Google Workspace. Please verify DNS TXT record propagation."
 
         except Exception as e:
             logger.error(f"[VERIFY] Workspace confirmation error for {domain}: {e}", exc_info=True)
-            return True, f"Site Verification succeeded; Workspace confirmation check failed ({str(e)})"
+            return False, f"Workspace verification check failed for {domain}: {str(e)}"
     
     def full_process(self, input_domain: str) -> Dict:
         """
