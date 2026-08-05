@@ -79,11 +79,9 @@ class SimpleDomainService:
         logger.info(f"[ADD_DOMAIN] Starting for {apex_domain}")
         
         try:
-            service = self._get_admin_service()
-            
             # Step 1: Check if domain already exists
             try:
-                existing = service.domains().get(
+                self._get_admin_service().domains().get(
                     customer='my_customer', 
                     domainName=apex_domain
                 ).execute()
@@ -98,23 +96,57 @@ class SimpleDomainService:
                 else:
                     logger.warning(f"[ADD_DOMAIN] Error checking {apex_domain}: {e}")
             
-            # Step 2: Add the domain
-            try:
-                result = service.domains().insert(
-                    customer='my_customer',
-                    body={'domainName': apex_domain}
-                ).execute()
-                logger.info(f"[ADD_DOMAIN] Successfully added {apex_domain}")
-                return True, "Domain added successfully"
-            except HttpError as e:
-                if 'already exists' in str(e).lower() or e.resp.status == 409:
-                    logger.info(f"[ADD_DOMAIN] {apex_domain} already exists (409)")
-                    return True, "Domain already exists"
-                elif e.resp.status == 403:
-                    return False, f"Permission denied adding domain. Check DWD."
-                else:
-                    logger.error(f"[ADD_DOMAIN] Failed to add {apex_domain}: {e}")
-                    return False, f"Failed to add domain: {str(e)}"
+            # Step 2: Add the domain. A Directory API 503 can mean that Google
+            # accepted the write but failed before returning a response, so check
+            # for the domain after each transient failure before trying again.
+            max_attempts = 6
+            last_error = None
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    result = self._get_admin_service().domains().insert(
+                        customer='my_customer',
+                        body={'domainName': apex_domain}
+                    ).execute()
+                    logger.info(f"[ADD_DOMAIN] Successfully added {apex_domain}: {result}")
+                    return True, "Domain added successfully"
+                except HttpError as e:
+                    last_error = e
+                    status = e.resp.status
+                    error_text = str(e).lower()
+                    if 'already exists' in error_text or status == 409:
+                        logger.info(f"[ADD_DOMAIN] {apex_domain} already exists (409)")
+                        return True, "Domain already exists"
+                    if status == 403:
+                        return False, "Permission denied adding domain. Check DWD."
+                    if status not in (429, 500, 503) or attempt == max_attempts:
+                        logger.error(f"[ADD_DOMAIN] Failed to add {apex_domain}: {e}")
+                        return False, f"Failed to add domain: {str(e)}"
+
+                    # Do not replay an insert that Google may already have applied.
+                    # Rebuilding the client also refreshes the delegated transport.
+                    self._admin_service = None
+                    try:
+                        self._get_admin_service().domains().get(
+                            customer='my_customer',
+                            domainName=apex_domain
+                        ).execute()
+                        logger.info(f"[ADD_DOMAIN] {apex_domain} exists after transient insert error")
+                        return True, "Domain added successfully"
+                    except HttpError as check_error:
+                        if check_error.resp.status != 404:
+                            logger.warning(
+                                f"[ADD_DOMAIN] Post-error domain check returned "
+                                f"HTTP {check_error.resp.status} for {apex_domain}"
+                            )
+
+                    wait_time = min(5 * (2 ** (attempt - 1)), 60)
+                    logger.warning(
+                        f"[ADD_DOMAIN] Directory API HTTP {status} for {apex_domain}; "
+                        f"retrying in {wait_time}s (attempt {attempt}/{max_attempts})"
+                    )
+                    time.sleep(wait_time)
+
+            return False, f"Failed to add domain: {str(last_error)}"
                     
         except Exception as e:
             logger.error(f"[ADD_DOMAIN] Exception for {apex_domain}: {e}", exc_info=True)
