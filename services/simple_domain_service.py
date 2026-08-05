@@ -37,7 +37,8 @@ class SimpleDomainService:
         self.admin_email = admin_email
         self.credentials_info = json.loads(service_account_json)
         self._admin_service = None
-        self._site_verification_service = None
+        self._site_verification_services = {}
+        self._last_token_without_delegation = None
         
         logger.info(f"SimpleDomainService initialized for {admin_email}")
     
@@ -56,12 +57,19 @@ class SimpleDomainService:
             self._admin_service = build('admin', 'directory_v1', credentials=creds)
         return self._admin_service
     
-    def _get_site_verification_service(self):
+    def _get_site_verification_service(self, without_delegation: bool = False):
         """Get Site Verification service."""
-        if not self._site_verification_service:
-            creds = self._get_delegated_credentials()
-            self._site_verification_service = build('siteVerification', 'v1', credentials=creds)
-        return self._site_verification_service
+        cache_key = 'without_delegation' if without_delegation else 'with_delegation'
+        if cache_key not in self._site_verification_services:
+            if without_delegation:
+                creds = service_account.Credentials.from_service_account_info(
+                    self.credentials_info,
+                    scopes=["https://www.googleapis.com/auth/siteverification"]
+                )
+            else:
+                creds = self._get_delegated_credentials()
+            self._site_verification_services[cache_key] = build('siteVerification', 'v1', credentials=creds)
+        return self._site_verification_services[cache_key]
     
     def add_domain(self, apex_domain: str) -> Tuple[bool, str]:
         """
@@ -130,8 +138,6 @@ class SimpleDomainService:
         logger.info(f"[GET_TOKEN] Starting for {domain}")
         
         try:
-            service = self._get_site_verification_service()
-            
             request_body = {
                 'verificationMethod': 'DNS_TXT',
                 'site': {
@@ -139,23 +145,51 @@ class SimpleDomainService:
                     'identifier': domain
                 }
             }
-            
-            response = service.webResource().getToken(body=request_body).execute()
-            token = response.get('token', '')
-            
-            if token:
-                # Ensure proper format
-                if not token.startswith('google-site-verification='):
-                    txt_value = f'google-site-verification={token}'
-                else:
-                    txt_value = token
-                    token = token.replace('google-site-verification=', '')
-                
-                logger.info(f"[GET_TOKEN] Got token for {domain}: {token[:20]}...")
-                return txt_value, "Token retrieved"
-            else:
-                logger.error(f"[GET_TOKEN] Empty token for {domain}")
-                return None, "Empty token received"
+
+            last_error = None
+            # Prefer direct service-account Site Verification for token creation.
+            # Delegated Site Verification can return repeat 503s for insert even
+            # when Admin SDK DWD is configured correctly.
+            for without_delegation in (True, False):
+                service = self._get_site_verification_service(without_delegation=without_delegation)
+
+                for attempt in range(3):
+                    try:
+                        response = service.webResource().getToken(body=request_body).execute()
+                        token = response.get('token', '')
+
+                        if token:
+                            # Ensure proper format
+                            if not token.startswith('google-site-verification='):
+                                txt_value = f'google-site-verification={token}'
+                            else:
+                                txt_value = token
+                                token = token.replace('google-site-verification=', '')
+
+                            self._last_token_without_delegation = without_delegation
+                            logger.info(f"[GET_TOKEN] Got token for {domain}: {token[:20]}... (without_delegation={without_delegation})")
+                            return txt_value, "Token retrieved"
+
+                        logger.error(f"[GET_TOKEN] Empty token for {domain}")
+                        return None, "Empty token received"
+
+                    except HttpError as e:
+                        last_error = e
+                        if e.resp.status == 503 and attempt < 2:
+                            wait_time = 2 + (attempt * 2)
+                            logger.warning(f"[GET_TOKEN] 503 for {domain} (without_delegation={without_delegation}), waiting {wait_time}s")
+                            time.sleep(wait_time)
+                            continue
+                        if e.resp.status == 503:
+                            logger.warning(f"[GET_TOKEN] 503 exhausted for {domain} (without_delegation={without_delegation}), trying fallback identity")
+                            break
+                        raise
+
+            if last_error:
+                logger.error(f"[GET_TOKEN] HTTP error for {domain}: {last_error}")
+                return None, f"API error: {str(last_error)}"
+
+            return None, "Token not received"
                 
         except HttpError as e:
             logger.error(f"[GET_TOKEN] HTTP error for {domain}: {e}")
@@ -177,8 +211,6 @@ class SimpleDomainService:
         logger.info(f"[VERIFY] Starting for {domain}")
         
         try:
-            service = self._get_site_verification_service()
-            
             # CRITICAL FIX: The body should only contain the 'site' object
             # The verificationMethod is passed as a parameter, NOT in the body
             request_body = {
@@ -191,65 +223,79 @@ class SimpleDomainService:
                 request_body['owners'] = [self.admin_email]
             
             # Try to verify with retries for DNS propagation
-            max_attempts = 8  # Increased to give DNS more time to propagate
-            for attempt in range(max_attempts):
-                try:
-                    # CRITICAL FIX: Only pass 'site' in body, method is a parameter
-                    result = service.webResource().insert(
-                        verificationMethod='DNS_TXT',
-                        body=request_body
-                    ).execute()
-                    
-                    logger.info(f"[VERIFY] ✅ Success for {domain}: {result}")
-                    
-                    # Additional check: Verify the response contains confirmation
-                    if result.get('id') or result.get('site', {}).get('identifier') == domain:
-                        return self._confirm_workspace_verification(domain)
-                    else:
-                        logger.warning(f"[VERIFY] Unexpected response: {result}")
-                        return self._confirm_workspace_verification(domain)
-                    
-                except HttpError as e:
-                    error_str = str(e)
-                    status = e.resp.status
-                    
-                    # Handle specific error cases
-                    if status == 400:
-                        # Always retry on 400 because it usually means DNS is not propagated yet
-                        # Google's error messages vary and might not always contain "token"
-                        if attempt < max_attempts - 1:
-                            wait_time = 15 * (attempt + 1)
-                            logger.info(f"[VERIFY] Verification failed (400). DNS probably not ready. Waiting {wait_time}s (attempt {attempt+1}/{max_attempts}). error: {error_str[:150]}")
-                            time.sleep(wait_time)
-                            continue
+            if self._last_token_without_delegation is None:
+                delegation_modes = (False, True)
+            else:
+                delegation_modes = (self._last_token_without_delegation, not self._last_token_without_delegation)
+
+            last_503_error = None
+            for without_delegation in delegation_modes:
+                service = self._get_site_verification_service(without_delegation=without_delegation)
+                max_attempts = 8  # Increased to give DNS more time to propagate
+
+                for attempt in range(max_attempts):
+                    try:
+                        # CRITICAL FIX: Only pass 'site' in body, method is a parameter
+                        result = service.webResource().insert(
+                            verificationMethod='DNS_TXT',
+                            body=request_body
+                        ).execute()
+
+                        logger.info(f"[VERIFY] ✅ Success for {domain}: {result} (without_delegation={without_delegation})")
+
+                        # Additional check: Verify the response contains confirmation
+                        if result.get('id') or result.get('site', {}).get('identifier') == domain:
+                            return self._confirm_workspace_verification(domain)
                         else:
-                            return False, f"Verification failed after {max_attempts} retries (DNS likely not propagated yet). Error from Google: {error_str}"
-                    
-                    elif status == 409:
-                        # Already verified - this is success!
-                        logger.info(f"[VERIFY] ✅ {domain} already verified (409)")
-                        self._ensure_workspace_admin_owner(domain)
-                        return self._confirm_workspace_verification(domain)
-                    
-                    elif status == 403:
-                        # Permission denied
-                        logger.error(f"[VERIFY] 403 Forbidden for {domain}")
-                        return False, "Permission denied. Check service account permissions and Domain-Wide Delegation setup."
-                    
-                    elif status == 503:
-                        # Service unavailable - retry
-                        if attempt < max_attempts - 1:
-                            wait_time = 5 * (attempt + 1)
-                            logger.warning(f"[VERIFY] 503 Service unavailable, waiting {wait_time}s")
-                            time.sleep(wait_time)
-                            continue
+                            logger.warning(f"[VERIFY] Unexpected response: {result}")
+                            return self._confirm_workspace_verification(domain)
+
+                    except HttpError as e:
+                        error_str = str(e)
+                        status = e.resp.status
+
+                        # Handle specific error cases
+                        if status == 400:
+                            # Always retry on 400 because it usually means DNS is not propagated yet
+                            # Google's error messages vary and might not always contain "token"
+                            if attempt < max_attempts - 1:
+                                wait_time = 15 * (attempt + 1)
+                                logger.info(f"[VERIFY] Verification failed (400). DNS probably not ready. Waiting {wait_time}s (attempt {attempt+1}/{max_attempts}, without_delegation={without_delegation}). error: {error_str[:150]}")
+                                time.sleep(wait_time)
+                                continue
+                            else:
+                                return False, f"Verification failed after {max_attempts} retries (DNS likely not propagated yet). Error from Google: {error_str}"
+
+                        elif status == 409:
+                            # Already verified - this is success!
+                            logger.info(f"[VERIFY] ✅ {domain} already verified (409)")
+                            self._ensure_workspace_admin_owner(domain, without_delegation=without_delegation)
+                            return self._confirm_workspace_verification(domain)
+
+                        elif status == 403:
+                            # Permission denied
+                            logger.error(f"[VERIFY] 403 Forbidden for {domain}")
+                            return False, "Permission denied. Check service account permissions and Domain-Wide Delegation setup."
+
+                        elif status == 503:
+                            # Service unavailable - retry, then try the alternate Site Verification identity
+                            last_503_error = error_str
+                            if attempt < max_attempts - 1:
+                                wait_time = 5 * (attempt + 1)
+                                logger.warning(f"[VERIFY] 503 Service unavailable, waiting {wait_time}s (without_delegation={without_delegation})")
+                                time.sleep(wait_time)
+                                continue
+
+                            logger.warning(f"[VERIFY] 503 retries exhausted for {domain} (without_delegation={without_delegation}), trying fallback identity")
+                            break
+
                         else:
-                            return False, "Google API service unavailable after retries"
-                    
-                    else:
-                        # Other HTTP errors
-                        logger.error(f"[VERIFY] HTTP {status} error for {domain}: {e}")
-                        return False, f"Verification failed: HTTP {status} - {error_str}"
+                            # Other HTTP errors
+                            logger.error(f"[VERIFY] HTTP {status} error for {domain}: {e}")
+                            return False, f"Verification failed: HTTP {status} - {error_str}"
+
+            if last_503_error:
+                return False, f"Google Site Verification API returned 503 for both delegated and service-account identities. Last error: {last_503_error}"
             
             # If we get here, all retries exhausted
             return False, "Verification failed after maximum retries"
@@ -258,7 +304,7 @@ class SimpleDomainService:
             logger.error(f"[VERIFY] Exception for {domain}: {e}", exc_info=True)
             return False, f"Error: {str(e)}"
 
-    def _ensure_workspace_admin_owner(self, domain: str) -> bool:
+    def _ensure_workspace_admin_owner(self, domain: str, without_delegation: bool = False) -> bool:
         """
         Add the Workspace admin as a direct Site Verification owner when the
         resource already exists. This helps Workspace consume the verified state.
@@ -267,7 +313,7 @@ class SimpleDomainService:
             return False
 
         try:
-            service = self._get_site_verification_service()
+            service = self._get_site_verification_service(without_delegation=without_delegation)
             resources = service.webResource().list().execute().get('items', [])
 
             for resource in resources:

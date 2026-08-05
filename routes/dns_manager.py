@@ -410,6 +410,7 @@ def verify_unverified_domains():
     """
     try:
         data = request.get_json() or {}
+        provider = data.get('provider', 'namecheap')
         
         # Get current account name from session
         account_name = session.get('current_account_name')
@@ -507,14 +508,15 @@ def verify_unverified_domains():
                                 job_id,
                                 domain,
                                 account_name,
-                                active_jobs[job_id]['stop_event']
+                                active_jobs[job_id]['stop_event'],
+                                provider
                             )
                             futures.append((domain, future))
                         
                         # Wait for all futures to complete
                         for domain, future in futures:
                             try:
-                                result = future.result(timeout=300)  # 5 min timeout per domain
+                                result = future.result(timeout=900)  # 15 min timeout per domain
                                 logger.info(f"Job {job_id}: Verification result for {domain}: {result}")
                             except Exception as exc:
                                 logger.error(f"Job {job_id}: Verification error for {domain}: {exc}")
@@ -553,7 +555,7 @@ def verify_unverified_domains():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-def verify_single_domain(job_id: str, domain: str, account_name: str, stop_event):
+def verify_single_domain(job_id: str, domain: str, account_name: str, stop_event, provider: str = 'namecheap'):
     """
     Verify a single domain - called from the parallel executor.
     """
@@ -588,6 +590,45 @@ def verify_single_domain(job_id: str, domain: str, account_name: str, stop_event
             if service_account:
                 from services.simple_domain_service import SimpleDomainService
                 simple_service = SimpleDomainService(service_account.json_content, service_account.admin_email)
+                operation.message = 'Refreshing verification TXT record...'
+                operation.dns_status = 'pending'
+                db.session.commit()
+
+                token_result = simple_service.full_process(domain)
+                if not token_result.get('add_success'):
+                    operation.workspace_status = 'failed'
+                    operation.verify_status = 'failed'
+                    operation.message = token_result.get('add_message', 'Failed to confirm Workspace domain')
+                    db.session.commit()
+                    return {'verified': False, 'status': 'failed', 'error': operation.message}
+
+                token = token_result.get('token')
+                if not token:
+                    operation.dns_status = 'failed'
+                    operation.verify_status = 'failed'
+                    operation.message = token_result.get('token_message', 'Failed to refresh verification token')
+                    db.session.commit()
+                    return {'verified': False, 'status': 'failed', 'error': operation.message}
+
+                try:
+                    apex = token_result.get('apex_domain', domain)
+                    txt_host = token_result.get('txt_host', '@')
+                    if provider == 'cloudflare':
+                        CloudflareDNSService().upsert_txt_record(apex, txt_host, token, ttl=1)
+                    else:
+                        NamecheapDNSService().upsert_txt_record(apex, txt_host, token, ttl=1799)
+
+                    operation.dns_status = 'success'
+                    operation.message = 'Verification TXT refreshed. Calling verification API...'
+                    db.session.commit()
+                    time.sleep(10)
+                except Exception as dns_error:
+                    operation.dns_status = 'failed'
+                    operation.verify_status = 'failed'
+                    operation.message = f"DNS refresh failed: {str(dns_error)}"
+                    db.session.commit()
+                    return {'verified': False, 'status': 'failed', 'error': operation.message}
+
                 is_verified, verify_msg = simple_service.verify_domain(domain)
                 verify_result = {
                     'verified': is_verified,

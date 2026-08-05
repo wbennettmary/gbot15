@@ -13030,10 +13030,15 @@
                 logBulkDomain('🔄 Starting verification of unverified domains...');
             }
 
+            const provider = document.querySelector('input[name="dns_provider"]:checked').value;
+
             fetch('/api/domains/verify-unverified', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ account_name: sessionStorage.getItem('current_account_name') })
+                body: JSON.stringify({
+                    account_name: sessionStorage.getItem('current_account_name'),
+                    provider: provider
+                })
             })
                 .then(response => response.json())
                 .then(data => {
