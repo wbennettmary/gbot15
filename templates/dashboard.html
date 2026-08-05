@@ -13426,6 +13426,23 @@
                         if (data.success) {
                             updateDomainVerificationTable(data.results);
 
+                            // Render detailed raw_log entries (every API call of the
+                            // verification) into the Results Log, deduped per domain.
+                            if (!window.domainRawLogCount) {
+                                window.domainRawLogCount = {};
+                            }
+                            data.results.forEach(result => {
+                                const rawLog = result.raw_log || [];
+                                const logKey = `${domainVerificationJobId}::${result.domain}`;
+                                const seenCount = window.domainRawLogCount[logKey] || 0;
+                                for (let i = seenCount; i < rawLog.length; i++) {
+                                    const entry = rawLog[i];
+                                    const icon = entry.status === 'error' ? '❌' : (entry.status === 'warning' ? '⚠️' : '🔄');
+                                    logBulkDomain(`${icon} ${result.domain}: ${entry.message}`);
+                                }
+                                window.domainRawLogCount[logKey] = rawLog.length;
+                            });
+
                             // Log status changes to Results Log
                             if (data.results.length !== lastStatusCount) {
                                 lastStatusCount = data.results.length;

@@ -755,12 +755,65 @@ def verify_unverified_domains():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+class _OperationLogHandler(logging.Handler):
+    """
+    Captures logger output emitted by the worker thread and appends it to the
+    operation's raw_log so the UI can show every API call made during
+    verification (token, DNS, each Site Verification attempt, Workspace checks).
+    """
+
+    SKIP_LOGGERS = {'googleapiclient.discovery_cache'}
+
+    def __init__(self, operation, thread_id):
+        super().__init__(level=logging.INFO)
+        self.operation = operation
+        self.thread_id = thread_id
+
+    def emit(self, record):
+        try:
+            if record.thread != self.thread_id:
+                return
+            if record.name in self.SKIP_LOGGERS:
+                return
+            message = record.getMessage()
+            if not message:
+                return
+            if self.operation.raw_log is None:
+                self.operation.raw_log = []
+            if record.levelno < logging.WARNING:
+                status = 'info'
+            elif record.levelno < logging.ERROR:
+                status = 'warning'
+            else:
+                status = 'error'
+            self.operation.raw_log.append({
+                'step': record.name.split('.')[-1],
+                'status': status,
+                'message': message,
+                'timestamp': datetime.now().isoformat()
+            })
+            try:
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+        except Exception:
+            pass
+
+
 def verify_single_domain(job_id: str, domain: str, account_name: str, stop_event, provider: str = 'namecheap'):
     """
     Verify a single domain - called from the parallel executor.
     """
     from app import app
     with app.app_context():
+        op_log_handler = None
+
+        def _remove_op_log():
+            nonlocal op_log_handler
+            if op_log_handler is not None:
+                logging.getLogger().removeHandler(op_log_handler)
+                op_log_handler = None
+
         try:
             # Get the operation record
             operation = DomainVerificationOperation.query.filter_by(
@@ -770,11 +823,17 @@ def verify_single_domain(job_id: str, domain: str, account_name: str, stop_event
             if not operation:
                 logger.error(f"Operation not found for {domain}")
                 return {'success': False, 'error': 'Operation not found'}
+
+            # Capture every logger line this thread emits into operation.raw_log
+            # so the frontend can display the full verification trace.
+            op_log_handler = _OperationLogHandler(operation, threading.current_thread().ident)
+            logging.getLogger().addHandler(op_log_handler)
             
             if stop_event.is_set():
                 operation.verify_status = 'stopped'
                 operation.message = 'Stopped by user'
                 db.session.commit()
+                _remove_op_log()
                 return {'success': False, 'error': 'Stopped by user'}
             
             logger.info(f"=== VERIFYING DOMAIN {domain} ===")
@@ -800,6 +859,7 @@ def verify_single_domain(job_id: str, domain: str, account_name: str, stop_event
                     operation.verify_status = 'failed'
                     operation.message = token_result.get('add_message', 'Failed to confirm Workspace domain')
                     db.session.commit()
+                    _remove_op_log()
                     return {'verified': False, 'status': 'failed', 'error': operation.message}
 
                 token = token_result.get('token')
@@ -808,6 +868,7 @@ def verify_single_domain(job_id: str, domain: str, account_name: str, stop_event
                     operation.verify_status = 'failed'
                     operation.message = token_result.get('token_message', 'Failed to refresh verification token')
                     db.session.commit()
+                    _remove_op_log()
                     return {'verified': False, 'status': 'failed', 'error': operation.message}
 
                 oauth_fallback_error = None
@@ -847,6 +908,7 @@ def verify_single_domain(job_id: str, domain: str, account_name: str, stop_event
 
                     operation.dns_status = 'success'
                     operation.message = 'Verification TXT refreshed. Calling verification API...'
+                    logger.info(f"[VERIFY] DNS TXT record refreshed for {domain}; calling Google Site Verification API...")
                     db.session.commit()
                     time.sleep(5)
                 except Exception as dns_error:
@@ -855,6 +917,7 @@ def verify_single_domain(job_id: str, domain: str, account_name: str, stop_event
                     operation.message = 'Using existing DNS TXT record. Calling verification API...'
                     db.session.commit()
 
+                logger.info(f"[VERIFY] Calling Google Site Verification API for {domain}...")
                 if oauth_verification.get('success'):
                     is_verified, verify_msg = _verify_domain_with_oauth_service(
                         domain,
@@ -889,6 +952,7 @@ def verify_single_domain(job_id: str, domain: str, account_name: str, stop_event
                 logger.warning(f"❌ Domain {domain} verification failed: {error_msg}")
             
             db.session.commit()
+            _remove_op_log()
             return verify_result
             
         except Exception as e:
@@ -897,6 +961,7 @@ def verify_single_domain(job_id: str, domain: str, account_name: str, stop_event
                 operation.verify_status = 'failed'
                 operation.message = str(e)
                 db.session.commit()
+            _remove_op_log()
             return {'success': False, 'error': str(e)}
 
 # ===== BULK MULTI-ACCOUNT DOMAIN VERIFICATION =====
@@ -1286,6 +1351,7 @@ def get_domain_verification_status():
                 'dns': dns_status,
                 'verify': op.verify_status,
                 'message': op.message,
+                'raw_log': op.raw_log or [],
                 'updated_at': app_updated.isoformat() if app_updated else None
             })
             
