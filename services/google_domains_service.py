@@ -135,9 +135,15 @@ class GoogleDomainsService:
                     )
                     return creds
                 else:
-                    # Use standard delegated credentials (impersonate admin)
+                    # Use delegated Site Verification credentials with only the
+                    # siteverification scope, matching Google's Workspace
+                    # domain verification codelab.
                     logger.info(f"Using Site Verification credentials WITH domain delegation to {gsa.admin_email}")
-                    return gsa.get_credentials()
+                    creds = sa_lib.Credentials.from_service_account_info(
+                        gsa.credentials_info,
+                        scopes=['https://www.googleapis.com/auth/siteverification']
+                    )
+                    return creds.with_subject(gsa.admin_email)
             
             # Fallback to standard credentials
             return self._get_credentials()
