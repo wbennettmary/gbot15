@@ -56,15 +56,33 @@ class SimpleDomainService:
             self._admin_service = build('admin', 'directory_v1', credentials=creds)
         return self._admin_service
     
-    def _get_site_verification_service(self):
-        """Get Site Verification service."""
-        if not self._site_verification_service:
-            creds = service_account.Credentials.from_service_account_info(
-                self.credentials_info,
-                scopes=["https://www.googleapis.com/auth/siteverification"]
-            ).with_subject(self.admin_email)
-            self._site_verification_service = build('siteVerification', 'v1', credentials=creds)
-        return self._site_verification_service
+    def _get_site_verification_service(self, without_delegation: bool = False, force_refresh: bool = False):
+        """
+        Get Site Verification service.
+        
+        Args:
+            without_delegation: If True, do not impersonate admin (direct service account)
+            force_refresh: If True, rebuild the service object
+        """
+        cache_key = 'without_delegation' if without_delegation else 'with_delegation'
+        if not hasattr(self, '_sv_cache'):
+            self._sv_cache = {}
+            
+        if not force_refresh and cache_key in self._sv_cache:
+            return self._sv_cache[cache_key]
+            
+        creds_base = service_account.Credentials.from_service_account_info(
+            self.credentials_info,
+            scopes=["https://www.googleapis.com/auth/siteverification"]
+        )
+        if without_delegation:
+            creds = creds_base
+        else:
+            creds = creds_base.with_subject(self.admin_email)
+            
+        svc = build('siteVerification', 'v1', credentials=creds)
+        self._sv_cache[cache_key] = svc
+        return svc
     
     def add_domain(self, apex_domain: str) -> Tuple[bool, str]:
         """
