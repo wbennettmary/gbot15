@@ -525,13 +525,6 @@ class SimpleDomainService:
         if not token:
             logger.error(f"[FULL_PROCESS] Token failed for {input_domain}: {token_msg}")
             return result
-        
-        # Step 3: Verify domain
-        logger.info(f"[FULL_PROCESS] Triggering domain verification for {input_domain}")
-        verified, verify_msg = self.verify_domain(input_domain)
-        result['verify_success'] = verified
-        result['verify_message'] = verify_msg
-        
-        result['overall_success'] = verified
-        logger.info(f"[FULL_PROCESS] Complete for {input_domain}: verified={verified}")
+            
+        logger.info(f"[FULL_PROCESS] Successfully added domain and retrieved verification token for {input_domain}")
         return result
