@@ -244,78 +244,80 @@ class SimpleDomainService:
             service = self._get_site_verification_service()
             max_attempts = 8  # Increased to give DNS more time to propagate
 
-            for attempt in range(max_attempts):
-                try:
-                    # CRITICAL FIX: Only pass 'site' in body, method is a parameter
-                    result = service.webResource().insert(
-                        verificationMethod='DNS_TXT',
-                        body=request_body
-                    ).execute()
+            # Try WITH delegation first, then WITHOUT delegation as fallback (helps bypass 503 backend errors)
+            delegation_modes = [False, True]  # without_delegation=False, then True
 
-                    logger.info(f"[VERIFY] ✅ Site Verification succeeded for {domain}: {result}")
+            for without_delegation in delegation_modes:
+                service = self._get_site_verification_service(without_delegation=without_delegation)
+                
+                for attempt in range(max_attempts):
+                    try:
+                        # CRITICAL FIX: Only pass 'site' in body, method is a parameter
+                        result = service.webResource().insert(
+                            verificationMethod='DNS_TXT',
+                            body=request_body
+                        ).execute()
 
-                    # The insert call only succeeds when Google found the TXT
-                    # token in DNS, so the domain is verified. Confirm the
-                    # Workspace side but never downgrade to failure on sync lag.
-                    return self._confirm_workspace_verification(domain)
+                        logger.info(f"[VERIFY] ✅ Site Verification succeeded for {domain} (without_delegation={without_delegation}): {result}")
 
-                except HttpError as e:
-                    error_str = str(e)
-                    status = e.resp.status
-
-                    # Handle specific error cases
-                    if status == 400:
-                        # Always retry on 400 because it usually means DNS is not propagated yet
-                        # Google's error messages vary and might not always contain "token"
-                        if attempt < max_attempts - 1:
-                            wait_time = 15 * (attempt + 1)
-                            logger.info(f"[VERIFY] Verification failed (400). DNS probably not ready. Waiting {wait_time}s (attempt {attempt+1}/{max_attempts}). error: {error_str[:150]}")
-                            time.sleep(wait_time)
-                            continue
-                        else:
-                            return False, f"Verification failed after {max_attempts} retries (DNS likely not propagated yet). Error from Google: {error_str}"
-
-                    elif status == 409:
-                        # Already verified - this is success!
-                        logger.info(f"[VERIFY] ✅ {domain} already verified (409)")
+                        # The insert call only succeeds when Google found the TXT
+                        # token in DNS, so the domain is verified. Confirm the
+                        # Workspace side but never downgrade to failure on sync lag.
                         self._ensure_workspace_admin_owner(domain)
                         return self._confirm_workspace_verification(domain)
 
-                    elif status == 403:
-                        # Permission denied
-                        logger.error(f"[VERIFY] 403 Forbidden for {domain}")
-                        return False, "Permission denied. Check service account permissions and Domain-Wide Delegation setup."
+                    except HttpError as e:
+                        error_str = str(e)
+                        status = e.resp.status
 
-                    elif status == 503:
-                        # Service unavailable - retry
-                        if attempt < max_attempts - 1:
-                            wait_time = 5 * (attempt + 1)
-                            logger.warning(f"[VERIFY] 503 Service unavailable, waiting {wait_time}s")
-                            time.sleep(wait_time)
-                            continue
+                        # Handle specific error cases
+                        if status == 400:
+                            # Always retry on 400 because it usually means DNS is not propagated yet
+                            if attempt < max_attempts - 1:
+                                wait_time = 15 * (attempt + 1)
+                                logger.info(f"[VERIFY] Verification failed (400). DNS probably not ready. Waiting {wait_time}s (attempt {attempt+1}/{max_attempts}). error: {error_str[:150]}")
+                                time.sleep(wait_time)
+                                continue
+                            else:
+                                return False, f"Verification failed after {max_attempts} retries (DNS likely not propagated yet). Error from Google: {error_str}"
+
+                        elif status == 409 or 'already exists' in error_str.lower() or 'already verified' in error_str.lower():
+                            # Already verified - this is success!
+                            logger.info(f"[VERIFY] ✅ {domain} already verified (409/already verified)")
+                            self._ensure_workspace_admin_owner(domain)
+                            return self._confirm_workspace_verification(domain)
+
+                        elif status == 403:
+                            # Permission denied
+                            logger.error(f"[VERIFY] 403 Forbidden for {domain} (without_delegation={without_delegation})")
+                            break  # Try next delegation mode
+
+                        elif status == 503:
+                            # Service unavailable - retry or attempt fallback mode
+                            if attempt < max_attempts - 1:
+                                wait_time = 5 * (attempt + 1)
+                                logger.warning(f"[VERIFY] 503 Service unavailable for {domain} (without_delegation={without_delegation}), waiting {wait_time}s (attempt {attempt+1}/{max_attempts})")
+                                time.sleep(wait_time)
+                                continue
+                            else:
+                                logger.warning(f"[VERIFY] 503 backendError after {max_attempts} retries for {domain} (without_delegation={without_delegation})")
+                                # Try to check if resource exists server side
+                                if self._site_verification_present(domain):
+                                    logger.info(f"[VERIFY] ✅ {domain} present in Site Verification resources despite the 503s")
+                                    self._ensure_workspace_admin_owner(domain)
+                                    return self._confirm_workspace_verification(domain)
+                                break  # Try next delegation mode if 503 exhausted
+
                         else:
-                            # A 503 backendError from Google means the backend may
-                            # have processed the insert even though we never got a
-                            # response back. The domain is already added to Workspace
-                            # and the DNS TXT record is set, so this is verification
-                            # pending Google's recovery - NOT a failure.
-                            logger.warning(f"[VERIFY] 503 backendError after {max_attempts} retries for {domain}; checking if insert was processed server-side")
-                            if self._site_verification_present(domain):
-                                logger.info(f"[VERIFY] ✅ {domain} present in Site Verification resources despite the 503s")
-                                self._ensure_workspace_admin_owner(domain)
-                                return self._confirm_workspace_verification(domain)
-                            return True, (
-                                f"Site Verification request submitted for {domain}. "
-                                f"Google returned a transient 503 backend error, but "
-                                f"the domain is added to Workspace and the DNS TXT "
-                                f"record is set. Verification completes once Google's "
-                                f"backend recovers."
-                            )
+                            # Other HTTP errors
+                            logger.error(f"[VERIFY] HTTP {status} error for {domain}: {e}")
+                            return False, f"Verification failed: HTTP {status} - {error_str}"
 
-                    else:
-                        # Other HTTP errors
-                        logger.error(f"[VERIFY] HTTP {status} error for {domain}: {e}")
-                        return False, f"Verification failed: HTTP {status} - {error_str}"
+            # After trying both modes, check if resource was inserted server-side
+            if self._site_verification_present(domain):
+                logger.info(f"[VERIFY] ✅ {domain} present in Site Verification resources after mode fallback")
+                self._ensure_workspace_admin_owner(domain)
+                return self._confirm_workspace_verification(domain)
             
             # If we get here, all retries exhausted
             return False, "Verification failed after maximum retries"
