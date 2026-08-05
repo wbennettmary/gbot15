@@ -846,13 +846,12 @@ def verify_single_domain(job_id: str, domain: str, account_name: str, stop_event
                     operation.dns_status = 'success'
                     operation.message = 'Verification TXT refreshed. Calling verification API...'
                     db.session.commit()
-                    time.sleep(10)
+                    time.sleep(5)
                 except Exception as dns_error:
-                    operation.dns_status = 'failed'
-                    operation.verify_status = 'failed'
-                    operation.message = f"DNS refresh failed: {str(dns_error)}"
+                    logger.warning(f"DNS refresh failed for {domain} (will attempt direct verification since TXT may already exist): {dns_error}")
+                    operation.dns_status = 'skipped'
+                    operation.message = 'Using existing DNS TXT record. Calling verification API...'
                     db.session.commit()
-                    return {'verified': False, 'status': 'failed', 'error': operation.message}
 
                 if oauth_verification.get('success'):
                     is_verified, verify_msg = _verify_domain_with_oauth_service(
