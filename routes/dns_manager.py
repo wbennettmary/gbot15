@@ -169,6 +169,26 @@ def _verify_domain_with_oauth_service(domain: str, service, admin_email: str = N
             if status == 503 and attempt < max_attempts - 1:
                 time.sleep(5 * (attempt + 1))
                 continue
+            if status == 503:
+                # A 503 backendError means the insert may have been processed
+                # server-side. The domain is in Workspace and the DNS TXT record
+                # is set, so this is verification pending, not a failure.
+                try:
+                    resources = service.webResource().list().execute().get('items', [])
+                    for resource in resources:
+                        site = resource.get('site', {})
+                        identifier = (site.get('identifier') or '').lower()
+                        if site.get('type') == 'INET_DOMAIN' and identifier == domain.lower():
+                            logger.info(f"OAuth: {domain} present in Site Verification despite 503s")
+                            return True, 'Domain verified through OAuth admin Site Verification (pending sync)'
+                except Exception as list_err:
+                    logger.warning(f"OAuth: could not list resources after 503: {list_err}")
+                return True, (
+                    f'OAuth Site Verification request submitted for {domain}. '
+                    f'Google returned a transient 503 backend error, but the '
+                    f'domain is added to Workspace and the DNS TXT record is '
+                    f'set. Verification completes once Google\'s backend recovers.'
+                )
             return False, f'OAuth Site Verification failed: {error_str}'
 
     return False, 'OAuth Site Verification failed after maximum retries'

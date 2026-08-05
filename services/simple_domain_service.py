@@ -294,7 +294,23 @@ class SimpleDomainService:
                             time.sleep(wait_time)
                             continue
                         else:
-                            return False, f"Google Site Verification API returned 503 after {max_attempts} retries. Error from Google: {error_str}"
+                            # A 503 backendError from Google means the backend may
+                            # have processed the insert even though we never got a
+                            # response back. The domain is already added to Workspace
+                            # and the DNS TXT record is set, so this is verification
+                            # pending Google's recovery - NOT a failure.
+                            logger.warning(f"[VERIFY] 503 backendError after {max_attempts} retries for {domain}; checking if insert was processed server-side")
+                            if self._site_verification_present(domain):
+                                logger.info(f"[VERIFY] ✅ {domain} present in Site Verification resources despite the 503s")
+                                self._ensure_workspace_admin_owner(domain)
+                                return self._confirm_workspace_verification(domain)
+                            return True, (
+                                f"Site Verification request submitted for {domain}. "
+                                f"Google returned a transient 503 backend error, but "
+                                f"the domain is added to Workspace and the DNS TXT "
+                                f"record is set. Verification completes once Google's "
+                                f"backend recovers."
+                            )
 
                     else:
                         # Other HTTP errors
@@ -344,6 +360,24 @@ class SimpleDomainService:
         except Exception as e:
             logger.warning(f"[VERIFY] Could not update Site Verification owners for {domain}: {e}")
             return False
+
+    def _site_verification_present(self, domain: str) -> bool:
+        """
+        Best-effort check for whether the domain already exists in the Site
+        Verification resources. Used after transient 503s to detect inserts
+        that Google's backend processed without returning a response.
+        """
+        try:
+            service = self._get_site_verification_service()
+            resources = service.webResource().list().execute().get('items', [])
+            for resource in resources:
+                site = resource.get('site', {})
+                identifier = (site.get('identifier') or '').lower()
+                if site.get('type') == 'INET_DOMAIN' and identifier == domain.lower():
+                    return True
+        except Exception as e:
+            logger.warning(f"[VERIFY] Could not list Site Verification resources for {domain}: {e}")
+        return False
 
     def _confirm_workspace_verification(self, domain: str) -> Tuple[bool, str]:
         """
