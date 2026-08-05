@@ -1049,14 +1049,16 @@ def start_bulk_multi_account():
                                 
                                 # ========== STEP 4: Verify Domain ==========
                                 entry['verifyStatus'] = 'running'
-                                entry['message'] = 'Waiting 60s for DNS propagation before verifying domain...'
                                 logger.info(f"[BULK] Waiting 60s for DNS TXT propagation on {domain}...")
                                 
-                                # Wait 60 seconds for DNS propagation
+                                # Live countdown for 60 seconds (update UI message every 10s)
                                 import time
-                                time.sleep(60)
+                                for remaining in range(60, 0, -10):
+                                    entry['message'] = f'DNS TXT published! Waiting {remaining}s for DNS propagation...'
+                                    time.sleep(10)
                                 
-                                entry['message'] = 'Verifying domain with Google...'
+                                entry['message'] = f'Triggering Google Site Verification API for {domain}...'
+                                logger.info(f"[BULK] Triggering verify_domain for {domain}")
                                 verified, verify_msg = svc.verify_domain(domain)
                                 
                                 if verified:
