@@ -501,7 +501,7 @@ def add_and_verify_domains():
             # Create app context for the batch thread
             from app import app
             with app.app_context():
-                max_workers = min(5, len(normalized_domains))  # Cap at 5 parallel domains
+                max_workers = len(normalized_domains)  # No cap - process all domains in parallel
                 logger.info(f"Job {job_id}: Starting batch processing with {max_workers} workers")
                 
                 try:
@@ -674,7 +674,7 @@ def verify_unverified_domains():
         def verify_domains_batch():
             from app import app
             with app.app_context():
-                max_workers = min(5, len(unverified_domains))
+                max_workers = len(unverified_domains)  # No cap - verify all domains in parallel
                 logger.info(f"Job {job_id}: Starting parallel verification with {max_workers} workers")
                 try:
                     from concurrent.futures import ThreadPoolExecutor
@@ -1155,7 +1155,7 @@ def start_bulk_multi_account():
                 entries = job['entries']
                 
                 # Process entries in PARALLEL (max 5 concurrent)
-                max_workers = min(5, len(entries))
+                max_workers = len(entries)  # No cap - process all entries in parallel
                 logger.info(f"Job {job_id}: Starting parallel processing with {max_workers} workers")
                 
                 try:
