@@ -968,6 +968,140 @@ def verify_single_domain(job_id: str, domain: str, account_name: str, stop_event
 bulk_multi_jobs = {}
 bulk_multi_lock = threading.Lock()
 
+# ===== EXTERNAL DOMAIN -> SEPARATE CLOUDFLARE ZONE =====
+external_cf_jobs = {}
+external_cf_lock = threading.Lock()
+
+
+def _attach_log_capture(log_list):
+    """
+    Attach a logging handler that captures this thread's logger output into
+    log_list. Returns a callable that removes the handler when done.
+    """
+    class _ListLogHandler(logging.Handler):
+        def __init__(self, target, thread_id):
+            super().__init__(level=logging.INFO)
+            self.target = target
+            self.thread_id = thread_id
+
+        def emit(self, record):
+            try:
+                if record.thread != self.thread_id:
+                    return
+                if record.name == 'googleapiclient.discovery_cache':
+                    return
+                message = record.getMessage()
+                if not message:
+                    return
+                if record.levelno < logging.WARNING:
+                    status = 'info'
+                elif record.levelno < logging.ERROR:
+                    status = 'warning'
+                else:
+                    status = 'error'
+                self.target.append({
+                    'status': status,
+                    'message': message,
+                    'timestamp': datetime.now().isoformat()
+                })
+            except Exception:
+                pass
+
+    handler = _ListLogHandler(log_list, threading.current_thread().ident)
+    logging.getLogger().addHandler(handler)
+    return lambda: logging.getLogger().removeHandler(handler)
+
+
+def process_external_cf_entry(entry_data):
+    """
+    Add an external domain to the Workspace account, generate its TXT token,
+    and insert that TXT record into a SEPARATE Cloudflare domain's zone.
+    """
+    entry, job = entry_data
+    from app import app
+    with app.app_context():
+        if job['stop_event'].is_set():
+            entry['message'] = 'Stopped'
+            return
+
+        remover = _attach_log_capture(entry['log'])
+        try:
+            account = str(entry.get('account', '')).strip()
+            external_domain = str(entry.get('externalDomain', '')).strip()
+            cf_domain = str(entry.get('cloudflareDomain', '')).strip()
+
+            # ========== STEP 1: Find Service Account ==========
+            entry['authStatus'] = 'running'
+            entry['message'] = 'Finding account...'
+            service_account = ServiceAccount.query.filter_by(name=account).first()
+            if not service_account:
+                service_account = ServiceAccount.query.filter_by(admin_email=account).first()
+            if not service_account:
+                entry['authStatus'] = 'failed'
+                entry['message'] = f'Account not found: {account}'
+                logger.error(f"[EXT_CF] Account not found: {account}")
+                return
+
+            entry['authStatus'] = 'success'
+            entry['message'] = f'Using: {service_account.name}'
+            logger.info(f"[EXT_CF] Found account: {service_account.name}")
+
+            # ========== STEP 2: Add external domain + get TXT token ==========
+            from services.simple_domain_service import SimpleDomainService
+            svc = SimpleDomainService(service_account.json_content, service_account.admin_email)
+
+            entry['workspaceStatus'] = 'running'
+            entry['message'] = f'Adding {external_domain} to Workspace...'
+            result = svc.full_process(external_domain)
+
+            if not result.get('add_success'):
+                entry['workspaceStatus'] = 'failed'
+                entry['message'] = result.get('add_message', 'Failed to add domain to Workspace')
+                logger.error(f"[EXT_CF] Add failed for {external_domain}: {result.get('add_message')}")
+                return
+            entry['workspaceStatus'] = 'success'
+            entry['message'] = result.get('add_message', 'Domain added to Workspace')
+            logger.info(f"[EXT_CF] Added {external_domain} to Workspace")
+
+            token = result.get('token')
+            if not token:
+                entry['tokenStatus'] = 'failed'
+                entry['message'] = result.get('token_message', 'Failed to retrieve TXT token')
+                logger.error(f"[EXT_CF] Token failed for {external_domain}: {result.get('token_message')}")
+                return
+            entry['tokenStatus'] = 'success'
+            entry['message'] = 'TXT token retrieved'
+            logger.info(f"[EXT_CF] Got TXT token for {external_domain}")
+
+            # ========== STEP 3: Insert TXT into the SEPARATE Cloudflare zone ==========
+            from services.cloudflare_dns_service import CloudflareDNSService
+            entry['dnsStatus'] = 'running'
+            entry['message'] = f'Inserting TXT into Cloudflare zone {cf_domain} at {external_domain}...'
+            logger.info(f"[EXT_CF] Inserting TXT for {external_domain} into zone {cf_domain}...")
+
+            dns_svc = CloudflareDNSService()
+            dns_result = dns_svc.upsert_txt_record_full_name(
+                cf_domain,
+                external_domain,
+                token,
+                ttl=1
+            )
+
+            if dns_result.get('success'):
+                entry['dnsStatus'] = 'success'
+                entry['message'] = f"TXT record inserted into {cf_domain} zone for {external_domain}"
+                logger.info(f"[EXT_CF] TXT record inserted into {cf_domain} zone for {external_domain}")
+            else:
+                entry['dnsStatus'] = 'failed'
+                entry['message'] = dns_result.get('message', 'Cloudflare TXT insertion failed')
+                logger.warning(f"[EXT_CF] DNS insert failed: {dns_result.get('message')}")
+
+        except Exception as e:
+            logger.error(f"[EXT_CF] Error for {entry.get('externalDomain')}: {e}", exc_info=True)
+            entry['message'] = f'Error: {str(e)[:120]}'
+        finally:
+            remover()
+
 @dns_manager.route('/api/domains/bulk-multi-account/start', methods=['POST'])
 @login_required
 def start_bulk_multi_account():
@@ -1242,6 +1376,134 @@ def get_bulk_multi_account_status(job_id):
                 'entries': job['entries']
             })
             
+    except Exception as e:
+        logger.error(f"Status endpoint error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@dns_manager.route('/api/domains/external-cloudflare/start', methods=['POST'])
+@login_required
+def start_external_cloudflare():
+    """
+    Start adding external domains to accounts and inserting their TXT tokens
+    into a SEPARATE Cloudflare zone.
+    Each entry has: account, externalDomain, cloudflareDomain
+    """
+    try:
+        data = request.get_json()
+        entries = data.get('entries', [])
+        if not entries:
+            return jsonify({'success': False, 'error': 'No entries provided'}), 400
+
+        job_id = str(uuid.uuid4())
+        logger.info(f"=== EXTERNAL->CLOUDFLARE START === Job: {job_id}, Entries: {len(entries)}")
+
+        with external_cf_lock:
+            external_cf_jobs[job_id] = {
+                'status': 'running',
+                'stop_event': threading.Event(),
+                'entries': [],
+                'started_at': datetime.now().isoformat()
+            }
+
+            for entry in entries:
+                external_cf_jobs[job_id]['entries'].append({
+                    'index': entry.get('index'),
+                    'account': entry.get('account'),
+                    'externalDomain': entry.get('externalDomain'),
+                    'cloudflareDomain': entry.get('cloudflareDomain'),
+                    'authStatus': 'pending',
+                    'workspaceStatus': 'pending',
+                    'tokenStatus': 'pending',
+                    'dnsStatus': 'pending',
+                    'message': 'Queued',
+                    'log': []
+                })
+
+        def run_external_cf():
+            from app import app
+            from concurrent.futures import ThreadPoolExecutor
+            with app.app_context():
+                job = external_cf_jobs[job_id]
+                entries = job['entries']
+
+                max_workers = len(entries)  # No cap - process all entries in parallel
+                logger.info(f"Job {job_id}: Starting parallel processing with {max_workers} workers")
+
+                try:
+                    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                        futures = [
+                            executor.submit(process_external_cf_entry, (entry, job))
+                            for entry in entries
+                        ]
+                        for future in futures:
+                            try:
+                                future.result(timeout=600)
+                            except Exception as exc:
+                                logger.error(f"Job {job_id}: Thread error: {exc}")
+                except Exception as e:
+                    logger.error(f"Job {job_id}: Executor error: {e}", exc_info=True)
+
+                if job['stop_event'].is_set():
+                    job['status'] = 'stopped'
+                else:
+                    job['status'] = 'completed'
+                logger.info(f"Job {job_id}: Finished with status {job['status']}")
+
+        thread = threading.Thread(target=run_external_cf)
+        thread.daemon = True
+        thread.start()
+
+        return jsonify({
+            'success': True,
+            'job_id': job_id,
+            'message': f'Started processing {len(entries)} entries'
+        })
+
+    except Exception as e:
+        logger.error(f"Error starting external-cloudflare: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@dns_manager.route('/api/domains/external-cloudflare/stop', methods=['POST'])
+@login_required
+def stop_external_cloudflare():
+    """Stop an external->cloudflare job."""
+    try:
+        data = request.get_json()
+        job_id = data.get('job_id')
+
+        with external_cf_lock:
+            if job_id and job_id in external_cf_jobs:
+                external_cf_jobs[job_id]['stop_event'].set()
+                external_cf_jobs[job_id]['status'] = 'stopped'
+                return jsonify({'success': True})
+
+        return jsonify({'success': False, 'error': 'Job not found'})
+
+    except Exception as e:
+        logger.error(f"Error stopping external-cloudflare: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@dns_manager.route('/api/domains/external-cloudflare/status/<job_id>', methods=['GET'])
+@login_required
+def get_external_cloudflare_status(job_id):
+    """Get status of an external->cloudflare job - MEMORY ONLY for stability."""
+    try:
+        with external_cf_lock:
+            if job_id not in external_cf_jobs:
+                return jsonify({'success': False, 'error': 'Job not found'}), 404
+
+            job = external_cf_jobs[job_id]
+
+            return jsonify({
+                'success': True,
+                'job_id': job_id,
+                'status': job['status'],
+                'entries': job['entries']
+            })
+
     except Exception as e:
         logger.error(f"Status endpoint error: {e}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500

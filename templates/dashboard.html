@@ -1568,6 +1568,95 @@
         </div>
     </div>
 
+    <!-- External Domain -> Separate Cloudflare Zone -->
+    <div class="github-card draggable-card" data-id="external-cloudflare-verification" style="margin-top: 24px;">
+        <div class="github-card-header" style="cursor: move;">
+            <h3 class="github-card-title">
+                <i class="fas fa-cloud-upload-alt"></i>
+                Add External Domain + Insert TXT into Separate Cloudflare Zone
+            </h3>
+        </div>
+
+        <div style="margin-bottom: 20px;">
+            <div class="form-group-github" style="margin-bottom: 16px;">
+                <label for="external-cf-input" class="form-label-github">
+                    <i class="fas fa-list"></i> Paste entries (one per line)
+                </label>
+                <textarea id="external-cf-input" class="form-control-github" rows="8"
+                    placeholder="Format: account, external domain, cloudflare domain&#10;admin@account.com,externaldomain.com,domaincloudflare.com&#10;admin@account.com,otherexternal.com,domaincloudflare.com"></textarea>
+                <small style="color: #656d76; font-size: 12px; margin-top: 8px; display: block;">
+                    <i class="fas fa-info-circle"></i>
+                    Format: <code>account, external domain, cloudflare domain</code> - Adds the external domain to the
+                    Workspace account, generates its TXT token, then inserts that TXT record into the Cloudflare zone
+                    of the cloudflare domain (a different domain). Uses stored JSON credentials (no password needed).
+                </small>
+            </div>
+
+            <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+                <button onclick="parseExternalCfEntries()" class="btn-github btn-github-primary">
+                    <i class="fas fa-list-check"></i> Parse & Preview
+                </button>
+                <button onclick="startExternalCfVerification()" class="btn-github"
+                    style="background-color: #28a745; border-color: #28a745; color: #ffffff;"
+                    id="external-cf-start-btn">
+                    <i class="fas fa-play"></i> Start
+                </button>
+                <button onclick="stopExternalCfVerification()" class="btn-github"
+                    style="background-color: var(--color-danger-emphasis); border-color: var(--color-danger-emphasis); color: #ffffff;">
+                    <i class="fas fa-stop"></i> Stop
+                </button>
+                <button onclick="clearExternalCfInput()" class="btn-github">
+                    <i class="fas fa-broom"></i> Clear
+                </button>
+            </div>
+        </div>
+
+        <!-- Parsed Schedule Table -->
+        <div id="external-cf-schedule" style="display: none; margin-top: 24px;">
+            <h4 style="font-size: 16px; font-weight: 600; color: var(--color-fg-default); margin: 0 0 16px 0;">
+                <i class="fas fa-table"></i> Schedule (<span id="external-cf-count">0</span> entries)
+            </h4>
+            <div style="overflow-x: auto;">
+                <table id="external-cf-table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                    <thead>
+                        <tr class="glass-table-header">
+                            <th style="padding: 8px; width: 40px; text-align: center;">#</th>
+                            <th style="padding: 8px; width: 170px;">Account</th>
+                            <th style="padding: 8px; width: 170px;">External Domain</th>
+                            <th style="padding: 8px; width: 170px;">Cloudflare Domain</th>
+                            <th style="padding: 8px; width: 40px; text-align: center;" title="Authentication"><i
+                                    class="fas fa-key"></i></th>
+                            <th style="padding: 8px; width: 40px; text-align: center;" title="Workspace"><i
+                                    class="fas fa-briefcase"></i></th>
+                            <th style="padding: 8px; width: 40px; text-align: center;" title="Token"><i
+                                    class="fas fa-fingerprint"></i></th>
+                            <th style="padding: 8px; width: 40px; text-align: center;" title="DNS TXT"><i
+                                    class="fas fa-globe"></i></th>
+                            <th style="padding: 8px;">Message</th>
+                        </tr>
+                    </thead>
+                    <tbody id="external-cf-table-body">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Log Panel -->
+        <div id="external-cf-log-container" style="margin-top: 24px; display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <h4 style="font-size: 16px; font-weight: 600; color: var(--color-fg-default); margin: 0;">
+                    <i class="fas fa-file-alt"></i> Log
+                </h4>
+                <button onclick="toggleExternalCfLog()" class="btn-github" style="padding: 4px 12px; font-size: 12px;">
+                    <i class="fas fa-chevron-down" id="external-cf-log-toggle-icon"></i> Toggle
+                </button>
+            </div>
+            <div id="external-cf-log" class="glass-code-block"
+                style="max-height: 300px; overflow-y: auto; white-space: pre-wrap;">
+            </div>
+        </div>
+    </div>
+
     <!-- Cloudflare TXT Deletion -->
     <div class="github-card draggable-card" data-id="cloudflare-txt-deletion" style="margin-top: 24px;">
         <div class="github-card-header" style="cursor: move;">
@@ -13391,6 +13480,263 @@
                 'skipped': '<i class="fas fa-forward" style="color: #bf8700; font-size: 12px;"></i>'
             };
             return statusMap[status] || statusMap['pending'];
+        }
+
+        // ===== EXTERNAL DOMAIN -> SEPARATE CLOUDFLARE ZONE =====
+        let externalCfParsedEntries = [];
+        let externalCfJobId = null;
+        let externalCfPollInterval = null;
+
+        window.parseExternalCfEntries = function () {
+            const input = document.getElementById('external-cf-input').value.trim();
+            if (!input) {
+                alert('Please paste entries first');
+                return;
+            }
+
+            const lines = input.split('\n').filter(line => line.trim());
+            externalCfParsedEntries = [];
+
+            lines.forEach((line, idx) => {
+                // Format: account, externalDomain, cloudflareDomain
+                const parts = line.split(',').map(p => p.trim());
+                if (parts.length >= 3) {
+                    externalCfParsedEntries.push({
+                        index: idx + 1,
+                        account: parts[0],
+                        externalDomain: parts[1],
+                        cloudflareDomain: parts[2],
+                        authStatus: 'pending',
+                        workspaceStatus: 'pending',
+                        tokenStatus: 'pending',
+                        dnsStatus: 'pending',
+                        message: 'Ready'
+                    });
+                }
+            });
+
+            if (externalCfParsedEntries.length === 0) {
+                alert('No valid entries found. Use format: account,external.domain,cloudflare.domain');
+                return;
+            }
+
+            const scheduleDiv = document.getElementById('external-cf-schedule');
+            scheduleDiv.style.display = 'block';
+            document.getElementById('external-cf-count').textContent = externalCfParsedEntries.length;
+
+            const tbody = document.getElementById('external-cf-table-body');
+            tbody.innerHTML = '';
+
+            externalCfParsedEntries.forEach(entry => {
+                const row = document.createElement('tr');
+                row.id = `external-cf-row-${entry.index}`;
+                row.innerHTML = `
+                <td style="padding: 8px; text-align: center; color: #666; font-size: 11px;">${entry.index}</td>
+                <td style="padding: 8px;"><span class="text-truncate-cell" title="${entry.account}" style="max-width: 160px;">${entry.account}</span></td>
+                <td style="padding: 8px;"><span class="text-truncate-cell" title="${entry.externalDomain}" style="max-width: 160px;">${entry.externalDomain}</span></td>
+                <td style="padding: 8px;"><span class="text-truncate-cell" title="${entry.cloudflareDomain}" style="max-width: 160px;">${entry.cloudflareDomain}</span></td>
+                <td style="padding: 8px; text-align: center;"><i class="fas fa-circle text-muted" style="font-size: 8px; opacity: 0.5;"></i></td>
+                <td style="padding: 8px; text-align: center;"><i class="fas fa-circle text-muted" style="font-size: 8px; opacity: 0.5;"></i></td>
+                <td style="padding: 8px; text-align: center;"><i class="fas fa-circle text-muted" style="font-size: 8px; opacity: 0.5;"></i></td>
+                <td style="padding: 8px; text-align: center;"><i class="fas fa-circle text-muted" style="font-size: 8px; opacity: 0.5;"></i></td>
+                <td style="padding: 8px; font-size: 11px; color: #666;" class="text-truncate-cell" title="${entry.message}">${entry.message}</td>
+            `;
+                tbody.appendChild(row);
+            });
+
+            document.getElementById('external-cf-log-container').style.display = 'block';
+            logExternalCf('📋 Parsed ' + externalCfParsedEntries.length + ' entries. Click "Start" to begin processing.');
+        };
+
+        window.startExternalCfVerification = function () {
+            if (externalCfParsedEntries.length === 0) {
+                alert('Please parse entries first using "Parse & Preview"');
+                return;
+            }
+
+            const btn = document.getElementById('external-cf-start-btn');
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+            }
+
+            logExternalCf('🚀 Starting external domain -> Cloudflare zone processing for ' + externalCfParsedEntries.length + ' entries...');
+
+            fetch('/api/domains/external-cloudflare/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ entries: externalCfParsedEntries })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        externalCfJobId = data.job_id;
+                        logExternalCf('✅ Job started: ' + data.job_id);
+                        startExternalCfPolling();
+                    } else {
+                        logExternalCf('❌ Error: ' + (data.error || 'Unknown error'));
+                        alert('Error: ' + (data.error || 'Unknown error'));
+                        if (btn) {
+                            btn.disabled = false;
+                            btn.innerHTML = '<i class="fas fa-play"></i> Start';
+                        }
+                    }
+                })
+                .catch(error => {
+                    logExternalCf('❌ Error: ' + error.message);
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="fas fa-play"></i> Start';
+                    }
+                });
+        };
+
+        window.stopExternalCfVerification = function () {
+            if (!externalCfJobId) {
+                alert('No active job to stop');
+                return;
+            }
+            fetch('/api/domains/external-cloudflare/stop', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ job_id: externalCfJobId })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        logExternalCf('🛑 Job stopped');
+                        if (externalCfPollInterval) {
+                            clearInterval(externalCfPollInterval);
+                            externalCfPollInterval = null;
+                        }
+                        externalCfJobId = null;
+                        const btn = document.getElementById('external-cf-start-btn');
+                        if (btn) {
+                            btn.disabled = false;
+                            btn.innerHTML = '<i class="fas fa-play"></i> Start';
+                        }
+                    }
+                })
+                .catch(error => console.error('Error stopping:', error));
+        };
+
+        window.clearExternalCfInput = function () {
+            document.getElementById('external-cf-input').value = '';
+            document.getElementById('external-cf-schedule').style.display = 'none';
+            document.getElementById('external-cf-log').innerHTML = '';
+            externalCfParsedEntries = [];
+        };
+
+        window.toggleExternalCfLog = function () {
+            const log = document.getElementById('external-cf-log');
+            const icon = document.getElementById('external-cf-log-toggle-icon');
+            if (log.style.display === 'none') {
+                log.style.display = 'block';
+                icon.className = 'fas fa-chevron-up';
+            } else {
+                log.style.display = 'none';
+                icon.className = 'fas fa-chevron-down';
+            }
+        };
+
+        function logExternalCf(message) {
+            const log = document.getElementById('external-cf-log');
+            if (log) {
+                const timestamp = new Date().toLocaleTimeString();
+                log.innerHTML += `[${timestamp}] ${message}\n`;
+                log.scrollTop = log.scrollHeight;
+            }
+        }
+
+        function startExternalCfPolling() {
+            if (externalCfPollInterval) clearInterval(externalCfPollInterval);
+
+            externalCfPollInterval = setInterval(() => {
+                if (!externalCfJobId) {
+                    clearInterval(externalCfPollInterval);
+                    return;
+                }
+
+                fetch(`/api/domains/external-cloudflare/status/${externalCfJobId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success && data.entries) {
+                            updateExternalCfTable(data.entries);
+
+                            // Render detailed log lines (every API call) per entry
+                            if (!window.externalCfLogCount) {
+                                window.externalCfLogCount = {};
+                            }
+                            data.entries.forEach(entry => {
+                                const entryLog = entry.log || [];
+                                const logKey = `${externalCfJobId}::${entry.index}`;
+                                const seenCount = window.externalCfLogCount[logKey] || 0;
+                                for (let i = seenCount; i < entryLog.length; i++) {
+                                    const item = entryLog[i];
+                                    const icon = item.status === 'error' ? '❌' : (item.status === 'warning' ? '⚠️' : '🔄');
+                                    logExternalCf(`${icon} ${entry.externalDomain}: ${item.message}`);
+                                }
+                                window.externalCfLogCount[logKey] = entryLog.length;
+                            });
+
+                            // Log status transitions
+                            data.entries.forEach(entry => {
+                                const statusKey = `${externalCfJobId}::${entry.index}_${entry.workspaceStatus}_${entry.tokenStatus}_${entry.dnsStatus}`;
+                                if (!window.externalCfStatusCache) {
+                                    window.externalCfStatusCache = {};
+                                }
+                                if (window.externalCfStatusCache[statusKey]) {
+                                    return;
+                                }
+                                window.externalCfStatusCache[statusKey] = true;
+                                if (entry.authStatus === 'failed') {
+                                    logExternalCf(`❌ ${entry.externalDomain}: Auth failed - ${entry.message}`);
+                                } else if (entry.workspaceStatus === 'success' && entry.tokenStatus === 'pending') {
+                                    logExternalCf(`✅ ${entry.externalDomain}: Added to Workspace`);
+                                } else if (entry.workspaceStatus === 'failed') {
+                                    logExternalCf(`❌ ${entry.externalDomain}: Workspace add failed - ${entry.message}`);
+                                } else if (entry.tokenStatus === 'success' && entry.dnsStatus === 'pending') {
+                                    logExternalCf(`✅ ${entry.externalDomain}: TXT token retrieved`);
+                                } else if (entry.tokenStatus === 'failed') {
+                                    logExternalCf(`❌ ${entry.externalDomain}: Token failed - ${entry.message}`);
+                                } else if (entry.dnsStatus === 'success') {
+                                    logExternalCf(`✅ ${entry.externalDomain}: TXT inserted into ${entry.cloudflareDomain}`);
+                                } else if (entry.dnsStatus === 'failed') {
+                                    logExternalCf(`❌ ${entry.externalDomain}: DNS failed - ${entry.message}`);
+                                }
+                            });
+
+                            if (data.status === 'completed' || data.status === 'stopped' || data.status === 'failed') {
+                                logExternalCf('✅ Job ' + data.status);
+                                clearInterval(externalCfPollInterval);
+                                externalCfPollInterval = null;
+                                externalCfJobId = null;
+                                const btn = document.getElementById('external-cf-start-btn');
+                                if (btn) {
+                                    btn.disabled = false;
+                                    btn.innerHTML = '<i class="fas fa-play"></i> Start';
+                                }
+                            }
+                        }
+                    })
+                    .catch(error => console.error('Poll error:', error));
+            }, 2000);
+        }
+
+        function updateExternalCfTable(entries) {
+            entries.forEach(entry => {
+                const row = document.getElementById(`external-cf-row-${entry.index}`);
+                if (row) {
+                    const cells = row.querySelectorAll('td');
+                    if (cells.length >= 9) {
+                        cells[4].innerHTML = getStatusBadge(entry.authStatus);
+                        cells[5].innerHTML = getStatusBadge(entry.workspaceStatus);
+                        cells[6].innerHTML = getStatusBadge(entry.tokenStatus);
+                        cells[7].innerHTML = getStatusBadge(entry.dnsStatus);
+                        cells[8].textContent = entry.message || '';
+                    }
+                }
+            });
         }
 
         // Verify function was created IMMEDIATELY

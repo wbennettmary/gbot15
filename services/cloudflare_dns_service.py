@@ -258,6 +258,98 @@ class CloudflareDNSService:
             logger.error(f"Error upserting TXT record for {apex}: {e}")
             raise
 
+    def upsert_txt_record_full_name(self, zone_apex: str, full_record_name: str, value: str, ttl: int = 1) -> Dict:
+        """
+        Create or update a TXT record at an EXACT record name inside a zone.
+
+        Unlike upsert_txt_record, the record name is used verbatim (the full
+        hostname, e.g. an external domain) instead of being derived from the
+        zone. Used to place a verification token for one domain inside a
+        different Cloudflare zone.
+
+        Args:
+            zone_apex: The Cloudflare zone to place the record in (e.g. domaincloudflare.com)
+            full_record_name: The exact record name (e.g. externaldomain.com)
+            value: The TXT record value
+            ttl: TTL in seconds (1 for automatic)
+
+        Returns:
+            Dict with 'success', 'message', 'record'
+        """
+        try:
+            # 1. Get Zone ID
+            zone_id = self.get_zone_id(zone_apex)
+            if not zone_id:
+                raise Exception(f"Could not find active zone for {zone_apex} in Cloudflare")
+
+            # 2. Use the full record name verbatim
+            record_name = full_record_name.lower()
+
+            # 3. Check for existing record
+            existing_records = self.get_dns_records(zone_id, type='TXT', name=record_name)
+
+            # Prepare both quoted and unquoted versions for comparison
+            quoted_value = f'"{value}"' if not (value.startswith('"') and value.endswith('"')) else value
+            unquoted_value = value.strip('"')
+
+            # Check if exact match exists (with or without quotes)
+            for record in existing_records:
+                record_content = record['content']
+                if record_content == value or record_content == quoted_value or record_content.strip('"') == unquoted_value:
+                    logger.info(f"TXT record already exists for {record_name} with value {value}")
+                    return {'success': True, 'message': 'Record already exists', 'record': record}
+
+            # 4. Remove any existing Google verification tokens for this name
+            if 'google-site-verification=' in value:
+                for record in existing_records:
+                    record_content = record['content'].strip('"')
+                    if 'google-site-verification=' in record_content:
+                        logger.info(f"Deleting existing Google verification token: {record['id']}")
+                        self.delete_record(zone_id, record['id'])
+
+            # 5. Create new record
+            url = f"{self.BASE_URL}/zones/{zone_id}/dns_records"
+
+            # Cloudflare TXT records need the value wrapped in double quotes
+            if not (value.startswith('"') and value.endswith('"')):
+                quoted_value = f'"{value}"'
+            else:
+                quoted_value = value
+
+            payload = {
+                'type': 'TXT',
+                'name': record_name,
+                'content': quoted_value,
+                'ttl': ttl  # 1 = Automatic in Cloudflare
+            }
+
+            response = requests.post(url, headers=self._headers, json=payload, timeout=30)
+
+            if not response.ok:
+                error_details = response.text
+                try:
+                    error_json = response.json()
+                    error_details = error_json.get('errors', error_details)
+                except:
+                    pass
+
+                error_msg = f"Cloudflare API error creating record: {error_details}"
+                logger.error(error_msg)
+                raise Exception(error_msg)
+
+            data = response.json()
+            if not data.get('success'):
+                error_msg = f"Cloudflare API error creating record: {data.get('errors')}"
+                logger.error(error_msg)
+                raise Exception(error_msg)
+
+            logger.info(f"Successfully created TXT record for {record_name} in zone {zone_apex}")
+            return {'success': True, 'message': 'Record created successfully', 'record': data.get('result')}
+
+        except Exception as e:
+            logger.error(f"Error upserting TXT record for {full_record_name} in zone {zone_apex}: {e}")
+            raise
+
     def delete_record(self, zone_id: str, record_id: str):
         """Delete a DNS record."""
         try:
