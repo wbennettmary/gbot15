@@ -13700,7 +13700,7 @@
                                 } else if (entry.tokenStatus === 'failed') {
                                     logExternalCf(`❌ ${entry.externalDomain}: Token failed - ${entry.message}`);
                                 } else if (entry.dnsStatus === 'success') {
-                                    logExternalCf(`✅ ${entry.externalDomain}: TXT inserted into ${entry.cloudflareDomain}`);
+                                    logExternalCf(`✅ ${entry.externalDomain}: TXT inserted at @ in ${entry.cloudflareDomain} zone`);
                                 } else if (entry.dnsStatus === 'failed') {
                                     logExternalCf(`❌ ${entry.externalDomain}: DNS failed - ${entry.message}`);
                                 }

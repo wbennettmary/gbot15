@@ -267,9 +267,12 @@ class CloudflareDNSService:
         zone. Used to place a verification token for one domain inside a
         different Cloudflare zone.
 
+        Passing '@' as full_record_name places the TXT record at the zone
+        root (the @ record of the Cloudflare zone).
+
         Args:
             zone_apex: The Cloudflare zone to place the record in (e.g. domaincloudflare.com)
-            full_record_name: The exact record name (e.g. externaldomain.com)
+            full_record_name: The exact record name (e.g. '@' or externaldomain.com)
             value: The TXT record value
             ttl: TTL in seconds (1 for automatic)
 
@@ -282,11 +285,14 @@ class CloudflareDNSService:
             if not zone_id:
                 raise Exception(f"Could not find active zone for {zone_apex} in Cloudflare")
 
-            # 2. Use the full record name verbatim
+            # 2. Use the record name verbatim; '@' means the zone root
             record_name = full_record_name.lower()
+            lookup_name = record_name
+            if record_name == '@':
+                lookup_name = zone_apex.lower()
 
             # 3. Check for existing record
-            existing_records = self.get_dns_records(zone_id, type='TXT', name=record_name)
+            existing_records = self.get_dns_records(zone_id, type='TXT', name=lookup_name)
 
             # Prepare both quoted and unquoted versions for comparison
             quoted_value = f'"{value}"' if not (value.startswith('"') and value.endswith('"')) else value

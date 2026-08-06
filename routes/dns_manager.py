@@ -1076,21 +1076,21 @@ def process_external_cf_entry(entry_data):
             # ========== STEP 3: Insert TXT into the SEPARATE Cloudflare zone ==========
             from services.cloudflare_dns_service import CloudflareDNSService
             entry['dnsStatus'] = 'running'
-            entry['message'] = f'Inserting TXT into Cloudflare zone {cf_domain} at {external_domain}...'
-            logger.info(f"[EXT_CF] Inserting TXT for {external_domain} into zone {cf_domain}...")
+            entry['message'] = f'Inserting TXT into Cloudflare zone {cf_domain} at @ (zone root)...'
+            logger.info(f"[EXT_CF] Inserting TXT for {external_domain} into zone {cf_domain} at @ (zone root)...")
 
             dns_svc = CloudflareDNSService()
             dns_result = dns_svc.upsert_txt_record_full_name(
                 cf_domain,
-                external_domain,
+                '@',
                 token,
                 ttl=1
             )
 
             if dns_result.get('success'):
                 entry['dnsStatus'] = 'success'
-                entry['message'] = f"TXT record inserted into {cf_domain} zone for {external_domain}"
-                logger.info(f"[EXT_CF] TXT record inserted into {cf_domain} zone for {external_domain}")
+                entry['message'] = f"TXT record inserted at @ in {cf_domain} zone"
+                logger.info(f"[EXT_CF] TXT record inserted at @ in {cf_domain} zone for {external_domain}")
             else:
                 entry['dnsStatus'] = 'failed'
                 entry['message'] = dns_result.get('message', 'Cloudflare TXT insertion failed')
