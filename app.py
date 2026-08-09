@@ -29,7 +29,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import re
 
-from core_logic import google_api
+from core_logic import google_api, unique_random_alias, get_random_name_pools
 from database import db, User, WhitelistedIP, UsedDomain, GoogleAccount, GoogleToken, Scope, ServerConfig, UserAppPassword, AutomationAccount, RetrievedUser, NamecheapConfig, DomainOperation, AwsConfig, ServiceAccount, CloudflareConfig, Notification, WorkspaceList, AwsGeneratedPassword
 from routes.dns_manager import dns_manager
 from routes.aws_manager import aws_manager
@@ -2220,12 +2220,11 @@ def api_create_gsuite_user():
         first_name = data.get('first_name')
         last_name = data.get('last_name')
         email = data.get('email')
-        password = data.get('password')
 
-        if not all([first_name, last_name, email, password]):
+        if not all([first_name, last_name, email]):
             return jsonify({'success': False, 'error': 'All fields are required'})
 
-        result = google_api.create_gsuite_user(first_name, last_name, email, password)
+        result = google_api.create_gsuite_user(first_name, last_name, email)
         
         if result.get('success'):
             try:
@@ -2274,17 +2273,18 @@ def api_create_random_admin_users():
         req = request.get_json(silent=True) or {}
         num_users = req.get('num_users', 1)
         domain = req.get('domain', '')
-        password = req.get('password', '')
         admin_role = req.get('admin_role', 'SUPER_ADMIN')
+        max_attempts = int(req.get('max_attempts', 3) or 3)
+        if max_attempts < 1:
+            max_attempts = 1
+        if max_attempts > 10:
+            max_attempts = 10
         
         if not domain or '.' not in domain:
             return jsonify({'success': False, 'error': 'Please provide a valid domain'})
         
-        if not password or len(password) < 8:
-            return jsonify({'success': False, 'error': 'Password must be at least 8 characters long'})
-        
-        if num_users <= 0 or num_users > 50:
-            return jsonify({'success': False, 'error': 'Number of admin users must be between 1 and 50'})
+        if num_users <= 0 or num_users > 500:
+            return jsonify({'success': False, 'error': 'Number of admin users must be between 1 and 500'})
         
         # Validate admin role
         valid_roles = [
@@ -2296,12 +2296,12 @@ def api_create_random_admin_users():
         
         logging.info(f"Creating {num_users} random admin users for domain {domain} with role {admin_role}")
         
-        # Create random admin users
+        # Create random admin users (app sets a random placeholder password; users set their own at first sign-in)
         result = google_api.create_random_admin_users(
             num_users=num_users,
             domain=domain,
-            password=password,
-            admin_role=admin_role
+            admin_role=admin_role,
+            max_attempts=max_attempts
         )
         
         if result['success']:
@@ -2327,8 +2327,8 @@ def api_create_random_admin_users():
 
             return jsonify({
                 'success': True,
-                'message': f'Successfully created {num_users} random admin users',
-                'password': password,
+                'message': f'Successfully created {num_users} random admin users. Each user will set their own password at first sign-in.',
+                'password': None,
                 'admin_role': admin_role,
                 'results': result.get('results', [])
             })
@@ -2352,27 +2352,21 @@ def api_create_random_users():
         data = request.get_json()
         num_users = data.get('num_users')
         domain = data.get('domain')
-        password = data.get('password', 'SecurePass123')
+        max_attempts = int(data.get('max_attempts', 3) or 3)
+        if max_attempts < 1:
+            max_attempts = 1
+        if max_attempts > 10:
+            max_attempts = 10
 
         if not num_users or num_users <= 0:
             return jsonify({'success': False, 'error': 'Number of users must be greater than 0'})
 
         if not domain or not domain.strip():
             return jsonify({'success': False, 'error': 'Domain is required'})
-        
-        if not password or len(password) < 8:
-            return jsonify({'success': False, 'error': 'Password must be at least 8 characters long'})
-
-        # Sanitize password - remove any potentially problematic characters
-        import re
-        password = re.sub(r'[^\w\-_!@#$%^&*()+=]', '', password)
-        
-        if not password.strip():
-            return jsonify({'success': False, 'error': 'Password cannot be empty after sanitization'})
 
         # Limit the number of users for performance
-        if num_users > 1000:
-            return jsonify({'success': False, 'error': 'Maximum 1000 users allowed per batch for performance'})
+        if num_users > 5000:
+            return jsonify({'success': False, 'error': 'Maximum 5000 users allowed per batch for performance'})
 
         # Clean domain name
         domain = domain.strip().lower()
@@ -2385,7 +2379,7 @@ def api_create_random_users():
         if not re.match(r'^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', domain):
             return jsonify({'success': False, 'error': 'Domain contains invalid characters'})
 
-        result = google_api.create_random_users(num_users, domain, password)
+        result = google_api.create_random_users(num_users, domain, max_attempts=max_attempts)
         
         if result.get('success') and result.get('successful_count', 0) > 0:
             try:
@@ -2409,7 +2403,6 @@ def api_create_random_users():
         return jsonify(result)
 
     except Exception as e:
-        signal.alarm(0)  # Cancel timeout
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/bulk-create-account-users', methods=['POST'])
@@ -2431,7 +2424,6 @@ def api_bulk_create_account_users():
         account_name = account_info.get('account', '').strip()
         users_per_account = account_info.get('users_per_account', 0)
         domain = account_info.get('domain', '').strip()
-        password = account_info.get('password', '').strip()
         
         if not account_name:
             return jsonify({'success': False, 'error': f'Row {idx + 1}: Account email is required'})
@@ -2439,23 +2431,14 @@ def api_bulk_create_account_users():
         if not users_per_account or int(users_per_account) < 1 or int(users_per_account) > 1000:
             return jsonify({'success': False, 'error': f'Row {idx + 1} ({account_name}): Users per account must be between 1 and 1000'})
         
-        if not password or len(password) < 8:
-            return jsonify({'success': False, 'error': f'Row {idx + 1} ({account_name}): Password must be at least 8 characters long'})
-        
         # Clean domain if provided
         if domain:
             domain = domain.strip().lower()
             if not re.match(r'^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', domain):
                 return jsonify({'success': False, 'error': f'Row {idx + 1} ({account_name}): Invalid domain format'})
         
-        # Sanitize password
-        password = re.sub(r'[^\w\-_!@#$%^&*()+=]', '', password)
-        if not password.strip():
-            return jsonify({'success': False, 'error': f'Row {idx + 1} ({account_name}): Password cannot be empty after sanitization'})
-        
         # Update
         account_info['domain'] = domain if domain else ''
-        account_info['password'] = password
         account_info['users_per_account'] = int(users_per_account)
 
     lightning_mode = data.get('lightning_mode', False)
@@ -2676,7 +2659,6 @@ def api_bulk_create_account_users():
                         account_name = account_info['account']
                         users_per_account = account_info['users_per_account']
                         domain_input = account_info['domain'] # Pre-validated/default handling to come
-                        password = account_info['password']
                         
                         account_result = {
                             'account': account_name,
@@ -2723,20 +2705,17 @@ def api_bulk_create_account_users():
                             
                             app.logger.info(f"[BULK ACCOUNTS] [{account_name}] Creating {users_per_account} users on domain {domain}")
                             
-                            # Prepare user data
-                            fake = Faker()
+                            # Prepare user data (real names, no digits, no dots in aliases)
                             users_data_list = []
+                            used_emails = set()
                             for i in range(users_per_account):
-                                first_name = fake.first_name()
-                                last_name = fake.last_name()
-                                random_num = ''.join(random.choices(string.digits, k=4))
-                                email = f"{first_name.lower()}{last_name.lower()}{random_num}@{domain}"
+                                first_name, last_name, email = unique_random_alias(domain, used_emails)
                                 
                                 users_data_list.append({
                                     'email': email,
                                     'first_name': first_name,
                                     'last_name': last_name,
-                                    'password': password
+                                    'password': ''.join(random.choices(string.ascii_letters + string.digits, k=16))
                                 })
 
                             if lightning_mode:
@@ -2766,7 +2745,7 @@ def api_bulk_create_account_users():
                                             "primaryEmail": user_data['email'],
                                             "name": { "givenName": user_data['first_name'], "familyName": user_data['last_name'] },
                                             "password": user_data['password'],
-                                            "changePasswordAtNextLogin": False,
+                                            "changePasswordAtNextLogin": True,
                                             "suspended": False # ACTIVE as requested
                                         }
                                         
@@ -2811,7 +2790,7 @@ def api_bulk_create_account_users():
                                                 "primaryEmail": user_data['email'],
                                                 "name": { "givenName": user_data['first_name'], "familyName": user_data['last_name'] },
                                                 "password": user_data['password'],
-                                                "changePasswordAtNextLogin": False,
+                                                "changePasswordAtNextLogin": True,
                                                 "orgUnitPath": "/",
                                                 "suspended": False
                                             }
@@ -3455,7 +3434,7 @@ def api_bulk_randomize_user_aliases():
     """
     Authenticate to each admin account, list all existing workspace users,
     and add a unique long-tail random alias for every user.
-    The alias format is: <firstname><lastname><6-digit-number>@<domain>
+    The alias format is: <firstname><lastname>@<domain> (real names, no digits, no dots)
     Uses the Google Admin SDK users.aliases.insert API.
     """
     cleanup_old_progress()
@@ -3554,29 +3533,28 @@ def api_bulk_randomize_user_aliases():
                 update_progress(task_id, 0, len(authenticated_accounts), "randomizing", f"Randomizing aliases for {len(authenticated_accounts)} accounts...")
 
                 def generate_unique_identity(existing_aliases_set):
-                    """Generate a unique long-tail identity (names and username) using creation logic (firstlastname####)"""
-                    fake = Faker()
-                    for _ in range(20):  # Up to 20 attempts to avoid collision
-                        f_name = fake.first_name()
-                        l_name = fake.last_name()
-                        
+                    """Generate a unique long-tail identity (names and username) using real names
+                    from the large cached pool — alias is "firstlast", no digits, no dots."""
+                    import random as _random
+                    first_names, last_names = get_random_name_pools()
+                    for _ in range(300):  # Up to 300 attempts to avoid collision
+                        f_name = _random.choice(first_names)
+                        l_name = _random.choice(last_names)
+
                         # Clean names to ensure valid email local part, removing spaces, single quotes, hyphens
                         clean_f = f_name.lower().replace("'", "").replace("-", "").replace(" ", "")
                         clean_l = l_name.lower().replace("'", "").replace("-", "").replace(" ", "")
-                        
-                        # Use a 4-digit number like in the Bulk Account Management creation
-                        random_num = ''.join(random.choices(string.digits, k=4))
-                        candidate_local = f"{clean_f}{clean_l}{random_num}"
-                        
+
+                        candidate_local = f"{clean_f}{clean_l}"
+
                         if candidate_local not in existing_aliases_set:
                             existing_aliases_set.add(candidate_local)
                             return f_name, l_name, candidate_local
-                            
-                    # Fallback
+
+                    # Fallback — name pools exhausted (essentially impossible)
                     fallback_f = "User"
-                    fallback_l = ''.join(random.choices(string.ascii_uppercase, k=4))
-                    random_num = ''.join(random.choices(string.digits, k=4))
-                    fallback_local = f"user{fallback_l.lower()}{random_num}"
+                    fallback_l = ''.join(_random.choices(string.ascii_uppercase, k=4))
+                    fallback_local = f"user{fallback_l.lower()}"
                     existing_aliases_set.add(fallback_local)
                     return fallback_f, fallback_l, fallback_local
 
@@ -8023,150 +8001,12 @@ def generate_csv():
                 'Advanced Protection Program enrollment'
             ])
             
-            # Generate sample users with realistic data
-            import random
-            from faker import Faker
-            fake = Faker()
-            
-            # Common first names and last names for realistic data
-            first_names = [
-                'James', 'John', 'Robert', 'Michael', 'William', 'David', 'Richard', 'Charles', 'Joseph', 'Thomas',
-                'Christopher', 'Daniel', 'Paul', 'Mark', 'Donald', 'George', 'Kenneth', 'Steven', 'Edward', 'Brian',
-                'Ronald', 'Anthony', 'Kevin', 'Jason', 'Matthew', 'Gary', 'Timothy', 'Jose', 'Larry', 'Jeffrey',
-                'Mary', 'Patricia', 'Jennifer', 'Linda', 'Elizabeth', 'Barbara', 'Susan', 'Jessica', 'Sarah', 'Karen',
-                'Nancy', 'Lisa', 'Betty', 'Helen', 'Sandra', 'Donna', 'Carol', 'Ruth', 'Sharon', 'Michelle',
-                'Laura', 'Kimberly', 'Deborah', 'Dorothy', 'Amanda', 'Ashley', 'Brenda', 'Catherine', 'Christine', 'Diane',
-                'Emily', 'Emma', 'Grace', 'Heather', 'Janet', 'Joyce', 'Judith', 'Julie', 'Katherine', 'Kelly',
-                'Margaret', 'Maria', 'Marie', 'Martha', 'Melissa', 'Pamela', 'Rachel', 'Rebecca', 'Shirley', 'Tammy',
-                'Teresa', 'Alexander', 'Andrew', 'Benjamin', 'Brandon', 'Carl', 'Christian', 'Eric', 'Frank', 'Gabriel',
-                'Gregory', 'Harold', 'Henry', 'Jack', 'Jacob', 'Jeremy', 'Jonathan', 'Jordan', 'Justin', 'Keith',
-                'Lawrence', 'Louis', 'Martin', 'Mason', 'Nicholas', 'Patrick', 'Peter', 'Raymond', 'Roger', 'Ryan',
-                'Samuel', 'Scott', 'Sean', 'Stephen', 'Terry', 'Tyler', 'Victor', 'Wayne', 'Zachary', 'Aaron', 'Adam',
-                'Alan', 'Albert', 'Arthur', 'Austin', 'Bruce', 'Bryan', 'Carlos', 'Craig', 'Dennis', 'Derek',
-                'Douglas', 'Eugene', 'Gregory', 'Harold', 'Howard', 'Jack', 'Jerry', 'Joe', 'Jordan', 'Joshua',
-                'Juan', 'Keith', 'Kenneth', 'Kyle', 'Lawrence', 'Louis', 'Manuel', 'Mason', 'Nicholas', 'Patrick',
-                'Peter', 'Raymond', 'Roger', 'Roy', 'Ryan', 'Samuel', 'Scott', 'Sean', 'Stephen', 'Terry',
-                'Tyler', 'Victor', 'Wayne', 'Zachary', 'Zachary', 'Aaron', 'Adam', 'Alan', 'Albert', 'Arthur'
-            ]
-            
-            last_names = [
-                'Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez',
-                'Hernandez', 'Lopez', 'Gonzalez', 'Wilson', 'Anderson', 'Thomas', 'Taylor', 'Moore', 'Jackson', 'Martin',
-                'Lee', 'Perez', 'Thompson', 'White', 'Harris', 'Sanchez', 'Clark', 'Ramirez', 'Lewis', 'Robinson',
-                'Walker', 'Young', 'Allen', 'King', 'Wright', 'Scott', 'Torres', 'Nguyen', 'Hill', 'Flores',
-                'Green', 'Adams', 'Nelson', 'Baker', 'Hall', 'Rivera', 'Campbell', 'Mitchell', 'Carter', 'Roberts',
-                'Gomez', 'Phillips', 'Evans', 'Turner', 'Diaz', 'Parker', 'Cruz', 'Edwards', 'Collins', 'Reyes',
-                'Stewart', 'Morris', 'Morales', 'Murphy', 'Cook', 'Rogers', 'Gutierrez', 'Ortiz', 'Morgan', 'Cooper',
-                'Peterson', 'Bailey', 'Reed', 'Kelly', 'Howard', 'Ramos', 'Kim', 'Cox', 'Ward', 'Richardson',
-                'Watson', 'Brooks', 'Chavez', 'Wood', 'James', 'Bennett', 'Gray', 'Mendoza', 'Ruiz', 'Hughes',
-                'Price', 'Alvarez', 'Castillo', 'Sanders', 'Patel', 'Myers', 'Long', 'Ross', 'Foster', 'Jimenez',
-                'Powell', 'Jenkins', 'Perry', 'Russell', 'Sullivan', 'Bell', 'Coleman', 'Butler', 'Henderson', 'Barnes',
-                'Gonzales', 'Fisher', 'Vasquez', 'Simmons', 'Romero', 'Jordan', 'Patterson', 'Alexander', 'Hamilton', 'Graham',
-                'Reynolds', 'Griffin', 'Wallace', 'Moreno', 'West', 'Cole', 'Hayes', 'Bryant', 'Herrera', 'Gibson',
-                'Ellis', 'Tran', 'Medina', 'Aguilar', 'Stevens', 'Murray', 'Ford', 'Castro', 'Marshall', 'Owens',
-                'Harrison', 'Fernandez', 'McDonald', 'Woods', 'Washington', 'Kennedy', 'Wells', 'Vargas', 'Henry', 'Chen',
-                'Freeman', 'Webb', 'Tucker', 'Guzman', 'Burns', 'Crawford', 'Olson', 'Simpson', 'Porter', 'Hunter',
-                'Gordon', 'Mendez', 'Aguirre', 'Gutierrez', 'Schmidt', 'Carr', 'Vasquez', 'Castillo', 'Wheeler', 'Chapman',
-                'Oliver', 'Montgomery', 'Richards', 'Williamson', 'Johnston', 'Banks', 'Meyer', 'Bishop', 'McCoy', 'Howell',
-                'Alvarez', 'Morales', 'Murphy', 'Cook', 'Rogers', 'Gutierrez', 'Ortiz', 'Morgan', 'Cooper', 'Peterson',
-                'Bailey', 'Reed', 'Kelly', 'Howard', 'Ramos', 'Kim', 'Cox', 'Ward', 'Richardson', 'Watson',
-                'Brooks', 'Chavez', 'Wood', 'James', 'Bennett', 'Gray', 'Mendoza', 'Ruiz', 'Hughes', 'Price',
-                'Alvarez', 'Castillo', 'Sanders', 'Patel', 'Myers', 'Long', 'Ross', 'Foster', 'Jimenez', 'Powell'
-            ]
-            
-            # Advanced unique alias generation system
-            used_aliases = set()
-            used_names = set()
-            
-            def generate_complex_alias(first_name, last_name, index, attempt=0):
-                """Generate complex, unique aliases using only letters"""
-                import string
-                import hashlib
-                import time
-                
-                # Base components
-                fname = first_name.lower()
-                lname = last_name.lower()
-                f_initial = fname[0]
-                l_initial = lname[0]
-                
-                # Generate random letter sequences
-                def random_letters(length):
-                    return ''.join(random.choice(string.ascii_lowercase) for _ in range(length))
-                
-                # Complex patterns with letters only
-                patterns = [
-                    # Pattern 1: Name + Random Letters + Index letters
-                    f"{fname}{lname}{random_letters(4)}{chr(97 + (index % 26))}{chr(97 + ((index // 26) % 26))}",
-                    f"{fname}{random_letters(3)}{lname}{random_letters(3)}",
-                    f"{f_initial}{lname}{random_letters(5)}{chr(97 + (index % 26))}",
-                    
-                    # Pattern 2: Mixed combinations with letters
-                    f"{fname}{random_letters(3)}{lname}{random_letters(2)}",
-                    f"{fname[0:3]}{lname[0:3]}{random_letters(4)}",
-                    f"{fname}{lname[0:2]}{random_letters(4)}{chr(97 + (index % 26))}",
-                    
-                    # Pattern 3: Hash-based unique identifiers (letters only)
-                    f"{fname}{lname}{hashlib.md5(f'{fname}{lname}{index}{attempt}'.encode()).hexdigest()[:6].replace('0', 'a').replace('1', 'b').replace('2', 'c').replace('3', 'd').replace('4', 'e').replace('5', 'f').replace('6', 'g').replace('7', 'h').replace('8', 'i').replace('9', 'j')}",
-                    f"{f_initial}{lname}{hashlib.md5(f'{index}{attempt}{time.time()}'.encode()).hexdigest()[:8].replace('0', 'k').replace('1', 'l').replace('2', 'm').replace('3', 'n').replace('4', 'o').replace('5', 'p').replace('6', 'q').replace('7', 'r').replace('8', 's').replace('9', 't')}",
-                    
-                    # Pattern 4: Complex letter combinations
-                    f"{fname}{random.choice(string.ascii_lowercase)}{lname}{random_letters(3)}",
-                    f"{fname[0:2]}{lname[0:2]}{random_letters(5)}",
-                    f"{fname}{lname[0:3]}{random_letters(4)}{chr(97 + (index % 26))}",
-                    
-                    # Pattern 5: Time-based unique identifiers (letters only)
-                    f"{fname}{lname}{random_letters(6)}{chr(97 + (index % 26))}",
-                    f"{f_initial}{lname}{random_letters(5)}{chr(97 + (index % 26))}",
-                    
-                    # Pattern 6: Advanced letter combinations
-                    f"{fname}{lname[0:4]}{random_letters(3)}",
-                    f"{fname[0:3]}{lname}{random_letters(4)}",
-                    f"{fname}{lname[0:2]}{random_letters(5)}{chr(97 + (index % 26))}",
-                    
-                    # Pattern 7: Complex letter patterns
-                    f"{fname}{lname}{random_letters(6)}",
-                    f"{f_initial}{lname[0:3]}{random_letters(5)}",
-                    f"{fname[0:2]}{lname[0:3]}{random_letters(4)}",
-                    
-                    # Pattern 8: Advanced letter combinations
-                    f"{fname}{lname}{random_letters(4)}{chr(97 + (index % 26))}",
-                    f"{f_initial}{lname}{random_letters(6)}{chr(97 + (index % 26))}",
-                    
-                    # Pattern 9: Multi-part unique identifiers (letters only)
-                    f"{fname}{lname[0:2]}{random_letters(3)}{chr(97 + (index % 26))}",
-                    f"{fname[0:4]}{lname}{random_letters(4)}{chr(97 + (index % 26))}",
-                    f"{fname}{lname[0:3]}{random_letters(5)}{chr(97 + (index % 26))}",
-                    
-                    # Pattern 10: Advanced hash combinations (letters only)
-                    f"{fname}{lname}{hashlib.sha256(f'{fname}{lname}{index}{attempt}{random_letters(4)}'.encode()).hexdigest()[:7].replace('0', 'a').replace('1', 'b').replace('2', 'c').replace('3', 'd').replace('4', 'e').replace('5', 'f').replace('6', 'g').replace('7', 'h').replace('8', 'i').replace('9', 'j')}",
-                    f"{f_initial}{lname}{hashlib.sha256(f'{index}{attempt}{time.time()}{random_letters(3)}'.encode()).hexdigest()[:9].replace('0', 'k').replace('1', 'l').replace('2', 'm').replace('3', 'n').replace('4', 'o').replace('5', 'p').replace('6', 'q').replace('7', 'r').replace('8', 's').replace('9', 't')}"
-                ]
-                
-                # Try each pattern until we find a unique one
-                for pattern in patterns:
-                    if pattern not in used_aliases:
-                        used_aliases.add(pattern)
-                        return pattern
-                
-                # If all patterns are taken, create a completely unique one (letters only)
-                unique_id = f"{fname}{lname}{random_letters(8)}{chr(97 + (index % 26))}{chr(97 + (attempt % 26))}"
-                used_aliases.add(unique_id)
-                return unique_id
-            
+            # Generate sample users with realistic data (real names, no digits, no dots in aliases)
+            used_emails = set()
+
             for i in range(1, int(num_users) + 1):
-                # Ensure unique name combinations
-                while True:
-                    first_name = random.choice(first_names)
-                    last_name = random.choice(last_names)
-                    name_key = f"{first_name}_{last_name}"
-                    if name_key not in used_names:
-                        used_names.add(name_key)
-                        break
-                
-                alias = generate_complex_alias(first_name, last_name, i)
-                email = f"{alias}@{domain}"
-                
+                first_name, last_name, email = unique_random_alias(domain, used_emails)
+
                 writer.writerow([
                     first_name,           # First Name [Required]
                     last_name,            # Last Name [Required]
@@ -8338,149 +8178,13 @@ def preview_csv():
             'Advanced Protection Program enrollment'
         ])
         
-        # Generate preview users with realistic data
-        import random
-        
-        # Common first names and last names for realistic data
-        first_names = [
-            'James', 'John', 'Robert', 'Michael', 'William', 'David', 'Richard', 'Charles', 'Joseph', 'Thomas',
-            'Christopher', 'Daniel', 'Paul', 'Mark', 'Donald', 'George', 'Kenneth', 'Steven', 'Edward', 'Brian',
-            'Ronald', 'Anthony', 'Kevin', 'Jason', 'Matthew', 'Gary', 'Timothy', 'Jose', 'Larry', 'Jeffrey',
-            'Mary', 'Patricia', 'Jennifer', 'Linda', 'Elizabeth', 'Barbara', 'Susan', 'Jessica', 'Sarah', 'Karen',
-            'Nancy', 'Lisa', 'Betty', 'Helen', 'Sandra', 'Donna', 'Carol', 'Ruth', 'Sharon', 'Michelle',
-            'Laura', 'Kimberly', 'Deborah', 'Dorothy', 'Amanda', 'Ashley', 'Brenda', 'Catherine', 'Christine', 'Diane',
-            'Emily', 'Emma', 'Grace', 'Heather', 'Janet', 'Joyce', 'Judith', 'Julie', 'Katherine', 'Kelly',
-            'Margaret', 'Maria', 'Marie', 'Martha', 'Melissa', 'Pamela', 'Rachel', 'Rebecca', 'Shirley', 'Tammy',
-            'Teresa', 'Alexander', 'Andrew', 'Benjamin', 'Brandon', 'Carl', 'Christian', 'Eric', 'Frank', 'Gabriel',
-            'Gregory', 'Harold', 'Henry', 'Jack', 'Jacob', 'Jeremy', 'Jonathan', 'Jordan', 'Justin', 'Keith',
-            'Lawrence', 'Louis', 'Martin', 'Mason', 'Nicholas', 'Patrick', 'Peter', 'Raymond', 'Roger', 'Ryan',
-            'Samuel', 'Scott', 'Sean', 'Stephen', 'Terry', 'Tyler', 'Victor', 'Wayne', 'Zachary', 'Aaron', 'Adam',
-            'Alan', 'Albert', 'Arthur', 'Austin', 'Bruce', 'Bryan', 'Carlos', 'Craig', 'Dennis', 'Derek',
-            'Douglas', 'Eugene', 'Gregory', 'Harold', 'Howard', 'Jack', 'Jerry', 'Joe', 'Jordan', 'Joshua',
-            'Juan', 'Keith', 'Kenneth', 'Kyle', 'Lawrence', 'Louis', 'Manuel', 'Mason', 'Nicholas', 'Patrick',
-            'Peter', 'Raymond', 'Roger', 'Roy', 'Ryan', 'Samuel', 'Scott', 'Sean', 'Stephen', 'Terry',
-            'Tyler', 'Victor', 'Wayne', 'Zachary', 'Zachary', 'Aaron', 'Adam', 'Alan', 'Albert', 'Arthur'
-        ]
-        
-        last_names = [
-            'Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez',
-            'Hernandez', 'Lopez', 'Gonzalez', 'Wilson', 'Anderson', 'Thomas', 'Taylor', 'Moore', 'Jackson', 'Martin',
-            'Lee', 'Perez', 'Thompson', 'White', 'Harris', 'Sanchez', 'Clark', 'Ramirez', 'Lewis', 'Robinson',
-            'Walker', 'Young', 'Allen', 'King', 'Wright', 'Scott', 'Torres', 'Nguyen', 'Hill', 'Flores',
-            'Green', 'Adams', 'Nelson', 'Baker', 'Hall', 'Rivera', 'Campbell', 'Mitchell', 'Carter', 'Roberts',
-            'Gomez', 'Phillips', 'Evans', 'Turner', 'Diaz', 'Parker', 'Cruz', 'Edwards', 'Collins', 'Reyes',
-            'Stewart', 'Morris', 'Morales', 'Murphy', 'Cook', 'Rogers', 'Gutierrez', 'Ortiz', 'Morgan', 'Cooper',
-            'Peterson', 'Bailey', 'Reed', 'Kelly', 'Howard', 'Ramos', 'Kim', 'Cox', 'Ward', 'Richardson',
-            'Watson', 'Brooks', 'Chavez', 'Wood', 'James', 'Bennett', 'Gray', 'Mendoza', 'Ruiz', 'Hughes',
-            'Price', 'Alvarez', 'Castillo', 'Sanders', 'Patel', 'Myers', 'Long', 'Ross', 'Foster', 'Jimenez',
-            'Powell', 'Jenkins', 'Perry', 'Russell', 'Sullivan', 'Bell', 'Coleman', 'Butler', 'Henderson', 'Barnes',
-            'Gonzales', 'Fisher', 'Vasquez', 'Simmons', 'Romero', 'Jordan', 'Patterson', 'Alexander', 'Hamilton', 'Graham',
-            'Reynolds', 'Griffin', 'Wallace', 'Moreno', 'West', 'Cole', 'Hayes', 'Bryant', 'Herrera', 'Gibson',
-            'Ellis', 'Tran', 'Medina', 'Aguilar', 'Stevens', 'Murray', 'Ford', 'Castro', 'Marshall', 'Owens',
-            'Harrison', 'Fernandez', 'McDonald', 'Woods', 'Washington', 'Kennedy', 'Wells', 'Vargas', 'Henry', 'Chen',
-            'Freeman', 'Webb', 'Tucker', 'Guzman', 'Burns', 'Crawford', 'Olson', 'Simpson', 'Porter', 'Hunter',
-            'Gordon', 'Mendez', 'Aguirre', 'Gutierrez', 'Schmidt', 'Carr', 'Vasquez', 'Castillo', 'Wheeler', 'Chapman',
-            'Oliver', 'Montgomery', 'Richards', 'Williamson', 'Johnston', 'Banks', 'Meyer', 'Bishop', 'McCoy', 'Howell',
-            'Alvarez', 'Morales', 'Murphy', 'Cook', 'Rogers', 'Gutierrez', 'Ortiz', 'Morgan', 'Cooper', 'Peterson',
-            'Bailey', 'Reed', 'Kelly', 'Howard', 'Ramos', 'Kim', 'Cox', 'Ward', 'Richardson', 'Watson',
-            'Brooks', 'Chavez', 'Wood', 'James', 'Bennett', 'Gray', 'Mendoza', 'Ruiz', 'Hughes', 'Price',
-            'Alvarez', 'Castillo', 'Sanders', 'Patel', 'Myers', 'Long', 'Ross', 'Foster', 'Jimenez', 'Powell'
-        ]
-        
-        # Advanced unique alias generation system for preview
-        used_aliases_preview = set()
-        used_names_preview = set()
-        
-        def generate_complex_alias_preview(first_name, last_name, index, attempt=0):
-            """Generate complex, unique aliases using only letters for preview"""
-            import string
-            import hashlib
-            import time
-            
-            # Base components
-            fname = first_name.lower()
-            lname = last_name.lower()
-            f_initial = fname[0]
-            l_initial = lname[0]
-            
-            # Generate random letter sequences
-            def random_letters(length):
-                return ''.join(random.choice(string.ascii_lowercase) for _ in range(length))
-            
-            # Complex patterns with letters only
-            patterns = [
-                # Pattern 1: Name + Random Letters + Index letters
-                f"{fname}{lname}{random_letters(4)}{chr(97 + (index % 26))}{chr(97 + ((index // 26) % 26))}",
-                f"{fname}{random_letters(3)}{lname}{random_letters(3)}",
-                f"{f_initial}{lname}{random_letters(5)}{chr(97 + (index % 26))}",
-                
-                # Pattern 2: Mixed combinations with letters
-                f"{fname}{random_letters(3)}{lname}{random_letters(2)}",
-                f"{fname[0:3]}{lname[0:3]}{random_letters(4)}",
-                f"{fname}{lname[0:2]}{random_letters(4)}{chr(97 + (index % 26))}",
-                
-                # Pattern 3: Hash-based unique identifiers (letters only)
-                f"{fname}{lname}{hashlib.md5(f'{fname}{lname}{index}{attempt}'.encode()).hexdigest()[:6].replace('0', 'a').replace('1', 'b').replace('2', 'c').replace('3', 'd').replace('4', 'e').replace('5', 'f').replace('6', 'g').replace('7', 'h').replace('8', 'i').replace('9', 'j')}",
-                f"{f_initial}{lname}{hashlib.md5(f'{index}{attempt}{time.time()}'.encode()).hexdigest()[:8].replace('0', 'k').replace('1', 'l').replace('2', 'm').replace('3', 'n').replace('4', 'o').replace('5', 'p').replace('6', 'q').replace('7', 'r').replace('8', 's').replace('9', 't')}",
-                
-                # Pattern 4: Complex letter combinations
-                f"{fname}{random.choice(string.ascii_lowercase)}{lname}{random_letters(3)}",
-                f"{fname[0:2]}{lname[0:2]}{random_letters(5)}",
-                f"{fname}{lname[0:3]}{random_letters(4)}{chr(97 + (index % 26))}",
-                
-                # Pattern 5: Time-based unique identifiers (letters only)
-                f"{fname}{lname}{random_letters(6)}{chr(97 + (index % 26))}",
-                f"{f_initial}{lname}{random_letters(5)}{chr(97 + (index % 26))}",
-                
-                # Pattern 6: Advanced letter combinations
-                f"{fname}{lname[0:4]}{random_letters(3)}",
-                f"{fname[0:3]}{lname}{random_letters(4)}",
-                f"{fname}{lname[0:2]}{random_letters(5)}{chr(97 + (index % 26))}",
-                
-                # Pattern 7: Complex letter patterns
-                f"{fname}{lname}{random_letters(6)}",
-                f"{f_initial}{lname[0:3]}{random_letters(5)}",
-                f"{fname[0:2]}{lname[0:3]}{random_letters(4)}{chr(97 + (index % 26))}",
-                
-                # Pattern 8: Advanced letter combinations
-                f"{fname}{lname}{random_letters(4)}{chr(97 + (index % 26))}",
-                f"{f_initial}{lname}{random_letters(6)}{chr(97 + (index % 26))}",
-                
-                # Pattern 9: Multi-part unique identifiers (letters only)
-                f"{fname}{lname[0:2]}{random_letters(3)}{chr(97 + (index % 26))}",
-                f"{fname[0:4]}{lname}{random_letters(4)}{chr(97 + (index % 26))}",
-                f"{fname}{lname[0:3]}{random_letters(5)}{chr(97 + (index % 26))}",
-                
-                # Pattern 10: Advanced hash combinations (letters only)
-                f"{fname}{lname}{hashlib.sha256(f'{fname}{lname}{index}{attempt}{random_letters(4)}'.encode()).hexdigest()[:7].replace('0', 'a').replace('1', 'b').replace('2', 'c').replace('3', 'd').replace('4', 'e').replace('5', 'f').replace('6', 'g').replace('7', 'h').replace('8', 'i').replace('9', 'j')}",
-                f"{f_initial}{lname}{hashlib.sha256(f'{index}{attempt}{time.time()}{random_letters(3)}'.encode()).hexdigest()[:9].replace('0', 'k').replace('1', 'l').replace('2', 'm').replace('3', 'n').replace('4', 'o').replace('5', 'p').replace('6', 'q').replace('7', 'r').replace('8', 's').replace('9', 't')}"
-            ]
-            
-            # Try each pattern until we find a unique one
-            for pattern in patterns:
-                if pattern not in used_aliases_preview:
-                    used_aliases_preview.add(pattern)
-                    return pattern
-            
-            # If all patterns are taken, create a completely unique one (letters only)
-            unique_id = f"{fname}{lname}{random_letters(8)}{chr(97 + (index % 26))}{chr(97 + (attempt % 26))}"
-            used_aliases_preview.add(unique_id)
-            return unique_id
-        
+        # Generate preview users with realistic data (real names, no digits, no dots in aliases)
+        used_emails_preview = set()
+
         # Generate preview users
         for i in range(1, min(int(num_users), 10) + 1):  # Max 10 for preview
-            # Ensure unique name combinations for preview
-            while True:
-                first_name = random.choice(first_names)
-                last_name = random.choice(last_names)
-                name_key = f"{first_name}_{last_name}"
-                if name_key not in used_names_preview:
-                    used_names_preview.add(name_key)
-                    break
-            
-            alias = generate_complex_alias_preview(first_name, last_name, i)
-            email = f"{alias}@{domain}"
-            
+            first_name, last_name, email = unique_random_alias(domain, used_emails_preview)
+
             writer.writerow([
                 first_name,           # First Name [Required]
                 last_name,            # Last Name [Required]

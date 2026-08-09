@@ -718,8 +718,8 @@
             <div class="modal-body" style="overflow-y: auto; flex: 1; padding: 32px;">
                 <p style="color: #656d76; margin-bottom: 16px;">
                     <i class="fas fa-info-circle"></i>
-                    Each account can have its own number of users, domain, and password. Add accounts using the button
-                    below or paste bulk data.
+                    Each account can have its own number of users and domain. Each user sets their own password at first sign-in. Add
+                    accounts using the button below or paste bulk data.
                 </p>
 
                 <!-- Bulk Paste Field -->
@@ -729,11 +729,11 @@
                         Bulk Paste Accounts (one per line)
                     </label>
                     <textarea id="bulk-accounts-paste" class="form-control-github" rows="4"
-                        placeholder="Paste accounts in one of these formats:&#10;account@domain.com,password&#10;account@domain.com,domain.com,password&#10;&#10;Example:&#10;admin@example.com,example.com,MyPass123&#10;user@test.com,TestPass456"></textarea>
+                        placeholder="Paste accounts in one of these formats:&#10;account@domain.com&#10;account@domain.com,domain.com&#10;&#10;Example:&#10;admin@example.com,example.com&#10;user@test.com"></textarea>
                     <small style="color: #656d76; font-size: 12px; margin-top: 8px; display: block;">
                         <i class="fas fa-info-circle"></i>
-                        Format: <code>account,password</code> or <code>account,domain,password</code> (one per line).
-                        Default: 50 users per account.
+                        Format: <code>account</code> or <code>account,domain</code> (one per line). Passwords are
+                        Each user sets their own password at first sign-in. Default: 50 users per account.
                     </small>
                     <button onclick="parseBulkAccountsPaste()" class="btn-github" style="margin-top: 8px;">
                         <i class="fas fa-magic"></i>
@@ -775,7 +775,7 @@
                                     </div>
                                 </th>
                                 <th>
-                                    <i class="fas fa-lock"></i> Password
+                                    <i class="fas fa-lock"></i> Password (optional)
                                 </th>
                                 <th style="width: 80px; text-align: center;">
                                     <i class="fas fa-trash"></i> Action
@@ -840,7 +840,7 @@
                     </button>
                     <button onclick="executeBulkRandomizeAliases(event)" class="btn-github"
                         style="background-color: #7c3aed; border-color: #7c3aed; color: white;"
-                        title="Authenticate to each account and add a unique random long-tail alias for every existing user">
+                        title="Authenticate to each account and add a unique random alias (real names, no digits, no dots) for every existing user">
                         <i class="fas fa-random"></i>
                         Auth + Randomize User Aliases
                     </button>
@@ -917,13 +917,6 @@
                     <i class="fas fa-envelope"></i> Email Address
                 </label>
                 <input type="email" id="new-user-email" class="form-control-github w-100" placeholder="user@domain.com">
-            </div>
-            <div class="flex-grow-1" style="min-width: 250px;">
-                <label for="new-user-password" class="form-label-github">
-                    <i class="fas fa-lock"></i> Password
-                </label>
-                <input type="password" id="new-user-password" class="form-control-github w-100"
-                    placeholder="Enter password">
             </div>
         </div>
         <button onclick="createSingleUser()" class="btn-github btn-github-primary">
@@ -1052,7 +1045,7 @@
                 <label for="random-user-count" class="form-label-github">
                     <i class="fas fa-hashtag"></i> Number of Users
                 </label>
-                <input type="number" id="random-user-count" class="form-control-github w-100" min="1" max="100"
+                <input type="number" id="random-user-count" class="form-control-github w-100" min="1" max="5000"
                     placeholder="e.g., 10">
             </div>
             <div class="flex-grow-1" style="min-width: 250px;">
@@ -1060,13 +1053,6 @@
                     <i class="fas fa-globe"></i> Domain
                 </label>
                 <input type="text" id="random-user-domain" class="form-control-github w-100" placeholder="example.com">
-            </div>
-            <div class="flex-grow-1" style="min-width: 250px;">
-                <label for="random-user-password" class="form-label-github">
-                    <i class="fas fa-lock"></i> Password
-                </label>
-                <input type="text" id="random-user-password" class="form-control-github w-100"
-                    placeholder="Password for all users">
             </div>
             <button onclick="createRandomUsers()" class="btn-github btn-github-primary" style="width: auto;">
                 <i class="fas fa-random"></i> Create Random Users
@@ -1087,7 +1073,7 @@
                 <label for="random-admin-count" class="form-label-github">
                     <i class="fas fa-hashtag"></i> Number of Admins
                 </label>
-                <input type="number" id="random-admin-count" class="form-control-github w-100" min="1" max="50"
+                <input type="number" id="random-admin-count" class="form-control-github w-100" min="1" max="500"
                     placeholder="e.g., 5">
             </div>
             <div class="flex-grow-1" style="min-width: 200px;">
@@ -1095,13 +1081,6 @@
                     <i class="fas fa-globe"></i> Domain
                 </label>
                 <input type="text" id="random-admin-domain" class="form-control-github w-100" placeholder="example.com">
-            </div>
-            <div class="flex-grow-1" style="min-width: 200px;">
-                <label for="random-admin-password" class="form-label-github">
-                    <i class="fas fa-lock"></i> Password
-                </label>
-                <input type="text" id="random-admin-password" class="form-control-github w-100"
-                    placeholder="Password for all admins">
             </div>
             <div class="flex-grow-1" style="min-width: 250px;">
                 <label for="admin-role" class="form-label-github">
@@ -5591,7 +5570,6 @@
         function createRandomUsers() {
             const count = document.getElementById('random-user-count').value;
             const domain = document.getElementById('random-user-domain').value;
-            const password = document.getElementById('random-user-password').value;
 
             if (!count || count <= 0) {
                 alert('Please enter a valid number of users');
@@ -5603,25 +5581,19 @@
                 return;
             }
 
-            if (!password || password.length < 8) {
-                alert('Please enter a password (minimum 8 characters)');
-                return;
-            }
-
             if (!isAuthenticated) {
                 alert('Please authenticate an account first');
                 return;
             }
 
-            logResult(`🎲 Creating ${count} random users for ${domain} with password...`);
+            logResult(`🎲 Creating ${count} random users for ${domain}. Each user will set their own password at first sign-in...`);
 
             fetch('/api/create-random-users', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     num_users: parseInt(count),
-                    domain: domain,
-                    password: password
+                    domain: domain
                 })
             })
                 .then(response => {
@@ -5632,14 +5604,15 @@
                 })
                 .then(data => {
                     if (data.success) {
-                        logResult(`✅ Random user creation completed. Password: ${data.password}`);
+                        logResult(`✅ Random user creation completed.`);
                         if (data.results) {
                             let successCount = 0;
                             let failureCount = 0;
+                            let suspendedCount = 0;
 
                             data.results.forEach(result => {
                                 if (result.result.success) {
-                                    logResult(`✅ Created: ${result.email}`);
+                                    logResult(`✅ Created (active): ${result.email}` + (result.attempts > 1 ? ` (${result.attempts} attempts)` : ''));
                                     successCount++;
                                 } else {
                                     // Handle different error types for random users
@@ -5649,6 +5622,14 @@
                                     } else if (result.result.error_type === 'duplicate_user') {
                                         logResult(`👤 DUPLICATE: ${result.email} - ${result.result.error}`);
                                         logResult(`💡 Solution: User already exists, skipping`);
+                                    } else if (result.result.error_type === 'google_auto_suspended') {
+                                        logResult(`⚠️ SUSPENDED BY GOOGLE: ${result.email} - ${result.result.error}`);
+                                        logResult(`   ${result.result.note || 'User must complete one-time web sign-in to activate.'}`);
+                                        suspendedCount++;
+                                    } else if (result.result.error_type === 'google_blocked') {
+                                        logResult(`⛔ GOOGLE BLOCK: ${result.email} - ${result.result.error}`);
+                                        logResult(`💡 Solution: Google has blocked user creation on this domain. Contact Google support.`);
+                                        failureCount++;
                                     } else {
                                         logResult(`❌ Failed: ${result.email} - ${result.result.error}`);
                                     }
@@ -5658,7 +5639,9 @@
 
                             logResult(`📊 Summary: ${successCount} successful, ${failureCount} failed`);
 
-                            if (failureCount > 0) {
+                            if (suspendedCount > 0) {
+                                logResult(`💡 Note: ${suspendedCount} user(s) were auto-suspended by Google (WEB_LOGIN_REQUIRED). This is Google's domain policy, not the app. Those users must sign in once at accounts.google.com to activate.`);
+                            } else if (failureCount > 0) {
                                 logResult(`💡 Note: Some users failed due to domain limits or duplicates`);
                             }
                         }
@@ -5682,7 +5665,6 @@
         function createRandomAdminUsers() {
             const count = document.getElementById('random-admin-count').value;
             const domain = document.getElementById('random-admin-domain').value;
-            const password = document.getElementById('random-admin-password').value;
             const adminRole = document.getElementById('admin-role').value;
 
             if (!count || count <= 0) {
@@ -5692,11 +5674,6 @@
 
             if (!domain || !domain.includes('.')) {
                 alert('Please enter a valid domain');
-                return;
-            }
-
-            if (!password || password.length < 8) {
-                alert('Please enter a password (minimum 8 characters)');
                 return;
             }
 
@@ -5715,7 +5692,7 @@
                 return;
             }
 
-            logResult(`👑 Creating ${count} random admin users for ${domain} with ${adminRole} permissions...`);
+            logResult(`👑 Creating ${count} random admin users for ${domain} with ${adminRole} permissions. Each user will set their own password at first sign-in...`);
 
             fetch('/api/create-random-admin-users', {
                 method: 'POST',
@@ -5723,7 +5700,6 @@
                 body: JSON.stringify({
                     num_users: parseInt(count),
                     domain: domain,
-                    password: password,
                     admin_role: adminRole
                 })
             })
@@ -5735,14 +5711,14 @@
                 })
                 .then(data => {
                     if (data.success) {
-                        logResult(`✅ Random admin user creation completed. Password: ${data.password}`);
+                        logResult(`✅ Random admin user creation completed. Each user will set their own password at first sign-in.`);
                         if (data.results) {
                             let successCount = 0;
                             let failureCount = 0;
 
                             data.results.forEach(result => {
                                 if (result.result.success) {
-                                    logResult(`✅ Created Admin: ${result.email} (${result.admin_role})`);
+                                    logResult(`✅ Created Admin: ${result.email} (${result.admin_role})` + (result.attempts > 1 ? ` (${result.attempts} attempts)` : ''));
                                     logResult(`📝 Note: ${result.result.message}`);
                                     successCount++;
                                 } else {
@@ -5752,6 +5728,12 @@
                                     } else if (result.result.error_type === 'duplicate_user') {
                                         logResult(`👤 DUPLICATE: ${result.email} - ${result.result.error}`);
                                         logResult(`💡 Solution: User already exists, skipping`);
+                                    } else if (result.result.error_type === 'google_blocked') {
+                                        logResult(`⛔ GOOGLE BLOCK: ${result.email} - ${result.result.error}`);
+                                        logResult(`💡 Solution: Contact Google support to lift the abuse block on this domain`);
+                                    } else if (result.result.error_type === 'google_auto_suspended') {
+                                        logResult(`⚠️ SUSPENDED BY GOOGLE: ${result.email} - ${result.result.error}`);
+                                        logResult(`   ${result.result.note || 'User must complete one-time web sign-in to activate.'}`);
                                     } else if (result.result.error_type === 'admin_permission_error') {
                                         logResult(`🔒 ADMIN PERMISSION ERROR: ${result.email} - ${result.result.error}`);
                                         logResult(`💡 Solution: Check if you have permission to assign admin roles`);
@@ -5770,13 +5752,16 @@
                             }
 
                             if (failureCount > 0) {
-                                logResult(`💡 Note: Some admin users failed due to domain limits, duplicates, or permission issues`);
+                                logResult(`💡 Note: Some admin users failed due to domain limits, duplicates, Google blocks, or permission issues`);
                             }
                         }
                     } else {
                         if (data.error_type === 'domain_limit') {
                             logResult(`🚫 DOMAIN LIMIT REACHED: ${data.error}`);
                             logResult(`💡 Solution: Upgrade to a paid Google Workspace subscription`);
+                        } else if (data.error_type === 'google_blocked') {
+                            logResult(`⛔ GOOGLE BLOCK: ${data.error}`);
+                            logResult(`💡 Solution: Contact Google support to lift the abuse block on this domain`);
                         } else if (data.error_type === 'admin_permission_error') {
                             logResult(`🔒 ADMIN PERMISSION ERROR: ${data.error}`);
                             logResult(`💡 Solution: Ensure you have permission to create admin users`);
@@ -6272,9 +6257,8 @@
             const firstName = document.getElementById('new-user-first-name').value;
             const lastName = document.getElementById('new-user-last-name').value;
             const email = document.getElementById('new-user-email').value;
-            const password = document.getElementById('new-user-password').value;
 
-            if (!firstName || !lastName || !email || !password) {
+            if (!firstName || !lastName || !email) {
                 alert('Please fill in all fields for the new user.');
                 return;
             }
@@ -6284,7 +6268,7 @@
                 return;
             }
 
-            logResult(`➕ Creating user: ${email}...`);
+            logResult(`➕ Creating user: ${email}. Password will be set by the user at their first sign-in...`);
 
             fetch('/api/create-gsuite-user', {
                 method: 'POST',
@@ -6292,8 +6276,7 @@
                 body: JSON.stringify({
                     first_name: firstName,
                     last_name: lastName,
-                    email: email,
-                    password: password
+                    email: email
                 })
             })
                 .then(response => {
@@ -6304,12 +6287,11 @@
                 })
                 .then(data => {
                     if (data.success) {
-                        logResult(`✅ User ${email} created successfully.`);
+                        logResult(`✅ User ${email} created successfully. Password will be set by the user at their first sign-in.`);
                         // Clear the form after successful creation
                         document.getElementById('new-user-first-name').value = '';
                         document.getElementById('new-user-last-name').value = '';
                         document.getElementById('new-user-email').value = '';
-                        document.getElementById('new-user-password').value = '';
                     } else {
                         // Handle different error types with specific messages
                         if (data.error_type === 'domain_limit') {
@@ -6490,8 +6472,8 @@
                     // Split by comma
                     const parts = line.split(',').map(p => p.trim()).filter(p => p);
 
-                    if (parts.length < 2) {
-                        errors.push(`Line ${index + 1}: Invalid format (need at least account,password)`);
+                    if (parts.length < 1) {
+                        errors.push(`Line ${index + 1}: Invalid format (need at least an account)`);
                         errorCount++;
                         continue;
                     }
@@ -6500,18 +6482,21 @@
                     let domain = '';
                     let password = '';
 
-                    if (parts.length === 2) {
-                        // Format: account,password
+                    if (parts.length === 1) {
+                        // Format: account
                         account = parts[0];
-                        password = parts[1];
                         domain = ''; // Will use default domain
+                    } else if (parts.length === 2) {
+                        // Format: account,domain (password ignored; user sets their own at first sign-in)
+                        account = parts[0];
+                        domain = parts[1];
                     } else if (parts.length === 3) {
-                        // Format: account,domain,password
+                        // Format: account,domain,password (password is ignored, Google auto-generates)
                         account = parts[0];
                         domain = parts[1];
                         password = parts[2];
                     } else {
-                        errors.push(`Line ${index + 1}: Too many fields (expected 2 or 3, got ${parts.length})`);
+                        errors.push(`Line ${index + 1}: Too many fields (expected 1-3, got ${parts.length})`);
                         errorCount++;
                         continue;
                     }
@@ -6519,13 +6504,6 @@
                     // Validate account email
                     if (!account.includes('@')) {
                         errors.push(`Line ${index + 1}: Invalid account email: ${account}`);
-                        errorCount++;
-                        continue;
-                    }
-
-                    // Validate password
-                    if (!password || password.length < 1) {
-                        errors.push(`Line ${index + 1}: Password is required`);
                         errorCount++;
                         continue;
                     }
@@ -6691,7 +6669,7 @@
         </td>
         <td style="padding: 12px; vertical-align: middle;">
             <input type="text" class="form-control-github" style="width: 100%; margin: 0; padding: 8px;" 
-                   placeholder="Password" value="${password}" 
+                   placeholder="Optional (auto)" value="${password}" 
                    data-field="password">
         </td>
         <td style="padding: 12px; text-align: center; vertical-align: middle;">
@@ -6978,18 +6956,13 @@
                 }
 
                 // Domain is optional - will use default domain if empty
-
-                if (!password || password.length < 8) {
-                    errors.push(`Row ${index + 1} (${account}): Password must be at least 8 characters`);
-                    hasErrors = true;
-                    return;
-                }
+                // Password is auto-generated by the app; user sets their own at first sign-in
 
                 accountsData.push({
                     account: account,
                     users_per_account: users,
                     domain: domain || '', // Empty domain will use default
-                    password: password
+                    password: password || '' // Ignored by backend, kept for compatibility
                 });
             });
 
@@ -8076,7 +8049,7 @@
                     return;
                 }
 
-                if (!confirm(`This will add a unique random alias for every user inside ${accounts.length} account(s).\n\nAliases use the format: firstname.lastname.randomletters@domain\n\nContinue?`)) {
+                if (!confirm(`This will add a unique random alias for every user inside ${accounts.length} account(s).\n\nAliases use real names, no digits and no dots: firstname.lastname → firstnamelastname@domain\n\nContinue?`)) {
                     return;
                 }
 
