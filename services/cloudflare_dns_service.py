@@ -203,16 +203,10 @@ class CloudflareDNSService:
                     logger.info(f"TXT record already exists for {record_name} with value {value}")
                     return {'success': True, 'message': 'Record already exists', 'record': record}
             
-            # 4. If we are adding a Google verification token, remove any existing ones for this name
-            # (Similar logic to Namecheap fix)
-            # Check for google-site-verification in both quoted and unquoted formats
-            is_google_verification = 'google-site-verification=' in value
-            if is_google_verification:
-                for record in existing_records:
-                    record_content = record['content'].strip('"')
-                    if 'google-site-verification=' in record_content:
-                        logger.info(f"Deleting existing Google verification token: {record['id']}")
-                        self.delete_record(zone_id, record['id'])
+            # 4. Do NOT delete existing records: multiple accounts can verify the
+            # same domain, each with its own google-site-verification token, and all
+            # tokens must remain present for every account to stay verified.
+            # (Exact-match dedup above already avoids creating duplicate identical tokens.)
 
             # 5. Create new record
             url = f"{self.BASE_URL}/zones/{zone_id}/dns_records"
@@ -305,13 +299,10 @@ class CloudflareDNSService:
                     logger.info(f"TXT record already exists for {record_name} with value {value}")
                     return {'success': True, 'message': 'Record already exists', 'record': record}
 
-            # 4. Remove any existing Google verification tokens for this name
-            if 'google-site-verification=' in value:
-                for record in existing_records:
-                    record_content = record['content'].strip('"')
-                    if 'google-site-verification=' in record_content:
-                        logger.info(f"Deleting existing Google verification token: {record['id']}")
-                        self.delete_record(zone_id, record['id'])
+            # 4. Do NOT delete existing records: multiple accounts/domains can share
+            # the same Cloudflare zone root, each with its own google-site-verification
+            # token, and all tokens must remain present for every one to stay verified.
+            # (Exact-match dedup above already avoids creating duplicate identical tokens.)
 
             # 5. Create new record
             url = f"{self.BASE_URL}/zones/{zone_id}/dns_records"

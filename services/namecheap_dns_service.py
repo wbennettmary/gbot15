@@ -221,20 +221,13 @@ class NamecheapDNSService:
             
             # Create updated host list
             updated_hosts = []
-            
-            # Preserve existing records, but replace old Google verification tokens
+
+            # Preserve ALL existing records: multiple accounts can verify the same
+            # domain, each with its own google-site-verification token, and all
+            # tokens must remain present for every account to stay verified.
+            # (Exact-match dedup above already avoids duplicate identical tokens.)
             for record in existing_hosts:
-                should_keep = True
-                
-                # If we are adding a TXT record
-                if record.host == host and record.record_type == 'TXT':
-                    # If we are adding a Google verification token, remove any existing Google tokens for this host
-                    if value.startswith('google-site-verification=') and record.address.startswith('google-site-verification='):
-                        logger.info(f"Replacing existing Google verification token: {record.address}")
-                        should_keep = False
-                
-                if should_keep:
-                    updated_hosts.append(record)
+                updated_hosts.append(record)
             
             # Add new TXT record
             new_txt = HostRecord(host=host, record_type='TXT', address=value, ttl=ttl)
