@@ -23,6 +23,7 @@ class AfraidDNSService:
         self.logged_in = False
         self.auth_error = None
         self.cookies_str = ""
+        self.last_error = None
         self._load_cookies(cookies_str)
 
     @staticmethod
@@ -144,11 +145,25 @@ class AfraidDNSService:
 
     def get_domains_with_ids(self):
         """Fetch all available domains and their IDs from the subdomain management page."""
+        self.last_error = None
         if not self.logged_in:
-            logger.error("get_domains_with_ids called but not authenticated.")
+            self.last_error = "get_domains_with_ids called but not authenticated."
+            logger.error(self.last_error)
             return {}
         try:
-            resp = self.session.get("https://freedns.afraid.org/subdomain/add.php", timeout=20)
+            url = "https://freedns.afraid.org/subdomain/add.php"
+            resp = self.session.get(url, allow_redirects=False, timeout=20)
+
+            if resp.status_code in (301, 302, 303, 307, 308):
+                location = resp.headers.get("Location", "login page")
+                self.last_error = f"FreeDNS redirected {url} to {location}; the saved cookies cannot access the add-subdomain form."
+                logger.error(self.last_error)
+                return {}
+
+            if resp.status_code != 200:
+                self.last_error = f"FreeDNS returned HTTP {resp.status_code} for {url}."
+                logger.error(self.last_error)
+                return {}
             
             domain_map = {}
             select_block = re.search(
@@ -165,12 +180,26 @@ class AfraidDNSService:
                         domain_map[clean_name.lower()] = value
                 logger.info(f"Found {len(domain_map)} domain(s): {list(domain_map.keys())}")
             else:
-                logger.error(f"Could not find domain_id select on add.php. HTML snippet: {resp.text[:400]}")
+                self.last_error = self._describe_unexpected_page(resp.text, url)
+                logger.error(self.last_error)
                 
             return domain_map
         except Exception as e:
-            logger.error(f"Error fetching Afraid domains: {e}")
+            self.last_error = f"Error fetching Afraid domains: {e}"
+            logger.error(self.last_error)
             return {}
+
+    @staticmethod
+    def _describe_unexpected_page(html, url):
+        title_m = re.search(r"<title>(.*?)</title>", html, re.IGNORECASE | re.DOTALL)
+        title = re.sub(r"\s+", " ", title_m.group(1)).strip() if title_m else "unknown title"
+        text = re.sub(r"<script\b.*?</script>", " ", html, flags=re.IGNORECASE | re.DOTALL)
+        text = re.sub(r"<style\b.*?</style>", " ", text, flags=re.IGNORECASE | re.DOTALL)
+        text = re.sub(r"<[^>]+>", " ", text)
+        snippet = re.sub(r"\s+", " ", text).strip()[:300]
+        if re.search(r"name=[\"']?username[\"']?", html, re.IGNORECASE) or "login" in title.lower():
+            return f"FreeDNS returned the login page for {url}; copy a fresh full Cookie request header from Network."
+        return f"FreeDNS page did not contain a domain_id dropdown for {url}. Title: {title}. Text: {snippet}"
 
     def get_domain_id(self, domain_name):
         """Resolve a FreeDNS domain name to its internal domain_id."""

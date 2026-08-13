@@ -64,6 +64,13 @@ def save_config():
             'error': svc.auth_error or 'Cookies appear to be invalid or expired. Please re-export fresh cookies from your browser.'
         }), 401
 
+    domain_map = svc.get_domains_with_ids()
+    if not domain_map:
+        return jsonify({
+            'success': False,
+            'error': svc.last_error or 'Cookies authenticated, but no FreeDNS domains were found in the add-subdomain form.'
+        }), 401
+
     config = AfraidConfig.query.first()
     if not config:
         config = AfraidConfig(cookies_str=svc.cookies_str, is_configured=True)
@@ -82,7 +89,13 @@ def test_config():
     svc, error = get_service()
     if error:
         return jsonify({'success': False, 'error': error})
-    return jsonify({'success': True, 'message': 'Cookies are valid and working!'})
+    domain_map = svc.get_domains_with_ids()
+    if not domain_map:
+        return jsonify({
+            'success': False,
+            'error': svc.last_error or 'Cookies authenticated, but no FreeDNS domains were found in the add-subdomain form.'
+        })
+    return jsonify({'success': True, 'message': f'Cookies are valid. Found {len(domain_map)} FreeDNS domain(s).'})
 
 @afraid_manager.route('/api/afraid/domains', methods=['GET'])
 @login_required
@@ -129,7 +142,10 @@ def fetch_domains_from_afraid():
 
     domain_map = svc.get_domains_with_ids()
     if not domain_map:
-        return jsonify({'success': False, 'error': 'No domains found. Make sure you have domains in your FreeDNS account.'}), 400
+        return jsonify({
+            'success': False,
+            'error': svc.last_error or 'No domains found. Make sure you have domains in your FreeDNS account.'
+        }), 400
 
     added = 0
     for domain_name in domain_map.keys():
@@ -158,9 +174,11 @@ def create_subdomain():
     domain_map = svc.get_domains_with_ids()
     domain_id = domain_map.get(base_domain.lower())
     if not domain_id:
+        available = ', '.join(sorted(domain_map.keys())[:10])
+        details = f" Available FreeDNS domains: {available}." if available else f" {svc.last_error}" if svc.last_error else ""
         return jsonify({
             'success': False,
-            'error': f"Domain '{base_domain}' was not found in the FreeDNS add-subdomain form. Check the spelling and confirm the domain is available in that FreeDNS account."
+            'error': f"Domain '{base_domain}' was not found in the FreeDNS add-subdomain form.{details}"
         }), 404
 
     subdomain = ''.join(random.choices(string.ascii_lowercase, k=15))
