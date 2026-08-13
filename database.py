@@ -357,6 +357,7 @@ class AfraidDomain(db.Model):
     hosts_in_use = db.Column(db.Integer, nullable=True)
     registry_age_text = db.Column(db.String(255), nullable=True)
     registry_created_on = db.Column(db.String(50), nullable=True)
+    delivery_status = db.Column(db.String(20), nullable=True, default='inbox')
     created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
 
 class AfraidResultList(db.Model):

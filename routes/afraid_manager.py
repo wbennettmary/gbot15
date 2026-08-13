@@ -140,9 +140,50 @@ def get_domains():
             'registry_owner': d.registry_owner,
             'hosts_in_use': d.hosts_in_use,
             'registry_age_text': d.registry_age_text,
-            'registry_created_on': d.registry_created_on
+            'registry_created_on': d.registry_created_on,
+            'delivery_status': d.delivery_status or 'inbox'
         } for d in domains]
     })
+
+@afraid_manager.route('/api/afraid/used-domains', methods=['GET'])
+@login_required
+def get_used_domains():
+    domains = AfraidDomain.query.filter(
+        AfraidDomain.domain_id.isnot(None),
+        AfraidDomain.registry_status == 'public',
+        AfraidDomain.last_used_at.isnot(None),
+        AfraidDomain.last_used_at >= used_cutoff()
+    ).order_by(AfraidDomain.last_used_at.desc(), AfraidDomain.domain_name.asc()).all()
+    return jsonify({
+        'success': True,
+        'domains': [{
+            'id': d.id,
+            'domain_name': d.domain_name,
+            'tld': d.tld,
+            'hosts_in_use': d.hosts_in_use,
+            'registry_created_on': d.registry_created_on,
+            'last_used_at': d.last_used_at.isoformat() + 'Z' if d.last_used_at else None,
+            'delivery_status': d.delivery_status or 'inbox'
+        } for d in domains]
+    })
+
+@afraid_manager.route('/api/afraid/used-domains/<int:domain_id>/status', methods=['PUT'])
+@login_required
+def update_used_domain_status(domain_id):
+    data = request.get_json(silent=True) or {}
+    status = data.get('delivery_status', '').strip().lower()
+    if status not in {'inbox', 'spam', 'bounce'}:
+        return jsonify({'success': False, 'error': 'Status must be inbox, spam, or bounce'}), 400
+    domain = AfraidDomain.query.get(domain_id)
+    if not domain:
+        return jsonify({'success': False, 'error': 'Domain not found'}), 404
+    domain.delivery_status = status
+    db.session.commit()
+    return jsonify({'success': True, 'domain': {
+        'id': domain.id,
+        'domain_name': domain.domain_name,
+        'delivery_status': domain.delivery_status
+    }})
 
 @afraid_manager.route('/api/afraid/domain-options', methods=['GET'])
 @login_required
@@ -533,6 +574,7 @@ def create_batch_subdomains():
         if success:
             domain_record.rotation_count = (domain_record.rotation_count or 0) + 1
             domain_record.last_used_at = datetime.utcnow()
+            domain_record.delivery_status = 'inbox'
             used_base_domains.add(domain_record.domain_name)
     db.session.commit()
     lst = create_afraid_result_list(results)

@@ -270,6 +270,7 @@ with app.app_context():
                 'hosts_in_use': 'INTEGER',
                 'registry_age_text': 'VARCHAR(255)',
                 'registry_created_on': 'VARCHAR(50)',
+                'delivery_status': "VARCHAR(20) DEFAULT 'inbox'",
             }
 
             with db.engine.connect() as conn:

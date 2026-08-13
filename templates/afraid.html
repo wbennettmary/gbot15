@@ -21,6 +21,11 @@
                 <i class="fas fa-list-check me-1"></i> List Management
             </button>
         </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="used-domains-tab" data-bs-toggle="tab" data-bs-target="#usedDomainsPane" type="button" role="tab">
+                <i class="fas fa-tags me-1"></i> Used Domains
+            </button>
+        </li>
     </ul>
 
     <div class="tab-content" id="afraidTabContent">
@@ -243,6 +248,35 @@
                 </div>
             </div>
         </div>
+
+        <div class="tab-pane fade" id="usedDomainsPane" role="tabpanel" aria-labelledby="used-domains-tab">
+            <div class="card mb-4">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0"><i class="fas fa-tags me-2"></i>Used FreeDNS Domains</h5>
+                    <button class="btn btn-sm btn-outline-secondary" id="btnRefreshUsedDomains">
+                        <i class="fas fa-sync me-1"></i> Refresh
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped align-middle">
+                            <thead>
+                                <tr>
+                                    <th>Domain</th>
+                                    <th>TLD</th>
+                                    <th>Last Used</th>
+                                    <th>Status</th>
+                                    <th style="width:100px">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="usedDomainsTableBody">
+                                <tr><td colspan="5" class="text-center text-muted">Loading used domains...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -253,6 +287,7 @@ document.addEventListener('DOMContentLoaded', function() {
     loadTlds();
     loadCloudflareDomains();
     loadAfraidLists();
+    loadUsedDomains();
 
     document.getElementById('tldSelect').addEventListener('change', () => {
         window.afraidDomainPage = 1;
@@ -270,6 +305,8 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('btnReactivateSelectedDomains').addEventListener('click', reactivateSelectedDomains);
     document.getElementById('btnRefreshAfraidLists').addEventListener('click', loadAfraidLists);
     document.getElementById('lists-tab').addEventListener('shown.bs.tab', loadAfraidLists);
+    document.getElementById('btnRefreshUsedDomains').addEventListener('click', loadUsedDomains);
+    document.getElementById('used-domains-tab').addEventListener('shown.bs.tab', loadUsedDomains);
     document.getElementById('afraidListForm').addEventListener('submit', saveManualAfraidList);
     document.getElementById('btnCancelAfraidListEdit').addEventListener('click', resetAfraidListForm);
     document.getElementById('afraidListRaw').addEventListener('input', updateAfraidListCount);
@@ -558,6 +595,7 @@ async function reactivateDomains(domain_names) {
     loadDomains();
     loadTlds();
     loadSelectedTldDomains();
+    loadUsedDomains();
 }
 
 function syncSelectedTldDomains() {
@@ -735,6 +773,7 @@ async function startProcess() {
         window.afraidUsedBaseDomains = data.used_base_domains || [];
         renderBatchResults(data);
         loadAfraidLists();
+        loadUsedDomains();
         loadDomains();
         loadTlds();
         loadSelectedTldDomains();
@@ -802,6 +841,66 @@ async function loadAfraidLists() {
         });
     } catch (err) {
         grid.innerHTML = `<div class="col-12"><div class="alert alert-danger">${escapeHtml(err.message || 'Could not load Afraid lists')}</div></div>`;
+    }
+}
+
+async function loadUsedDomains() {
+    const tbody = document.getElementById('usedDomainsTableBody');
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Loading used domains...</td></tr>';
+    try {
+        const res = await fetch('/api/afraid/used-domains');
+        const data = await parseJsonResponse(res);
+        tbody.innerHTML = '';
+        if (!data.success || !data.domains.length) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No used domains in the last 30 days.</td></tr>';
+            return;
+        }
+        data.domains.forEach(domain => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><strong>${escapeHtml(domain.domain_name)}</strong>
+                    <div class="text-muted small">hosts: ${domain.hosts_in_use ?? 'n/a'} | created: ${domain.registry_created_on || 'n/a'}</div>
+                </td>
+                <td>.${escapeHtml(domain.tld || '')}</td>
+                <td>${domain.last_used_at ? escapeHtml(new Date(domain.last_used_at).toLocaleString()) : 'n/a'}</td>
+                <td>
+                    <select class="form-select form-select-sm used-domain-status" data-domain-id="${domain.id}">
+                        <option value="inbox" ${domain.delivery_status === 'inbox' ? 'selected' : ''}>inbox</option>
+                        <option value="spam" ${domain.delivery_status === 'spam' ? 'selected' : ''}>spam</option>
+                        <option value="bounce" ${domain.delivery_status === 'bounce' ? 'selected' : ''}>bounce</option>
+                    </select>
+                </td>
+                <td>
+                    <button class="btn btn-sm btn-outline-primary" onclick="reactivateDomains(['${escapeHtml(domain.domain_name)}'])" title="Reactivate">
+                        <i class="fas fa-undo"></i>
+                    </button>
+                </td>`;
+            tr.querySelector('.used-domain-status').addEventListener('change', updateUsedDomainStatus);
+            tbody.appendChild(tr);
+        });
+    } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="5"><div class="alert alert-danger mb-0">${escapeHtml(err.message || 'Could not load used domains')}</div></td></tr>`;
+    }
+}
+
+async function updateUsedDomainStatus(e) {
+    const select = e.target;
+    const domainId = select.dataset.domainId;
+    select.disabled = true;
+    try {
+        const res = await fetch(`/api/afraid/used-domains/${domainId}/status`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({delivery_status: select.value})
+        });
+        const data = await parseJsonResponse(res);
+        if (!data.success) {
+            alert(data.error || 'Could not update domain status');
+        }
+    } catch (err) {
+        alert(err.message || 'Could not update domain status');
+    } finally {
+        select.disabled = false;
     }
 }
 
