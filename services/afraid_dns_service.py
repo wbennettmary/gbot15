@@ -286,18 +286,20 @@ class AfraidDNSService:
                         self.last_delete_url = action
 
             records = []
-            rows = re.findall(r'<tr[^>]*class=["\']?tr[ld]["\']?[^>]*>(.*?)</tr>', resp.text, re.IGNORECASE | re.DOTALL)
+            rows = re.findall(r'<tr\b[^>]*>(.*?)</tr>', resp.text, re.IGNORECASE | re.DOTALL)
             for row in rows:
+                checkbox_tag = re.search(r'<input[^>]+type=["\']?checkbox["\']?[^>]*>', row, re.IGNORECASE)
+                if not checkbox_tag:
+                    continue
                 cells = re.findall(r'<td[^>]*>(.*?)</td>', row, re.IGNORECASE | re.DOTALL)
                 if len(cells) < 2:
                     continue
-                checkbox_tag = re.search(r'<input[^>]+type=["\']?checkbox["\']?[^>]*>', row, re.IGNORECASE)
                 delete_name = ''
                 delete_value = ''
                 if checkbox_tag:
                     name_match = re.search(r'\bname=["\']?([^"\'>\s]+)', checkbox_tag.group(0), re.IGNORECASE)
                     value_match = re.search(r'\bvalue=["\']?([^"\'>\s]+)', checkbox_tag.group(0), re.IGNORECASE)
-                    delete_name = name_match.group(1) if name_match else ''
+                    delete_name = name_match.group(1) if name_match else 'delete[]'
                     delete_value = value_match.group(1) if value_match else ''
 
                 clean_cells = []
@@ -306,9 +308,17 @@ class AfraidDNSService:
                     clean_cells.append(re.sub(r'\s+', ' ', unescape(text)).strip())
 
                 fqdn = ''
-                fqdn_match = re.search(r'([a-z0-9][a-z0-9.-]+\.[a-z]{2,})', ' '.join(clean_cells), re.IGNORECASE)
-                if fqdn_match:
-                    fqdn = fqdn_match.group(1).lower()
+                link_texts = re.findall(r'<a\b[^>]*>(.*?)</a>', row, re.IGNORECASE | re.DOTALL)
+                for link_text in link_texts:
+                    clean_link = re.sub(r'<[^>]+>', ' ', link_text)
+                    clean_link = re.sub(r'\s+', ' ', unescape(clean_link)).strip()
+                    if re.match(r'^[a-z0-9][a-z0-9.-]+\.[a-z]{2,}$', clean_link, re.IGNORECASE):
+                        fqdn = clean_link.lower()
+                        break
+                if not fqdn:
+                    fqdn_match = re.search(r'([a-z0-9][a-z0-9.-]+\.[a-z]{2,})', ' '.join(clean_cells), re.IGNORECASE)
+                    if fqdn_match:
+                        fqdn = fqdn_match.group(1).lower()
 
                 record_type = ''
                 destination = ''
@@ -340,12 +350,12 @@ class AfraidDNSService:
         if not records:
             return True, "No records selected."
         try:
-            payload = {'submit': 'delete selected'}
+            payload = [('submit', 'delete selected')]
             for record in records:
-                name = record.get('delete_name')
+                name = record.get('delete_name') or 'delete[]'
                 value = record.get('delete_value')
                 if name and value:
-                    payload[name] = value
+                    payload.append((name, value))
             resp = self.session.post(self.last_delete_url, data=payload, allow_redirects=False, timeout=20)
             if resp.status_code in (200, 302):
                 return True, f"Submitted deletion for {len(records)} subdomain(s)."

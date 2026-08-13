@@ -92,6 +92,12 @@
                         </div>
                         <div class="mb-3">
                             <label class="form-label fw-semibold">Domains In Selected TLD</label>
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <div class="small text-muted">Available domains are used for creation. Used domains can be reactivated here.</div>
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="btnReactivateSelectedDomains">
+                                    Reactivate Selected Used
+                                </button>
+                            </div>
                             <div id="tldDomainList" class="border rounded p-2" style="max-height: 220px; overflow-y: auto;">
                                 <div class="text-muted small">Select a TLD group to view public domains.</div>
                             </div>
@@ -269,6 +275,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('btnDeleteSelectedSubdomains').addEventListener('click', deleteSelectedSubdomains);
     document.getElementById('btnDeleteAllSubdomains').addEventListener('click', deleteAllSubdomains);
     document.getElementById('btnStartProcess').addEventListener('click', startProcess);
+    document.getElementById('btnReactivateSelectedDomains').addEventListener('click', reactivateSelectedDomains);
     document.getElementById('btnRefreshAfraidLists').addEventListener('click', loadAfraidLists);
     document.getElementById('lists-tab').addEventListener('shown.bs.tab', loadAfraidLists);
     document.getElementById('afraidListForm').addEventListener('submit', saveManualAfraidList);
@@ -527,12 +534,38 @@ function renderSelectedTldDomains(domains) {
         const row = document.createElement('label');
         row.className = `d-flex justify-content-between align-items-center py-1 px-2 border-bottom small ${usedThisMonth ? 'text-muted bg-light' : 'bg-success bg-opacity-10'}`;
         row.style.cursor = 'pointer';
-        row.innerHTML = `<span><input type="checkbox" class="me-2 tld-domain-check" value="${escapeHtml(item.domain_name)}" ${usedThisMonth ? 'disabled' : ''}> ${escapeHtml(item.domain_name)}</span>
+        const checkClass = usedThisMonth ? 'reactivate-domain-check' : 'tld-domain-check';
+        row.innerHTML = `<span><input type="checkbox" class="me-2 ${checkClass}" value="${escapeHtml(item.domain_name)}"> ${escapeHtml(item.domain_name)}</span>
             <span class="text-muted">hosts: ${item.hosts_in_use ?? 'n/a'} | ${item.registry_created_on || 'n/a'} | ${usedThisMonth ? 'used' : 'available'}</span>`;
-        row.querySelector('input').addEventListener('change', syncSelectedTldDomains);
+        if (!usedThisMonth) {
+            row.querySelector('input').addEventListener('change', syncSelectedTldDomains);
+        }
         list.appendChild(row);
     });
     syncSelectedTldDomains();
+}
+
+async function reactivateSelectedDomains() {
+    const domain_names = [...document.querySelectorAll('.reactivate-domain-check:checked')].map(el => el.value);
+    if (!domain_names.length) {
+        alert('Select one or more used domains first.');
+        return;
+    }
+    const res = await fetch('/api/afraid/domains/reactivate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({domain_names})
+    });
+    const data = await parseJsonResponse(res);
+    if (!data.success) {
+        alert(data.error || 'Could not reactivate domains');
+        return;
+    }
+    window.afraidUsedBaseDomains = (window.afraidUsedBaseDomains || []).filter(name => !domain_names.includes(name));
+    alert(`Reactivated ${data.reactivated || 0} domain(s).`);
+    loadDomains();
+    loadTlds();
+    loadSelectedTldDomains();
 }
 
 function syncSelectedTldDomains() {

@@ -202,6 +202,29 @@ def delete_domain(domain_id):
     db.session.commit()
     return jsonify({'success': True})
 
+@afraid_manager.route('/api/afraid/domains/reactivate', methods=['POST'])
+@login_required
+def reactivate_domains():
+    data = request.get_json(silent=True) or {}
+    domain_names = [d.strip().lower() for d in data.get('domain_names', []) if d.strip()]
+    domain_ids = [int(d) for d in data.get('domain_ids', []) if str(d).isdigit()]
+    query = AfraidDomain.query
+    if domain_names:
+        query = query.filter(AfraidDomain.domain_name.in_(domain_names))
+    elif domain_ids:
+        query = query.filter(AfraidDomain.id.in_(domain_ids))
+    else:
+        return jsonify({'success': False, 'error': 'Select at least one used domain to reactivate'}), 400
+    domains = query.all()
+    for domain in domains:
+        domain.last_used_at = None
+    db.session.commit()
+    return jsonify({
+        'success': True,
+        'reactivated': len(domains),
+        'domains': [domain.domain_name for domain in domains]
+    })
+
 @afraid_manager.route('/api/afraid/fetch-domains', methods=['POST'])
 @login_required
 def fetch_domains_from_afraid():
