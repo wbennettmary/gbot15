@@ -24,11 +24,21 @@ class AfraidDNSService:
 
     def _login(self):
         try:
-            # Get login page first to establish session cookies
-            self.session.get("https://freedns.afraid.org/zc.php?step=1", allow_redirects=True)
+            # Step 1: GET login page to grab session cookies + any hidden fields
+            login_page = self.session.get("https://freedns.afraid.org/zc.php?step=1", allow_redirects=True)
+            
+            # Scrape hidden input fields (CSRF tokens, session IDs, etc.)
+            hidden_fields = re.findall(r'<input[^>]+type=["\']?hidden["\']?[^>]*>', login_page.text, re.IGNORECASE)
+            form_data = {}
+            for field in hidden_fields:
+                name_m = re.search(r'name=["\']([^"\']+)["\']', field)
+                value_m = re.search(r'value=["\']([^"\']*)["\']', field)
+                if name_m:
+                    form_data[name_m.group(1)] = value_m.group(1) if value_m else ''
 
-            login_url = "https://freedns.afraid.org/zc.php?step=2"
+            # Step 2: POST login with credentials + hidden fields
             payload = {
+                **form_data,
                 "username": self.username,
                 "password": self.password,
                 "remember": "1",
@@ -37,21 +47,24 @@ class AfraidDNSService:
                 "from": "",
                 "action": "auth"
             }
-            resp = self.session.post(login_url, data=payload, allow_redirects=False)
+            
+            resp = self.session.post(
+                "https://freedns.afraid.org/zc.php?step=2",
+                data=payload,
+                allow_redirects=False
+            )
             
             # FreeDNS returns HTTP 302 redirect ONLY on successful login.
-            # A 200 with "Problems!" means bad credentials.
             if resp.status_code == 302:
                 self.logged_in = True
                 logger.info("Successfully logged in to Afraid (FreeDNS).")
             else:
-                # Try to extract the actual error message from their "Problems!" page
-                error_match = re.search(r'<td[^>]*bgcolor="#eeeeee"[^>]*>(.*?)</td>', resp.text, re.IGNORECASE | re.DOTALL)
-                if error_match:
-                    msg = re.sub(r'<[^>]+>', '', error_match.group(1)).strip()
+                error_m = re.search(r'bgcolor=["\']?#eeeeee["\']?[^>]*>(.*?)</td>', resp.text, re.IGNORECASE | re.DOTALL)
+                if error_m:
+                    msg = re.sub(r'<[^>]+>', '', error_m.group(1)).strip()
                     logger.error(f"FreeDNS login rejected: {msg}")
                 else:
-                    logger.error(f"Failed to log in to Afraid. Status: {resp.status_code}")
+                    logger.error(f"FreeDNS login failed. Status: {resp.status_code}. HTML: {resp.text[:300]}")
         except Exception as e:
             logger.error(f"Error logging into Afraid: {e}")
 
