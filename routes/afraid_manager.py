@@ -1,14 +1,17 @@
 import logging
 import random
 import string
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, session, render_template, redirect, url_for
 from functools import wraps
-from database import db, AfraidConfig, AfraidDomain
+from faker import Faker
+from sqlalchemy import func
+from database import db, AfraidConfig, AfraidDomain, WorkspaceList
 from services.afraid_dns_service import AfraidDNSService
 from services.cloudflare_dns_service import CloudflareDNSService
 
 logger = logging.getLogger(__name__)
+fake = Faker()
 
 afraid_manager = Blueprint('afraid_manager', __name__)
 
@@ -103,19 +106,31 @@ def test_config():
 @login_required
 def get_domains():
     tld = request.args.get('tld', '').strip().lower()
+    page = max(1, int(request.args.get('page', 1)))
+    per_page = min(25, max(1, int(request.args.get('per_page', 5))))
     query = AfraidDomain.query
     if tld:
         query = query.filter_by(tld=tld)
-    domains = query.order_by(AfraidDomain.domain_name.asc()).all()
+    total = query.count()
+    domains = query.order_by(AfraidDomain.domain_name.asc()).offset((page - 1) * per_page).limit(per_page).all()
     return jsonify({
         'success': True,
+        'total': total,
+        'page': page,
+        'per_page': per_page,
+        'pages': (total + per_page - 1) // per_page if per_page else 1,
         'domains': [{
             'id': d.id,
             'domain_name': d.domain_name,
             'domain_id': d.domain_id,
             'tld': d.tld,
             'source': d.source,
-            'rotation_count': d.rotation_count or 0
+            'rotation_count': d.rotation_count or 0,
+            'registry_status': d.registry_status,
+            'registry_owner': d.registry_owner,
+            'hosts_in_use': d.hosts_in_use,
+            'registry_age_text': d.registry_age_text,
+            'registry_created_on': d.registry_created_on
         } for d in domains]
     })
 
@@ -188,6 +203,11 @@ def fetch_domains_from_afraid():
             domain.domain_id = item.get('domain_id')
             domain.tld = item.get('tld')
             domain.source = 'registry'
+            domain.registry_status = item.get('status')
+            domain.registry_owner = item.get('owner')
+            domain.hosts_in_use = item.get('hosts_in_use')
+            domain.registry_age_text = item.get('age_text')
+            domain.registry_created_on = item.get('created_on')
 
         if page % 10 == 0:
             db.session.commit()
@@ -212,7 +232,7 @@ def fetch_domains_from_afraid():
 @afraid_manager.route('/api/afraid/tlds', methods=['GET'])
 @login_required
 def get_tld_groups():
-    rows = db.session.query(AfraidDomain.tld, db.func.count(AfraidDomain.id)).filter(
+    rows = db.session.query(AfraidDomain.tld, func.count(AfraidDomain.id)).filter(
         AfraidDomain.tld.isnot(None)
     ).group_by(AfraidDomain.tld).order_by(AfraidDomain.tld.asc()).all()
     return jsonify({
@@ -244,6 +264,115 @@ def get_rotated_afraid_domain(tld):
         AfraidDomain.last_used_at.asc(),
         AfraidDomain.id.asc()
     ).first()
+
+def get_rotated_afraid_domains(tld, limit):
+    query = AfraidDomain.query.filter(AfraidDomain.domain_id.isnot(None))
+    if tld:
+        query = query.filter_by(tld=tld)
+    return query.order_by(AfraidDomain.rotation_count.asc(), AfraidDomain.last_used_at.asc(), AfraidDomain.id.asc()).limit(limit).all()
+
+def create_afraid_result_list(results):
+    username = (session.get('user') or 'user').split('@')[0].lower()
+    date_part = datetime.utcnow().strftime('%d/%m')
+    prefix = f"{username}_list_{date_part}"
+    existing = WorkspaceList.query.filter(WorkspaceList.name.like(f"{prefix}-%")).count()
+    name = f"{prefix}-{existing + 1}"
+    lines = []
+    for item in results:
+        if item.get('success'):
+            lines.append(f"{item.get('subdomain')},{item.get('destination')}")
+    if not lines:
+        return None
+    lst = WorkspaceList(
+        name=name,
+        raw_accounts="\n".join(lines),
+        lifetime_expires_at=datetime.utcnow() + timedelta(days=14)
+    )
+    db.session.add(lst)
+    db.session.commit()
+    return lst
+
+def generated_label():
+    return ''.join(fake.word() for _ in range(3)).lower()
+
+@afraid_manager.route('/api/afraid/subdomains', methods=['GET'])
+@login_required
+def get_existing_subdomains():
+    svc, error = get_service()
+    if error:
+        return jsonify({'success': False, 'error': error}), 401
+    records = svc.get_existing_subdomains()
+    return jsonify({'success': True, 'records': records, 'total': len(records), 'error': svc.last_error})
+
+@afraid_manager.route('/api/afraid/subdomains/delete', methods=['POST'])
+@login_required
+def delete_existing_subdomains():
+    data = request.get_json(silent=True) or {}
+    delete_all = bool(data.get('delete_all'))
+    selected = set(data.get('delete_values') or [])
+    svc, error = get_service()
+    if error:
+        return jsonify({'success': False, 'error': error}), 401
+    records = svc.get_existing_subdomains()
+    targets = records if delete_all else [r for r in records if r.get('delete_value') in selected]
+    success, message = svc.delete_subdomains(targets)
+    return jsonify({'success': success, 'message': message, 'deleted': len(targets)})
+
+@afraid_manager.route('/api/afraid/create-batch', methods=['POST'])
+@login_required
+def create_batch_subdomains():
+    data = request.get_json(silent=True) or {}
+    tld = data.get('tld', '').strip().lower()
+    afraid_count = max(1, min(50, int(data.get('afraid_count') or 1)))
+    cloudflare_count = max(1, min(50, int(data.get('cloudflare_count') or 1)))
+    total_count = max(1, min(50, int(data.get('total_count') or afraid_count)))
+    ttl = data.get('ttl', 300)
+    manual_destinations = [d.strip().lower() for d in data.get('destinations', []) if d.strip()]
+
+    svc, error = get_service()
+    if error:
+        return jsonify({'success': False, 'error': error}), 401
+
+    afraid_domains = get_rotated_afraid_domains(tld, afraid_count)
+    if not afraid_domains:
+        return jsonify({'success': False, 'error': f"No cached FreeDNS domains found for TLD '{tld}'."}), 404
+
+    destinations = manual_destinations[:cloudflare_count]
+    if not destinations:
+        try:
+            cf = CloudflareDNSService()
+            destinations = [z['name'] for z in cf.get_zones()[:cloudflare_count]]
+        except Exception as e:
+            return jsonify({'success': False, 'error': f"No Cloudflare destination selected and Cloudflare domains could not load: {e}"}), 400
+    if not destinations:
+        return jsonify({'success': False, 'error': 'No Cloudflare destination domains available.'}), 400
+
+    results = []
+    for index in range(total_count):
+        domain_record = afraid_domains[index % len(afraid_domains)]
+        destination = destinations[index % len(destinations)]
+        label = generated_label()
+        success, message = svc.add_cname(label, domain_record.domain_id, destination, ttl)
+        result = {
+            'success': success,
+            'subdomain': f"{label}.{domain_record.domain_name}",
+            'base_domain': domain_record.domain_name,
+            'destination': destination,
+            'message': message
+        }
+        results.append(result)
+        if success:
+            domain_record.rotation_count = (domain_record.rotation_count or 0) + 1
+            domain_record.last_used_at = datetime.utcnow()
+    db.session.commit()
+    lst = create_afraid_result_list(results)
+    return jsonify({
+        'success': True,
+        'results': results,
+        'created': sum(1 for r in results if r['success']),
+        'failed': sum(1 for r in results if not r['success']),
+        'list': lst.to_dict() if lst else None
+    })
 
 @afraid_manager.route('/api/afraid/create-subdomain', methods=['POST'])
 @login_required
@@ -281,7 +410,7 @@ def create_subdomain():
             'error': f"Domain '{base_domain}' does not have a FreeDNS domain_id. Fetch the FreeDNS registry first or choose a different domain."
         }), 404
 
-    subdomain = ''.join(random.choices(string.ascii_lowercase, k=15))
+    subdomain = generated_label()
 
     success, message = svc.add_cname(subdomain, domain_id, destination, ttl)
 

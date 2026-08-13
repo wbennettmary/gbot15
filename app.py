@@ -265,6 +265,11 @@ with app.app_context():
                 'source': "VARCHAR(50) DEFAULT 'manual'",
                 'rotation_count': 'INTEGER DEFAULT 0',
                 'last_used_at': 'TIMESTAMP',
+                'registry_status': 'VARCHAR(50)',
+                'registry_owner': 'VARCHAR(255)',
+                'hosts_in_use': 'INTEGER',
+                'registry_age_text': 'VARCHAR(255)',
+                'registry_created_on': 'VARCHAR(50)',
             }
 
             with db.engine.connect() as conn:

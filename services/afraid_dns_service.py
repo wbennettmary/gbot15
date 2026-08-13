@@ -230,12 +230,25 @@ class AfraidDNSService:
             cells = cell_pattern.findall(row)
             status = ''
             owner = ''
+            hosts_in_use = None
+            age_text = ''
+            created_on = ''
             if len(cells) > 1:
                 status = re.sub(r'<[^>]+>', ' ', cells[1])
                 status = re.sub(r'\s+', ' ', unescape(status)).strip().lower()
             if len(cells) > 2:
                 owner = re.sub(r'<[^>]+>', ' ', cells[2])
                 owner = re.sub(r'\s+', ' ', unescape(owner)).strip()
+            if cells:
+                hosts_match = re.search(r'\(([\d,]+)\s+hosts?\s+in\s+use\)', cells[0], re.IGNORECASE)
+                if hosts_match:
+                    hosts_in_use = int(hosts_match.group(1).replace(',', ''))
+            if len(cells) > 3:
+                age_text = re.sub(r'<[^>]+>', ' ', cells[3])
+                age_text = re.sub(r'\s+', ' ', unescape(age_text)).strip()
+                date_match = re.search(r'\(([^)]+)\)', age_text)
+                if date_match:
+                    created_on = date_match.group(1)
             if domain_name and "." in domain_name:
                 domains.append({
                     'domain_name': domain_name,
@@ -243,8 +256,69 @@ class AfraidDNSService:
                     'tld': domain_name.rsplit('.', 1)[-1].lower(),
                     'status': status,
                     'owner': owner,
+                    'hosts_in_use': hosts_in_use,
+                    'age_text': age_text,
+                    'created_on': created_on,
                 })
         return domains
+
+    def get_existing_subdomains(self):
+        """Parse current FreeDNS subdomain records from the account page."""
+        self.last_error = None
+        url = "https://freedns.afraid.org/subdomain/"
+        try:
+            resp = self.session.get(url, allow_redirects=False, timeout=20)
+            if resp.status_code in (301, 302, 303, 307, 308):
+                self.last_error = f"FreeDNS redirected {url} to {resp.headers.get('Location', 'login page')}."
+                return []
+            if resp.status_code != 200:
+                self.last_error = f"FreeDNS returned HTTP {resp.status_code} for {url}."
+                return []
+
+            records = []
+            rows = re.findall(r'<tr[^>]*class=["\']?tr[ld]["\']?[^>]*>(.*?)</tr>', resp.text, re.IGNORECASE | re.DOTALL)
+            for row in rows:
+                cells = re.findall(r'<td[^>]*>(.*?)</td>', row, re.IGNORECASE | re.DOTALL)
+                if len(cells) < 3:
+                    continue
+                checkbox = re.search(r'<input[^>]+type=["\']?checkbox["\']?[^>]+name=["\']?([^"\'>\s]+)["\']?[^>]+value=["\']?([^"\'>\s]+)', row, re.IGNORECASE)
+                fqdn_match = re.search(r'>([a-z0-9][a-z0-9.-]+\.[a-z]{2,})</a>', cells[0], re.IGNORECASE)
+                record_type = re.sub(r'<[^>]+>', ' ', cells[1])
+                record_type = re.sub(r'\s+', ' ', unescape(record_type)).strip()
+                destination = re.sub(r'<[^>]+>', ' ', cells[2])
+                destination = re.sub(r'\s+', ' ', unescape(destination)).strip()
+                if fqdn_match:
+                    records.append({
+                        'fqdn': fqdn_match.group(1).lower(),
+                        'type': record_type,
+                        'destination': destination,
+                        'delete_name': checkbox.group(1) if checkbox else '',
+                        'delete_value': checkbox.group(2) if checkbox else '',
+                    })
+            return records
+        except Exception as e:
+            self.last_error = f"Error fetching existing FreeDNS subdomains: {e}"
+            logger.error(self.last_error)
+            return []
+
+    def delete_subdomains(self, records):
+        """Delete selected records from FreeDNS subdomain page."""
+        if not records:
+            return True, "No records selected."
+        try:
+            payload = {'submit': 'delete selected'}
+            for record in records:
+                name = record.get('delete_name')
+                value = record.get('delete_value')
+                if name and value:
+                    payload[name] = value
+            resp = self.session.post("https://freedns.afraid.org/subdomain/delete2.php", data=payload, allow_redirects=False, timeout=20)
+            if resp.status_code in (200, 302):
+                return True, f"Submitted deletion for {len(records)} subdomain(s)."
+            return False, f"FreeDNS returned HTTP {resp.status_code} while deleting subdomains."
+        except Exception as e:
+            logger.error(f"Exception deleting Afraid subdomains: {e}")
+            return False, f"Exception: {str(e)}"
 
     @staticmethod
     def _describe_unexpected_page(html, url):
