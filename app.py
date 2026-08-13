@@ -34,6 +34,7 @@ from database import db, User, WhitelistedIP, UsedDomain, GoogleAccount, GoogleT
 from routes.dns_manager import dns_manager
 from routes.aws_manager import aws_manager
 from routes.digitalocean_manager import digitalocean_manager
+from routes.afraid_manager import afraid_manager
 
 # Progress tracking system for domain changes
 # Progress tracking system for domain changes
@@ -168,6 +169,7 @@ db.init_app(app)
 app.register_blueprint(dns_manager)
 app.register_blueprint(aws_manager)
 app.register_blueprint(digitalocean_manager)
+app.register_blueprint(afraid_manager)
 
 # Global concurrency limiter - REMOVED for unlimited concurrent machines
 # No artificial limits - let the server handle as many requests as possible

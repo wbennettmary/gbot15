@@ -1148,6 +1148,14 @@
             </a>
             {% endif %}
 
+            <!-- Afraid DNS Management -->
+            <a href="/afraid"
+                class="group flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all duration-200 {{ 'bg-blue-50 text-blue-700 shadow-sm' if 'afraid' in request.path else 'text-slate-500 hover:bg-slate-50 hover:text-slate-900' }}">
+                <i
+                    class="fas fa-network-wired h-5 w-5 flex items-center justify-center transition-colors {{ 'text-blue-600' if 'afraid' in request.path else 'text-slate-400 group-hover:text-slate-600' }}"></i>
+                <span class="truncate nav-text">Afraid Management</span>
+            </a>
+
             <!-- List Management -->
             {% if 'list_management' in user_permissions or user_permissions is not defined %}
             <a href="/list-management"
