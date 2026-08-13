@@ -140,7 +140,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({cookies_str})
             });
-            const data = await res.json();
+            const data = await parseJsonResponse(res);
             if (data.success) {
                 showAlert('configAlert', '<i class="fas fa-check-circle me-1"></i>' + (data.message || 'Cookies saved!'), 'success');
                 document.getElementById('cookiesInput').value = '';
@@ -149,7 +149,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 showAlert('configAlert', '<i class="fas fa-exclamation-circle me-1"></i>' + (data.error || 'Error'), 'danger');
             }
         } catch (err) {
-            showAlert('configAlert', 'Request failed', 'danger');
+            showAlert('configAlert', '<i class="fas fa-exclamation-circle me-1"></i>' + escapeHtml(err.message || 'Request failed'), 'danger');
         } finally {
             btn.disabled = false;
             btn.innerHTML = '<i class="fas fa-save me-1"></i> Save & Verify Cookies';
@@ -163,15 +163,15 @@ document.addEventListener('DOMContentLoaded', function() {
         btn.innerHTML = 'Testing...';
         try {
             const res = await fetch('/api/afraid/config/test', {method: 'POST'});
-            const data = await res.json();
+            const data = await parseJsonResponse(res);
             const el = document.getElementById('cookieStatus');
             el.style.display = 'block';
             el.innerHTML = `<div class="alert alert-${data.success ? 'success' : 'danger'} py-2 mb-0 small">
                 <i class="fas fa-${data.success ? 'check' : 'times'}-circle me-1"></i>
-                ${data.success ? data.message : data.error}
+                ${escapeHtml(data.success ? data.message : data.error)}
             </div>`;
         } catch (err) {
-            alert('Test failed');
+            alert(err.message || 'Test failed');
         } finally {
             btn.disabled = false;
             btn.innerHTML = 'Test';
@@ -323,6 +323,32 @@ function showAlert(elementId, message, type) {
             ${message}
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>`;
+}
+
+async function parseJsonResponse(res) {
+    const text = await res.text();
+    let data = {};
+    try {
+        data = text ? JSON.parse(text) : {};
+    } catch (err) {
+        const preview = text.replace(/\s+/g, ' ').trim().slice(0, 200);
+        throw new Error(preview || `Server returned HTTP ${res.status}`);
+    }
+
+    if (!res.ok && !data.error) {
+        data.error = `Server returned HTTP ${res.status}`;
+    }
+    return data;
+}
+
+function escapeHtml(value) {
+    return String(value || '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[char]));
 }
 </script>
 {% endblock %}

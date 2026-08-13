@@ -25,7 +25,7 @@ def get_service():
         return None, "Afraid cookies not configured. Please import your browser cookies."
     svc = AfraidDNSService(config.cookies_str)
     if not svc.logged_in:
-        return None, "Afraid cookies are expired or invalid. Please re-import your browser cookies."
+        return None, svc.auth_error or "Afraid cookies are expired or invalid. Please re-import your browser cookies."
     return svc, None
 
 @afraid_manager.route('/afraid', methods=['GET'])
@@ -50,7 +50,7 @@ def get_config():
 @afraid_manager.route('/api/afraid/config', methods=['POST'])
 @login_required
 def save_config():
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     cookies_str = data.get('cookies_str', '').strip()
 
     if not cookies_str:
@@ -59,14 +59,17 @@ def save_config():
     # Quick validation — test the cookies before saving
     svc = AfraidDNSService(cookies_str)
     if not svc.logged_in:
-        return jsonify({'success': False, 'error': 'Cookies appear to be invalid or expired. Please re-export fresh cookies from your browser.'}), 401
+        return jsonify({
+            'success': False,
+            'error': svc.auth_error or 'Cookies appear to be invalid or expired. Please re-export fresh cookies from your browser.'
+        }), 401
 
     config = AfraidConfig.query.first()
     if not config:
-        config = AfraidConfig(cookies_str=cookies_str, is_configured=True)
+        config = AfraidConfig(cookies_str=svc.cookies_str, is_configured=True)
         db.session.add(config)
     else:
-        config.cookies_str = cookies_str
+        config.cookies_str = svc.cookies_str
         config.is_configured = True
 
     db.session.commit()
