@@ -379,6 +379,9 @@ def create_batch_subdomains():
     data = request.get_json(silent=True) or {}
     tld = data.get('tld', '').strip().lower()
     base_domain = data.get('base_domain', '').strip().lower()
+    base_domains = [d.strip().lower() for d in data.get('base_domains', []) if d.strip()]
+    if base_domain and base_domain not in base_domains:
+        base_domains.append(base_domain)
     afraid_count = max(1, min(50, int(data.get('afraid_count') or 1)))
     cloudflare_count = max(1, min(50, int(data.get('cloudflare_count') or 1)))
     total_count = max(1, min(50, int(data.get('total_count') or afraid_count)))
@@ -389,15 +392,17 @@ def create_batch_subdomains():
     if error:
         return jsonify({'success': False, 'error': error}), 401
 
-    if base_domain:
-        domain_record = AfraidDomain.query.filter_by(domain_name=base_domain).first()
-        if not domain_record:
-            return jsonify({'success': False, 'error': f"FreeDNS domain '{base_domain}' is not cached. Fetch Registry first."}), 404
-        if domain_record.last_used_at and domain_record.last_used_at >= month_start():
-            return jsonify({'success': False, 'error': f"FreeDNS domain '{base_domain}' is already marked used for this month."}), 400
-        if domain_record.registry_status and domain_record.registry_status != 'public':
-            return jsonify({'success': False, 'error': f"FreeDNS domain '{base_domain}' is not public."}), 400
-        afraid_domains = [domain_record]
+    if base_domains:
+        afraid_domains = []
+        for selected_domain in base_domains:
+            domain_record = AfraidDomain.query.filter_by(domain_name=selected_domain).first()
+            if not domain_record:
+                return jsonify({'success': False, 'error': f"FreeDNS domain '{selected_domain}' is not cached. Fetch Registry first."}), 404
+            if domain_record.last_used_at and domain_record.last_used_at >= month_start():
+                return jsonify({'success': False, 'error': f"FreeDNS domain '{selected_domain}' is already marked used for this month."}), 400
+            if domain_record.registry_status != 'public' or not domain_record.domain_id:
+                return jsonify({'success': False, 'error': f"FreeDNS domain '{selected_domain}' is not a usable public registry domain."}), 400
+            afraid_domains.append(domain_record)
     else:
         afraid_domains = get_rotated_afraid_domains(tld, afraid_count)
     if not afraid_domains:

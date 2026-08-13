@@ -454,15 +454,23 @@ function renderSelectedTldDomains(domains) {
         const row = document.createElement('label');
         row.className = `d-flex justify-content-between align-items-center py-1 px-2 border-bottom small ${item.used_this_month ? 'text-muted bg-light' : 'bg-success bg-opacity-10'}`;
         row.style.cursor = 'pointer';
-        row.innerHTML = `<span><input type="radio" name="tldDomainRadio" class="me-2" value="${escapeHtml(item.domain_name)}"> ${escapeHtml(item.domain_name)}</span>
+        row.innerHTML = `<span><input type="checkbox" class="me-2 tld-domain-check" value="${escapeHtml(item.domain_name)}" ${item.used_this_month ? 'disabled' : ''}> ${escapeHtml(item.domain_name)}</span>
             <span class="text-muted">hosts: ${item.hosts_in_use ?? 'n/a'} | ${item.registry_created_on || 'n/a'}</span>`;
-        row.querySelector('input').addEventListener('change', (e) => {
-            document.getElementById('rotateDomainToggle').checked = false;
-            updateDomainMode();
-            document.getElementById('domainSelect').value = e.target.value;
-        });
+        row.querySelector('input').addEventListener('change', syncSelectedTldDomains);
         list.appendChild(row);
     });
+}
+
+function syncSelectedTldDomains() {
+    const selected = [...document.querySelectorAll('.tld-domain-check:checked')].map(el => el.value);
+    if (selected.length) {
+        document.getElementById('rotateDomainToggle').checked = false;
+        updateDomainMode();
+        const select = document.getElementById('domainSelect');
+        if (selected.length === 1) {
+            select.value = selected[0];
+        }
+    }
 }
 
 async function loadCloudflareDomains() {
@@ -569,6 +577,7 @@ async function startProcess() {
     try {
         const rotate = document.getElementById('rotateDomainToggle').checked;
         const selectedDomain = document.getElementById('domainSelect').value;
+        const selectedDomains = [...document.querySelectorAll('.tld-domain-check:checked')].map(el => el.value);
         const selectedDestination = document.getElementById('destinationInput').value.trim() || document.getElementById('cloudflareSelect').value;
         const destinations = selectedDestination ? [selectedDestination] : [];
         const payload = {
@@ -579,9 +588,14 @@ async function startProcess() {
             destinations,
             ttl: document.getElementById('ttlInput').value
         };
-        if (!rotate && selectedDomain) {
-            payload.base_domain = selectedDomain;
-            payload.afraid_count = 1;
+        if (!rotate) {
+            if (selectedDomains.length) {
+                payload.base_domains = selectedDomains;
+                payload.afraid_count = selectedDomains.length;
+            } else if (selectedDomain) {
+                payload.base_domain = selectedDomain;
+                payload.afraid_count = 1;
+            }
         }
         const res = await fetch('/api/afraid/create-batch', {
             method: 'POST',
