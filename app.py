@@ -221,6 +221,35 @@ if not app.debug:
 
 with app.app_context():
     db.create_all()
+
+    # Auto-migration: Add cookies_str column to afraid_config if it doesn't exist.
+    # db.create_all() creates new tables, but it does not alter existing ones.
+    try:
+        from sqlalchemy import inspect
+        inspector = inspect(db.engine)
+        table_names = inspector.get_table_names()
+
+        if 'afraid_config' in table_names:
+            columns = [col['name'] for col in inspector.get_columns('afraid_config')]
+
+            if 'cookies_str' not in columns:
+                logging.info("Adding missing 'cookies_str' column to afraid_config table...")
+                with db.engine.connect() as conn:
+                    if 'postgresql' in str(db.engine.url):
+                        conn.execute(text('ALTER TABLE "afraid_config" ADD COLUMN cookies_str TEXT'))
+                    else:
+                        conn.execute(text("ALTER TABLE afraid_config ADD COLUMN cookies_str TEXT"))
+                    conn.commit()
+                logging.info("Successfully added 'cookies_str' column to afraid_config!")
+            else:
+                logging.debug("Column 'cookies_str' already exists in afraid_config")
+
+    except Exception as e:
+        logging.warning(f"Could not auto-migrate cookies_str column for afraid_config: {e}")
+        try:
+            db.session.rollback()
+        except:
+            pass
     
     # Auto-migration: Add ever_used column if it doesn't exist
     # Auto-migration: Add ever_used column if it doesn't exist
