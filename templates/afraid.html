@@ -65,6 +65,12 @@
                                 <option value="">All TLDs</option>
                             </select>
                         </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Available TLD Groups</label>
+                            <div id="tldGroupList" class="border rounded p-2" style="max-height: 180px; overflow-y: auto;">
+                                <div class="text-muted small">Fetch registry to load groups.</div>
+                            </div>
+                        </div>
                         <div class="row">
                             <div class="col-md-4 mb-3">
                                 <label for="totalCountInput" class="form-label">Subdomains</label>
@@ -104,11 +110,8 @@
                             <label for="ttlInput" class="form-label">TTL (seconds)</label>
                             <input type="number" class="form-control" id="ttlInput" value="300">
                         </div>
-                        <button type="submit" class="btn btn-success w-100" id="btnCreateSubdomain">
-                            <i class="fas fa-magic me-1"></i> Create & Link Subdomain
-                        </button>
-                        <button type="button" class="btn btn-outline-success w-100 mt-2" id="btnCreateBatch">
-                            <i class="fas fa-layer-group me-1"></i> Create Batch & Save List
+                        <button type="button" class="btn btn-success w-100" id="btnStartProcess">
+                            <i class="fas fa-play me-1"></i> Start Process & Save List
                         </button>
                     </form>
                     <div id="createAlert" class="mt-3"></div>
@@ -198,7 +201,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('btnLoadSubdomains').addEventListener('click', loadExistingSubdomains);
     document.getElementById('btnDeleteSelectedSubdomains').addEventListener('click', deleteSelectedSubdomains);
     document.getElementById('btnDeleteAllSubdomains').addEventListener('click', deleteAllSubdomains);
-    document.getElementById('btnCreateBatch').addEventListener('click', createBatch);
+    document.getElementById('btnStartProcess').addEventListener('click', startProcess);
     document.getElementById('rotateDomainToggle').addEventListener('change', updateDomainMode);
     document.getElementById('cloudflareSelect').addEventListener('change', (e) => {
         document.getElementById('destinationInput').value = e.target.value;
@@ -315,43 +318,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Create subdomain
+    // Keep the form from submitting; the process is started by the single button.
     document.getElementById('createSubdomainForm').addEventListener('submit', async (e) => {
         e.preventDefault();
-        const btn = document.getElementById('btnCreateSubdomain');
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Creating...';
-
-        const rotate_domain = document.getElementById('rotateDomainToggle').checked;
-        const base_domain = document.getElementById('domainSelect').value;
-        const tld = document.getElementById('tldSelect').value;
-        let destination = document.getElementById('destinationInput').value.trim();
-        if (!destination) {
-            destination = getRotatedCloudflareDomain();
-        }
-        const ttl = document.getElementById('ttlInput').value;
-
-        try {
-            const res = await fetch('/api/afraid/create-subdomain', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({base_domain, tld, rotate_domain, destination, ttl})
-            });
-            const data = await parseJsonResponse(res);
-            if (data.success) {
-                showAlert('createAlert',
-                    `<i class="fas fa-check-circle me-1"></i><strong>Success!</strong> Subdomain created: <code>${data.subdomain}</code>`,
-                    'success');
-                document.getElementById('destinationInput').value = getRotatedCloudflareDomain();
-            } else {
-                showAlert('createAlert', '<i class="fas fa-exclamation-circle me-1"></i>' + escapeHtml(data.error), 'danger');
-            }
-        } catch (err) {
-            showAlert('createAlert', 'Request failed', 'danger');
-        } finally {
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-magic me-1"></i> Create & Link Subdomain';
-        }
+        startProcess();
     });
 });
 
@@ -442,15 +412,39 @@ async function loadTlds() {
             data.tlds.forEach(item => {
                 const opt = document.createElement('option');
                 opt.value = item.tld;
-                opt.textContent = `.${item.tld} (${item.count})`;
+                opt.textContent = `.${item.tld} (${item.available}/${item.count})`;
                 select.appendChild(opt);
             });
             select.value = current;
+            renderTldGroupList(data.tlds);
             loadDomainOptions();
         }
     } catch (err) {
         console.error('Error loading TLD groups', err);
     }
+}
+
+function renderTldGroupList(tlds) {
+    const list = document.getElementById('tldGroupList');
+    list.innerHTML = '';
+    if (!tlds || !tlds.length) {
+        list.innerHTML = '<div class="text-muted small">No cached public registry groups yet.</div>';
+        return;
+    }
+    tlds.forEach(item => {
+        const row = document.createElement('label');
+        row.className = 'd-flex justify-content-between align-items-center py-1 px-2 border-bottom small';
+        row.style.cursor = 'pointer';
+        row.innerHTML = `<span><input type="radio" name="tldGroupRadio" class="me-2" value="${escapeHtml(item.tld)}">.${escapeHtml(item.tld)}</span>
+            <span class="text-muted">${item.available} available / ${item.used} used</span>`;
+        row.querySelector('input').addEventListener('change', (e) => {
+            document.getElementById('tldSelect').value = e.target.value;
+            window.afraidDomainPage = 1;
+            loadDomains();
+            loadDomainOptions();
+        });
+        list.appendChild(row);
+    });
 }
 
 async function loadCloudflareDomains() {
@@ -550,33 +544,41 @@ async function deleteAllSubdomains() {
     loadExistingSubdomains();
 }
 
-async function createBatch() {
-    const btn = document.getElementById('btnCreateBatch');
+async function startProcess() {
+    const btn = document.getElementById('btnStartProcess');
     btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Creating batch...';
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Running...';
     try {
+        const rotate = document.getElementById('rotateDomainToggle').checked;
+        const selectedDomain = document.getElementById('domainSelect').value;
         const selectedDestination = document.getElementById('destinationInput').value.trim() || document.getElementById('cloudflareSelect').value;
         const destinations = selectedDestination ? [selectedDestination] : [];
+        const payload = {
+            tld: document.getElementById('tldSelect').value,
+            total_count: document.getElementById('totalCountInput').value,
+            afraid_count: document.getElementById('afraidCountInput').value,
+            cloudflare_count: document.getElementById('cloudflareCountInput').value,
+            destinations,
+            ttl: document.getElementById('ttlInput').value
+        };
+        if (!rotate && selectedDomain) {
+            payload.base_domain = selectedDomain;
+            payload.afraid_count = 1;
+        }
         const res = await fetch('/api/afraid/create-batch', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                tld: document.getElementById('tldSelect').value,
-                total_count: document.getElementById('totalCountInput').value,
-                afraid_count: document.getElementById('afraidCountInput').value,
-                cloudflare_count: document.getElementById('cloudflareCountInput').value,
-                destinations,
-                ttl: document.getElementById('ttlInput').value
-            })
+            body: JSON.stringify(payload)
         });
         const data = await parseJsonResponse(res);
         renderBatchResults(data);
         loadDomains();
+        loadTlds();
     } catch (err) {
-        showAlert('createAlert', escapeHtml(err.message || 'Batch failed'), 'danger');
+        showAlert('createAlert', escapeHtml(err.message || 'Process failed'), 'danger');
     } finally {
         btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-layer-group me-1"></i> Create Batch & Save List';
+        btn.innerHTML = '<i class="fas fa-play me-1"></i> Start Process & Save List';
     }
 }
 

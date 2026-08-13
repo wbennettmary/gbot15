@@ -1,11 +1,9 @@
 import logging
-import random
-import string
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, session, render_template, redirect, url_for
 from functools import wraps
 from faker import Faker
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from database import db, AfraidConfig, AfraidDomain, WorkspaceList
 from services.afraid_dns_service import AfraidDNSService
 from services.cloudflare_dns_service import CloudflareDNSService
@@ -32,6 +30,16 @@ def get_service():
     if not svc.logged_in:
         return None, svc.auth_error or "Afraid cookies are expired or invalid. Please re-import your browser cookies."
     return svc, None
+
+def month_start():
+    now = datetime.utcnow()
+    return datetime(now.year, now.month, 1)
+
+def available_domain_query():
+    return AfraidDomain.query.filter(
+        AfraidDomain.domain_id.isnot(None),
+        or_(AfraidDomain.last_used_at.is_(None), AfraidDomain.last_used_at < month_start())
+    )
 
 @afraid_manager.route('/afraid', methods=['GET'])
 @login_required
@@ -108,7 +116,9 @@ def get_domains():
     tld = request.args.get('tld', '').strip().lower()
     page = max(1, int(request.args.get('page', 1)))
     per_page = min(25, max(1, int(request.args.get('per_page', 5))))
-    query = AfraidDomain.query
+    query = AfraidDomain.query.filter(
+        or_(AfraidDomain.registry_status.is_(None), AfraidDomain.registry_status == 'public')
+    )
     if tld:
         query = query.filter_by(tld=tld)
     total = query.count()
@@ -126,6 +136,7 @@ def get_domains():
             'tld': d.tld,
             'source': d.source,
             'rotation_count': d.rotation_count or 0,
+            'used_this_month': bool(d.last_used_at and d.last_used_at >= month_start()),
             'registry_status': d.registry_status,
             'registry_owner': d.registry_owner,
             'hosts_in_use': d.hosts_in_use,
@@ -139,7 +150,9 @@ def get_domains():
 def get_domain_options():
     tld = request.args.get('tld', '').strip().lower()
     limit = min(5000, max(1, int(request.args.get('limit', 1000))))
-    query = AfraidDomain.query.filter(AfraidDomain.domain_id.isnot(None))
+    query = available_domain_query().filter(
+        or_(AfraidDomain.registry_status.is_(None), AfraidDomain.registry_status == 'public')
+    )
     if tld:
         query = query.filter_by(tld=tld)
     domains = query.order_by(
@@ -199,6 +212,7 @@ def fetch_domains_from_afraid():
     added = 0
     updated = 0
     total_seen = 0
+    public_seen = 0
     errors = []
 
     for page in range(start_page, end_page + 1):
@@ -212,6 +226,7 @@ def fetch_domains_from_afraid():
         for item in registry_domains:
             if item.get('status') != 'public':
                 continue
+            public_seen += 1
             domain_name = item['domain_name']
             domain = AfraidDomain.query.filter_by(domain_name=domain_name).first()
             if not domain:
@@ -239,7 +254,7 @@ def fetch_domains_from_afraid():
     ).delete(synchronize_session=False)
     db.session.commit()
 
-    if total_seen == 0:
+    if public_seen == 0:
         return jsonify({
             'success': False,
             'error': '; '.join(errors[:5]) or 'No domains found in the FreeDNS registry pages.'
@@ -249,7 +264,8 @@ def fetch_domains_from_afraid():
         'success': True,
         'added': added,
         'updated': updated,
-        'total': total_seen,
+        'total': public_seen,
+        'seen': total_seen,
         'pages': end_page - start_page + 1,
         'errors': errors[:10]
     })
@@ -258,11 +274,18 @@ def fetch_domains_from_afraid():
 @login_required
 def get_tld_groups():
     rows = db.session.query(AfraidDomain.tld, func.count(AfraidDomain.id)).filter(
-        AfraidDomain.tld.isnot(None)
+        AfraidDomain.tld.isnot(None),
+        or_(AfraidDomain.registry_status.is_(None), AfraidDomain.registry_status == 'public')
     ).group_by(AfraidDomain.tld).order_by(AfraidDomain.tld.asc()).all()
+    used_rows = db.session.query(AfraidDomain.tld, func.count(AfraidDomain.id)).filter(
+        AfraidDomain.tld.isnot(None),
+        AfraidDomain.last_used_at >= month_start(),
+        or_(AfraidDomain.registry_status.is_(None), AfraidDomain.registry_status == 'public')
+    ).group_by(AfraidDomain.tld).all()
+    used_by_tld = {tld: count for tld, count in used_rows}
     return jsonify({
         'success': True,
-        'tlds': [{'tld': tld, 'count': count} for tld, count in rows if tld]
+        'tlds': [{'tld': tld, 'count': count, 'used': used_by_tld.get(tld, 0), 'available': count - used_by_tld.get(tld, 0)} for tld, count in rows if tld]
     })
 
 @afraid_manager.route('/api/afraid/cloudflare-domains', methods=['GET'])
@@ -281,7 +304,9 @@ def get_afraid_cloudflare_domains():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 def get_rotated_afraid_domain(tld):
-    query = AfraidDomain.query.filter(AfraidDomain.domain_id.isnot(None))
+    query = available_domain_query().filter(
+        or_(AfraidDomain.registry_status.is_(None), AfraidDomain.registry_status == 'public')
+    )
     if tld:
         query = query.filter_by(tld=tld)
     return query.order_by(
@@ -291,7 +316,9 @@ def get_rotated_afraid_domain(tld):
     ).first()
 
 def get_rotated_afraid_domains(tld, limit):
-    query = AfraidDomain.query.filter(AfraidDomain.domain_id.isnot(None))
+    query = available_domain_query().filter(
+        or_(AfraidDomain.registry_status.is_(None), AfraidDomain.registry_status == 'public')
+    )
     if tld:
         query = query.filter_by(tld=tld)
     return query.order_by(AfraidDomain.rotation_count.asc(), AfraidDomain.last_used_at.asc(), AfraidDomain.id.asc()).limit(limit).all()
@@ -348,6 +375,7 @@ def delete_existing_subdomains():
 def create_batch_subdomains():
     data = request.get_json(silent=True) or {}
     tld = data.get('tld', '').strip().lower()
+    base_domain = data.get('base_domain', '').strip().lower()
     afraid_count = max(1, min(50, int(data.get('afraid_count') or 1)))
     cloudflare_count = max(1, min(50, int(data.get('cloudflare_count') or 1)))
     total_count = max(1, min(50, int(data.get('total_count') or afraid_count)))
@@ -358,7 +386,17 @@ def create_batch_subdomains():
     if error:
         return jsonify({'success': False, 'error': error}), 401
 
-    afraid_domains = get_rotated_afraid_domains(tld, afraid_count)
+    if base_domain:
+        domain_record = AfraidDomain.query.filter_by(domain_name=base_domain).first()
+        if not domain_record:
+            return jsonify({'success': False, 'error': f"FreeDNS domain '{base_domain}' is not cached. Fetch Registry first."}), 404
+        if domain_record.last_used_at and domain_record.last_used_at >= month_start():
+            return jsonify({'success': False, 'error': f"FreeDNS domain '{base_domain}' is already marked used for this month."}), 400
+        if domain_record.registry_status and domain_record.registry_status != 'public':
+            return jsonify({'success': False, 'error': f"FreeDNS domain '{base_domain}' is not public."}), 400
+        afraid_domains = [domain_record]
+    else:
+        afraid_domains = get_rotated_afraid_domains(tld, afraid_count)
     if not afraid_domains:
         return jsonify({'success': False, 'error': f"No cached FreeDNS domains found for TLD '{tld}'."}), 404
 
