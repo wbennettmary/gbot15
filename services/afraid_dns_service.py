@@ -23,13 +23,18 @@ class AfraidDNSService:
             
             login_url = "https://freedns.afraid.org/zc.php?step=2"
             payload = {
-                "action": "login",
                 "username": self.username,
                 "password": self.password,
-                "submit": "Login"
+                "remember": "1",
+                "submit": "Login",
+                "remote": "",
+                "from": "",
+                "action": "auth"
             }
-            resp = self.session.post(login_url, data=payload)
-            if "Logout" in resp.text or "Welcome" in resp.text or "freedns.afraid.org/logout" in resp.text:
+            resp = self.session.post(login_url, data=payload, allow_redirects=False)
+            
+            # Afraid redirects on successful login
+            if resp.status_code == 302 or "Logout" in resp.text or "Welcome" in resp.text or "freedns.afraid.org/logout" in resp.text:
                 self.logged_in = True
                 logger.info("Successfully logged in to Afraid (FreeDNS).")
             else:
@@ -68,26 +73,22 @@ class AfraidDNSService:
             return False, "Not logged in to Afraid."
         
         try:
-            url = "https://freedns.afraid.org/subdomain/save.php"
+            url = "https://freedns.afraid.org/subdomain/save.php?step=2"
             payload = {
-                "action": "edit",
                 "type": "CNAME",
                 "subdomain": subdomain,
                 "domain_id": domain_id,
                 "address": destination,
-                "ttl": str(ttl),
-                "submit": "Save!"
+                "ttlalias": "For our premium supporters",  # Default or optional field
+                "ref": "",
+                "send": "Save!"
             }
             
-            # Afraid uses action=edit for adding?
-            # Usually the URL is /subdomain/save.php?step=2
-            # Let's check typical form submission on FreeDNS
-            # It posts to save.php
+            resp = self.session.post(url, data=payload, allow_redirects=False)
             
-            resp = self.session.post(url, data=payload)
-            if "has been created" in resp.text or "Updated" in resp.text or "successfully" in resp.text.lower():
-                return True, f"Subdomain {subdomain} created successfully."
-            
+            if resp.status_code == 302:
+                return True, f"Subdomain {subdomain} created successfully (redirected)."
+                
             if "already exists" in resp.text:
                 return False, "Subdomain already exists."
                 
