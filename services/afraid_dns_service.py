@@ -203,6 +203,49 @@ class AfraidDNSService:
                 domain_map[clean_name] = value
         return domain_map
 
+    def fetch_registry_page(self, page_number):
+        """Fetch and parse one FreeDNS public registry page."""
+        url = f"https://freedns.afraid.org/domain/registry/page-{page_number}.html"
+        resp = self.session.get(url, allow_redirects=False, timeout=30)
+        if resp.status_code != 200:
+            raise RuntimeError(f"FreeDNS returned HTTP {resp.status_code} for {url}")
+        return self.parse_registry_domains(resp.text)
+
+    @staticmethod
+    def parse_registry_domains(html):
+        domains = []
+        row_pattern = re.compile(r'<tr[^>]*class=["\']?tr[ld]["\']?[^>]*>(.*?)</tr>', re.IGNORECASE | re.DOTALL)
+        link_pattern = re.compile(
+            r'href=["\']?/subdomain/edit\.php\?edit_domain_id=(\d+)["\']?[^>]*>\s*([^<]+?)\s*</a>',
+            re.IGNORECASE | re.DOTALL
+        )
+        cell_pattern = re.compile(r'<td[^>]*>(.*?)</td>', re.IGNORECASE | re.DOTALL)
+
+        for row in row_pattern.findall(html):
+            link = link_pattern.search(row)
+            if not link:
+                continue
+            domain_id, domain_name = link.groups()
+            domain_name = unescape(domain_name).strip().lower()
+            cells = cell_pattern.findall(row)
+            status = ''
+            owner = ''
+            if len(cells) > 1:
+                status = re.sub(r'<[^>]+>', ' ', cells[1])
+                status = re.sub(r'\s+', ' ', unescape(status)).strip().lower()
+            if len(cells) > 2:
+                owner = re.sub(r'<[^>]+>', ' ', cells[2])
+                owner = re.sub(r'\s+', ' ', unescape(owner)).strip()
+            if domain_name and "." in domain_name:
+                domains.append({
+                    'domain_name': domain_name,
+                    'domain_id': domain_id,
+                    'tld': domain_name.rsplit('.', 1)[-1].lower(),
+                    'status': status,
+                    'owner': owner,
+                })
+        return domains
+
     @staticmethod
     def _describe_unexpected_page(html, url):
         title_m = re.search(r"<title>(.*?)</title>", html, re.IGNORECASE | re.DOTALL)

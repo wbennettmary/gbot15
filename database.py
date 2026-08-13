@@ -347,5 +347,9 @@ class AfraidConfig(db.Model):
 class AfraidDomain(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     domain_name = db.Column(db.String(255), unique=True, nullable=False)
+    domain_id = db.Column(db.String(50), nullable=True)
+    tld = db.Column(db.String(50), nullable=True, index=True)
+    source = db.Column(db.String(50), nullable=True, default='manual')
+    rotation_count = db.Column(db.Integer, default=0)
+    last_used_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
-

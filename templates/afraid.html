@@ -60,14 +60,30 @@
                             </div>
                         </div>
                         <div class="mb-3">
-                            <label for="domainSelect" class="form-label fw-semibold">Domain (from FreeDNS account)</label>
+                            <label for="tldSelect" class="form-label fw-semibold">FreeDNS TLD Group</label>
+                            <select class="form-select" id="tldSelect">
+                                <option value="">All TLDs</option>
+                            </select>
+                        </div>
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" id="rotateDomainToggle" checked>
+                            <label class="form-check-label" for="rotateDomainToggle">Rotate FreeDNS domain from selected TLD</label>
+                        </div>
+                        <div class="mb-3">
+                            <label for="domainSelect" class="form-label fw-semibold">Manual FreeDNS Domain</label>
                             <select class="form-select" id="domainSelect" required>
                                 <option value="">— Select a domain —</option>
                             </select>
                         </div>
                         <div class="mb-3">
                             <label for="destinationInput" class="form-label fw-semibold">Destination (Cloudflare domain)</label>
-                            <input type="text" class="form-control" id="destinationInput" placeholder="e.g. altomirevia.fun" required>
+                            <div class="input-group">
+                                <select class="form-select" id="cloudflareSelect">
+                                    <option value="">Rotate Cloudflare destination</option>
+                                </select>
+                                <input type="text" class="form-control" id="destinationInput" list="cloudflareDomainsList" placeholder="or type a domain">
+                                <datalist id="cloudflareDomainsList"></datalist>
+                            </div>
                         </div>
                         <div class="mb-3">
                             <label for="ttlInput" class="form-label">TTL (seconds)</label>
@@ -88,7 +104,7 @@
         <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
             <h5 class="card-title mb-0"><i class="fas fa-list me-2"></i>Managed FreeDNS Domains</h5>
             <button class="btn btn-sm btn-light" id="btnFetchDomains">
-                <i class="fas fa-sync me-1"></i> Fetch from FreeDNS
+                <i class="fas fa-sync me-1"></i> Fetch Registry
             </button>
         </div>
         <div class="card-body">
@@ -118,6 +134,15 @@
 document.addEventListener('DOMContentLoaded', function() {
     loadConfig();
     loadDomains();
+    loadTlds();
+    loadCloudflareDomains();
+
+    document.getElementById('tldSelect').addEventListener('change', () => loadDomains());
+    document.getElementById('rotateDomainToggle').addEventListener('change', updateDomainMode);
+    document.getElementById('cloudflareSelect').addEventListener('change', (e) => {
+        document.getElementById('destinationInput').value = e.target.value;
+    });
+    updateDomainMode();
 
     // Save cookies
     document.getElementById('cookieForm').addEventListener('submit', async (e) => {
@@ -184,10 +209,15 @@ document.addEventListener('DOMContentLoaded', function() {
         btn.disabled = true;
         btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Fetching...';
         try {
-            const res = await fetch('/api/afraid/fetch-domains', {method: 'POST'});
-            const data = await res.json();
+            const res = await fetch('/api/afraid/fetch-domains', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({start_page: 1, end_page: 212})
+            });
+            const data = await parseJsonResponse(res);
             if (data.success) {
-                alert(`Done! Added ${data.added} new domain(s). Total in your FreeDNS account: ${data.total}.`);
+                alert(`Done! Added ${data.added}, updated ${data.updated}. Parsed ${data.total} registry rows across ${data.pages} pages.`);
+                loadTlds();
                 loadDomains();
             } else {
                 alert('Error: ' + data.error);
@@ -230,24 +260,29 @@ document.addEventListener('DOMContentLoaded', function() {
         btn.disabled = true;
         btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Creating...';
 
+        const rotate_domain = document.getElementById('rotateDomainToggle').checked;
         const base_domain = document.getElementById('domainSelect').value;
-        const destination = document.getElementById('destinationInput').value.trim();
+        const tld = document.getElementById('tldSelect').value;
+        let destination = document.getElementById('destinationInput').value.trim();
+        if (!destination) {
+            destination = getRotatedCloudflareDomain();
+        }
         const ttl = document.getElementById('ttlInput').value;
 
         try {
             const res = await fetch('/api/afraid/create-subdomain', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({base_domain, destination, ttl})
+                body: JSON.stringify({base_domain, tld, rotate_domain, destination, ttl})
             });
-            const data = await res.json();
+            const data = await parseJsonResponse(res);
             if (data.success) {
                 showAlert('createAlert',
                     `<i class="fas fa-check-circle me-1"></i><strong>Success!</strong> Subdomain created: <code>${data.subdomain}</code>`,
                     'success');
-                document.getElementById('destinationInput').value = '';
+                document.getElementById('destinationInput').value = getRotatedCloudflareDomain();
             } else {
-                showAlert('createAlert', '<i class="fas fa-exclamation-circle me-1"></i>' + data.error, 'danger');
+                showAlert('createAlert', '<i class="fas fa-exclamation-circle me-1"></i>' + escapeHtml(data.error), 'danger');
             }
         } catch (err) {
             showAlert('createAlert', 'Request failed', 'danger');
@@ -276,7 +311,8 @@ async function loadConfig() {
 
 async function loadDomains() {
     try {
-        const res = await fetch('/api/afraid/domains');
+        const tld = document.getElementById('tldSelect')?.value || '';
+        const res = await fetch('/api/afraid/domains' + (tld ? `?tld=${encodeURIComponent(tld)}` : ''));
         const data = await res.json();
         const tbody = document.getElementById('domainsTableBody');
         const select = document.getElementById('domainSelect');
@@ -285,9 +321,9 @@ async function loadDomains() {
         select.innerHTML = '<option value="">— Select a domain —</option>';
 
         if (data.success && data.domains.length > 0) {
-            data.domains.forEach(d => {
+            data.domains.slice(0, 500).forEach(d => {
                 const tr = document.createElement('tr');
-                tr.innerHTML = `<td>${d.domain_name}</td>
+                tr.innerHTML = `<td>${d.domain_name} <span class="text-muted small">${d.tld || ''}</span></td>
                     <td><button class="btn btn-sm btn-outline-danger" onclick="deleteDomain(${d.id})">
                         <i class="fas fa-trash"></i></button></td>`;
                 tbody.appendChild(tr);
@@ -297,12 +333,82 @@ async function loadDomains() {
                 opt.textContent = d.domain_name;
                 select.appendChild(opt);
             });
+            if (data.domains.length > 500) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td colspan="2" class="text-center text-muted">Showing first 500 of ${data.domains.length} cached domains.</td>`;
+                tbody.appendChild(tr);
+            }
         } else {
             tbody.innerHTML = '<tr><td colspan="2" class="text-center text-muted">No domains yet. Click "Fetch from FreeDNS" or add manually.</td></tr>';
         }
     } catch (err) {
         console.error('Error loading domains', err);
     }
+}
+
+async function loadTlds() {
+    try {
+        const res = await fetch('/api/afraid/tlds');
+        const data = await res.json();
+        const select = document.getElementById('tldSelect');
+        const current = select.value;
+        select.innerHTML = '<option value="">All TLDs</option>';
+        if (data.success) {
+            data.tlds.forEach(item => {
+                const opt = document.createElement('option');
+                opt.value = item.tld;
+                opt.textContent = `.${item.tld} (${item.count})`;
+                select.appendChild(opt);
+            });
+            select.value = current;
+        }
+    } catch (err) {
+        console.error('Error loading TLD groups', err);
+    }
+}
+
+async function loadCloudflareDomains() {
+    try {
+        const res = await fetch('/api/afraid/cloudflare-domains');
+        const data = await parseJsonResponse(res);
+        const select = document.getElementById('cloudflareSelect');
+        const list = document.getElementById('cloudflareDomainsList');
+        select.innerHTML = '<option value="">Rotate Cloudflare destination</option>';
+        list.innerHTML = '';
+        if (data.success) {
+            window.afraidCloudflareDomains = data.domains.map(d => d.name).filter(Boolean);
+            window.afraidCloudflareIndex = 0;
+            window.afraidCloudflareDomains.forEach(name => {
+                const opt = document.createElement('option');
+                opt.value = name;
+                opt.textContent = name;
+                select.appendChild(opt);
+                const dataOpt = document.createElement('option');
+                dataOpt.value = name;
+                list.appendChild(dataOpt);
+            });
+            document.getElementById('destinationInput').value = getRotatedCloudflareDomain();
+        }
+    } catch (err) {
+        console.error('Error loading Cloudflare domains', err);
+    }
+}
+
+function getRotatedCloudflareDomain() {
+    const select = document.getElementById('cloudflareSelect');
+    if (select.value) return select.value;
+    const domains = window.afraidCloudflareDomains || [];
+    if (!domains.length) return document.getElementById('destinationInput').value.trim();
+    const index = window.afraidCloudflareIndex || 0;
+    const value = domains[index % domains.length];
+    window.afraidCloudflareIndex = index + 1;
+    return value;
+}
+
+function updateDomainMode() {
+    const rotate = document.getElementById('rotateDomainToggle').checked;
+    document.getElementById('domainSelect').disabled = rotate;
+    document.getElementById('domainSelect').required = !rotate;
 }
 
 async function deleteDomain(id) {

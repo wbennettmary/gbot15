@@ -250,7 +250,57 @@ with app.app_context():
             db.session.rollback()
         except:
             pass
-    
+
+    # Auto-migration: Add FreeDNS registry cache columns to afraid_domain.
+    try:
+        from sqlalchemy import inspect
+        inspector = inspect(db.engine)
+        table_names = inspector.get_table_names()
+
+        if 'afraid_domain' in table_names:
+            columns = [col['name'] for col in inspector.get_columns('afraid_domain')]
+            new_columns = {
+                'domain_id': 'VARCHAR(50)',
+                'tld': 'VARCHAR(50)',
+                'source': "VARCHAR(50) DEFAULT 'manual'",
+                'rotation_count': 'INTEGER DEFAULT 0',
+                'last_used_at': 'TIMESTAMP',
+            }
+
+            with db.engine.connect() as conn:
+                for column_name, column_type in new_columns.items():
+                    if column_name not in columns:
+                        logging.info(f"Adding missing '{column_name}' column to afraid_domain table...")
+                        if 'postgresql' in str(db.engine.url):
+                            conn.execute(text(f'ALTER TABLE "afraid_domain" ADD COLUMN {column_name} {column_type}'))
+                        else:
+                            conn.execute(text(f"ALTER TABLE afraid_domain ADD COLUMN {column_name} {column_type}"))
+                conn.commit()
+
+            if 'tld' not in columns:
+                with db.engine.connect() as conn:
+                    if 'postgresql' in str(db.engine.url):
+                        conn.execute(text("""
+                            UPDATE "afraid_domain"
+                            SET tld = lower(split_part(domain_name, '.', array_length(string_to_array(domain_name, '.'), 1)))
+                            WHERE tld IS NULL AND domain_name LIKE '%.%'
+                        """))
+                    else:
+                        rows = conn.execute(text("SELECT id, domain_name FROM afraid_domain WHERE tld IS NULL")).fetchall()
+                        for row in rows:
+                            domain_name = row[1] or ''
+                            tld = domain_name.rsplit('.', 1)[-1].lower() if '.' in domain_name else None
+                            if tld:
+                                conn.execute(text("UPDATE afraid_domain SET tld = :tld WHERE id = :id"), {'tld': tld, 'id': row[0]})
+                    conn.commit()
+
+    except Exception as e:
+        logging.warning(f"Could not auto-migrate registry columns for afraid_domain: {e}")
+        try:
+            db.session.rollback()
+        except:
+            pass
+     
     # Auto-migration: Add ever_used column if it doesn't exist
     # Auto-migration: Add ever_used column if it doesn't exist
     try:
