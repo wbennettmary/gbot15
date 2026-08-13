@@ -25,6 +25,7 @@ class AfraidDNSService:
         self.auth_error = None
         self.cookies_str = ""
         self.last_error = None
+        self.last_delete_url = "https://freedns.afraid.org/subdomain/delete2.php"
         self._load_cookies(cookies_str)
 
     @staticmethod
@@ -275,26 +276,59 @@ class AfraidDNSService:
                 self.last_error = f"FreeDNS returned HTTP {resp.status_code} for {url}."
                 return []
 
+            action_match = re.search(r'<form[^>]+action=["\']?([^"\'>\s]+)', resp.text, re.IGNORECASE)
+            if action_match:
+                action = unescape(action_match.group(1))
+                if 'delete' in action.lower() or 'subdomain' in action.lower():
+                    if action.startswith('/'):
+                        self.last_delete_url = f"https://freedns.afraid.org{action}"
+                    elif action.startswith('http'):
+                        self.last_delete_url = action
+
             records = []
             rows = re.findall(r'<tr[^>]*class=["\']?tr[ld]["\']?[^>]*>(.*?)</tr>', resp.text, re.IGNORECASE | re.DOTALL)
             for row in rows:
                 cells = re.findall(r'<td[^>]*>(.*?)</td>', row, re.IGNORECASE | re.DOTALL)
-                if len(cells) < 3:
+                if len(cells) < 2:
                     continue
-                checkbox = re.search(r'<input[^>]+type=["\']?checkbox["\']?[^>]+name=["\']?([^"\'>\s]+)["\']?[^>]+value=["\']?([^"\'>\s]+)', row, re.IGNORECASE)
-                fqdn_match = re.search(r'>([a-z0-9][a-z0-9.-]+\.[a-z]{2,})</a>', cells[0], re.IGNORECASE)
-                record_type = re.sub(r'<[^>]+>', ' ', cells[1])
-                record_type = re.sub(r'\s+', ' ', unescape(record_type)).strip()
-                destination = re.sub(r'<[^>]+>', ' ', cells[2])
-                destination = re.sub(r'\s+', ' ', unescape(destination)).strip()
+                checkbox_tag = re.search(r'<input[^>]+type=["\']?checkbox["\']?[^>]*>', row, re.IGNORECASE)
+                delete_name = ''
+                delete_value = ''
+                if checkbox_tag:
+                    name_match = re.search(r'\bname=["\']?([^"\'>\s]+)', checkbox_tag.group(0), re.IGNORECASE)
+                    value_match = re.search(r'\bvalue=["\']?([^"\'>\s]+)', checkbox_tag.group(0), re.IGNORECASE)
+                    delete_name = name_match.group(1) if name_match else ''
+                    delete_value = value_match.group(1) if value_match else ''
+
+                clean_cells = []
+                for cell in cells:
+                    text = re.sub(r'<[^>]+>', ' ', cell)
+                    clean_cells.append(re.sub(r'\s+', ' ', unescape(text)).strip())
+
+                fqdn = ''
+                fqdn_match = re.search(r'([a-z0-9][a-z0-9.-]+\.[a-z]{2,})', ' '.join(clean_cells), re.IGNORECASE)
                 if fqdn_match:
+                    fqdn = fqdn_match.group(1).lower()
+
+                record_type = ''
+                destination = ''
+                for index, text in enumerate(clean_cells):
+                    if text.upper() in {'A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS'}:
+                        record_type = text.upper()
+                        if index + 1 < len(clean_cells):
+                            destination = clean_cells[index + 1]
+                        break
+
+                if fqdn and delete_value:
                     records.append({
-                        'fqdn': fqdn_match.group(1).lower(),
+                        'fqdn': fqdn,
                         'type': record_type,
                         'destination': destination,
-                        'delete_name': checkbox.group(1) if checkbox else '',
-                        'delete_value': checkbox.group(2) if checkbox else '',
+                        'delete_name': delete_name,
+                        'delete_value': delete_value,
                     })
+            if not records:
+                self.last_error = self._describe_unexpected_page(resp.text, url)
             return records
         except Exception as e:
             self.last_error = f"Error fetching existing FreeDNS subdomains: {e}"
@@ -312,7 +346,7 @@ class AfraidDNSService:
                 value = record.get('delete_value')
                 if name and value:
                     payload[name] = value
-            resp = self.session.post("https://freedns.afraid.org/subdomain/delete2.php", data=payload, allow_redirects=False, timeout=20)
+            resp = self.session.post(self.last_delete_url, data=payload, allow_redirects=False, timeout=20)
             if resp.status_code in (200, 302):
                 return True, f"Submitted deletion for {len(records)} subdomain(s)."
             return False, f"FreeDNS returned HTTP {resp.status_code} while deleting subdomains."

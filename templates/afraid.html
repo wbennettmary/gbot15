@@ -82,6 +82,7 @@
                         <div class="form-check form-switch mb-3">
                             <input class="form-check-input" type="checkbox" id="rotateDomainToggle" checked>
                             <label class="form-check-label" for="rotateDomainToggle">Rotate FreeDNS domain from selected TLD</label>
+                            <span class="badge bg-success ms-2" id="rotationModeBadge">Rotation ON</span>
                         </div>
                         <div class="mb-3">
                             <label for="domainSelect" class="form-label fw-semibold">Manual FreeDNS Domain</label>
@@ -187,7 +188,11 @@ document.addEventListener('DOMContentLoaded', function() {
     loadTlds();
     loadCloudflareDomains();
 
-    document.getElementById('tldSelect').addEventListener('change', () => loadDomains());
+    document.getElementById('tldSelect').addEventListener('change', () => {
+        window.afraidDomainPage = 1;
+        loadDomains();
+        loadDomainOptions();
+    });
     document.getElementById('btnPrevDomainPage').addEventListener('click', () => changeDomainPage(-1));
     document.getElementById('btnNextDomainPage').addEventListener('click', () => changeDomainPage(1));
     document.getElementById('btnLoadSubdomains').addEventListener('click', loadExistingSubdomains);
@@ -275,6 +280,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 alert(`Done! Added ${data.added}, updated ${data.updated}. Parsed ${data.total} registry rows across ${data.pages} pages.`);
                 loadTlds();
                 loadDomains();
+                loadDomainOptions();
             } else {
                 alert('Error: ' + data.error);
             }
@@ -377,7 +383,6 @@ async function loadDomains() {
         const select = document.getElementById('domainSelect');
 
         tbody.innerHTML = '';
-        select.innerHTML = '<option value="">— Select a domain —</option>';
 
         document.getElementById('domainPageStatus').textContent = `Page ${data.page || 1} / ${data.pages || 1} (${data.total || 0})`;
         if (data.success && data.domains.length > 0) {
@@ -390,16 +395,34 @@ async function loadDomains() {
                         <i class="fas fa-trash"></i></button></td>`;
                 tbody.appendChild(tr);
 
-                const opt = document.createElement('option');
-                opt.value = d.domain_name;
-                opt.textContent = d.domain_name;
-                select.appendChild(opt);
             });
         } else {
             tbody.innerHTML = '<tr><td colspan="2" class="text-center text-muted">No domains yet. Click "Fetch from FreeDNS" or add manually.</td></tr>';
         }
     } catch (err) {
         console.error('Error loading domains', err);
+    }
+}
+
+async function loadDomainOptions() {
+    try {
+        const tld = document.getElementById('tldSelect')?.value || '';
+        const params = new URLSearchParams({limit: 1000});
+        if (tld) params.set('tld', tld);
+        const res = await fetch('/api/afraid/domain-options?' + params.toString());
+        const data = await parseJsonResponse(res);
+        const select = document.getElementById('domainSelect');
+        select.innerHTML = '<option value="">— Select a domain —</option>';
+        if (data.success) {
+            data.domains.forEach(d => {
+                const opt = document.createElement('option');
+                opt.value = d.domain_name;
+                opt.textContent = d.domain_name;
+                select.appendChild(opt);
+            });
+        }
+    } catch (err) {
+        console.error('Error loading domain options', err);
     }
 }
 
@@ -423,6 +446,7 @@ async function loadTlds() {
                 select.appendChild(opt);
             });
             select.value = current;
+            loadDomainOptions();
         }
     } catch (err) {
         console.error('Error loading TLD groups', err);
@@ -449,7 +473,6 @@ async function loadCloudflareDomains() {
                 dataOpt.value = name;
                 list.appendChild(dataOpt);
             });
-            document.getElementById('destinationInput').value = getRotatedCloudflareDomain();
         }
     } catch (err) {
         console.error('Error loading Cloudflare domains', err);
@@ -460,17 +483,25 @@ function getRotatedCloudflareDomain() {
     const select = document.getElementById('cloudflareSelect');
     if (select.value) return select.value;
     const domains = window.afraidCloudflareDomains || [];
-    if (!domains.length) return document.getElementById('destinationInput').value.trim();
+    const limit = Math.max(1, parseInt(document.getElementById('cloudflareCountInput').value || domains.length, 10));
+    const pool = domains.slice(0, limit);
+    if (!pool.length) return document.getElementById('destinationInput').value.trim();
     const index = window.afraidCloudflareIndex || 0;
-    const value = domains[index % domains.length];
+    const value = pool[index % pool.length];
     window.afraidCloudflareIndex = index + 1;
     return value;
 }
 
 function updateDomainMode() {
     const rotate = document.getElementById('rotateDomainToggle').checked;
-    document.getElementById('domainSelect').disabled = rotate;
-    document.getElementById('domainSelect').required = !rotate;
+    const select = document.getElementById('domainSelect');
+    const badge = document.getElementById('rotationModeBadge');
+    select.disabled = rotate;
+    select.required = !rotate;
+    badge.textContent = rotate ? 'Rotation ON' : 'Manual ON';
+    badge.className = rotate ? 'badge bg-success ms-2' : 'badge bg-primary ms-2';
+    select.classList.toggle('border-success', rotate);
+    select.classList.toggle('border-primary', !rotate);
 }
 
 async function loadExistingSubdomains() {
@@ -479,6 +510,9 @@ async function loadExistingSubdomains() {
     const res = await fetch('/api/afraid/subdomains');
     const data = await parseJsonResponse(res);
     tbody.innerHTML = '';
+    if (data.error) {
+        showAlert('createAlert', escapeHtml(data.error), data.records.length ? 'warning' : 'danger');
+    }
     if (!data.records.length) {
         tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No existing subdomains found.</td></tr>';
         return;

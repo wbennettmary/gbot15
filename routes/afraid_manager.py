@@ -134,6 +134,24 @@ def get_domains():
         } for d in domains]
     })
 
+@afraid_manager.route('/api/afraid/domain-options', methods=['GET'])
+@login_required
+def get_domain_options():
+    tld = request.args.get('tld', '').strip().lower()
+    limit = min(5000, max(1, int(request.args.get('limit', 1000))))
+    query = AfraidDomain.query.filter(AfraidDomain.domain_id.isnot(None))
+    if tld:
+        query = query.filter_by(tld=tld)
+    domains = query.order_by(
+        AfraidDomain.rotation_count.asc(),
+        AfraidDomain.last_used_at.asc(),
+        AfraidDomain.domain_name.asc()
+    ).limit(limit).all()
+    return jsonify({
+        'success': True,
+        'domains': [{'domain_name': d.domain_name, 'domain_id': d.domain_id, 'tld': d.tld} for d in domains]
+    })
+
 @afraid_manager.route('/api/afraid/domains', methods=['POST'])
 @login_required
 def add_domain():
@@ -192,6 +210,8 @@ def fetch_domains_from_afraid():
 
         total_seen += len(registry_domains)
         for item in registry_domains:
+            if item.get('status') != 'public':
+                continue
             domain_name = item['domain_name']
             domain = AfraidDomain.query.filter_by(domain_name=domain_name).first()
             if not domain:
@@ -212,6 +232,11 @@ def fetch_domains_from_afraid():
         if page % 10 == 0:
             db.session.commit()
 
+    AfraidDomain.query.filter(
+        AfraidDomain.source == 'registry',
+        AfraidDomain.registry_status.isnot(None),
+        AfraidDomain.registry_status != 'public'
+    ).delete(synchronize_session=False)
     db.session.commit()
 
     if total_seen == 0:
@@ -337,13 +362,20 @@ def create_batch_subdomains():
     if not afraid_domains:
         return jsonify({'success': False, 'error': f"No cached FreeDNS domains found for TLD '{tld}'."}), 404
 
+    try:
+        cf_zones = [z['name'] for z in CloudflareDNSService().get_zones()]
+    except Exception as e:
+        cf_zones = []
+
     destinations = manual_destinations[:cloudflare_count]
     if not destinations:
-        try:
-            cf = CloudflareDNSService()
-            destinations = [z['name'] for z in cf.get_zones()[:cloudflare_count]]
-        except Exception as e:
-            return jsonify({'success': False, 'error': f"No Cloudflare destination selected and Cloudflare domains could not load: {e}"}), 400
+        destinations = cf_zones[:cloudflare_count]
+    elif len(destinations) < cloudflare_count:
+        for zone_name in cf_zones:
+            if zone_name not in destinations:
+                destinations.append(zone_name)
+            if len(destinations) >= cloudflare_count:
+                break
     if not destinations:
         return jsonify({'success': False, 'error': 'No Cloudflare destination domains available.'}), 400
 
