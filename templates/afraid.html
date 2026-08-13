@@ -6,13 +6,15 @@
     <p class="text-muted mb-4">Automate CNAME subdomain creation on FreeDNS using your browser session cookies.</p>
 
     <ul class="nav nav-tabs mb-4" id="afraidTabs" role="tablist">
+        {% if session.get('role') == 'admin' %}
         <li class="nav-item" role="presentation">
             <button class="nav-link active" id="cookies-tab" data-bs-toggle="tab" data-bs-target="#cookiesPane" type="button" role="tab">
                 <i class="fas fa-cookie-bite me-1"></i> Session Cookies
             </button>
         </li>
+        {% endif %}
         <li class="nav-item" role="presentation">
-            <button class="nav-link" id="process-tab" data-bs-toggle="tab" data-bs-target="#processPane" type="button" role="tab">
+            <button class="nav-link {% if session.get('role') != 'admin' %}active{% endif %}" id="process-tab" data-bs-toggle="tab" data-bs-target="#processPane" type="button" role="tab">
                 <i class="fas fa-play me-1"></i> Process
             </button>
         </li>
@@ -29,6 +31,7 @@
     </ul>
 
     <div class="tab-content" id="afraidTabContent">
+        {% if session.get('role') == 'admin' %}
         <div class="tab-pane fade show active" id="cookiesPane" role="tabpanel" aria-labelledby="cookies-tab">
             <div class="row">
         <!-- Cookie Configuration Card -->
@@ -67,8 +70,9 @@
         </div>
             </div>
         </div>
+        {% endif %}
 
-        <div class="tab-pane fade" id="processPane" role="tabpanel" aria-labelledby="process-tab">
+        <div class="tab-pane fade {% if session.get('role') != 'admin' %}show active{% endif %}" id="processPane" role="tabpanel" aria-labelledby="process-tab">
             <div class="row">
 
         <!-- Subdomain Generator Card -->
@@ -99,7 +103,7 @@
                             <label class="form-label fw-semibold">Domains In Selected TLD</label>
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <div class="small text-muted">Available domains are used for creation. Used domains can be reactivated here.</div>
-                                <button type="button" class="btn btn-sm btn-outline-primary" id="btnReactivateSelectedDomains">
+                                <button type="button" class="btn btn-sm btn-primary" id="btnReactivateSelectedDomains">
                                     Reactivate Selected Used
                                 </button>
                             </div>
@@ -282,7 +286,9 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    loadConfig();
+    if (document.getElementById('cookieStatus')) {
+        loadConfig();
+    }
     loadDomains();
     loadTlds();
     loadCloudflareDomains();
@@ -317,8 +323,9 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('destinationInput').addEventListener('input', updateCloudflareCountState);
     updateCloudflareCountState();
 
-    // Save cookies
-    document.getElementById('cookieForm').addEventListener('submit', async (e) => {
+    const cookieForm = document.getElementById('cookieForm');
+    if (cookieForm) {
+    cookieForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const btn = document.getElementById('btnSaveCookies');
         btn.disabled = true;
@@ -353,9 +360,11 @@ document.addEventListener('DOMContentLoaded', function() {
             btn.innerHTML = '<i class="fas fa-save me-1"></i> Save & Verify Cookies';
         }
     });
+    }
 
-    // Test cookies
-    document.getElementById('btnTestCookies').addEventListener('click', async () => {
+    const btnTestCookies = document.getElementById('btnTestCookies');
+    if (btnTestCookies) {
+    btnTestCookies.addEventListener('click', async () => {
         const btn = document.getElementById('btnTestCookies');
         btn.disabled = true;
         btn.innerHTML = 'Testing...';
@@ -375,6 +384,7 @@ document.addEventListener('DOMContentLoaded', function() {
             btn.innerHTML = 'Test';
         }
     });
+    }
 
     // Fetch domains from FreeDNS
     document.getElementById('btnFetchDomains').addEventListener('click', async () => {
@@ -537,7 +547,7 @@ async function loadSelectedTldDomains() {
             renderSelectedTldDomains([]);
             return;
         }
-        const params = new URLSearchParams({limit: 200, tld, include_used: 'true'});
+        const params = new URLSearchParams({limit: 5000, tld, include_used: 'true'});
         const res = await fetch('/api/afraid/domain-options?' + params.toString());
         const data = await parseJsonResponse(res);
         renderSelectedTldDomains(data.domains || []);
@@ -863,7 +873,7 @@ async function loadUsedDomains() {
                 </td>
                 <td>.${escapeHtml(domain.tld || '')}</td>
                 <td>${domain.last_used_at ? escapeHtml(new Date(domain.last_used_at).toLocaleString()) : 'n/a'}</td>
-                <td>
+                <td class="${usedDomainStatusCellClass(domain.delivery_status)}">
                     <select class="form-select form-select-sm used-domain-status" data-domain-id="${domain.id}">
                         <option value="inbox" ${domain.delivery_status === 'inbox' ? 'selected' : ''}>inbox</option>
                         <option value="spam" ${domain.delivery_status === 'spam' ? 'selected' : ''}>spam</option>
@@ -886,6 +896,7 @@ async function loadUsedDomains() {
 async function updateUsedDomainStatus(e) {
     const select = e.target;
     const domainId = select.dataset.domainId;
+    const cell = select.closest('td');
     select.disabled = true;
     try {
         const res = await fetch(`/api/afraid/used-domains/${domainId}/status`, {
@@ -896,12 +907,20 @@ async function updateUsedDomainStatus(e) {
         const data = await parseJsonResponse(res);
         if (!data.success) {
             alert(data.error || 'Could not update domain status');
+        } else if (cell) {
+            cell.className = usedDomainStatusCellClass(select.value);
         }
     } catch (err) {
         alert(err.message || 'Could not update domain status');
     } finally {
         select.disabled = false;
     }
+}
+
+function usedDomainStatusCellClass(status) {
+    if (status === 'spam') return 'bg-warning bg-opacity-25';
+    if (status === 'bounce') return 'bg-danger bg-opacity-25';
+    return 'bg-success bg-opacity-10';
 }
 
 async function saveManualAfraidList(e) {
