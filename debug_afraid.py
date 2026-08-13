@@ -19,7 +19,7 @@ if not PASSWORD:
             if cfg:
                 USERNAME = cfg.username
                 PASSWORD = cfg.password
-                print(f"[DB] Loaded credentials: user={USERNAME}")
+                print(f"[DB] Loaded credentials: user={USERNAME}, password_length={len(PASSWORD)}, password_preview={PASSWORD[:3]}***")
             else:
                 print("[DB] No afraid_config row found!")
                 sys.exit(1)
@@ -39,8 +39,8 @@ headers = {
 session = requests.Session()
 session.headers.update(headers)
 
-print("\n===== STEP 1: Get login page for cookies =====")
-r = session.get("https://freedns.afraid.org/zc.php?step=1")
+print("\n===== STEP 1: Get login page =====")
+r = session.get("https://freedns.afraid.org/zc.php?step=1", allow_redirects=True)
 print(f"  Status: {r.status_code}")
 
 print("\n===== STEP 2: Submit login =====")
@@ -55,44 +55,47 @@ payload = {
 }
 r = session.post("https://freedns.afraid.org/zc.php?step=2", data=payload, allow_redirects=False)
 print(f"  Status: {r.status_code}")
-print(f"  Location header: {r.headers.get('Location', '(none)')}")
+print(f"  Location: {r.headers.get('Location', '(none)')}")
 if r.status_code == 302:
-    print("  [OK] Got 302 redirect – login successful!")
+    print("  [OK] 302 redirect – login successful!")
     logged_in = True
 else:
-    # Try to extract the specific error message from the "Problems!" page
-    error_match = re.search(r'<td[^>]*bgcolor="#eeeeee"[^>]*>(.*?)</td>', r.text, re.IGNORECASE | re.DOTALL)
-    if error_match:
-        msg = re.sub(r'<[^>]+>', '', error_match.group(1)).strip()
-        print(f"  [FAIL] FreeDNS error: {msg}")
-    else:
-        print(f"  [FAIL] Login did NOT redirect. HTML title: {re.search(r'<title>(.*?)</title>', r.text, re.I).group(1) if re.search(r'<title>(.*?)</title>', r.text, re.I) else 'unknown'}")
     logged_in = False
+    print("  [FAIL] No redirect – bad credentials or wrong form params")
+    # Show the actual error text from the page
+    # First try the known CSS selector structure
+    import lxml.html
+    try:
+        doc = lxml.html.fromstring(r.text)
+        tables = doc.cssselect('table[width="95%"]')
+        if tables:
+            cells = tables[0].cssselect('td[bgcolor="#eeeeee"]')
+            if cells:
+                print(f"  FreeDNS says: '{cells[0].text_content().strip()}'")
+            else:
+                print("  Could not find error cell via CSS selector")
+        else:
+            print("  Could not find error table")
+    except Exception as e:
+        print(f"  lxml parse error: {e}")
+    print(f"\n  Raw HTML (first 800 chars):\n{r.text[:800]}")
 
-print("\n===== STEP 3: Check auth by visiting profile page =====")
-r2 = session.get("https://freedns.afraid.org/profile/", allow_redirects=False)
+print("\n===== STEP 3: Check auth via /subdomain/ page =====")
+r2 = session.get("https://freedns.afraid.org/subdomain/", allow_redirects=False)
 print(f"  Status: {r2.status_code}")
-if r2.status_code == 200 and "username" in r2.text.lower():
-    print("  [OK] Profile page loaded – authenticated!")
-    logged_in = True
-elif r2.status_code == 302:
-    print(f"  [FAIL] Profile redirected to: {r2.headers.get('Location')} – NOT authenticated")
-else:
-    print(f"  [?] Status: {r2.status_code}, Content snippet: {r2.text[:300]}")
-
-print("\n===== STEP 4: Fetch domain_id select from add.php =====")
-r3 = session.get("https://freedns.afraid.org/subdomain/add.php")
-print(f"  Status: {r3.status_code}")
-print(f"  Page title: {re.search(r'<title>(.*?)</title>', r3.text, re.I).group(1).strip() if re.search(r'<title>(.*?)</title>', r3.text, re.I) else 'unknown'}")
-
-select_block = re.search(r'<select[^>]*name=[\'"]?domain_id[\'"]?[^>]*>(.*?)</select>', r3.text, re.IGNORECASE | re.DOTALL)
-if select_block:
-    print("  [OK] Found domain_id <select> block!")
-    pattern = r'<option\s+[^>]*value=[\'"]?(\d+)[\'"]?[^>]*>([^<]+)</option>'
-    options = re.findall(pattern, select_block.group(1), re.IGNORECASE)
-    print(f"  Found {len(options)} domain(s):")
-    for val, name in options:
-        print(f"    id={val}  name={name.strip()}")
-else:
-    print("  [FAIL] Could not find domain_id <select> block!")
-    print(f"  Full HTML (first 1000 chars):\n{r3.text[:1000]}")
+if r2.status_code == 302:
+    print(f"  [FAIL] Redirected to: {r2.headers.get('Location')} – NOT authenticated")
+elif r2.status_code == 200:
+    # The subdomain page will have the domain_id select if logged in
+    select_block = re.search(r'<select[^>]*name=[\'"]?domain_id[\'"]?[^>]*>(.*?)</select>', r2.text, re.IGNORECASE | re.DOTALL)
+    if select_block:
+        print("  [OK] Authenticated + found domain_id select on /subdomain/ page!")
+        pattern = r'<option\s+[^>]*value=[\'"]?(\d+)[\'"]?[^>]*>([^<]+)</option>'
+        options = re.findall(pattern, select_block.group(1), re.IGNORECASE)
+        print(f"  Found {len(options)} domain(s):")
+        for val, name in options:
+            print(f"    id={val}  name={name.strip()}")
+    else:
+        title_m = re.search(r'<title>(.*?)</title>', r2.text, re.I)
+        print(f"  Status 200 but no domain select. Page title: {title_m.group(1) if title_m else 'unknown'}")
+        print(f"  HTML snippet: {r2.text[:400]}")

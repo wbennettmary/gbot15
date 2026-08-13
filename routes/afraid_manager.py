@@ -40,19 +40,23 @@ def get_config():
 @login_required
 def save_config():
     data = request.get_json()
-    username = data.get('username')
-    password = data.get('password')
+    username = data.get('username', '').strip()
+    password = data.get('password', '').strip()  # May be absent if user didn't change it
     
-    if not username or not password:
-        return jsonify({'success': False, 'error': 'Username and password required'}), 400
+    if not username:
+        return jsonify({'success': False, 'error': 'Username is required'}), 400
         
     config = AfraidConfig.query.first()
     if not config:
+        # First-time save – password required
+        if not password:
+            return jsonify({'success': False, 'error': 'Password is required for initial setup'}), 400
         config = AfraidConfig(username=username, password=password, is_configured=True)
         db.session.add(config)
     else:
         config.username = username
-        if password != '********':  # Don't update if dummy password
+        # Only update password if a new one was actually provided
+        if password:
             config.password = password
         config.is_configured = True
         

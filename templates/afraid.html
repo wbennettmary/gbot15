@@ -19,7 +19,8 @@
                         </div>
                         <div class="mb-3">
                             <label for="afraidPassword" class="form-label">Password</label>
-                            <input type="password" class="form-control" id="afraidPassword" required>
+                            <input type="password" class="form-control" id="afraidPassword" placeholder="Enter new password to change" autocomplete="new-password">
+                            <small class="text-muted" id="passwordHint" style="display:none">Password is saved. Leave blank to keep current password.</small>
                         </div>
                         <button type="submit" class="btn btn-primary">Save Configuration</button>
                     </form>
@@ -103,18 +104,31 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('configForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         const username = document.getElementById('afraidUsername').value;
-        const password = document.getElementById('afraidPassword').value;
+        const passwordField = document.getElementById('afraidPassword');
+        const password = passwordField.value;
+        
+        // If password field is blank and we already have a config, skip password update
+        // Send a special marker so the backend knows to keep the old password
+        const payload = { username };
+        if (password && password.trim() !== '') {
+            payload.password = password;
+        } else if (!passwordField.dataset.configured) {
+            showAlert('configAlert', 'Please enter a password', 'warning');
+            return;
+        }
         
         try {
             const res = await fetch('/api/afraid/config', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({username, password})
+                body: JSON.stringify(payload)
             });
             const data = await res.json();
-            showAlert('configAlert', data.success ? 'Configuration saved' : data.error, data.success ? 'success' : 'danger');
-            if (data.success && password !== '********') {
-                document.getElementById('afraidPassword').value = '********';
+            showAlert('configAlert', data.success ? 'Configuration saved!' : (data.error || 'Error'), data.success ? 'success' : 'danger');
+            if (data.success) {
+                passwordField.value = '';
+                passwordField.dataset.configured = 'true';
+                document.getElementById('passwordHint').style.display = 'block';
             }
         } catch (err) {
             showAlert('configAlert', 'Error saving configuration', 'danger');
@@ -201,9 +215,13 @@ async function loadConfig() {
         const res = await fetch('/api/afraid/config');
         const data = await res.json();
         if (data.success) {
-            document.getElementById('afraidUsername').value = data.username;
+            document.getElementById('afraidUsername').value = data.username || '';
+            const passwordField = document.getElementById('afraidPassword');
             if (data.is_configured) {
-                document.getElementById('afraidPassword').value = '********';
+                // Don't pre-fill the password – just show the hint
+                passwordField.value = '';
+                passwordField.dataset.configured = 'true';
+                document.getElementById('passwordHint').style.display = 'block';
             }
         }
     } catch (err) {

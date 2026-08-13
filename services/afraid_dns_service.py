@@ -61,7 +61,7 @@ class AfraidDNSService:
             logger.error("get_domains_with_ids called but not logged in.")
             return {}
         try:
-            resp = self.session.get("https://freedns.afraid.org/subdomain/add.php")
+            resp = self.session.get("https://freedns.afraid.org/subdomain/")
             
             domain_map = {}
             # Match options in domain_id select, handle single/double quotes or no quotes
