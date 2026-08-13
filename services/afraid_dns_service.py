@@ -11,16 +11,19 @@ class AfraidDNSService:
         self.session = requests.Session()
         # Set a common user agent
         self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
+            "Host": "freedns.afraid.org",
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:102.0) Gecko/20100101 Firefox/102.0",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Accept-Encoding": "gzip, deflate",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1"
         })
         self.logged_in = False
         self._login()
 
     def _login(self):
         try:
-            # Get the login page first to establish cookies
-            self.session.get("https://freedns.afraid.org/")
-            
             login_url = "https://freedns.afraid.org/zc.php?step=2"
             payload = {
                 "username": self.username,
@@ -38,31 +41,31 @@ class AfraidDNSService:
                 self.logged_in = True
                 logger.info("Successfully logged in to Afraid (FreeDNS).")
             else:
-                logger.error("Failed to log in to Afraid. Check credentials.")
+                logger.error(f"Failed to log in to Afraid. Status: {resp.status_code}, Response HTML snippet: {resp.text[:500]}")
         except Exception as e:
             logger.error(f"Error logging into Afraid: {e}")
 
     def get_domains_with_ids(self):
         """Fetch all available domains and their IDs from the add subdomain page."""
         if not self.logged_in:
+            logger.error("get_domains_with_ids called but not logged in.")
             return {}
         try:
             resp = self.session.get("https://freedns.afraid.org/subdomain/edit.php")
             
-            # The dropdown looks like: <select name="domain_id"><option value="12345">domain.com (public)</option>
-            # Let's use regex to find them
             domain_map = {}
-            # Match options in domain_id select
-            # It might look like: <option value="99999" >artitech.com (public)</option>
-            pattern = r'<option\s+value="(\d+)"[^>]*>([^<]+)</option>'
+            # Match options in domain_id select, handle single/double quotes or no quotes
+            select_block = re.search(r'<select[^>]*name=[\'"]?domain_id[\'"]?[^>]*>(.*?)</select>', resp.text, re.IGNORECASE | re.DOTALL)
             
-            # Narrow down to the select tag if possible, or just find all options
-            select_block = re.search(r'<select[^>]*name="domain_id"[^>]*>(.*?)</select>', resp.text, re.IGNORECASE | re.DOTALL)
             if select_block:
+                pattern = r'<option\s+[^>]*value=[\'"]?(\d+)[\'"]?[^>]*>([^<]+)</option>'
                 options = re.findall(pattern, select_block.group(1), re.IGNORECASE)
                 for value, name in options:
-                    clean_name = name.split()[0]  # Remove (public) or (private)
+                    clean_name = name.split()[0].strip()  # Remove (public) or (private)
                     domain_map[clean_name] = value
+            else:
+                logger.error(f"Could not find domain_id select in edit.php. HTML snippet: {resp.text[:500]}")
+                
             return domain_map
         except Exception as e:
             logger.error(f"Error fetching Afraid domains: {e}")
