@@ -118,17 +118,6 @@
                                 <div class="form-text">Active only when Cloudflare destination rotation is used.</div>
                             </div>
                         </div>
-                        <div class="form-check form-switch mb-3">
-                            <input class="form-check-input" type="checkbox" id="rotateDomainToggle" checked>
-                            <label class="form-check-label" for="rotateDomainToggle">Rotate FreeDNS domain from selected TLD</label>
-                            <span class="badge bg-success ms-2" id="rotationModeBadge">Rotation ON</span>
-                        </div>
-                        <div class="mb-3">
-                            <label for="domainSelect" class="form-label fw-semibold">Manual FreeDNS Domain</label>
-                            <select class="form-select" id="domainSelect" required>
-                                <option value="">— Select a domain —</option>
-                            </select>
-                        </div>
                         <div class="mb-3">
                             <label for="destinationInput" class="form-label fw-semibold">Destination (Cloudflare domain)</label>
                             <div class="input-group">
@@ -195,7 +184,6 @@
                 <button class="btn btn-sm btn-light" id="btnLoadSubdomains">Load Existing</button>
                 <button class="btn btn-sm btn-outline-dark" id="btnMarkAllSubdomains">Mark All</button>
                 <button class="btn btn-sm btn-danger" id="btnDeleteSelectedSubdomains">Delete Selected</button>
-                <button class="btn btn-sm btn-outline-danger" id="btnDeleteAllSubdomains">Delete All</button>
             </div>
         </div>
         <div class="card-body">
@@ -278,7 +266,6 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('btnMarkAllSubdomains').addEventListener('click', markAllSubdomains);
     document.getElementById('selectAllSubdomains').addEventListener('change', toggleAllSubdomains);
     document.getElementById('btnDeleteSelectedSubdomains').addEventListener('click', deleteSelectedSubdomains);
-    document.getElementById('btnDeleteAllSubdomains').addEventListener('click', deleteAllSubdomains);
     document.getElementById('btnStartProcess').addEventListener('click', startProcess);
     document.getElementById('btnReactivateSelectedDomains').addEventListener('click', reactivateSelectedDomains);
     document.getElementById('btnRefreshAfraidLists').addEventListener('click', loadAfraidLists);
@@ -286,13 +273,11 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('afraidListForm').addEventListener('submit', saveManualAfraidList);
     document.getElementById('btnCancelAfraidListEdit').addEventListener('click', resetAfraidListForm);
     document.getElementById('afraidListRaw').addEventListener('input', updateAfraidListCount);
-    document.getElementById('rotateDomainToggle').addEventListener('change', updateDomainMode);
     document.getElementById('cloudflareSelect').addEventListener('change', (e) => {
         document.getElementById('destinationInput').value = e.target.value;
         updateCloudflareCountState();
     });
     document.getElementById('destinationInput').addEventListener('input', updateCloudflareCountState);
-    updateDomainMode();
     updateCloudflareCountState();
 
     // Save cookies
@@ -438,7 +423,6 @@ async function loadDomains() {
         const res = await fetch('/api/afraid/domains?' + params.toString());
         const data = await res.json();
         const tbody = document.getElementById('domainsTableBody');
-        const select = document.getElementById('domainSelect');
 
         tbody.innerHTML = '';
 
@@ -449,8 +433,14 @@ async function loadDomains() {
                 tr.innerHTML = `<td><strong>${d.domain_name}</strong>
                         <div class="text-muted small">.${d.tld || ''} | public | hosts: ${d.hosts_in_use ?? 'n/a'} | created: ${d.registry_created_on || 'n/a'} | ${d.used_this_month ? 'used this month' : 'available'}</div>
                     </td>
-                    <td><button class="btn btn-sm btn-outline-danger" onclick="deleteDomain(${d.id})">
-                        <i class="fas fa-trash"></i></button></td>`;
+                    <td>
+                        <div class="btn-group btn-group-sm">
+                            ${d.used_this_month ? `<button class="btn btn-outline-primary" onclick="reactivateDomains(['${escapeHtml(d.domain_name)}'])" title="Reactivate">
+                                <i class="fas fa-undo"></i></button>` : ''}
+                            <button class="btn btn-outline-danger" onclick="deleteDomain(${d.id})">
+                                <i class="fas fa-trash"></i></button>
+                        </div>
+                    </td>`;
                 tbody.appendChild(tr);
 
             });
@@ -469,16 +459,6 @@ async function loadDomainOptions() {
         if (tld) params.set('tld', tld);
         const res = await fetch('/api/afraid/domain-options?' + params.toString());
         const data = await parseJsonResponse(res);
-        const select = document.getElementById('domainSelect');
-        select.innerHTML = '<option value="">— Select a domain —</option>';
-        if (data.success) {
-            data.domains.forEach(d => {
-                const opt = document.createElement('option');
-                opt.value = d.domain_name;
-                opt.textContent = d.domain_name;
-                select.appendChild(opt);
-            });
-        }
         renderSelectedTldDomains(data.domains || []);
     } catch (err) {
         console.error('Error loading domain options', err);
@@ -559,6 +539,10 @@ async function reactivateSelectedDomains() {
         alert('Select one or more used domains first.');
         return;
     }
+    await reactivateDomains(domain_names);
+}
+
+async function reactivateDomains(domain_names) {
     const res = await fetch('/api/afraid/domains/reactivate', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -578,19 +562,10 @@ async function reactivateSelectedDomains() {
 
 function syncSelectedTldDomains() {
     const selected = [...document.querySelectorAll('.tld-domain-check:checked')].map(el => el.value);
-    const select = document.getElementById('domainSelect');
     const afraidCountInput = document.getElementById('afraidCountInput');
     if (selected.length) {
-        document.getElementById('rotateDomainToggle').checked = false;
-        updateDomainMode();
         afraidCountInput.value = selected.length;
-        if (selected.length === 1) {
-            select.value = selected[0];
-        } else {
-            select.value = '';
-        }
     } else {
-        updateDomainMode();
         afraidCountInput.value = '';
     }
     renderSelectedDomainSummary(selected);
@@ -598,19 +573,18 @@ function syncSelectedTldDomains() {
 
 function renderSelectedDomainSummary(selected) {
     let summary = document.getElementById('selectedDomainSummary');
-    const select = document.getElementById('domainSelect');
     if (!summary) {
         summary = document.createElement('div');
         summary.id = 'selectedDomainSummary';
         summary.className = 'form-text';
-        select.parentElement.appendChild(summary);
+        document.getElementById('tldDomainList').parentElement.appendChild(summary);
     }
     if (!selected.length) {
-        summary.textContent = 'No TLD list domains selected. Manual domain or rotation will be used.';
+        summary.textContent = 'No domains selected. The process will rotate through all available domains.';
     } else if (selected.length === 1) {
-        summary.textContent = `Using selected TLD domain: ${selected[0]}`;
+        summary.textContent = `Using selected domain: ${selected[0]}`;
     } else {
-        summary.textContent = `Using ${selected.length} selected TLD domains. Manual dropdown is ignored.`;
+        summary.textContent = `Using ${selected.length} selected domains with automatic rotation.`;
     }
 }
 
@@ -651,24 +625,6 @@ function getRotatedCloudflareDomain() {
     const value = pool[index % pool.length];
     window.afraidCloudflareIndex = index + 1;
     return value;
-}
-
-function updateDomainMode() {
-    const rotate = document.getElementById('rotateDomainToggle').checked;
-    const select = document.getElementById('domainSelect');
-    const badge = document.getElementById('rotationModeBadge');
-    const selectedCount = document.querySelectorAll('.tld-domain-check:checked').length;
-    select.disabled = rotate || selectedCount > 1;
-    select.required = !rotate && selectedCount === 0;
-    if (selectedCount > 1) {
-        badge.textContent = `${selectedCount} Selected`;
-        badge.className = 'badge bg-primary ms-2';
-    } else {
-        badge.textContent = rotate ? 'Rotation ON' : 'Manual ON';
-        badge.className = rotate ? 'badge bg-success ms-2' : 'badge bg-primary ms-2';
-    }
-    select.classList.toggle('border-success', rotate);
-    select.classList.toggle('border-primary', !rotate);
 }
 
 function updateCloudflareCountState() {
@@ -750,33 +706,11 @@ async function deleteSelectedSubdomains() {
     loadExistingSubdomains();
 }
 
-async function deleteAllSubdomains() {
-    const checks = getSubdomainChecks();
-    if (checks.length) {
-        checks.forEach(check => {
-            check.checked = true;
-        });
-        updateSubdomainSelectAllState();
-    }
-    if (!confirm('Delete ALL loaded FreeDNS subdomains in this account?')) return;
-    const delete_values = getSubdomainChecks().map(el => el.value);
-    const res = await fetch('/api/afraid/subdomains/delete', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(delete_values.length ? {delete_values} : {delete_all: true})
-    });
-    const data = await parseJsonResponse(res);
-    alert(data.message || `Deleted ${data.deleted || 0}`);
-    loadExistingSubdomains();
-}
-
 async function startProcess() {
     const btn = document.getElementById('btnStartProcess');
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Running...';
     try {
-        const rotate = document.getElementById('rotateDomainToggle').checked;
-        const selectedDomain = document.getElementById('domainSelect').value;
         const selectedDomains = [...document.querySelectorAll('.tld-domain-check:checked')].map(el => el.value);
         const selectedDestination = document.getElementById('destinationInput').value.trim() || document.getElementById('cloudflareSelect').value;
         const destinations = selectedDestination ? [selectedDestination] : [];
@@ -791,11 +725,6 @@ async function startProcess() {
         if (selectedDomains.length) {
             payload.base_domains = selectedDomains;
             payload.afraid_count = selectedDomains.length;
-        } else if (!rotate) {
-            if (selectedDomain) {
-                payload.base_domain = selectedDomain;
-                payload.afraid_count = 1;
-            }
         }
         const res = await fetch('/api/afraid/create-batch', {
             method: 'POST',

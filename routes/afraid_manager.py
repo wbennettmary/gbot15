@@ -1,6 +1,6 @@
 import logging
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, session, render_template, redirect, url_for
 from functools import wraps
 from faker import Faker
@@ -32,15 +32,14 @@ def get_service():
         return None, svc.auth_error or "Afraid cookies are expired or invalid. Please re-import your browser cookies."
     return svc, None
 
-def month_start():
-    now = datetime.utcnow()
-    return datetime(now.year, now.month, 1)
+def used_cutoff():
+    return datetime.utcnow() - timedelta(days=30)
 
 def available_domain_query():
     return AfraidDomain.query.filter(
         AfraidDomain.domain_id.isnot(None),
         AfraidDomain.registry_status == 'public',
-        or_(AfraidDomain.last_used_at.is_(None), AfraidDomain.last_used_at < month_start())
+        or_(AfraidDomain.last_used_at.is_(None), AfraidDomain.last_used_at < used_cutoff())
     )
 
 @afraid_manager.route('/afraid', methods=['GET'])
@@ -136,7 +135,7 @@ def get_domains():
             'tld': d.tld,
             'source': d.source,
             'rotation_count': d.rotation_count or 0,
-            'used_this_month': bool(d.last_used_at and d.last_used_at >= month_start()),
+            'used_this_month': bool(d.last_used_at and d.last_used_at >= used_cutoff()),
             'registry_status': d.registry_status,
             'registry_owner': d.registry_owner,
             'hosts_in_use': d.hosts_in_use,
@@ -165,7 +164,7 @@ def get_domain_options():
             'domain_name': d.domain_name,
             'domain_id': d.domain_id,
             'tld': d.tld,
-            'used_this_month': bool(d.last_used_at and d.last_used_at >= month_start()),
+            'used_this_month': bool(d.last_used_at and d.last_used_at >= used_cutoff()),
             'hosts_in_use': d.hosts_in_use,
             'registry_created_on': d.registry_created_on
         } for d in domains]
@@ -309,7 +308,7 @@ def get_tld_groups():
     ).group_by(AfraidDomain.tld).order_by(AfraidDomain.tld.asc()).all()
     used_rows = db.session.query(AfraidDomain.tld, func.count(AfraidDomain.id)).filter(
         AfraidDomain.tld.isnot(None),
-        AfraidDomain.last_used_at >= month_start(),
+        AfraidDomain.last_used_at >= used_cutoff(),
         AfraidDomain.domain_id.isnot(None),
         AfraidDomain.registry_status == 'public'
     ).group_by(AfraidDomain.tld).all()
@@ -489,8 +488,8 @@ def create_batch_subdomains():
             domain_record = AfraidDomain.query.filter_by(domain_name=selected_domain).first()
             if not domain_record:
                 return jsonify({'success': False, 'error': f"FreeDNS domain '{selected_domain}' is not cached. Fetch Registry first."}), 404
-            if domain_record.last_used_at and domain_record.last_used_at >= month_start():
-                return jsonify({'success': False, 'error': f"FreeDNS domain '{selected_domain}' is already marked used for this month."}), 400
+            if domain_record.last_used_at and domain_record.last_used_at >= used_cutoff():
+                return jsonify({'success': False, 'error': f"FreeDNS domain '{selected_domain}' is already marked used. Reactivate it first or wait 30 days."}), 400
             if domain_record.registry_status != 'public' or not domain_record.domain_id:
                 return jsonify({'success': False, 'error': f"FreeDNS domain '{selected_domain}' is not a usable public registry domain."}), 400
             afraid_domains.append(domain_record)
