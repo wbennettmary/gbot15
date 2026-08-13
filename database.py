@@ -358,3 +358,26 @@ class AfraidDomain(db.Model):
     registry_age_text = db.Column(db.String(255), nullable=True)
     registry_created_on = db.Column(db.String(50), nullable=True)
     created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+
+class AfraidResultList(db.Model):
+    """Lists created by the Afraid subdomain process."""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(255), unique=True, nullable=False)
+    created_by = db.Column(db.String(255), nullable=True)
+    raw_results = db.Column(db.Text, nullable=False)
+    results_json = db.Column(db.Text, nullable=True)
+    created_count = db.Column(db.Integer, default=0)
+    failed_count = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'created_by': self.created_by,
+            'raw_results': self.raw_results,
+            'results_json': self.results_json,
+            'created_count': self.created_count or 0,
+            'failed_count': self.failed_count or 0,
+            'created_at': self.created_at.isoformat() + 'Z' if self.created_at else None
+        }

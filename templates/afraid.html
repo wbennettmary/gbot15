@@ -5,9 +5,29 @@
     <h2 class="mb-1">Afraid (FreeDNS) Management</h2>
     <p class="text-muted mb-4">Automate CNAME subdomain creation on FreeDNS using your browser session cookies.</p>
 
-    <div class="row">
+    <ul class="nav nav-tabs mb-4" id="afraidTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="cookies-tab" data-bs-toggle="tab" data-bs-target="#cookiesPane" type="button" role="tab">
+                <i class="fas fa-cookie-bite me-1"></i> Session Cookies
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="process-tab" data-bs-toggle="tab" data-bs-target="#processPane" type="button" role="tab">
+                <i class="fas fa-play me-1"></i> Process
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="lists-tab" data-bs-toggle="tab" data-bs-target="#listsPane" type="button" role="tab">
+                <i class="fas fa-list-check me-1"></i> List Management
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="afraidTabContent">
+        <div class="tab-pane fade show active" id="cookiesPane" role="tabpanel" aria-labelledby="cookies-tab">
+            <div class="row">
         <!-- Cookie Configuration Card -->
-        <div class="col-md-5 mb-4">
+        <div class="col-lg-7 mb-4">
             <div class="card h-100">
                 <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                     <h5 class="card-title mb-0"><i class="fas fa-cookie-bite me-2"></i>Session Cookies</h5>
@@ -40,9 +60,14 @@
                 </div>
             </div>
         </div>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="processPane" role="tabpanel" aria-labelledby="process-tab">
+            <div class="row">
 
         <!-- Subdomain Generator Card -->
-        <div class="col-md-7 mb-4">
+        <div class="col-12 mb-4">
             <div class="card h-100">
                 <div class="card-header bg-success text-white">
                     <h5 class="card-title mb-0"><i class="fas fa-plus-circle me-2"></i>Create CNAME Subdomain</h5>
@@ -182,6 +207,24 @@
             <div id="batchResultList" class="small text-muted">No run yet.</div>
         </div>
     </div>
+        </div>
+
+        <div class="tab-pane fade" id="listsPane" role="tabpanel" aria-labelledby="lists-tab">
+            <div class="card mb-4">
+                <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0"><i class="fas fa-list-check me-2"></i>Afraid Saved Lists</h5>
+                    <button class="btn btn-sm btn-light" id="btnRefreshAfraidLists">
+                        <i class="fas fa-sync me-1"></i> Refresh
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div id="afraidListsGrid" class="row g-3">
+                        <div class="col-12 text-center text-muted py-4">Loading saved Afraid lists...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -190,6 +233,7 @@ document.addEventListener('DOMContentLoaded', function() {
     loadDomains();
     loadTlds();
     loadCloudflareDomains();
+    loadAfraidLists();
 
     document.getElementById('tldSelect').addEventListener('change', () => {
         window.afraidDomainPage = 1;
@@ -203,6 +247,8 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('btnDeleteSelectedSubdomains').addEventListener('click', deleteSelectedSubdomains);
     document.getElementById('btnDeleteAllSubdomains').addEventListener('click', deleteAllSubdomains);
     document.getElementById('btnStartProcess').addEventListener('click', startProcess);
+    document.getElementById('btnRefreshAfraidLists').addEventListener('click', loadAfraidLists);
+    document.getElementById('lists-tab').addEventListener('shown.bs.tab', loadAfraidLists);
     document.getElementById('rotateDomainToggle').addEventListener('change', updateDomainMode);
     document.getElementById('cloudflareSelect').addEventListener('change', (e) => {
         document.getElementById('destinationInput').value = e.target.value;
@@ -604,6 +650,7 @@ async function startProcess() {
         });
         const data = await parseJsonResponse(res);
         renderBatchResults(data);
+        loadAfraidLists();
         loadDomains();
         loadTlds();
     } catch (err) {
@@ -620,6 +667,58 @@ function renderBatchResults(data) {
     const rows = (data.results || []).map(r => `<tr><td>${r.success ? 'OK' : 'FAIL'}</td><td>${escapeHtml(r.subdomain)}</td><td>${escapeHtml(r.destination)}</td><td>${escapeHtml(r.message)}</td></tr>`).join('');
     el.innerHTML = `${listName}<div class="mb-2">Created ${data.created || 0}, failed ${data.failed || 0}</div>
         <table class="table table-sm"><thead><tr><th>Status</th><th>Subdomain</th><th>Destination</th><th>Message</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+async function loadAfraidLists() {
+    const grid = document.getElementById('afraidListsGrid');
+    grid.innerHTML = '<div class="col-12 text-center text-muted py-4">Loading saved Afraid lists...</div>';
+    try {
+        const res = await fetch('/api/afraid/lists');
+        const data = await parseJsonResponse(res);
+        if (!data.success || !data.lists.length) {
+            grid.innerHTML = '<div class="col-12 text-center text-muted py-4">No Afraid lists saved yet.</div>';
+            return;
+        }
+        grid.innerHTML = '';
+        data.lists.forEach(lst => {
+            const createdAt = lst.created_at ? new Date(lst.created_at).toLocaleString() : 'n/a';
+            const col = document.createElement('div');
+            col.className = 'col-lg-6';
+            col.innerHTML = `
+                <div class="card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-start">
+                        <div>
+                            <h6 class="mb-1">${escapeHtml(lst.name)}</h6>
+                            <div class="text-muted small">${escapeHtml(createdAt)} | owner: ${escapeHtml(lst.created_by || 'user')}</div>
+                        </div>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteAfraidList(${lst.id})">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-flex gap-2 mb-2">
+                            <span class="badge bg-success">${lst.created_count || 0} created</span>
+                            <span class="badge bg-danger">${lst.failed_count || 0} failed</span>
+                        </div>
+                        <textarea class="form-control font-monospace small" rows="7" readonly>${escapeHtml(lst.raw_results || '')}</textarea>
+                    </div>
+                </div>`;
+            grid.appendChild(col);
+        });
+    } catch (err) {
+        grid.innerHTML = `<div class="col-12"><div class="alert alert-danger">${escapeHtml(err.message || 'Could not load Afraid lists')}</div></div>`;
+    }
+}
+
+async function deleteAfraidList(id) {
+    if (!confirm('Delete this Afraid saved list?')) return;
+    const res = await fetch(`/api/afraid/lists/${id}`, {method: 'DELETE'});
+    const data = await parseJsonResponse(res);
+    if (!data.success) {
+        alert(data.error || 'Could not delete list');
+        return;
+    }
+    loadAfraidLists();
 }
 
 async function deleteDomain(id) {

@@ -1,10 +1,11 @@
 import logging
-from datetime import datetime, timedelta
+import json
+from datetime import datetime
 from flask import Blueprint, request, jsonify, session, render_template, redirect, url_for
 from functools import wraps
 from faker import Faker
 from sqlalchemy import func, or_
-from database import db, AfraidConfig, AfraidDomain, WorkspaceList
+from database import db, AfraidConfig, AfraidDomain, AfraidResultList
 from services.afraid_dns_service import AfraidDNSService
 from services.cloudflare_dns_service import CloudflareDNSService
 
@@ -330,7 +331,7 @@ def create_afraid_result_list(results):
     username = (session.get('user') or 'user').split('@')[0].lower()
     date_part = datetime.utcnow().strftime('%d/%m')
     prefix = f"{username}_list_{date_part}"
-    existing = WorkspaceList.query.filter(WorkspaceList.name.like(f"{prefix}-%")).count()
+    existing = AfraidResultList.query.filter(AfraidResultList.name.like(f"{prefix}-%")).count()
     name = f"{prefix}-{existing + 1}"
     lines = []
     for item in results:
@@ -338,14 +339,33 @@ def create_afraid_result_list(results):
             lines.append(f"{item.get('subdomain')},{item.get('destination')}")
     if not lines:
         return None
-    lst = WorkspaceList(
+    lst = AfraidResultList(
         name=name,
-        raw_accounts="\n".join(lines),
-        lifetime_expires_at=datetime.utcnow() + timedelta(days=14)
+        created_by=username,
+        raw_results="\n".join(lines),
+        results_json=json.dumps(results),
+        created_count=sum(1 for item in results if item.get('success')),
+        failed_count=sum(1 for item in results if not item.get('success'))
     )
     db.session.add(lst)
     db.session.commit()
     return lst
+
+@afraid_manager.route('/api/afraid/lists', methods=['GET'])
+@login_required
+def get_afraid_lists():
+    lists = AfraidResultList.query.order_by(AfraidResultList.created_at.desc()).all()
+    return jsonify({'success': True, 'lists': [lst.to_dict() for lst in lists]})
+
+@afraid_manager.route('/api/afraid/lists/<int:list_id>', methods=['DELETE'])
+@login_required
+def delete_afraid_list(list_id):
+    lst = AfraidResultList.query.get(list_id)
+    if not lst:
+        return jsonify({'success': False, 'error': 'Afraid list not found'}), 404
+    db.session.delete(lst)
+    db.session.commit()
+    return jsonify({'success': True})
 
 def generated_label():
     return ''.join(fake.word() for _ in range(3)).lower()
