@@ -145,19 +145,19 @@ class AfraidDNSService:
         return "FreeDNS returned HTTP 200, but the account domain controls were not found."
 
     def get_domains_with_ids(self):
-        """Fetch domains owned by this FreeDNS account and their internal IDs."""
+        """Fetch available add-subdomain domains and their internal IDs."""
         self.last_error = None
         if not self.logged_in:
             self.last_error = "get_domains_with_ids called but not authenticated."
             logger.error(self.last_error)
             return {}
         try:
-            url = "https://freedns.afraid.org/domain/"
+            url = "https://freedns.afraid.org/subdomain/edit.php"
             resp = self.session.get(url, allow_redirects=False, timeout=20)
 
             if resp.status_code in (301, 302, 303, 307, 308):
                 location = resp.headers.get("Location", "login page")
-                self.last_error = f"FreeDNS redirected {url} to {location}; the saved cookies cannot access the domains page."
+                self.last_error = f"FreeDNS redirected {url} to {location}; the saved cookies cannot access the add-subdomain form."
                 logger.error(self.last_error)
                 return {}
 
@@ -166,19 +166,9 @@ class AfraidDNSService:
                 logger.error(self.last_error)
                 return {}
             
-            domain_map = {}
-            for match in re.finditer(
-                r'href=["\']?/subdomain/edit\.php\?edit_domain_id=(\d+)["\']?[^>]*>([^<]+)</a>',
-                resp.text,
-                re.IGNORECASE
-            ):
-                domain_id, domain_name = match.groups()
-                clean_name = unescape(domain_name).strip().lower()
-                if clean_name and "." in clean_name:
-                    domain_map[clean_name] = domain_id
-
+            domain_map = self._parse_domain_select(resp.text)
             if domain_map:
-                logger.info(f"Found {len(domain_map)} owned domain(s): {list(domain_map.keys())}")
+                logger.info(f"Found {len(domain_map)} add-subdomain domain(s): {list(domain_map.keys())}")
             else:
                 self.last_error = self._describe_unexpected_page(resp.text, url)
                 logger.error(self.last_error)
@@ -188,6 +178,30 @@ class AfraidDNSService:
             self.last_error = f"Error fetching Afraid domains: {e}"
             logger.error(self.last_error)
             return {}
+
+    @staticmethod
+    def _parse_domain_select(html):
+        domain_map = {}
+        select_block = re.search(
+            r'<select[^>]*name=[\'"]?domain_id[\'"]?[^>]*>(.*?)</select>',
+            html,
+            re.IGNORECASE | re.DOTALL
+        )
+        if not select_block:
+            return domain_map
+
+        option_pattern = re.compile(
+            r'<option\b[^>]*value=[\'"]?(\d+)[\'"]?[^>]*>(.*?)</option>',
+            re.IGNORECASE | re.DOTALL
+        )
+        for value, label in option_pattern.findall(select_block.group(1)):
+            clean_name = re.sub(r'<[^>]+>', ' ', label)
+            clean_name = unescape(clean_name)
+            clean_name = re.sub(r'\([^)]*\)', ' ', clean_name)
+            clean_name = re.sub(r'\s+', ' ', clean_name).strip().lower()
+            if clean_name and "." in clean_name:
+                domain_map[clean_name] = value
+        return domain_map
 
     @staticmethod
     def _describe_unexpected_page(html, url):
