@@ -24,6 +24,9 @@ class AfraidDNSService:
 
     def _login(self):
         try:
+            # Get login page first to establish session cookies
+            self.session.get("https://freedns.afraid.org/zc.php?step=1", allow_redirects=True)
+
             login_url = "https://freedns.afraid.org/zc.php?step=2"
             payload = {
                 "username": self.username,
@@ -36,12 +39,19 @@ class AfraidDNSService:
             }
             resp = self.session.post(login_url, data=payload, allow_redirects=False)
             
-            # Afraid redirects on successful login
-            if resp.status_code == 302 or "Logout" in resp.text or "Welcome" in resp.text or "freedns.afraid.org/logout" in resp.text:
+            # FreeDNS returns HTTP 302 redirect ONLY on successful login.
+            # A 200 with "Problems!" means bad credentials.
+            if resp.status_code == 302:
                 self.logged_in = True
                 logger.info("Successfully logged in to Afraid (FreeDNS).")
             else:
-                logger.error(f"Failed to log in to Afraid. Status: {resp.status_code}, Response HTML snippet: {resp.text[:500]}")
+                # Try to extract the actual error message from their "Problems!" page
+                error_match = re.search(r'<td[^>]*bgcolor="#eeeeee"[^>]*>(.*?)</td>', resp.text, re.IGNORECASE | re.DOTALL)
+                if error_match:
+                    msg = re.sub(r'<[^>]+>', '', error_match.group(1)).strip()
+                    logger.error(f"FreeDNS login rejected: {msg}")
+                else:
+                    logger.error(f"Failed to log in to Afraid. Status: {resp.status_code}")
         except Exception as e:
             logger.error(f"Error logging into Afraid: {e}")
 
@@ -51,7 +61,7 @@ class AfraidDNSService:
             logger.error("get_domains_with_ids called but not logged in.")
             return {}
         try:
-            resp = self.session.get("https://freedns.afraid.org/subdomain/edit.php")
+            resp = self.session.get("https://freedns.afraid.org/subdomain/add.php")
             
             domain_map = {}
             # Match options in domain_id select, handle single/double quotes or no quotes
