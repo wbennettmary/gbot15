@@ -148,7 +148,7 @@ class AfraidDNSService:
             logger.error("get_domains_with_ids called but not authenticated.")
             return {}
         try:
-            resp = self.session.get("https://freedns.afraid.org/subdomain/", timeout=20)
+            resp = self.session.get("https://freedns.afraid.org/subdomain/add.php", timeout=20)
             
             domain_map = {}
             select_block = re.search(
@@ -157,19 +157,27 @@ class AfraidDNSService:
             )
             
             if select_block:
-                pattern = r'<option\s+[^>]*value=[\'"]?(\d+)[\'"]?[^>]*>([^<]+)</option>'
+                pattern = r'<option\b[^>]*value=[\'"]?(\d+)[\'"]?[^>]*>([^<]+)</option>'
                 options = re.findall(pattern, select_block.group(1), re.IGNORECASE)
                 for value, name in options:
                     clean_name = name.split()[0].strip()
-                    domain_map[clean_name] = value
+                    if clean_name:
+                        domain_map[clean_name.lower()] = value
                 logger.info(f"Found {len(domain_map)} domain(s): {list(domain_map.keys())}")
             else:
-                logger.error(f"Could not find domain_id select. HTML snippet: {resp.text[:400]}")
+                logger.error(f"Could not find domain_id select on add.php. HTML snippet: {resp.text[:400]}")
                 
             return domain_map
         except Exception as e:
             logger.error(f"Error fetching Afraid domains: {e}")
             return {}
+
+    def get_domain_id(self, domain_name):
+        """Resolve a FreeDNS domain name to its internal domain_id."""
+        domain_name = (domain_name or "").strip().lower()
+        if not domain_name:
+            return None
+        return self.get_domains_with_ids().get(domain_name)
 
     def add_cname(self, subdomain, domain_id, destination, ttl=300):
         if not self.logged_in:

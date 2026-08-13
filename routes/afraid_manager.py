@@ -156,10 +156,13 @@ def create_subdomain():
         return jsonify({'success': False, 'error': error}), 401
 
     domain_map = svc.get_domains_with_ids()
-    if base_domain not in domain_map:
-        return jsonify({'success': False, 'error': f"Domain '{base_domain}' not found in your FreeDNS account. Use 'Fetch from FreeDNS' first."}), 404
+    domain_id = domain_map.get(base_domain.lower())
+    if not domain_id:
+        return jsonify({
+            'success': False,
+            'error': f"Domain '{base_domain}' was not found in the FreeDNS add-subdomain form. Check the spelling and confirm the domain is available in that FreeDNS account."
+        }), 404
 
-    domain_id = domain_map[base_domain]
     subdomain = ''.join(random.choices(string.ascii_lowercase, k=15))
 
     success, message = svc.add_cname(subdomain, domain_id, destination, ttl)
