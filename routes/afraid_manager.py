@@ -357,6 +357,52 @@ def get_afraid_lists():
     lists = AfraidResultList.query.order_by(AfraidResultList.created_at.desc()).all()
     return jsonify({'success': True, 'lists': [lst.to_dict() for lst in lists]})
 
+@afraid_manager.route('/api/afraid/lists', methods=['POST'])
+@login_required
+def create_manual_afraid_list():
+    data = request.get_json(silent=True) or {}
+    name = data.get('name', '').strip()
+    raw_results = data.get('raw_results', '').strip()
+    username = (session.get('user') or 'user').split('@')[0].lower()
+    if not name or not raw_results:
+        return jsonify({'success': False, 'error': 'List name and content are required'}), 400
+    if AfraidResultList.query.filter_by(name=name).first():
+        return jsonify({'success': False, 'error': 'A list with this name already exists'}), 400
+    lines = [line for line in raw_results.splitlines() if line.strip()]
+    lst = AfraidResultList(
+        name=name,
+        created_by=username,
+        raw_results="\n".join(lines),
+        created_count=len(lines),
+        failed_count=0
+    )
+    db.session.add(lst)
+    db.session.commit()
+    return jsonify({'success': True, 'message': 'Afraid list created', 'list': lst.to_dict()})
+
+@afraid_manager.route('/api/afraid/lists/<int:list_id>', methods=['PUT'])
+@login_required
+def update_afraid_list(list_id):
+    data = request.get_json(silent=True) or {}
+    lst = AfraidResultList.query.get(list_id)
+    if not lst:
+        return jsonify({'success': False, 'error': 'Afraid list not found'}), 404
+    name = data.get('name', '').strip()
+    raw_results = data.get('raw_results', '').strip()
+    if not name or not raw_results:
+        return jsonify({'success': False, 'error': 'List name and content are required'}), 400
+    duplicate = AfraidResultList.query.filter(AfraidResultList.name == name, AfraidResultList.id != list_id).first()
+    if duplicate:
+        return jsonify({'success': False, 'error': 'A list with this name already exists'}), 400
+    lines = [line for line in raw_results.splitlines() if line.strip()]
+    lst.name = name
+    lst.raw_results = "\n".join(lines)
+    lst.created_count = len(lines)
+    lst.failed_count = 0
+    lst.results_json = None
+    db.session.commit()
+    return jsonify({'success': True, 'message': 'Afraid list updated', 'list': lst.to_dict()})
+
 @afraid_manager.route('/api/afraid/lists/<int:list_id>', methods=['DELETE'])
 @login_required
 def delete_afraid_list(list_id):

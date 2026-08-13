@@ -211,13 +211,35 @@
 
         <div class="tab-pane fade" id="listsPane" role="tabpanel" aria-labelledby="lists-tab">
             <div class="card mb-4">
-                <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center">
                     <h5 class="card-title mb-0"><i class="fas fa-list-check me-2"></i>Afraid Saved Lists</h5>
-                    <button class="btn btn-sm btn-light" id="btnRefreshAfraidLists">
+                    <button class="btn btn-sm btn-outline-secondary" id="btnRefreshAfraidLists">
                         <i class="fas fa-sync me-1"></i> Refresh
                     </button>
                 </div>
                 <div class="card-body">
+                    <form id="afraidListForm" class="border rounded p-3 mb-4 bg-light">
+                        <input type="hidden" id="afraidListId">
+                        <div class="row">
+                            <div class="col-lg-4 mb-3">
+                                <label for="afraidListName" class="form-label fw-semibold">List Name</label>
+                                <input type="text" class="form-control" id="afraidListName" placeholder="imad_list_13/08-1">
+                            </div>
+                            <div class="col-lg-8 mb-3">
+                                <label for="afraidListRaw" class="form-label fw-semibold">List Content</label>
+                                <textarea class="form-control font-monospace" id="afraidListRaw" rows="5" placeholder="subdomain.domain.com,destination.com"></textarea>
+                                <div class="form-text" id="afraidListCount">0 lines</div>
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary" id="btnSaveAfraidList">
+                                <i class="fas fa-save me-1"></i> Create List
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" id="btnCancelAfraidListEdit" style="display:none">
+                                Cancel Edit
+                            </button>
+                        </div>
+                    </form>
                     <div id="afraidListsGrid" class="row g-3">
                         <div class="col-12 text-center text-muted py-4">Loading saved Afraid lists...</div>
                     </div>
@@ -249,6 +271,9 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('btnStartProcess').addEventListener('click', startProcess);
     document.getElementById('btnRefreshAfraidLists').addEventListener('click', loadAfraidLists);
     document.getElementById('lists-tab').addEventListener('shown.bs.tab', loadAfraidLists);
+    document.getElementById('afraidListForm').addEventListener('submit', saveManualAfraidList);
+    document.getElementById('btnCancelAfraidListEdit').addEventListener('click', resetAfraidListForm);
+    document.getElementById('afraidListRaw').addEventListener('input', updateAfraidListCount);
     document.getElementById('rotateDomainToggle').addEventListener('change', updateDomainMode);
     document.getElementById('cloudflareSelect').addEventListener('change', (e) => {
         document.getElementById('destinationInput').value = e.target.value;
@@ -634,11 +659,11 @@ async function startProcess() {
             destinations,
             ttl: document.getElementById('ttlInput').value
         };
-        if (!rotate) {
-            if (selectedDomains.length) {
-                payload.base_domains = selectedDomains;
-                payload.afraid_count = selectedDomains.length;
-            } else if (selectedDomain) {
+        if (selectedDomains.length) {
+            payload.base_domains = selectedDomains;
+            payload.afraid_count = selectedDomains.length;
+        } else if (!rotate) {
+            if (selectedDomain) {
                 payload.base_domain = selectedDomain;
                 payload.afraid_count = 1;
             }
@@ -676,9 +701,11 @@ async function loadAfraidLists() {
         const res = await fetch('/api/afraid/lists');
         const data = await parseJsonResponse(res);
         if (!data.success || !data.lists.length) {
+            window.afraidLists = [];
             grid.innerHTML = '<div class="col-12 text-center text-muted py-4">No Afraid lists saved yet.</div>';
             return;
         }
+        window.afraidLists = data.lists;
         grid.innerHTML = '';
         data.lists.forEach(lst => {
             const createdAt = lst.created_at ? new Date(lst.created_at).toLocaleString() : 'n/a';
@@ -686,14 +713,22 @@ async function loadAfraidLists() {
             col.className = 'col-lg-6';
             col.innerHTML = `
                 <div class="card h-100">
-                    <div class="card-header d-flex justify-content-between align-items-start">
+                    <div class="card-header bg-light d-flex justify-content-between align-items-start">
                         <div>
                             <h6 class="mb-1">${escapeHtml(lst.name)}</h6>
                             <div class="text-muted small">${escapeHtml(createdAt)} | owner: ${escapeHtml(lst.created_by || 'user')}</div>
                         </div>
-                        <button class="btn btn-sm btn-outline-danger" onclick="deleteAfraidList(${lst.id})">
-                            <i class="fas fa-trash"></i>
-                        </button>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-secondary" onclick="copyAfraidList(${lst.id})" title="Copy list">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                            <button class="btn btn-outline-primary" onclick="editAfraidList(${lst.id})" title="Edit list">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn btn-outline-danger" onclick="deleteAfraidList(${lst.id})" title="Delete list">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
                     </div>
                     <div class="card-body">
                         <div class="d-flex gap-2 mb-2">
@@ -708,6 +743,66 @@ async function loadAfraidLists() {
     } catch (err) {
         grid.innerHTML = `<div class="col-12"><div class="alert alert-danger">${escapeHtml(err.message || 'Could not load Afraid lists')}</div></div>`;
     }
+}
+
+async function saveManualAfraidList(e) {
+    e.preventDefault();
+    const id = document.getElementById('afraidListId').value;
+    const name = document.getElementById('afraidListName').value.trim();
+    const raw_results = document.getElementById('afraidListRaw').value.trim();
+    if (!name || !raw_results) {
+        alert('List name and content are required.');
+        return;
+    }
+    const url = id ? `/api/afraid/lists/${id}` : '/api/afraid/lists';
+    const method = id ? 'PUT' : 'POST';
+    const res = await fetch(url, {
+        method,
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name, raw_results})
+    });
+    const data = await parseJsonResponse(res);
+    if (!data.success) {
+        alert(data.error || 'Could not save list');
+        return;
+    }
+    resetAfraidListForm();
+    loadAfraidLists();
+}
+
+function editAfraidList(id) {
+    const list = (window.afraidLists || []).find(item => item.id === id);
+    if (!list) return;
+    document.getElementById('afraidListId').value = list.id;
+    document.getElementById('afraidListName').value = list.name;
+    document.getElementById('afraidListRaw').value = list.raw_results || '';
+    document.getElementById('btnSaveAfraidList').innerHTML = '<i class="fas fa-save me-1"></i> Update List';
+    document.getElementById('btnCancelAfraidListEdit').style.display = 'inline-block';
+    updateAfraidListCount();
+    document.getElementById('afraidListName').scrollIntoView({behavior: 'smooth', block: 'center'});
+}
+
+function resetAfraidListForm() {
+    document.getElementById('afraidListId').value = '';
+    document.getElementById('afraidListName').value = '';
+    document.getElementById('afraidListRaw').value = '';
+    document.getElementById('btnSaveAfraidList').innerHTML = '<i class="fas fa-save me-1"></i> Create List';
+    document.getElementById('btnCancelAfraidListEdit').style.display = 'none';
+    updateAfraidListCount();
+}
+
+function updateAfraidListCount() {
+    const text = document.getElementById('afraidListRaw').value;
+    const count = text.split('\n').filter(line => line.trim()).length;
+    document.getElementById('afraidListCount').textContent = `${count} line${count !== 1 ? 's' : ''}`;
+}
+
+function copyAfraidList(id) {
+    const list = (window.afraidLists || []).find(item => item.id === id);
+    if (!list) return;
+    navigator.clipboard.writeText(list.raw_results || '').then(() => {
+        alert('List copied');
+    }).catch(() => alert('Could not copy list'));
 }
 
 async function deleteAfraidList(id) {
