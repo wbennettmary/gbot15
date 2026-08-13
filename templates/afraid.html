@@ -193,13 +193,14 @@
             <h5 class="card-title mb-0"><i class="fas fa-trash me-2"></i>FreeDNS Quota Cleanup</h5>
             <div>
                 <button class="btn btn-sm btn-light" id="btnLoadSubdomains">Load Existing</button>
+                <button class="btn btn-sm btn-outline-dark" id="btnMarkAllSubdomains">Mark All</button>
                 <button class="btn btn-sm btn-danger" id="btnDeleteSelectedSubdomains">Delete Selected</button>
                 <button class="btn btn-sm btn-outline-danger" id="btnDeleteAllSubdomains">Delete All</button>
             </div>
         </div>
         <div class="card-body">
             <table class="table table-sm table-striped">
-                <thead><tr><th style="width:40px"></th><th>Subdomain</th><th>Type</th><th>Destination</th></tr></thead>
+                <thead><tr><th style="width:40px"><input type="checkbox" id="selectAllSubdomains"></th><th>Subdomain</th><th>Type</th><th>Destination</th></tr></thead>
                 <tbody id="subdomainsTableBody">
                     <tr><td colspan="4" class="text-center text-muted">Load existing records before cleanup.</td></tr>
                 </tbody>
@@ -274,6 +275,8 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('btnPrevDomainPage').addEventListener('click', () => changeDomainPage(-1));
     document.getElementById('btnNextDomainPage').addEventListener('click', () => changeDomainPage(1));
     document.getElementById('btnLoadSubdomains').addEventListener('click', loadExistingSubdomains);
+    document.getElementById('btnMarkAllSubdomains').addEventListener('click', markAllSubdomains);
+    document.getElementById('selectAllSubdomains').addEventListener('change', toggleAllSubdomains);
     document.getElementById('btnDeleteSelectedSubdomains').addEventListener('click', deleteSelectedSubdomains);
     document.getElementById('btnDeleteAllSubdomains').addEventListener('click', deleteAllSubdomains);
     document.getElementById('btnStartProcess').addEventListener('click', startProcess);
@@ -682,6 +685,7 @@ function updateCloudflareCountState() {
 
 async function loadExistingSubdomains() {
     const tbody = document.getElementById('subdomainsTableBody');
+    document.getElementById('selectAllSubdomains').checked = false;
     tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Loading...</td></tr>';
     const res = await fetch('/api/afraid/subdomains');
     const data = await parseJsonResponse(res);
@@ -697,8 +701,40 @@ async function loadExistingSubdomains() {
         const tr = document.createElement('tr');
         tr.innerHTML = `<td><input type="checkbox" class="subdomain-delete-check" value="${escapeHtml(r.delete_value)}"></td>
             <td>${escapeHtml(r.fqdn)}</td><td>${escapeHtml(r.type)}</td><td>${escapeHtml(r.destination)}</td>`;
+        tr.querySelector('input').addEventListener('change', updateSubdomainSelectAllState);
         tbody.appendChild(tr);
     });
+    updateSubdomainSelectAllState();
+}
+
+function getSubdomainChecks() {
+    return [...document.querySelectorAll('.subdomain-delete-check')];
+}
+
+function toggleAllSubdomains(e) {
+    getSubdomainChecks().forEach(check => {
+        check.checked = e.target.checked;
+    });
+}
+
+function markAllSubdomains() {
+    const checks = getSubdomainChecks();
+    if (!checks.length) {
+        alert('Load existing subdomains first.');
+        return;
+    }
+    checks.forEach(check => {
+        check.checked = true;
+    });
+    updateSubdomainSelectAllState();
+}
+
+function updateSubdomainSelectAllState() {
+    const checks = getSubdomainChecks();
+    const selectAll = document.getElementById('selectAllSubdomains');
+    const checked = checks.filter(check => check.checked).length;
+    selectAll.checked = checks.length > 0 && checked === checks.length;
+    selectAll.indeterminate = checked > 0 && checked < checks.length;
 }
 
 async function deleteSelectedSubdomains() {
@@ -715,11 +751,19 @@ async function deleteSelectedSubdomains() {
 }
 
 async function deleteAllSubdomains() {
-    if (!confirm('Delete ALL existing FreeDNS subdomains in this account?')) return;
+    const checks = getSubdomainChecks();
+    if (checks.length) {
+        checks.forEach(check => {
+            check.checked = true;
+        });
+        updateSubdomainSelectAllState();
+    }
+    if (!confirm('Delete ALL loaded FreeDNS subdomains in this account?')) return;
+    const delete_values = getSubdomainChecks().map(el => el.value);
     const res = await fetch('/api/afraid/subdomains/delete', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({delete_all: true})
+        body: JSON.stringify(delete_values.length ? {delete_values} : {delete_all: true})
     });
     const data = await parseJsonResponse(res);
     alert(data.message || `Deleted ${data.deleted || 0}`);
