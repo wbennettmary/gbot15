@@ -505,8 +505,7 @@ async function loadDomainOptions() {
         const params = new URLSearchParams({limit: 1000});
         if (tld) params.set('tld', tld);
         const res = await fetch('/api/afraid/domain-options?' + params.toString());
-        const data = await parseJsonResponse(res);
-        renderSelectedTldDomains(data.domains || []);
+        await parseJsonResponse(res);
     } catch (err) {
         console.error('Error loading domain options', err);
     }

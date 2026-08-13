@@ -194,11 +194,18 @@ def get_domain_options():
     query = AfraidDomain.query.filter(AfraidDomain.domain_id.isnot(None), AfraidDomain.registry_status == 'public') if include_used else available_domain_query()
     if tld:
         query = query.filter_by(tld=tld)
-    domains = query.order_by(
-        AfraidDomain.rotation_count.asc(),
-        AfraidDomain.last_used_at.asc(),
-        AfraidDomain.domain_name.asc()
-    ).limit(limit).all()
+    if include_used:
+        domains = query.order_by(
+            AfraidDomain.last_used_at.is_(None).asc(),
+            AfraidDomain.last_used_at.desc(),
+            AfraidDomain.domain_name.asc()
+        ).limit(limit).all()
+    else:
+        domains = query.order_by(
+            AfraidDomain.rotation_count.asc(),
+            AfraidDomain.last_used_at.asc(),
+            AfraidDomain.domain_name.asc()
+        ).limit(limit).all()
     return jsonify({
         'success': True,
         'domains': [{
