@@ -492,6 +492,7 @@ def create_batch_subdomains():
         return jsonify({'success': False, 'error': 'No Cloudflare destination domains available.'}), 400
 
     results = []
+    used_base_domains = set()
     for index in range(total_count):
         domain_record = afraid_domains[index % len(afraid_domains)]
         destination = destinations[index % len(destinations)]
@@ -508,6 +509,7 @@ def create_batch_subdomains():
         if success:
             domain_record.rotation_count = (domain_record.rotation_count or 0) + 1
             domain_record.last_used_at = datetime.utcnow()
+            used_base_domains.add(domain_record.domain_name)
     db.session.commit()
     lst = create_afraid_result_list(results)
     return jsonify({
@@ -515,6 +517,7 @@ def create_batch_subdomains():
         'results': results,
         'created': sum(1 for r in results if r['success']),
         'failed': sum(1 for r in results if not r['success']),
+        'used_base_domains': sorted(used_base_domains),
         'list': lst.to_dict() if lst else None
     })
 

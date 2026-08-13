@@ -517,30 +517,56 @@ async function loadSelectedTldDomains() {
 function renderSelectedTldDomains(domains) {
     const list = document.getElementById('tldDomainList');
     list.innerHTML = '';
+    const usedNow = new Set(window.afraidUsedBaseDomains || []);
     if (!domains || !domains.length) {
         list.innerHTML = '<div class="text-muted small">No available public domains for this TLD. Used domains return next month.</div>';
         return;
     }
     domains.forEach(item => {
+        const usedThisMonth = item.used_this_month || usedNow.has(item.domain_name);
         const row = document.createElement('label');
-        row.className = `d-flex justify-content-between align-items-center py-1 px-2 border-bottom small ${item.used_this_month ? 'text-muted bg-light' : 'bg-success bg-opacity-10'}`;
+        row.className = `d-flex justify-content-between align-items-center py-1 px-2 border-bottom small ${usedThisMonth ? 'text-muted bg-light' : 'bg-success bg-opacity-10'}`;
         row.style.cursor = 'pointer';
-        row.innerHTML = `<span><input type="checkbox" class="me-2 tld-domain-check" value="${escapeHtml(item.domain_name)}" ${item.used_this_month ? 'disabled' : ''}> ${escapeHtml(item.domain_name)}</span>
-            <span class="text-muted">hosts: ${item.hosts_in_use ?? 'n/a'} | ${item.registry_created_on || 'n/a'}</span>`;
+        row.innerHTML = `<span><input type="checkbox" class="me-2 tld-domain-check" value="${escapeHtml(item.domain_name)}" ${usedThisMonth ? 'disabled' : ''}> ${escapeHtml(item.domain_name)}</span>
+            <span class="text-muted">hosts: ${item.hosts_in_use ?? 'n/a'} | ${item.registry_created_on || 'n/a'} | ${usedThisMonth ? 'used' : 'available'}</span>`;
         row.querySelector('input').addEventListener('change', syncSelectedTldDomains);
         list.appendChild(row);
     });
+    syncSelectedTldDomains();
 }
 
 function syncSelectedTldDomains() {
     const selected = [...document.querySelectorAll('.tld-domain-check:checked')].map(el => el.value);
+    const select = document.getElementById('domainSelect');
     if (selected.length) {
         document.getElementById('rotateDomainToggle').checked = false;
         updateDomainMode();
-        const select = document.getElementById('domainSelect');
         if (selected.length === 1) {
             select.value = selected[0];
+        } else {
+            select.value = '';
         }
+    } else {
+        updateDomainMode();
+    }
+    renderSelectedDomainSummary(selected);
+}
+
+function renderSelectedDomainSummary(selected) {
+    let summary = document.getElementById('selectedDomainSummary');
+    const select = document.getElementById('domainSelect');
+    if (!summary) {
+        summary = document.createElement('div');
+        summary.id = 'selectedDomainSummary';
+        summary.className = 'form-text';
+        select.parentElement.appendChild(summary);
+    }
+    if (!selected.length) {
+        summary.textContent = 'No TLD list domains selected. Manual domain or rotation will be used.';
+    } else if (selected.length === 1) {
+        summary.textContent = `Using selected TLD domain: ${selected[0]}`;
+    } else {
+        summary.textContent = `Using ${selected.length} selected TLD domains. Manual dropdown is ignored.`;
     }
 }
 
@@ -587,10 +613,16 @@ function updateDomainMode() {
     const rotate = document.getElementById('rotateDomainToggle').checked;
     const select = document.getElementById('domainSelect');
     const badge = document.getElementById('rotationModeBadge');
-    select.disabled = rotate;
-    select.required = !rotate;
-    badge.textContent = rotate ? 'Rotation ON' : 'Manual ON';
-    badge.className = rotate ? 'badge bg-success ms-2' : 'badge bg-primary ms-2';
+    const selectedCount = document.querySelectorAll('.tld-domain-check:checked').length;
+    select.disabled = rotate || selectedCount > 1;
+    select.required = !rotate && selectedCount === 0;
+    if (selectedCount > 1) {
+        badge.textContent = `${selectedCount} Selected`;
+        badge.className = 'badge bg-primary ms-2';
+    } else {
+        badge.textContent = rotate ? 'Rotation ON' : 'Manual ON';
+        badge.className = rotate ? 'badge bg-success ms-2' : 'badge bg-primary ms-2';
+    }
     select.classList.toggle('border-success', rotate);
     select.classList.toggle('border-primary', !rotate);
 }
@@ -674,10 +706,12 @@ async function startProcess() {
             body: JSON.stringify(payload)
         });
         const data = await parseJsonResponse(res);
+        window.afraidUsedBaseDomains = data.used_base_domains || [];
         renderBatchResults(data);
         loadAfraidLists();
         loadDomains();
         loadTlds();
+        loadSelectedTldDomains();
     } catch (err) {
         showAlert('createAlert', escapeHtml(err.message || 'Process failed'), 'danger');
     } finally {
