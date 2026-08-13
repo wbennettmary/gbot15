@@ -337,8 +337,9 @@ class DigitalOceanExecution(db.Model):
 # Afraid (FreeDNS) Models
 class AfraidConfig(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(255), nullable=False)
-    password = db.Column(db.String(255), nullable=False)
+    username = db.Column(db.String(255), nullable=True)
+    password = db.Column(db.String(255), nullable=True)
+    cookies_str = db.Column(db.Text, nullable=True)  # Raw browser cookie string
     is_configured = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
     updated_at = db.Column(db.DateTime, default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())

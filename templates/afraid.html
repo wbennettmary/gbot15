@@ -2,64 +2,80 @@
 
 {% block content %}
 <div class="container mt-4">
-    <h2 class="mb-4">Afraid (FreeDNS) Management</h2>
+    <h2 class="mb-1">Afraid (FreeDNS) Management</h2>
+    <p class="text-muted mb-4">Automate CNAME subdomain creation on FreeDNS using your browser session cookies.</p>
 
     <div class="row">
-        <!-- Configuration Card -->
-        <div class="col-md-6 mb-4">
+        <!-- Cookie Configuration Card -->
+        <div class="col-md-5 mb-4">
             <div class="card h-100">
-                <div class="card-header bg-primary text-white">
-                    <h5 class="card-title mb-0">FreeDNS Configuration</h5>
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0"><i class="fas fa-cookie-bite me-2"></i>Session Cookies</h5>
+                    <button class="btn btn-sm btn-outline-light" id="btnTestCookies">Test</button>
                 </div>
                 <div class="card-body">
-                    <form id="configForm">
+                    <div class="alert alert-info py-2 small mb-3">
+                        <strong>How to get your cookies:</strong><br>
+                        1. Log in to <a href="https://freedns.afraid.org" target="_blank">freedns.afraid.org</a> in your browser<br>
+                        2. Press <kbd>F12</kbd> → Network tab → refresh page<br>
+                        3. Click any request to freedns.afraid.org<br>
+                        4. Find the <strong>Cookie</strong> header in Request Headers<br>
+                        5. Copy the entire value and paste it below
+                    </div>
+
+                    <div id="cookieStatus" class="mb-3" style="display:none"></div>
+
+                    <form id="cookieForm">
                         <div class="mb-3">
-                            <label for="afraidUsername" class="form-label">Username</label>
-                            <input type="text" class="form-control" id="afraidUsername" required>
+                            <label for="cookiesInput" class="form-label fw-semibold">Cookie String</label>
+                            <textarea class="form-control font-monospace" id="cookiesInput" rows="4"
+                                placeholder="dns_id=abc123; dns_cookie=xyz456; ..."></textarea>
+                            <div class="form-text">Paste the full Cookie header value here.</div>
                         </div>
-                        <div class="mb-3">
-                            <label for="afraidPassword" class="form-label">Password</label>
-                            <input type="password" class="form-control" id="afraidPassword" placeholder="Enter new password to change" autocomplete="new-password">
-                            <small class="text-muted" id="passwordHint" style="display:none">Password is saved. Leave blank to keep current password.</small>
-                        </div>
-                        <button type="submit" class="btn btn-primary">Save Configuration</button>
+                        <button type="submit" class="btn btn-primary w-100" id="btnSaveCookies">
+                            <i class="fas fa-save me-1"></i> Save & Verify Cookies
+                        </button>
                     </form>
                     <div id="configAlert" class="mt-3"></div>
                 </div>
             </div>
         </div>
 
-        <!-- Subdomain Generation Card -->
-        <div class="col-md-6 mb-4">
+        <!-- Subdomain Generator Card -->
+        <div class="col-md-7 mb-4">
             <div class="card h-100">
                 <div class="card-header bg-success text-white">
-                    <h5 class="card-title mb-0">Add a new subdomain (CNAME)</h5>
+                    <h5 class="card-title mb-0"><i class="fas fa-plus-circle me-2"></i>Create CNAME Subdomain</h5>
                 </div>
                 <div class="card-body">
                     <form id="createSubdomainForm">
-                        <div class="mb-3">
-                            <label class="form-label">Type</label>
-                            <input type="text" class="form-control" value="CNAME" readonly>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Type</label>
+                                <input type="text" class="form-control" value="CNAME" readonly>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Subdomain</label>
+                                <input type="text" class="form-control text-muted fst-italic" value="Auto-generated (15 chars)" readonly>
+                            </div>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Subdomain</label>
-                            <input type="text" class="form-control" value="(Will be generated automatically)" readonly>
-                        </div>
-                        <div class="mb-3">
-                            <label for="domainSelect" class="form-label">Domain</label>
+                            <label for="domainSelect" class="form-label fw-semibold">Domain (from FreeDNS account)</label>
                             <select class="form-select" id="domainSelect" required>
-                                <option value="">Loading domains...</option>
+                                <option value="">— Select a domain —</option>
                             </select>
                         </div>
                         <div class="mb-3">
-                            <label for="destinationInput" class="form-label">Destination (Cloudflare domain)</label>
+                            <label for="destinationInput" class="form-label fw-semibold">Destination (Cloudflare domain)</label>
                             <input type="text" class="form-control" id="destinationInput" placeholder="e.g. altomirevia.fun" required>
                         </div>
                         <div class="mb-3">
                             <label for="ttlInput" class="form-label">TTL (seconds)</label>
-                            <input type="number" class="form-control" id="ttlInput" value="300" required>
+                            <input type="number" class="form-control" id="ttlInput" value="300">
                         </div>
-                        <button type="submit" class="btn btn-success" id="btnCreateSubdomain">Create & Link Subdomain</button>
+                        <button type="submit" class="btn btn-success w-100" id="btnCreateSubdomain">
+                            <i class="fas fa-magic me-1"></i> Create & Link Subdomain
+                        </button>
                     </form>
                     <div id="createAlert" class="mt-3"></div>
                 </div>
@@ -67,29 +83,31 @@
         </div>
     </div>
 
-    <!-- Domains Management Card -->
+    <!-- Domains Management -->
     <div class="card mb-4">
         <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
-            <h5 class="card-title mb-0">Managed Afraid Domains</h5>
-            <button class="btn btn-sm btn-light" id="btnFetchDomains">Fetch from FreeDNS</button>
+            <h5 class="card-title mb-0"><i class="fas fa-list me-2"></i>Managed FreeDNS Domains</h5>
+            <button class="btn btn-sm btn-light" id="btnFetchDomains">
+                <i class="fas fa-sync me-1"></i> Fetch from FreeDNS
+            </button>
         </div>
         <div class="card-body">
             <form id="addDomainForm" class="mb-4">
                 <div class="input-group">
-                    <input type="text" class="form-control" id="newDomainInput" placeholder="Enter domain name (e.g. artitech.com)" required>
-                    <button class="btn btn-primary" type="submit">Add Domain Manually</button>
+                    <input type="text" class="form-control" id="newDomainInput" placeholder="Manually add domain (e.g. chickenkiller.com)">
+                    <button class="btn btn-primary" type="submit">Add Manually</button>
                 </div>
             </form>
-            
+
             <table class="table table-striped table-hover">
                 <thead>
                     <tr>
                         <th>Domain Name</th>
-                        <th>Actions</th>
+                        <th style="width:100px">Actions</th>
                     </tr>
                 </thead>
                 <tbody id="domainsTableBody">
-                    <tr><td colspan="2" class="text-center">Loading domains...</td></tr>
+                    <tr><td colspan="2" class="text-center text-muted">Loading...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -101,44 +119,92 @@ document.addEventListener('DOMContentLoaded', function() {
     loadConfig();
     loadDomains();
 
-    document.getElementById('configForm').addEventListener('submit', async (e) => {
+    // Save cookies
+    document.getElementById('cookieForm').addEventListener('submit', async (e) => {
         e.preventDefault();
-        const username = document.getElementById('afraidUsername').value;
-        const passwordField = document.getElementById('afraidPassword');
-        const password = passwordField.value;
-        
-        // If password field is blank and we already have a config, skip password update
-        // Send a special marker so the backend knows to keep the old password
-        const payload = { username };
-        if (password && password.trim() !== '') {
-            payload.password = password;
-        } else if (!passwordField.dataset.configured) {
-            showAlert('configAlert', 'Please enter a password', 'warning');
+        const btn = document.getElementById('btnSaveCookies');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Verifying...';
+
+        const cookies_str = document.getElementById('cookiesInput').value.trim();
+        if (!cookies_str) {
+            showAlert('configAlert', 'Please paste your cookie string first.', 'warning');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-save me-1"></i> Save & Verify Cookies';
             return;
         }
-        
+
         try {
             const res = await fetch('/api/afraid/config', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(payload)
+                body: JSON.stringify({cookies_str})
             });
             const data = await res.json();
-            showAlert('configAlert', data.success ? 'Configuration saved!' : (data.error || 'Error'), data.success ? 'success' : 'danger');
             if (data.success) {
-                passwordField.value = '';
-                passwordField.dataset.configured = 'true';
-                document.getElementById('passwordHint').style.display = 'block';
+                showAlert('configAlert', '<i class="fas fa-check-circle me-1"></i>' + (data.message || 'Cookies saved!'), 'success');
+                document.getElementById('cookiesInput').value = '';
+                loadConfig();
+            } else {
+                showAlert('configAlert', '<i class="fas fa-exclamation-circle me-1"></i>' + (data.error || 'Error'), 'danger');
             }
         } catch (err) {
-            showAlert('configAlert', 'Error saving configuration', 'danger');
+            showAlert('configAlert', 'Request failed', 'danger');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-save me-1"></i> Save & Verify Cookies';
         }
     });
 
+    // Test cookies
+    document.getElementById('btnTestCookies').addEventListener('click', async () => {
+        const btn = document.getElementById('btnTestCookies');
+        btn.disabled = true;
+        btn.innerHTML = 'Testing...';
+        try {
+            const res = await fetch('/api/afraid/config/test', {method: 'POST'});
+            const data = await res.json();
+            const el = document.getElementById('cookieStatus');
+            el.style.display = 'block';
+            el.innerHTML = `<div class="alert alert-${data.success ? 'success' : 'danger'} py-2 mb-0 small">
+                <i class="fas fa-${data.success ? 'check' : 'times'}-circle me-1"></i>
+                ${data.success ? data.message : data.error}
+            </div>`;
+        } catch (err) {
+            alert('Test failed');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = 'Test';
+        }
+    });
+
+    // Fetch domains from FreeDNS
+    document.getElementById('btnFetchDomains').addEventListener('click', async () => {
+        const btn = document.getElementById('btnFetchDomains');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Fetching...';
+        try {
+            const res = await fetch('/api/afraid/fetch-domains', {method: 'POST'});
+            const data = await res.json();
+            if (data.success) {
+                alert(`Done! Added ${data.added} new domain(s). Total in your FreeDNS account: ${data.total}.`);
+                loadDomains();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        } catch (err) {
+            alert('Request failed');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-sync me-1"></i> Fetch from FreeDNS';
+        }
+    });
+
+    // Add domain manually
     document.getElementById('addDomainForm').addEventListener('submit', async (e) => {
         e.preventDefault();
-        const domain_name = document.getElementById('newDomainInput').value;
-        
+        const domain_name = document.getElementById('newDomainInput').value.trim();
+        if (!domain_name) return;
         try {
             const res = await fetch('/api/afraid/domains', {
                 method: 'POST',
@@ -150,45 +216,24 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('newDomainInput').value = '';
                 loadDomains();
             } else {
-                alert('Error adding domain: ' + data.error);
+                alert('Error: ' + data.error);
             }
         } catch (err) {
             alert('Error adding domain');
         }
     });
 
-    document.getElementById('btnFetchDomains').addEventListener('click', async () => {
-        const btn = document.getElementById('btnFetchDomains');
-        btn.disabled = true;
-        btn.innerHTML = 'Fetching...';
-        
-        try {
-            const res = await fetch('/api/afraid/fetch-domains', {method: 'POST'});
-            const data = await res.json();
-            if (data.success) {
-                alert(`Successfully fetched and added ${data.added} domains from FreeDNS.`);
-                loadDomains();
-            } else {
-                alert('Error fetching domains: ' + data.error);
-            }
-        } catch (err) {
-            alert('Error fetching domains');
-        } finally {
-            btn.disabled = false;
-            btn.innerHTML = 'Fetch from FreeDNS';
-        }
-    });
-
+    // Create subdomain
     document.getElementById('createSubdomainForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         const btn = document.getElementById('btnCreateSubdomain');
         btn.disabled = true;
-        btn.innerHTML = 'Creating...';
-        
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Creating...';
+
         const base_domain = document.getElementById('domainSelect').value;
-        const destination = document.getElementById('destinationInput').value;
+        const destination = document.getElementById('destinationInput').value.trim();
         const ttl = document.getElementById('ttlInput').value;
-        
+
         try {
             const res = await fetch('/api/afraid/create-subdomain', {
                 method: 'POST',
@@ -197,15 +242,18 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             const data = await res.json();
             if (data.success) {
-                showAlert('createAlert', `Success! Subdomain created: ${data.subdomain}`, 'success');
+                showAlert('createAlert',
+                    `<i class="fas fa-check-circle me-1"></i><strong>Success!</strong> Subdomain created: <code>${data.subdomain}</code>`,
+                    'success');
+                document.getElementById('destinationInput').value = '';
             } else {
-                showAlert('createAlert', 'Error: ' + data.error, 'danger');
+                showAlert('createAlert', '<i class="fas fa-exclamation-circle me-1"></i>' + data.error, 'danger');
             }
         } catch (err) {
             showAlert('createAlert', 'Request failed', 'danger');
         } finally {
             btn.disabled = false;
-            btn.innerHTML = 'Create & Link Subdomain';
+            btn.innerHTML = '<i class="fas fa-magic me-1"></i> Create & Link Subdomain';
         }
     });
 });
@@ -214,15 +262,12 @@ async function loadConfig() {
     try {
         const res = await fetch('/api/afraid/config');
         const data = await res.json();
-        if (data.success) {
-            document.getElementById('afraidUsername').value = data.username || '';
-            const passwordField = document.getElementById('afraidPassword');
-            if (data.is_configured) {
-                // Don't pre-fill the password – just show the hint
-                passwordField.value = '';
-                passwordField.dataset.configured = 'true';
-                document.getElementById('passwordHint').style.display = 'block';
-            }
+        const statusEl = document.getElementById('cookieStatus');
+        if (data.has_cookies) {
+            statusEl.style.display = 'block';
+            statusEl.innerHTML = `<div class="alert alert-success py-2 mb-0 small">
+                <i class="fas fa-check-circle me-1"></i> Cookies saved: <code>${data.cookies_preview}</code>
+            </div>`;
         }
     } catch (err) {
         console.error('Error loading config', err);
@@ -235,28 +280,25 @@ async function loadDomains() {
         const data = await res.json();
         const tbody = document.getElementById('domainsTableBody');
         const select = document.getElementById('domainSelect');
-        
+
         tbody.innerHTML = '';
-        select.innerHTML = '<option value="">Select a domain...</option>';
-        
+        select.innerHTML = '<option value="">— Select a domain —</option>';
+
         if (data.success && data.domains.length > 0) {
             data.domains.forEach(d => {
-                // Add to table
                 const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td>${d.domain_name}</td>
-                    <td><button class="btn btn-sm btn-danger" onclick="deleteDomain(${d.id})">Delete</button></td>
-                `;
+                tr.innerHTML = `<td>${d.domain_name}</td>
+                    <td><button class="btn btn-sm btn-outline-danger" onclick="deleteDomain(${d.id})">
+                        <i class="fas fa-trash"></i></button></td>`;
                 tbody.appendChild(tr);
-                
-                // Add to select
+
                 const opt = document.createElement('option');
                 opt.value = d.domain_name;
                 opt.textContent = d.domain_name;
                 select.appendChild(opt);
             });
         } else {
-            tbody.innerHTML = '<tr><td colspan="2" class="text-center">No domains found</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="2" class="text-center text-muted">No domains yet. Click "Fetch from FreeDNS" or add manually.</td></tr>';
         }
     } catch (err) {
         console.error('Error loading domains', err);
@@ -264,26 +306,23 @@ async function loadDomains() {
 }
 
 async function deleteDomain(id) {
-    if (!confirm('Are you sure you want to delete this domain?')) return;
+    if (!confirm('Delete this domain?')) return;
     try {
         const res = await fetch(`/api/afraid/domains/${id}`, {method: 'DELETE'});
         const data = await res.json();
-        if (data.success) {
-            loadDomains();
-        } else {
-            alert('Error deleting domain: ' + data.error);
-        }
+        if (data.success) loadDomains();
+        else alert('Error: ' + data.error);
     } catch (err) {
         alert('Error deleting domain');
     }
 }
 
 function showAlert(elementId, message, type) {
-    const el = document.getElementById(elementId);
-    el.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show">
-        ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>`;
+    document.getElementById(elementId).innerHTML =
+        `<div class="alert alert-${type} alert-dismissible fade show">
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>`;
 }
 </script>
 {% endblock %}
