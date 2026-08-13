@@ -172,7 +172,7 @@ def create_subdomain():
         return jsonify({'success': False, 'error': error}), 401
 
     domain_map = svc.get_domains_with_ids()
-    domain_id = domain_map.get(base_domain.lower())
+    domain_id = domain_map.get(base_domain.lower()) or svc.get_public_registry_domain_id(base_domain)
     if not domain_id:
         available = ', '.join(sorted(domain_map.keys())[:10])
         details = f" Available FreeDNS domains: {available}." if available else f" {svc.last_error}" if svc.last_error else ""

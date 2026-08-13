@@ -2,6 +2,7 @@ import requests
 import re
 import logging
 from http.cookies import SimpleCookie
+from html import unescape
 
 logger = logging.getLogger(__name__)
 
@@ -144,19 +145,19 @@ class AfraidDNSService:
         return "FreeDNS returned HTTP 200, but the account domain controls were not found."
 
     def get_domains_with_ids(self):
-        """Fetch all available domains and their IDs from the subdomain management page."""
+        """Fetch domains owned by this FreeDNS account and their internal IDs."""
         self.last_error = None
         if not self.logged_in:
             self.last_error = "get_domains_with_ids called but not authenticated."
             logger.error(self.last_error)
             return {}
         try:
-            url = "https://freedns.afraid.org/subdomain/add.php"
+            url = "https://freedns.afraid.org/domain/"
             resp = self.session.get(url, allow_redirects=False, timeout=20)
 
             if resp.status_code in (301, 302, 303, 307, 308):
                 location = resp.headers.get("Location", "login page")
-                self.last_error = f"FreeDNS redirected {url} to {location}; the saved cookies cannot access the add-subdomain form."
+                self.last_error = f"FreeDNS redirected {url} to {location}; the saved cookies cannot access the domains page."
                 logger.error(self.last_error)
                 return {}
 
@@ -166,19 +167,18 @@ class AfraidDNSService:
                 return {}
             
             domain_map = {}
-            select_block = re.search(
-                r'<select[^>]*name=[\'"]?domain_id[\'"]?[^>]*>(.*?)</select>',
-                resp.text, re.IGNORECASE | re.DOTALL
-            )
-            
-            if select_block:
-                pattern = r'<option\b[^>]*value=[\'"]?(\d+)[\'"]?[^>]*>([^<]+)</option>'
-                options = re.findall(pattern, select_block.group(1), re.IGNORECASE)
-                for value, name in options:
-                    clean_name = name.split()[0].strip()
-                    if clean_name:
-                        domain_map[clean_name.lower()] = value
-                logger.info(f"Found {len(domain_map)} domain(s): {list(domain_map.keys())}")
+            for match in re.finditer(
+                r'href=["\']?/subdomain/edit\.php\?edit_domain_id=(\d+)["\']?[^>]*>([^<]+)</a>',
+                resp.text,
+                re.IGNORECASE
+            ):
+                domain_id, domain_name = match.groups()
+                clean_name = unescape(domain_name).strip().lower()
+                if clean_name and "." in clean_name:
+                    domain_map[clean_name] = domain_id
+
+            if domain_map:
+                logger.info(f"Found {len(domain_map)} owned domain(s): {list(domain_map.keys())}")
             else:
                 self.last_error = self._describe_unexpected_page(resp.text, url)
                 logger.error(self.last_error)
@@ -206,7 +206,56 @@ class AfraidDNSService:
         domain_name = (domain_name or "").strip().lower()
         if not domain_name:
             return None
-        return self.get_domains_with_ids().get(domain_name)
+
+        owned_domain_id = self.get_domains_with_ids().get(domain_name)
+        if owned_domain_id:
+            return owned_domain_id
+
+        return self.get_public_registry_domain_id(domain_name)
+
+    def get_public_registry_domain_id(self, domain_name):
+        """Resolve public registry domains such as chickenkiller.com to domain_id."""
+        self.last_error = None
+        domain_name = (domain_name or "").strip().lower()
+        if not domain_name:
+            return None
+
+        try:
+            url = "https://freedns.afraid.org/domain/registry/"
+            resp = self.session.get(url, allow_redirects=False, timeout=20)
+
+            if resp.status_code in (301, 302, 303, 307, 308):
+                location = resp.headers.get("Location", "login page")
+                self.last_error = f"FreeDNS redirected registry lookup to {location}; copy a fresh full Cookie request header from Network."
+                logger.error(self.last_error)
+                return None
+
+            if resp.status_code != 200:
+                self.last_error = f"FreeDNS returned HTTP {resp.status_code} while looking up '{domain_name}' in the registry."
+                logger.error(self.last_error)
+                return None
+
+            escaped_domain = re.escape(domain_name)
+            patterns = [
+                rf'href=["\']?/subdomain/edit\.php\?edit_domain_id=(\d+)["\']?[^>]*>\s*{escaped_domain}\s*</a>',
+                rf'<a[^>]+href=["\'][^"\']*edit_domain_id=(\d+)[^"\']*["\'][^>]*>\s*{escaped_domain}\s*</a>',
+            ]
+            for pattern in patterns:
+                match = re.search(pattern, resp.text, re.IGNORECASE)
+                if match:
+                    return match.group(1)
+
+            if re.search(rf'\b{escaped_domain}\b', resp.text, re.IGNORECASE):
+                self.last_error = f"FreeDNS registry found '{domain_name}', but it is not exposed as an attachable public domain."
+            else:
+                self.last_error = f"FreeDNS registry did not find '{domain_name}'. Check the spelling or choose a public FreeDNS registry domain."
+            logger.error(self.last_error)
+            return None
+
+        except Exception as e:
+            self.last_error = f"Error looking up '{domain_name}' in FreeDNS registry: {e}"
+            logger.error(self.last_error)
+            return None
 
     def add_cname(self, subdomain, domain_id, destination, ttl=300):
         if not self.logged_in:
