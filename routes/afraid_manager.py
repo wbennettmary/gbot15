@@ -218,6 +218,31 @@ def get_domain_options():
         } for d in domains]
     })
 
+@afraid_manager.route('/api/afraid/domain-search', methods=['GET'])
+@login_required
+def search_afraid_domain():
+    q = request.args.get('q', '').strip().lower()
+    if not q:
+        return jsonify({'success': False, 'error': 'Domain search is required'}), 400
+    domain = AfraidDomain.query.filter(
+        AfraidDomain.domain_id.isnot(None),
+        AfraidDomain.registry_status == 'public',
+        AfraidDomain.domain_name == q
+    ).first()
+    if not domain:
+        domain = AfraidDomain.query.filter(
+            AfraidDomain.domain_id.isnot(None),
+            AfraidDomain.registry_status == 'public',
+            AfraidDomain.domain_name.ilike(f"%{q}%")
+        ).order_by(AfraidDomain.domain_name.asc()).first()
+    if not domain:
+        return jsonify({'success': False, 'error': 'Domain not found in cached public FreeDNS registry'}), 404
+    return jsonify({'success': True, 'domain': {
+        'domain_name': domain.domain_name,
+        'tld': domain.tld,
+        'used_this_month': bool(domain.last_used_at and domain.last_used_at >= used_cutoff())
+    }})
+
 @afraid_manager.route('/api/afraid/domains', methods=['POST'])
 @login_required
 def add_domain():

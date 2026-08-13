@@ -95,9 +95,22 @@
                         </div>
                         <div class="mb-3">
                             <label for="tldSelect" class="form-label fw-semibold">FreeDNS TLD Group</label>
-                            <select class="form-select" id="tldSelect">
-                                <option value="">All TLDs</option>
-                            </select>
+                            <div class="row g-2">
+                                <div class="col-lg-5">
+                                    <select class="form-select" id="tldSelect">
+                                        <option value="">All TLDs</option>
+                                    </select>
+                                </div>
+                                <div class="col-lg-7">
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" id="domainSearchInput" placeholder="Search cached domain, e.g. 1000pizzas.com">
+                                        <button class="btn btn-outline-primary" type="button" id="btnSearchDomainGroup">
+                                            Search Group
+                                        </button>
+                                    </div>
+                                    <div class="form-text" id="domainSearchStatus">Search selects the matching TLD group and shows that domain below.</div>
+                                </div>
+                            </div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label fw-semibold">Domains In Selected TLD</label>
@@ -297,9 +310,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
     document.getElementById('tldSelect').addEventListener('change', () => {
         window.afraidDomainPage = 1;
+        window.afraidHighlightedDomain = '';
         loadDomains();
         loadDomainOptions();
         loadSelectedTldDomains();
+    });
+    document.getElementById('btnSearchDomainGroup').addEventListener('click', searchDomainGroup);
+    document.getElementById('domainSearchInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            searchDomainGroup();
+        }
     });
     document.getElementById('btnPrevDomainPage').addEventListener('click', () => changeDomainPage(-1));
     document.getElementById('btnNextDomainPage').addEventListener('click', () => changeDomainPage(1));
@@ -555,6 +576,38 @@ async function loadSelectedTldDomains() {
     }
 }
 
+async function searchDomainGroup() {
+    const input = document.getElementById('domainSearchInput');
+    const status = document.getElementById('domainSearchStatus');
+    const q = input.value.trim().toLowerCase();
+    if (!q) {
+        status.textContent = 'Type a domain to search.';
+        status.className = 'form-text text-danger';
+        return;
+    }
+    status.textContent = 'Searching cached registry...';
+    status.className = 'form-text text-muted';
+    try {
+        const res = await fetch('/api/afraid/domain-search?' + new URLSearchParams({q}).toString());
+        const data = await parseJsonResponse(res);
+        if (!data.success) {
+            status.textContent = data.error || 'Domain not found.';
+            status.className = 'form-text text-danger';
+            return;
+        }
+        window.afraidHighlightedDomain = data.domain.domain_name;
+        document.getElementById('tldSelect').value = data.domain.tld || '';
+        window.afraidDomainPage = 1;
+        status.textContent = `Found ${data.domain.domain_name} in .${data.domain.tld || ''}.`;
+        status.className = 'form-text text-success';
+        loadDomains();
+        loadSelectedTldDomains();
+    } catch (err) {
+        status.textContent = err.message || 'Search failed.';
+        status.className = 'form-text text-danger';
+    }
+}
+
 function renderSelectedTldDomains(domains) {
     const list = document.getElementById('tldDomainList');
     list.innerHTML = '';
@@ -566,7 +619,8 @@ function renderSelectedTldDomains(domains) {
     domains.forEach(item => {
         const usedThisMonth = item.used_this_month || usedNow.has(item.domain_name);
         const row = document.createElement('label');
-        row.className = `d-flex justify-content-between align-items-center py-1 px-2 border-bottom small ${usedThisMonth ? 'text-muted bg-light' : 'bg-success bg-opacity-10'}`;
+        const highlighted = window.afraidHighlightedDomain === item.domain_name;
+        row.className = `d-flex justify-content-between align-items-center py-1 px-2 border-bottom small ${usedThisMonth ? 'text-muted bg-light' : 'bg-success bg-opacity-10'} ${highlighted ? 'border border-primary bg-primary bg-opacity-10' : ''}`;
         row.style.cursor = 'pointer';
         const checkClass = usedThisMonth ? 'reactivate-domain-check' : 'tld-domain-check';
         row.innerHTML = `<span><input type="checkbox" class="me-2 ${checkClass}" value="${escapeHtml(item.domain_name)}"> ${escapeHtml(item.domain_name)}</span>
