@@ -38,6 +38,7 @@ def month_start():
 def available_domain_query():
     return AfraidDomain.query.filter(
         AfraidDomain.domain_id.isnot(None),
+        AfraidDomain.registry_status == 'public',
         or_(AfraidDomain.last_used_at.is_(None), AfraidDomain.last_used_at < month_start())
     )
 
@@ -116,9 +117,7 @@ def get_domains():
     tld = request.args.get('tld', '').strip().lower()
     page = max(1, int(request.args.get('page', 1)))
     per_page = min(25, max(1, int(request.args.get('per_page', 5))))
-    query = AfraidDomain.query.filter(
-        or_(AfraidDomain.registry_status.is_(None), AfraidDomain.registry_status == 'public')
-    )
+    query = AfraidDomain.query.filter(AfraidDomain.domain_id.isnot(None), AfraidDomain.registry_status == 'public')
     if tld:
         query = query.filter_by(tld=tld)
     total = query.count()
@@ -150,9 +149,8 @@ def get_domains():
 def get_domain_options():
     tld = request.args.get('tld', '').strip().lower()
     limit = min(5000, max(1, int(request.args.get('limit', 1000))))
-    query = available_domain_query().filter(
-        or_(AfraidDomain.registry_status.is_(None), AfraidDomain.registry_status == 'public')
-    )
+    include_used = request.args.get('include_used', '').lower() == 'true'
+    query = AfraidDomain.query.filter(AfraidDomain.domain_id.isnot(None), AfraidDomain.registry_status == 'public') if include_used else available_domain_query()
     if tld:
         query = query.filter_by(tld=tld)
     domains = query.order_by(
@@ -162,7 +160,14 @@ def get_domain_options():
     ).limit(limit).all()
     return jsonify({
         'success': True,
-        'domains': [{'domain_name': d.domain_name, 'domain_id': d.domain_id, 'tld': d.tld} for d in domains]
+        'domains': [{
+            'domain_name': d.domain_name,
+            'domain_id': d.domain_id,
+            'tld': d.tld,
+            'used_this_month': bool(d.last_used_at and d.last_used_at >= month_start()),
+            'hosts_in_use': d.hosts_in_use,
+            'registry_created_on': d.registry_created_on
+        } for d in domains]
     })
 
 @afraid_manager.route('/api/afraid/domains', methods=['POST'])
@@ -248,9 +253,9 @@ def fetch_domains_from_afraid():
             db.session.commit()
 
     AfraidDomain.query.filter(
-        AfraidDomain.source == 'registry',
-        AfraidDomain.registry_status.isnot(None),
-        AfraidDomain.registry_status != 'public'
+        AfraidDomain.source == 'registry'
+    ).filter(
+        or_(AfraidDomain.registry_status != 'public', AfraidDomain.registry_status.is_(None), AfraidDomain.domain_id.is_(None))
     ).delete(synchronize_session=False)
     db.session.commit()
 
@@ -275,12 +280,14 @@ def fetch_domains_from_afraid():
 def get_tld_groups():
     rows = db.session.query(AfraidDomain.tld, func.count(AfraidDomain.id)).filter(
         AfraidDomain.tld.isnot(None),
-        or_(AfraidDomain.registry_status.is_(None), AfraidDomain.registry_status == 'public')
+        AfraidDomain.domain_id.isnot(None),
+        AfraidDomain.registry_status == 'public'
     ).group_by(AfraidDomain.tld).order_by(AfraidDomain.tld.asc()).all()
     used_rows = db.session.query(AfraidDomain.tld, func.count(AfraidDomain.id)).filter(
         AfraidDomain.tld.isnot(None),
         AfraidDomain.last_used_at >= month_start(),
-        or_(AfraidDomain.registry_status.is_(None), AfraidDomain.registry_status == 'public')
+        AfraidDomain.domain_id.isnot(None),
+        AfraidDomain.registry_status == 'public'
     ).group_by(AfraidDomain.tld).all()
     used_by_tld = {tld: count for tld, count in used_rows}
     return jsonify({
@@ -304,9 +311,7 @@ def get_afraid_cloudflare_domains():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 def get_rotated_afraid_domain(tld):
-    query = available_domain_query().filter(
-        or_(AfraidDomain.registry_status.is_(None), AfraidDomain.registry_status == 'public')
-    )
+    query = available_domain_query()
     if tld:
         query = query.filter_by(tld=tld)
     return query.order_by(
@@ -316,9 +321,7 @@ def get_rotated_afraid_domain(tld):
     ).first()
 
 def get_rotated_afraid_domains(tld, limit):
-    query = available_domain_query().filter(
-        or_(AfraidDomain.registry_status.is_(None), AfraidDomain.registry_status == 'public')
-    )
+    query = available_domain_query()
     if tld:
         query = query.filter_by(tld=tld)
     return query.order_by(AfraidDomain.rotation_count.asc(), AfraidDomain.last_used_at.asc(), AfraidDomain.id.asc()).limit(limit).all()

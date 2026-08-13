@@ -66,9 +66,9 @@
                             </select>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label fw-semibold">Available TLD Groups</label>
-                            <div id="tldGroupList" class="border rounded p-2" style="max-height: 180px; overflow-y: auto;">
-                                <div class="text-muted small">Fetch registry to load groups.</div>
+                            <label class="form-label fw-semibold">Domains In Selected TLD</label>
+                            <div id="tldDomainList" class="border rounded p-2" style="max-height: 220px; overflow-y: auto;">
+                                <div class="text-muted small">Select a TLD group to view public domains.</div>
                             </div>
                         </div>
                         <div class="row">
@@ -195,6 +195,7 @@ document.addEventListener('DOMContentLoaded', function() {
         window.afraidDomainPage = 1;
         loadDomains();
         loadDomainOptions();
+        loadSelectedTldDomains();
     });
     document.getElementById('btnPrevDomainPage').addEventListener('click', () => changeDomainPage(-1));
     document.getElementById('btnNextDomainPage').addEventListener('click', () => changeDomainPage(1));
@@ -284,6 +285,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 loadTlds();
                 loadDomains();
                 loadDomainOptions();
+                loadSelectedTldDomains();
             } else {
                 alert('Error: ' + data.error);
             }
@@ -359,7 +361,7 @@ async function loadDomains() {
             data.domains.forEach(d => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `<td><strong>${d.domain_name}</strong>
-                        <div class="text-muted small">.${d.tld || ''} | ${d.registry_status || d.source || ''} | hosts: ${d.hosts_in_use ?? 'n/a'} | created: ${d.registry_created_on || 'n/a'} | used: ${d.rotation_count || 0}</div>
+                        <div class="text-muted small">.${d.tld || ''} | public | hosts: ${d.hosts_in_use ?? 'n/a'} | created: ${d.registry_created_on || 'n/a'} | ${d.used_this_month ? 'used this month' : 'available'}</div>
                     </td>
                     <td><button class="btn btn-sm btn-outline-danger" onclick="deleteDomain(${d.id})">
                         <i class="fas fa-trash"></i></button></td>`;
@@ -391,6 +393,7 @@ async function loadDomainOptions() {
                 select.appendChild(opt);
             });
         }
+        renderSelectedTldDomains(data.domains || []);
     } catch (err) {
         console.error('Error loading domain options', err);
     }
@@ -416,32 +419,47 @@ async function loadTlds() {
                 select.appendChild(opt);
             });
             select.value = current;
-            renderTldGroupList(data.tlds);
             loadDomainOptions();
+            loadSelectedTldDomains();
         }
     } catch (err) {
         console.error('Error loading TLD groups', err);
     }
 }
 
-function renderTldGroupList(tlds) {
-    const list = document.getElementById('tldGroupList');
+async function loadSelectedTldDomains() {
+    try {
+        const tld = document.getElementById('tldSelect')?.value || '';
+        if (!tld) {
+            renderSelectedTldDomains([]);
+            return;
+        }
+        const params = new URLSearchParams({limit: 200, tld, include_used: 'true'});
+        const res = await fetch('/api/afraid/domain-options?' + params.toString());
+        const data = await parseJsonResponse(res);
+        renderSelectedTldDomains(data.domains || []);
+    } catch (err) {
+        console.error('Error loading selected TLD domains', err);
+    }
+}
+
+function renderSelectedTldDomains(domains) {
+    const list = document.getElementById('tldDomainList');
     list.innerHTML = '';
-    if (!tlds || !tlds.length) {
-        list.innerHTML = '<div class="text-muted small">No cached public registry groups yet.</div>';
+    if (!domains || !domains.length) {
+        list.innerHTML = '<div class="text-muted small">No available public domains for this TLD. Used domains return next month.</div>';
         return;
     }
-    tlds.forEach(item => {
+    domains.forEach(item => {
         const row = document.createElement('label');
-        row.className = 'd-flex justify-content-between align-items-center py-1 px-2 border-bottom small';
+        row.className = `d-flex justify-content-between align-items-center py-1 px-2 border-bottom small ${item.used_this_month ? 'text-muted bg-light' : 'bg-success bg-opacity-10'}`;
         row.style.cursor = 'pointer';
-        row.innerHTML = `<span><input type="radio" name="tldGroupRadio" class="me-2" value="${escapeHtml(item.tld)}">.${escapeHtml(item.tld)}</span>
-            <span class="text-muted">${item.available} available / ${item.used} used</span>`;
+        row.innerHTML = `<span><input type="radio" name="tldDomainRadio" class="me-2" value="${escapeHtml(item.domain_name)}"> ${escapeHtml(item.domain_name)}</span>
+            <span class="text-muted">hosts: ${item.hosts_in_use ?? 'n/a'} | ${item.registry_created_on || 'n/a'}</span>`;
         row.querySelector('input').addEventListener('change', (e) => {
-            document.getElementById('tldSelect').value = e.target.value;
-            window.afraidDomainPage = 1;
-            loadDomains();
-            loadDomainOptions();
+            document.getElementById('rotateDomainToggle').checked = false;
+            updateDomainMode();
+            document.getElementById('domainSelect').value = e.target.value;
         });
         list.appendChild(row);
     });
