@@ -109,11 +109,13 @@
                             </div>
                             <div class="col-md-4 mb-3">
                                 <label for="afraidCountInput" class="form-label">Afraid Domains</label>
-                                <input type="number" class="form-control" id="afraidCountInput" value="5" min="1" max="50">
+                                <input type="number" class="form-control" id="afraidCountInput" min="1" max="5000" placeholder="All available">
+                                <div class="form-text">Blank uses all available rotated domains.</div>
                             </div>
                             <div class="col-md-4 mb-3">
                                 <label for="cloudflareCountInput" class="form-label">Cloudflare Domains</label>
-                                <input type="number" class="form-control" id="cloudflareCountInput" value="2" min="1" max="50">
+                                <input type="number" class="form-control" id="cloudflareCountInput" min="1" max="50" placeholder="Set rotation count" disabled>
+                                <div class="form-text">Active only when Cloudflare destination rotation is used.</div>
                             </div>
                         </div>
                         <div class="form-check form-switch mb-3">
@@ -284,8 +286,11 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('rotateDomainToggle').addEventListener('change', updateDomainMode);
     document.getElementById('cloudflareSelect').addEventListener('change', (e) => {
         document.getElementById('destinationInput').value = e.target.value;
+        updateCloudflareCountState();
     });
+    document.getElementById('destinationInput').addEventListener('input', updateCloudflareCountState);
     updateDomainMode();
+    updateCloudflareCountState();
 
     // Save cookies
     document.getElementById('cookieForm').addEventListener('submit', async (e) => {
@@ -571,9 +576,11 @@ async function reactivateSelectedDomains() {
 function syncSelectedTldDomains() {
     const selected = [...document.querySelectorAll('.tld-domain-check:checked')].map(el => el.value);
     const select = document.getElementById('domainSelect');
+    const afraidCountInput = document.getElementById('afraidCountInput');
     if (selected.length) {
         document.getElementById('rotateDomainToggle').checked = false;
         updateDomainMode();
+        afraidCountInput.value = selected.length;
         if (selected.length === 1) {
             select.value = selected[0];
         } else {
@@ -581,6 +588,7 @@ function syncSelectedTldDomains() {
         }
     } else {
         updateDomainMode();
+        afraidCountInput.value = '';
     }
     renderSelectedDomainSummary(selected);
 }
@@ -660,6 +668,18 @@ function updateDomainMode() {
     select.classList.toggle('border-primary', !rotate);
 }
 
+function updateCloudflareCountState() {
+    const cloudflareCount = document.getElementById('cloudflareCountInput');
+    const typedDestination = document.getElementById('destinationInput').value.trim();
+    const selectedDestination = document.getElementById('cloudflareSelect').value;
+    const rotationActive = !typedDestination && !selectedDestination;
+    cloudflareCount.disabled = !rotationActive;
+    cloudflareCount.classList.toggle('bg-light', !rotationActive);
+    if (!rotationActive) {
+        cloudflareCount.value = '';
+    }
+}
+
 async function loadExistingSubdomains() {
     const tbody = document.getElementById('subdomainsTableBody');
     tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Loading...</td></tr>';
@@ -719,8 +739,8 @@ async function startProcess() {
         const payload = {
             tld: document.getElementById('tldSelect').value,
             total_count: document.getElementById('totalCountInput').value,
-            afraid_count: document.getElementById('afraidCountInput').value,
-            cloudflare_count: document.getElementById('cloudflareCountInput').value,
+            afraid_count: document.getElementById('afraidCountInput').value.trim(),
+            cloudflare_count: document.getElementById('cloudflareCountInput').disabled ? '' : document.getElementById('cloudflareCountInput').value.trim(),
             destinations,
             ttl: document.getElementById('ttlInput').value
         };

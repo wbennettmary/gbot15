@@ -471,9 +471,11 @@ def create_batch_subdomains():
     base_domains = [d.strip().lower() for d in data.get('base_domains', []) if d.strip()]
     if base_domain and base_domain not in base_domains:
         base_domains.append(base_domain)
-    afraid_count = max(1, min(50, int(data.get('afraid_count') or 1)))
-    cloudflare_count = max(1, min(50, int(data.get('cloudflare_count') or 1)))
-    total_count = max(1, min(50, int(data.get('total_count') or afraid_count)))
+    raw_afraid_count = data.get('afraid_count')
+    afraid_count = None if raw_afraid_count in (None, '') else max(1, min(5000, int(raw_afraid_count)))
+    raw_cloudflare_count = data.get('cloudflare_count')
+    cloudflare_count = max(1, min(50, int(raw_cloudflare_count or 1)))
+    total_count = max(1, min(50, int(data.get('total_count') or afraid_count or 1)))
     ttl = data.get('ttl', 300)
     manual_destinations = [d.strip().lower() for d in data.get('destinations', []) if d.strip()]
 
@@ -493,7 +495,7 @@ def create_batch_subdomains():
                 return jsonify({'success': False, 'error': f"FreeDNS domain '{selected_domain}' is not a usable public registry domain."}), 400
             afraid_domains.append(domain_record)
     else:
-        afraid_domains = get_rotated_afraid_domains(tld, afraid_count)
+        afraid_domains = get_rotated_afraid_domains(tld, afraid_count or 5000)
     if not afraid_domains:
         return jsonify({'success': False, 'error': f"No cached FreeDNS domains found for TLD '{tld}'."}), 404
 
