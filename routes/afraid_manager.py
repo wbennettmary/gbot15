@@ -513,8 +513,11 @@ def generated_label():
 
 def is_quota_error(message):
     text = (message or '').lower()
-    quota_terms = ['quota', 'limit', 'maximum', 'max', 'too many', '50']
-    record_terms = ['subdomain', 'record', 'dns', 'entries', 'entry']
+    exact_terms = ['no more subdomain capacity', 'more hostnames', 'subdomain capacity allocated']
+    quota_terms = ['quota', 'limit', 'maximum', 'max', 'too many', 'capacity', 'allocated', '50']
+    record_terms = ['subdomain', 'record', 'dns', 'entries', 'entry', 'hostname', 'hostnames']
+    if any(term in text for term in exact_terms):
+        return True
     return any(term in text for term in quota_terms) and any(term in text for term in record_terms)
 
 @afraid_manager.route('/api/afraid/subdomains', methods=['GET'])

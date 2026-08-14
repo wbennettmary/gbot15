@@ -464,6 +464,13 @@ class AfraidDNSService:
                     if msg:
                         return False, msg
 
+                page_text = re.sub(r'<script\b.*?</script>', ' ', resp.text, flags=re.IGNORECASE | re.DOTALL)
+                page_text = re.sub(r'<style\b.*?</style>', ' ', page_text, flags=re.IGNORECASE | re.DOTALL)
+                page_text = re.sub(r'<[^>]+>', ' ', page_text)
+                page_text = re.sub(r'\s+', ' ', unescape(page_text)).strip()
+                if re.search(r'no more subdomain capacity|subdomain capacity allocated|more hostnames', page_text, re.IGNORECASE):
+                    return False, page_text[:500]
+
             return True, f"{subdomain} creation submitted."
         except Exception as e:
             logger.error(f"Exception adding Afraid CNAME: {e}")
