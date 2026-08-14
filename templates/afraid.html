@@ -835,6 +835,10 @@ async function startProcess() {
         const data = await parseJsonResponse(res);
         window.afraidUsedBaseDomains = data.used_base_domains || [];
         renderBatchResults(data);
+        if (data.quota_reached) {
+            alert('FreeDNS quota reached: ' + (data.quota_message || 'Cleanup existing subdomains before continuing.'));
+            showAlert('createAlert', '<i class="fas fa-exclamation-triangle me-1"></i>FreeDNS quota reached. Failed domains were kept available.', 'warning');
+        }
         loadAfraidLists();
         loadUsedDomains();
         loadDomains();

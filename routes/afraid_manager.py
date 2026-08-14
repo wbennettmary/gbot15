@@ -511,6 +511,12 @@ def delete_afraid_list(list_id):
 def generated_label():
     return ''.join(fake.word() for _ in range(3)).lower()
 
+def is_quota_error(message):
+    text = (message or '').lower()
+    quota_terms = ['quota', 'limit', 'maximum', 'max', 'too many', '50']
+    record_terms = ['subdomain', 'record', 'dns', 'entries', 'entry']
+    return any(term in text for term in quota_terms) and any(term in text for term in record_terms)
+
 @afraid_manager.route('/api/afraid/subdomains', methods=['GET'])
 @login_required
 def get_existing_subdomains():
@@ -590,6 +596,8 @@ def create_batch_subdomains():
 
     results = []
     used_base_domains = set()
+    quota_reached = False
+    quota_message = ''
     for index in range(total_count):
         domain_record = afraid_domains[index % len(afraid_domains)]
         destination = destinations[index % len(destinations)]
@@ -608,6 +616,10 @@ def create_batch_subdomains():
             domain_record.last_used_at = datetime.utcnow()
             domain_record.delivery_status = 'inbox'
             used_base_domains.add(domain_record.domain_name)
+        elif is_quota_error(message):
+            quota_reached = True
+            quota_message = message or 'FreeDNS quota reached. Cleanup existing subdomains before continuing.'
+            break
     db.session.commit()
     lst = create_afraid_result_list(results)
     return jsonify({
@@ -615,6 +627,8 @@ def create_batch_subdomains():
         'results': results,
         'created': sum(1 for r in results if r['success']),
         'failed': sum(1 for r in results if not r['success']),
+        'quota_reached': quota_reached,
+        'quota_message': quota_message,
         'used_base_domains': sorted(used_base_domains),
         'list': lst.to_dict() if lst else None
     })
