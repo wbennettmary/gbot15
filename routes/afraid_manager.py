@@ -5,12 +5,13 @@ from flask import Blueprint, request, jsonify, session, render_template, redirec
 from functools import wraps
 from faker import Faker
 from sqlalchemy import func, or_
-from database import db, AfraidConfig, AfraidDomain, AfraidResultList
+from database import db, AfraidConfig, AfraidDomain, AfraidResultList, AfraidCloudflareDomainUsage
 from services.afraid_dns_service import AfraidDNSService
 from services.cloudflare_dns_service import CloudflareDNSService
 
 logger = logging.getLogger(__name__)
 fake = Faker()
+MAX_CLOUDFLARE_DESTINATION_USES = 5
 
 afraid_manager = Blueprint('afraid_manager', __name__)
 
@@ -397,9 +398,20 @@ def get_afraid_cloudflare_domains():
     try:
         service = CloudflareDNSService()
         zones = service.get_zones()
+        zone_names = [z['name'].strip().lower() for z in zones if z.get('name')]
+        usage_rows = {
+            row.domain_name: row
+            for row in AfraidCloudflareDomainUsage.query.filter(AfraidCloudflareDomainUsage.domain_name.in_(zone_names)).all()
+        } if zone_names else {}
         return jsonify({
             'success': True,
-            'domains': [{'name': z['name'], 'id': z['id'], 'status': z.get('status')} for z in zones],
+            'domains': [{
+                'name': z['name'],
+                'id': z['id'],
+                'status': z.get('status'),
+                'afraid_use_count': usage_rows.get(z['name'].strip().lower()).use_count if usage_rows.get(z['name'].strip().lower()) else 0,
+                'afraid_skipped': (usage_rows.get(z['name'].strip().lower()).use_count if usage_rows.get(z['name'].strip().lower()) else 0) >= MAX_CLOUDFLARE_DESTINATION_USES
+            } for z in zones],
             'total': len(zones)
         })
     except Exception as e:
@@ -421,6 +433,48 @@ def get_rotated_afraid_domains(tld, limit):
     if tld:
         query = query.filter_by(tld=tld)
     return query.order_by(AfraidDomain.rotation_count.asc(), AfraidDomain.last_used_at.asc(), AfraidDomain.id.asc()).limit(limit).all()
+
+def get_or_create_cloudflare_usage(domain_name):
+    domain_name = (domain_name or '').strip().lower()
+    usage = AfraidCloudflareDomainUsage.query.filter_by(domain_name=domain_name).first()
+    if not usage:
+        usage = AfraidCloudflareDomainUsage(domain_name=domain_name, use_count=0)
+        db.session.add(usage)
+    return usage
+
+def select_cloudflare_destinations(zone_names, limit, manual_destinations=None):
+    ordered_names = []
+    for name in (manual_destinations or []) + (zone_names or []):
+        clean = (name or '').strip().lower()
+        if clean and clean not in ordered_names:
+            ordered_names.append(clean)
+
+    usage_rows = {row.domain_name: row for row in AfraidCloudflareDomainUsage.query.filter(
+        AfraidCloudflareDomainUsage.domain_name.in_(ordered_names)
+    ).all()} if ordered_names else {}
+
+    for name in ordered_names:
+        if name not in usage_rows:
+            usage_rows[name] = get_or_create_cloudflare_usage(name)
+
+    available = [
+        name for name in ordered_names
+        if (usage_rows[name].use_count or 0) < MAX_CLOUDFLARE_DESTINATION_USES
+    ]
+
+    manual_set = set(manual_destinations or [])
+    if manual_set:
+        selected = [name for name in ordered_names if name in manual_set and name in available]
+        if len(selected) < len(manual_set):
+            exhausted = sorted(manual_set - set(selected))
+            return [], f"Cloudflare destination(s) reached {MAX_CLOUDFLARE_DESTINATION_USES} process uses and were skipped: {', '.join(exhausted)}"
+        return selected[:limit], None
+
+    selected = sorted(
+        available,
+        key=lambda name: (usage_rows[name].use_count or 0, usage_rows[name].last_used_at or datetime.min, name)
+    )[:limit]
+    return selected, None
 
 def create_afraid_result_list(results):
     username = (session.get('user') or 'user').split('@')[0].lower()
@@ -585,20 +639,19 @@ def create_batch_subdomains():
     except Exception as e:
         cf_zones = []
 
-    destinations = manual_destinations[:cloudflare_count]
+    destinations, destination_error = select_cloudflare_destinations(
+        cf_zones,
+        cloudflare_count,
+        manual_destinations=manual_destinations
+    )
+    if destination_error:
+        return jsonify({'success': False, 'error': destination_error}), 400
     if not destinations:
-        destinations = cf_zones[:cloudflare_count]
-    elif len(destinations) < cloudflare_count:
-        for zone_name in cf_zones:
-            if zone_name not in destinations:
-                destinations.append(zone_name)
-            if len(destinations) >= cloudflare_count:
-                break
-    if not destinations:
-        return jsonify({'success': False, 'error': 'No Cloudflare destination domains available.'}), 400
+        return jsonify({'success': False, 'error': f'No Cloudflare destination domains available under {MAX_CLOUDFLARE_DESTINATION_USES} Afraid process uses.'}), 400
 
     results = []
     used_base_domains = set()
+    used_destinations = set()
     quota_reached = False
     quota_message = ''
     for index in range(total_count):
@@ -619,10 +672,15 @@ def create_batch_subdomains():
             domain_record.last_used_at = datetime.utcnow()
             domain_record.delivery_status = 'inbox'
             used_base_domains.add(domain_record.domain_name)
+            used_destinations.add(destination)
         elif is_quota_error(message):
             quota_reached = True
             quota_message = message or 'FreeDNS quota reached. Cleanup existing subdomains before continuing.'
             break
+    for destination in used_destinations:
+        usage = get_or_create_cloudflare_usage(destination)
+        usage.use_count = (usage.use_count or 0) + 1
+        usage.last_used_at = datetime.utcnow()
     db.session.commit()
     lst = create_afraid_result_list(results)
     return jsonify({
@@ -632,6 +690,7 @@ def create_batch_subdomains():
         'failed': sum(1 for r in results if not r['success']),
         'quota_reached': quota_reached,
         'quota_message': quota_message,
+        'used_destinations': sorted(used_destinations),
         'used_base_domains': sorted(used_base_domains),
         'list': lst.to_dict() if lst else None
     })

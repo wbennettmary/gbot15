@@ -382,3 +382,12 @@ class AfraidResultList(db.Model):
             'failed_count': self.failed_count or 0,
             'created_at': self.created_at.isoformat() + 'Z' if self.created_at else None
         }
+
+class AfraidCloudflareDomainUsage(db.Model):
+    """Track Cloudflare destination usage for Afraid CNAME batches."""
+    id = db.Column(db.Integer, primary_key=True)
+    domain_name = db.Column(db.String(255), unique=True, nullable=False)
+    use_count = db.Column(db.Integer, default=0)
+    last_used_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+    updated_at = db.Column(db.DateTime, default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())

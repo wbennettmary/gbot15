@@ -700,14 +700,19 @@ async function loadCloudflareDomains() {
         if (data.success) {
             window.afraidCloudflareDomains = data.domains.map(d => d.name).filter(Boolean);
             window.afraidCloudflareIndex = 0;
-            window.afraidCloudflareDomains.forEach(name => {
+            data.domains.forEach(domain => {
+                const name = domain.name;
+                if (!name) return;
                 const opt = document.createElement('option');
                 opt.value = name;
-                opt.textContent = name;
+                opt.textContent = `${name} (${domain.afraid_use_count || 0}/5)${domain.afraid_skipped ? ' skipped' : ''}`;
+                opt.disabled = Boolean(domain.afraid_skipped);
                 select.appendChild(opt);
-                const dataOpt = document.createElement('option');
-                dataOpt.value = name;
-                list.appendChild(dataOpt);
+                if (!domain.afraid_skipped) {
+                    const dataOpt = document.createElement('option');
+                    dataOpt.value = name;
+                    list.appendChild(dataOpt);
+                }
             });
         }
     } catch (err) {
@@ -843,6 +848,7 @@ async function startProcess() {
         loadUsedDomains();
         loadDomains();
         loadTlds();
+        loadCloudflareDomains();
         loadSelectedTldDomains();
     } catch (err) {
         showAlert('createAlert', escapeHtml(err.message || 'Process failed'), 'danger');
