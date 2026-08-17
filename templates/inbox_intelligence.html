@@ -391,6 +391,26 @@
         line-height: 1.35;
     }
 
+    .ii-result-summary {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(110px, 1fr));
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+
+    .ii-result-pill {
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 10px;
+        background: #fff;
+    }
+
+    .ii-result-pill strong {
+        display: block;
+        font-size: 20px;
+        color: #0f172a;
+    }
+
     .ii-template-thumb {
         min-height: 210px;
         border: 1px solid #dbe4ef;
@@ -494,10 +514,11 @@
         <button class="ii-tab active" data-tab="overview">Overview</button>
         <button class="ii-tab" data-tab="connected">Connected Inboxes</button>
         <button class="ii-tab" data-tab="explorer">Inbox Explorer</button>
+        <button class="ii-tab" data-tab="senders">Workspace Accounts</button>
         <button class="ii-tab" data-tab="staticTemplates">Template Library</button>
         <button class="ii-tab" data-tab="templates">Template Studio</button>
-        <button class="ii-tab" data-tab="senders">Workspace Accounts</button>
         <button class="ii-tab" data-tab="tests">Run Test</button>
+        <button class="ii-tab" data-tab="userInboxTest">User Inbox Test</button>
         <button class="ii-tab" data-tab="history">Results</button>
         <button class="ii-tab" data-tab="settings">Settings</button>
     </nav>
@@ -605,6 +626,8 @@
                 <input class="ii-input mb-2" id="messageSearchInput" placeholder="Sender, domain, subject" oninput="loadInboxMessages()">
                 <select class="ii-select mb-2" id="messageAccountFilter" onchange="loadInboxMessages()"><option value="">All inbox accounts</option></select>
                 <select class="ii-select"><option>Any date</option><option>Last 24 hours</option><option>7 days</option></select>
+                <button class="ii-btn ii-btn-primary mt-3 w-100" type="button" onclick="syncSelectedInboxAccounts()"><i class="fas fa-rotate"></i> Sync Selected Accounts</button>
+                <div class="ii-muted mt-2" id="explorerSyncStatus">Uses selected accounts from Connected Inboxes.</div>
             </aside>
             <main class="ii-panel">
                 <div class="ii-row justify-content-between mb-3">
@@ -694,6 +717,9 @@
                 <h3>StaticTemplateParser Output</h3>
                 <p class="ii-muted">Deterministic markers and HTML parsing run before semantic AI classification.</p>
                 <pre class="ii-preview-frame" id="staticTemplateParserOutput" style="white-space: pre-wrap; font-size: 12px;">Upload a template to inspect deterministic region markers, locked structure, editable content, links, images, and required footer elements.</pre>
+                <h4 class="mt-3">AI Agent Custom Prompt</h4>
+                <textarea class="ii-textarea" id="templateAiPromptInput" placeholder="Prompt for the AI agent that manages template analysis, controlled modifications, region edits, and merge decisions."></textarea>
+                <div class="ii-row mt-2"><button class="ii-btn ii-btn-primary" type="button" onclick="saveTemplateAiPrompt()"><i class="fas fa-save"></i> Save Prompt</button><span class="ii-muted" id="templateAiPromptStatus"></span></div>
                 <h4 class="mt-3">Supported Region Markers</h4>
                 <pre class="ii-muted mb-0">&lt;!-- APP:REGION:HEADLINE --&gt;
 ...
@@ -984,6 +1010,12 @@ merge_recipe_id, content_blueprint_id</pre>
             </div>
             <div class="ii-panel">
                 <h3>Results Matrix</h3>
+                <div class="ii-result-summary" id="resultsMatrixSummary">
+                    <div class="ii-result-pill"><span class="ii-muted">Tests</span><strong>0</strong></div>
+                    <div class="ii-result-pill"><span class="ii-muted">Inbox</span><strong>0</strong></div>
+                    <div class="ii-result-pill"><span class="ii-muted">Spam</span><strong>0</strong></div>
+                    <div class="ii-result-pill"><span class="ii-muted">Missing</span><strong>0</strong></div>
+                </div>
                 <div class="ii-table-wrap">
                     <table class="ii-table ii-matrix" id="resultsMatrixTable">
                         <tr><th>Workspace Sender</th><th>Recipient</th><th>Placement</th><th>Status</th><th>Test ID</th><th>Merge</th></tr>
@@ -992,6 +1024,40 @@ merge_recipe_id, content_blueprint_id</pre>
                 </div>
                 <h4 class="mt-3">Sender Health Score</h4>
                 <div class="ii-card"><div class="ii-card-label">Deliverability Score</div><div class="ii-card-value">-- / 100</div><div class="ii-muted">Internal score appears after observed tests, authentication signals, and provider consistency are available.</div></div>
+            </div>
+        </div>
+    </section>
+
+    <section id="userInboxTest" class="ii-tabpane">
+        <div class="ii-grid ii-layout-2">
+            <div class="ii-panel">
+                <h3>User Inbox Test</h3>
+                <p class="ii-muted">Paste a static template, select Workspace API users, type connected IMAP recipients, then measure which users reach inbox.</p>
+                <div class="ii-form-grid">
+                    <div class="ii-field"><label>Test name</label><input class="ii-input" id="userInboxTestNameInput" placeholder="User inbox placement test"></div>
+                    <div class="ii-field"><label>Subject</label><input class="ii-input" id="userInboxSubjectInput" placeholder="Subject for user inbox test"></div>
+                    <div class="ii-field" style="grid-column: 1 / -1;"><label>Static HTML template</label><textarea class="ii-textarea" id="userInboxHtmlInput" placeholder="Paste the static HTML template used for this user inbox test."></textarea></div>
+                    <div class="ii-field" style="grid-column: 1 / -1;"><label>Plain-text template</label><textarea class="ii-textarea" id="userInboxTextInput" placeholder="Plain text version."></textarea></div>
+                    <div class="ii-field" style="grid-column: 1 / -1;"><label>Recipient inboxes, one per line</label><textarea class="ii-textarea" id="userInboxRecipientsInput" placeholder="connected-imap-recipient@example.com"></textarea></div>
+                </div>
+                <h4 class="mt-3">Selected Workspace API Users</h4>
+                <div id="userInboxSenderSelector" class="ii-card ii-muted">Retrieve/select Workspace API users in the Workspace Accounts tab first.</div>
+                <div class="ii-row mt-3"><button class="ii-btn ii-btn-primary" type="button" onclick="runUserInboxTest()"><i class="fas fa-vial-circle-check"></i> Trigger User Inbox Test</button><span class="ii-muted" id="userInboxTestStatus"></span></div>
+            </div>
+            <div class="ii-panel">
+                <h3>User Inbox Analytics</h3>
+                <div class="ii-result-summary" id="userInboxAnalyticsSummary">
+                    <div class="ii-result-pill"><span class="ii-muted">Users</span><strong>0</strong></div>
+                    <div class="ii-result-pill"><span class="ii-muted">Inbox</span><strong>0</strong></div>
+                    <div class="ii-result-pill"><span class="ii-muted">Spam</span><strong>0</strong></div>
+                    <div class="ii-result-pill"><span class="ii-muted">Missing</span><strong>0</strong></div>
+                </div>
+                <div class="ii-table-wrap">
+                    <table class="ii-table ii-matrix" id="userInboxAnalyticsTable">
+                        <tr><th>User</th><th>Recipient</th><th>Placement</th><th>Status</th><th>Test ID</th><th>Signal</th></tr>
+                        <tr><td colspan="6" class="text-center ii-muted">Analytics appear after the user inbox test is triggered and polled.</td></tr>
+                    </table>
+                </div>
             </div>
         </div>
     </section>
@@ -1076,6 +1142,7 @@ merge_recipe_id, content_blueprint_id</pre>
         activeMessageId: null,
         selectedMessageIds: new Set(),
         selectedTemplateId: null,
+        userInboxTestId: null,
         selectedServiceAccountIds: new Set(),
         selectedSenderEmails: new Set(),
         selectedInboxIds: new Set(),
@@ -1260,6 +1327,34 @@ merge_recipe_id, content_blueprint_id</pre>
         await loadInboxMessages();
     }
 
+    async function syncSelectedInboxAccounts() {
+        const status = document.getElementById('explorerSyncStatus');
+        const selected = iiState.imapAccounts.filter((account) => iiState.selectedInboxIds.has(account.id));
+        if (!selected.length) {
+            status.textContent = 'Select at least one connected inbox account first.';
+            return;
+        }
+        status.textContent = `Syncing ${selected.length} selected account(s)...`;
+        let success = 0;
+        let failed = 0;
+        for (const account of selected) {
+            try {
+                await iiFetch(`/api/inbox-intelligence/imap-accounts/${account.id}/sync`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({limit: 50})
+                });
+                success += 1;
+                status.textContent = `Synced ${success}/${selected.length} selected account(s)...`;
+            } catch (err) {
+                failed += 1;
+            }
+        }
+        await loadImapAccounts();
+        await loadInboxMessages();
+        status.textContent = `Selected-account sync complete. Synced ${success}, failed ${failed}.`;
+    }
+
     async function deleteImapAccount(id) {
         if (!confirm('Remove this inbox and its synchronized messages?')) return;
         await iiFetch(`/api/inbox-intelligence/imap-accounts/${id}`, {method: 'DELETE'});
@@ -1355,6 +1450,7 @@ merge_recipe_id, content_blueprint_id</pre>
         iiState.workspaceSenders = data.senders || [];
         renderWorkspaceSenders();
         renderTestSenderSelector();
+        renderUserInboxSenderSelector();
     }
 
     async function searchWorkspaceAccounts() {
@@ -1376,6 +1472,26 @@ merge_recipe_id, content_blueprint_id</pre>
         const data = await iiFetch('/api/inbox-intelligence/static-templates');
         iiState.staticTemplates = data.templates || [];
         renderStaticTemplates();
+    }
+
+    async function loadTemplateAiPrompt() {
+        const data = await iiFetch('/api/inbox-intelligence/template-ai-prompt');
+        document.getElementById('templateAiPromptInput').value = data.prompt || '';
+    }
+
+    async function saveTemplateAiPrompt() {
+        const status = document.getElementById('templateAiPromptStatus');
+        status.textContent = 'Saving prompt...';
+        try {
+            const data = await iiFetch('/api/inbox-intelligence/template-ai-prompt', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({prompt: document.getElementById('templateAiPromptInput').value})
+            });
+            status.textContent = data.message || 'Prompt saved.';
+        } catch (err) {
+            status.textContent = err.message;
+        }
     }
 
     function renderStaticTemplates() {
@@ -1518,6 +1634,7 @@ merge_recipe_id, content_blueprint_id</pre>
             status.textContent = `Retrieved ${data.count || 0} sender user(s).${data.errors && data.errors.length ? ' Some accounts returned errors; check logs/details.' : ''}`;
             renderWorkspaceSenders();
             renderTestSenderSelector();
+            renderUserInboxSenderSelector();
         } catch (err) {
             status.textContent = err.message;
         }
@@ -1544,6 +1661,7 @@ merge_recipe_id, content_blueprint_id</pre>
         if (checked) iiState.selectedSenderEmails.add(email);
         else iiState.selectedSenderEmails.delete(email);
         renderTestSenderSelector();
+        renderUserInboxSenderSelector();
     }
 
     function renderTestSenderSelector() {
@@ -1553,6 +1671,19 @@ merge_recipe_id, content_blueprint_id</pre>
             return;
         }
         el.innerHTML = iiState.workspaceSenders.map((sender) => `<label class="d-block mb-1"><input type="checkbox" ${iiState.selectedSenderEmails.has(sender.email) ? 'checked' : ''} onchange="toggleSender('${escapeHtml(sender.email)}', this.checked)"> ${escapeHtml(sender.email)} <span class="ii-chip ${sender.service_account_id ? 'green' : 'yellow'}">${sender.service_account_id ? 'Gmail API' : 'select from account'}</span></label>`).join('');
+    }
+
+    function renderUserInboxSenderSelector() {
+        const el = document.getElementById('userInboxSenderSelector');
+        if (!el) return;
+        const selected = iiState.workspaceSenders.filter((sender) => iiState.selectedSenderEmails.has(sender.email));
+        if (!selected.length) {
+            el.className = 'ii-card ii-muted';
+            el.innerHTML = 'Select Workspace API users in the Workspace Accounts tab first.';
+            return;
+        }
+        el.className = 'ii-card';
+        el.innerHTML = selected.map((sender) => `<span class="ii-chip ${sender.service_account_id ? 'green' : 'yellow'}">${escapeHtml(sender.email)} · ${sender.service_account_id ? 'Gmail API' : 'missing API account'}</span>`).join(' ');
     }
 
     function renderTestInboxSelector() {
@@ -1566,11 +1697,12 @@ merge_recipe_id, content_blueprint_id</pre>
 
     function syncRecipientInputFromSelectedInboxes() {
         const input = document.getElementById('testRecipientInput');
-        if (!input || input.dataset.manualEdit === 'true') return;
         const emails = iiState.imapAccounts
             .filter((account) => iiState.selectedInboxIds.has(account.id))
             .map((account) => account.email);
-        input.value = emails.join('\n');
+        if (input && input.dataset.manualEdit !== 'true') input.value = emails.join('\n');
+        const userInboxInput = document.getElementById('userInboxRecipientsInput');
+        if (userInboxInput && userInboxInput.dataset.manualEdit !== 'true') userInboxInput.value = emails.join('\n');
     }
 
     function parseRecipientInput() {
@@ -1612,6 +1744,64 @@ merge_recipe_id, content_blueprint_id</pre>
         }
     }
 
+    async function runUserInboxTest() {
+        const status = document.getElementById('userInboxTestStatus');
+        status.textContent = 'Preparing static template...';
+        try {
+            const selectedSenders = iiState.workspaceSenders
+                .filter((sender) => iiState.selectedSenderEmails.has(sender.email))
+                .map((sender) => ({email: sender.email, service_account_id: sender.service_account_id}));
+            const subject = document.getElementById('userInboxSubjectInput').value.trim();
+            const html = document.getElementById('userInboxHtmlInput').value;
+            const text = document.getElementById('userInboxTextInput').value;
+            const recipients = (document.getElementById('userInboxRecipientsInput').value || '')
+                .split(/\n|,/).map((item) => item.trim().toLowerCase()).filter(Boolean);
+            if (!selectedSenders.length) throw new Error('Select Workspace API users first.');
+            if (!subject) throw new Error('Subject is required.');
+            if (!html.trim() && !text.trim()) throw new Error('Static HTML or plain-text template is required.');
+            if (!recipients.length) throw new Error('Type at least one connected IMAP recipient.');
+
+            const templateData = await iiFetch('/api/inbox-intelligence/static-templates', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    name: `User Inbox Test Template - ${subject}`,
+                    html_content: html || `<html><body>${escapeHtml(text).replace(/\n/g, '<br>')}</body></html>`,
+                    plain_text: text
+                })
+            });
+            status.textContent = 'Sending user inbox test...';
+            const testData = await iiFetch('/api/inbox-intelligence/tests', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    name: document.getElementById('userInboxTestNameInput').value || `User Inbox Test ${new Date().toLocaleString()}`,
+                    template_id: templateData.template.id,
+                    subject,
+                    html_body: html,
+                    text_body: text,
+                    senders: selectedSenders,
+                    recipient_emails: recipients
+                })
+            });
+            iiState.userInboxTestId = testData.test_id;
+            status.textContent = `Test ${testData.test_id} sent. Polling recipient inboxes...`;
+            await pollUserInboxTest(testData.test_id);
+        } catch (err) {
+            status.textContent = err.message;
+        }
+    }
+
+    async function pollUserInboxTest(testId) {
+        await iiFetch(`/api/inbox-intelligence/tests/${testId}/poll`, {method: 'POST'});
+        const data = await iiFetch(`/api/inbox-intelligence/tests/${testId}`);
+        const rows = data.test.messages || [];
+        renderAnalyticsSummary('userInboxAnalyticsSummary', rows, 'Users');
+        document.getElementById('userInboxAnalyticsTable').innerHTML = '<tr><th>User</th><th>Recipient</th><th>Placement</th><th>Signal</th><th>Test ID</th><th>Result</th></tr>' + renderResultRows(rows, testId, false);
+        document.getElementById('userInboxTestStatus').textContent = `Analytics updated for ${testId}. Inbox ${matrixSummary(rows).inbox}, spam ${matrixSummary(rows).spam}, missing ${matrixSummary(rows).pending + matrixSummary(rows).failed}.`;
+        await loadTests();
+    }
+
     async function pollDeliverabilityTest(testId) {
         await iiFetch(`/api/inbox-intelligence/tests/${testId}/poll`, {method: 'POST'});
         await loadTests();
@@ -1645,18 +1835,62 @@ merge_recipe_id, content_blueprint_id</pre>
         return `${text.slice(0, 8)}...${text.slice(-6)}`;
     }
 
-    async function loadTestDetail(testId) {
-        const data = await iiFetch(`/api/inbox-intelligence/tests/${testId}`);
-        const rows = data.test.messages || [];
-        document.getElementById('resultsMatrixTable').innerHTML = '<tr><th>Workspace Sender</th><th>Recipient</th><th>Placement</th><th>Status</th><th>Test ID</th><th>Merge</th></tr>' + rows.map((row) => `
+    function placementClass(placement) {
+        if (placement === 'INBOX') return 'green';
+        if (placement === 'SPAM' || placement === 'FAILED') return 'red';
+        if (placement === 'PENDING') return 'yellow';
+        return 'gray';
+    }
+
+    function placementSignal(row) {
+        if (row.placement === 'INBOX') return 'Inbox';
+        if (row.placement === 'SPAM') return `Spam${row.folder ? ` · ${row.folder}` : ''}`;
+        if (row.placement === 'FAILED') return row.error_message || 'Failed';
+        if (row.placement === 'PENDING') return 'Waiting for IMAP detection';
+        return row.status || 'Unknown';
+    }
+
+    function matrixSummary(rows) {
+        return {
+            total: rows.length,
+            inbox: rows.filter((row) => row.placement === 'INBOX').length,
+            spam: rows.filter((row) => row.placement === 'SPAM').length,
+            pending: rows.filter((row) => row.placement === 'PENDING').length,
+            failed: rows.filter((row) => row.placement === 'FAILED' || row.status === 'FAILED').length,
+        };
+    }
+
+    function renderAnalyticsSummary(containerId, rows, userLabel = 'Tests') {
+        const el = document.getElementById(containerId);
+        if (!el) return;
+        const summary = matrixSummary(rows);
+        el.innerHTML = `
+            <div class="ii-result-pill"><span class="ii-muted">${userLabel}</span><strong>${summary.total}</strong></div>
+            <div class="ii-result-pill"><span class="ii-muted">Inbox</span><strong>${summary.inbox}</strong></div>
+            <div class="ii-result-pill"><span class="ii-muted">Spam</span><strong>${summary.spam}</strong></div>
+            <div class="ii-result-pill"><span class="ii-muted">Missing</span><strong>${summary.pending + summary.failed}</strong></div>`;
+    }
+
+    function renderResultRows(rows, testId, includeMerge = true) {
+        if (!rows.length) {
+            return '<tr><td colspan="6" class="text-center ii-muted">No message-level results are available yet.</td></tr>';
+        }
+        return rows.map((row) => `
             <tr>
                 <td>${escapeHtml(row.sender)}</td>
                 <td>${escapeHtml(row.recipient)}</td>
-                <td><span class="ii-chip ${row.placement === 'INBOX' ? 'green' : row.placement === 'SPAM' ? 'red' : row.placement === 'FAILED' ? 'red' : 'gray'}">${escapeHtml(row.placement)}</span></td>
-                <td>${escapeHtml(row.status)}</td>
+                <td><span class="ii-chip ${placementClass(row.placement)}">${escapeHtml(row.placement || 'UNKNOWN')}</span></td>
+                <td>${escapeHtml(placementSignal(row))}</td>
                 <td><span class="ii-matrix-id" title="${escapeHtml(row.test_identifier)}">${escapeHtml(compactTestIdentifier(row.test_identifier))}</span></td>
-                <td>${row.placement === 'INBOX' ? `<button class="ii-btn" type="button" onclick="startMergeFromTest('${escapeHtml(testId)}')"><i class="fas fa-code-merge"></i> Start Merge</button>` : '<span class="ii-muted">Waiting</span>'}</td>
+                <td>${includeMerge && row.placement === 'INBOX' ? `<button class="ii-btn" type="button" onclick="startMergeFromTest('${escapeHtml(testId)}')"><i class="fas fa-code-merge"></i> Merge</button>` : `<span class="ii-chip ${placementClass(row.placement)}">${row.placement === 'INBOX' ? 'Good' : row.placement === 'SPAM' ? 'Not inbox' : 'Check'}</span>`}</td>
             </tr>`).join('');
+    }
+
+    async function loadTestDetail(testId) {
+        const data = await iiFetch(`/api/inbox-intelligence/tests/${testId}`);
+        const rows = data.test.messages || [];
+        renderAnalyticsSummary('resultsMatrixSummary', rows);
+        document.getElementById('resultsMatrixTable').innerHTML = '<tr><th>Workspace Sender</th><th>Recipient</th><th>Placement</th><th>Signal</th><th>Test ID</th><th>Action</th></tr>' + renderResultRows(rows, testId, true);
     }
 
     async function startMergeFromTest(testId) {
@@ -1753,15 +1987,20 @@ merge_recipe_id, content_blueprint_id</pre>
         document.getElementById('testRecipientInput')?.addEventListener('input', (event) => {
             event.target.dataset.manualEdit = 'true';
         });
+        document.getElementById('userInboxRecipientsInput')?.addEventListener('input', (event) => {
+            event.target.dataset.manualEdit = 'true';
+        });
         document.getElementById('imapProviderInput')?.dispatchEvent(new Event('change'));
 
         Promise.allSettled([
             loadImapAccounts(),
             loadInboxMessages(),
             loadStaticTemplates(),
+            loadTemplateAiPrompt(),
             loadTests(),
             loadOpenRouterConfig()
         ]).catch((err) => console.error(err));
+        renderUserInboxSenderSelector();
     });
 </script>
 {% endblock %}

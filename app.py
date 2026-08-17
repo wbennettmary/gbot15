@@ -1877,6 +1877,30 @@ def _serialize_static_template(template):
         'updated_at': template.updated_at.isoformat() + 'Z' if template.updated_at else None,
     }
 
+def _template_ai_prompt_path():
+    os.makedirs(app.instance_path, exist_ok=True)
+    return os.path.join(app.instance_path, 'inbox_template_ai_prompt.json')
+
+@app.route('/api/inbox-intelligence/template-ai-prompt', methods=['GET', 'POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_template_ai_prompt():
+    path = _template_ai_prompt_path()
+    if request.method == 'GET':
+        prompt = ''
+        if os.path.exists(path):
+            try:
+                with open(path, 'r') as f:
+                    prompt = (json.load(f) or {}).get('prompt', '')
+            except Exception:
+                prompt = ''
+        return jsonify({'success': True, 'prompt': prompt})
+    data = request.get_json(silent=True) or {}
+    prompt = data.get('prompt') or ''
+    with open(path, 'w') as f:
+        json.dump({'prompt': prompt, 'updated_at': datetime.utcnow().isoformat() + 'Z', 'updated_by': session.get('user')}, f)
+    return jsonify({'success': True, 'message': 'Template AI prompt saved'})
+
 @app.route('/api/inbox-intelligence/static-templates', methods=['GET', 'POST'])
 @login_required
 @permission_required('inbox_intelligence')
