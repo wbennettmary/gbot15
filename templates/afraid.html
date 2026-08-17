@@ -90,8 +90,13 @@
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Subdomain</label>
-                                <input type="text" class="form-control text-muted fst-italic" value="Auto-generated (15 chars)" readonly>
+                                <input type="text" class="form-control text-muted fst-italic" value="Auto-generated or manual list below" readonly>
                             </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="manualSubdomainsInput" class="form-label fw-semibold">Manual Subdomains</label>
+                            <textarea class="form-control font-monospace" id="manualSubdomainsInput" rows="5" placeholder="mail&#10;shop&#10;support"></textarea>
+                            <div class="form-text" id="manualSubdomainsCount">0 manual subdomains</div>
                         </div>
                         <div class="mb-3">
                             <label for="tldSelect" class="form-label fw-semibold">FreeDNS TLD Group</label>
@@ -329,6 +334,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('selectAllSubdomains').addEventListener('change', toggleAllSubdomains);
     document.getElementById('btnDeleteSelectedSubdomains').addEventListener('click', deleteSelectedSubdomains);
     document.getElementById('btnStartProcess').addEventListener('click', startProcess);
+    document.getElementById('manualSubdomainsInput').addEventListener('input', updateManualSubdomainsCount);
     document.getElementById('btnReactivateSelectedDomains').addEventListener('click', reactivateSelectedDomains);
     document.getElementById('btnRefreshAfraidLists').addEventListener('click', loadAfraidLists);
     document.getElementById('lists-tab').addEventListener('shown.bs.tab', loadAfraidLists);
@@ -343,6 +349,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     document.getElementById('destinationInput').addEventListener('input', updateCloudflareCountState);
     updateCloudflareCountState();
+    updateManualSubdomainsCount();
 
     const cookieForm = document.getElementById('cookieForm');
     if (cookieForm) {
@@ -745,6 +752,22 @@ function updateCloudflareCountState() {
     }
 }
 
+function getManualSubdomains() {
+    return document.getElementById('manualSubdomainsInput').value
+        .split('\n')
+        .map(line => line.trim())
+        .filter(Boolean);
+}
+
+function updateManualSubdomainsCount() {
+    const lines = getManualSubdomains();
+    const countEl = document.getElementById('manualSubdomainsCount');
+    countEl.textContent = `${lines.length} manual subdomain${lines.length === 1 ? '' : 's'}`;
+    if (lines.length) {
+        document.getElementById('totalCountInput').value = lines.length;
+    }
+}
+
 async function loadExistingSubdomains() {
     const tbody = document.getElementById('subdomainsTableBody');
     document.getElementById('selectAllSubdomains').checked = false;
@@ -820,12 +843,14 @@ async function startProcess() {
         const selectedDomains = [...document.querySelectorAll('.tld-domain-check:checked')].map(el => el.value);
         const selectedDestination = document.getElementById('destinationInput').value.trim() || document.getElementById('cloudflareSelect').value;
         const destinations = selectedDestination ? [selectedDestination] : [];
+        const manualSubdomains = getManualSubdomains();
         const payload = {
             tld: document.getElementById('tldSelect').value,
             total_count: document.getElementById('totalCountInput').value,
             afraid_count: document.getElementById('afraidCountInput').value.trim(),
             cloudflare_count: document.getElementById('cloudflareCountInput').disabled ? '' : document.getElementById('cloudflareCountInput').value.trim(),
             destinations,
+            subdomains: manualSubdomains,
             ttl: document.getElementById('ttlInput').value
         };
         if (selectedDomains.length) {

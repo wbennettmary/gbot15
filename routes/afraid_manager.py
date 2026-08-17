@@ -1,5 +1,6 @@
 import logging
 import json
+import re
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, session, render_template, redirect, url_for
 from functools import wraps
@@ -565,6 +566,43 @@ def delete_afraid_list(list_id):
 def generated_label():
     return ''.join(fake.word() for _ in range(3)).lower()
 
+def normalize_subdomain_label(value, base_domain=None):
+    label = (value or '').strip().lower().rstrip('.')
+    base_domain = (base_domain or '').strip().lower().rstrip('.')
+    if base_domain and label.endswith(f".{base_domain}"):
+        label = label[:-(len(base_domain) + 1)]
+    label = label.strip('.')
+    if not label:
+        return ''
+    if not re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?', label):
+        raise ValueError(f"Invalid subdomain '{value}'. Use one label per line, using only letters, numbers, and hyphens.")
+    return label
+
+def parse_manual_subdomain_labels(values):
+    labels = []
+    seen = set()
+    duplicates = []
+    for raw in values or []:
+        label = (raw or '').strip().lower().rstrip('.')
+        if not label:
+            continue
+        if label in seen:
+            duplicates.append(label)
+            continue
+        seen.add(label)
+        labels.append(label)
+    if duplicates:
+        raise ValueError(f"Duplicate manual subdomain(s): {', '.join(sorted(set(duplicates)))}")
+    return labels
+
+def unique_generated_label(base_domain, used_fqdns, max_attempts=100):
+    for _ in range(max_attempts):
+        label = normalize_subdomain_label(generated_label())
+        fqdn = f"{label}.{base_domain}".lower()
+        if fqdn not in used_fqdns:
+            return label
+    raise ValueError("Could not generate a unique subdomain label after several attempts. Try again.")
+
 def is_quota_error(message):
     text = (message or '').lower()
     exact_terms = ['no more subdomain capacity', 'more hostnames', 'subdomain capacity allocated']
@@ -610,9 +648,13 @@ def create_batch_subdomains():
     afraid_count = None if raw_afraid_count in (None, '') else max(1, min(5000, int(raw_afraid_count)))
     raw_cloudflare_count = data.get('cloudflare_count')
     cloudflare_count = max(1, min(50, int(raw_cloudflare_count or 1)))
-    total_count = max(1, min(50, int(data.get('total_count') or afraid_count or 1)))
     ttl = data.get('ttl', 300)
     manual_destinations = [d.strip().lower() for d in data.get('destinations', []) if d.strip()]
+    try:
+        manual_subdomains = parse_manual_subdomain_labels(data.get('subdomains', []))
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    total_count = len(manual_subdomains) if manual_subdomains else max(1, min(50, int(data.get('total_count') or afraid_count or 1)))
 
     svc, error = get_service()
     if error:
@@ -652,16 +694,45 @@ def create_batch_subdomains():
     results = []
     used_base_domains = set()
     used_destinations = set()
+    existing_fqdns = {
+        (record.get('fqdn') or '').strip().lower().rstrip('.')
+        for record in svc.get_existing_subdomains()
+        if record.get('fqdn')
+    }
+    planned_fqdns = set(existing_fqdns)
+    manual_plan = []
+    if manual_subdomains:
+        for index, raw_label in enumerate(manual_subdomains):
+            domain_record = afraid_domains[index % len(afraid_domains)]
+            try:
+                label = normalize_subdomain_label(raw_label, domain_record.domain_name)
+            except ValueError as e:
+                return jsonify({'success': False, 'error': str(e)}), 400
+            fqdn = f"{label}.{domain_record.domain_name}".lower()
+            if fqdn in planned_fqdns:
+                return jsonify({'success': False, 'error': f"Duplicate subdomain blocked: {fqdn}"}), 400
+            planned_fqdns.add(fqdn)
+            manual_plan.append((label, fqdn))
+    else:
+        planned_fqdns = set(existing_fqdns)
     quota_reached = False
     quota_message = ''
     for index in range(total_count):
         domain_record = afraid_domains[index % len(afraid_domains)]
         destination = destinations[index % len(destinations)]
-        label = generated_label()
+        try:
+            if manual_subdomains:
+                label, fqdn = manual_plan[index]
+            else:
+                label = unique_generated_label(domain_record.domain_name, planned_fqdns)
+                fqdn = f"{label}.{domain_record.domain_name}".lower()
+                planned_fqdns.add(fqdn)
+        except ValueError as e:
+            return jsonify({'success': False, 'error': str(e)}), 400
         success, message = svc.add_cname(label, domain_record.domain_id, destination, ttl)
         result = {
             'success': success,
-            'subdomain': f"{label}.{domain_record.domain_name}",
+            'subdomain': fqdn,
             'base_domain': domain_record.domain_name,
             'destination': destination,
             'message': message
@@ -731,7 +802,15 @@ def create_subdomain():
             'error': f"Domain '{base_domain}' does not have a FreeDNS domain_id. Fetch the FreeDNS registry first or choose a different domain."
         }), 404
 
-    subdomain = generated_label()
+    existing_fqdns = {
+        (record.get('fqdn') or '').strip().lower().rstrip('.')
+        for record in svc.get_existing_subdomains()
+        if record.get('fqdn')
+    }
+    try:
+        subdomain = unique_generated_label(base_domain, existing_fqdns)
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
 
     success, message = svc.add_cname(subdomain, domain_id, destination, ttl)
 
