@@ -1419,45 +1419,8 @@ def api_inbox_workspace_senders():
             'domain': row.domain or (row.email.split('@')[-1].lower() if '@' in row.email else ''),
             'source': 'retrieved_user',
             'status': row.status or 'active',
-            'has_app_password': False,
+            'send_method': 'workspace_api',
         }
-
-    password_filters = [UserAppPassword.username.ilike(like), UserAppPassword.domain.ilike(like)]
-    if '@' in query:
-        local_part, domain_part = query.rsplit('@', 1)
-        if local_part:
-            password_filters.append(UserAppPassword.username.ilike(f'%{local_part}%'))
-        if domain_part:
-            password_filters.append(UserAppPassword.domain.ilike(f'%{domain_part}%'))
-    app_password_rows = UserAppPassword.query.filter(or_(*password_filters)).limit(limit).all()
-    for row in app_password_rows:
-        email_addr = f"{row.username}@{row.domain}".lower() if row.domain != '*' else row.username.lower()
-        if '@' not in email_addr:
-            continue
-        senders.setdefault(email_addr, {
-            'email': email_addr,
-            'name': row.username,
-            'domain': email_addr.split('@')[-1],
-            'source': 'app_password',
-            'status': 'active',
-            'has_app_password': True,
-        })
-        senders[email_addr]['has_app_password'] = True
-
-    aws_password_rows = AwsGeneratedPassword.query.filter(AwsGeneratedPassword.email.ilike(like)).limit(limit).all()
-    for row in aws_password_rows:
-        email_addr = (row.email or '').lower()
-        if '@' not in email_addr:
-            continue
-        senders.setdefault(email_addr, {
-            'email': email_addr,
-            'name': email_addr.split('@')[0],
-            'domain': email_addr.split('@')[-1],
-            'source': 'aws_generated_password',
-            'status': 'active',
-            'has_app_password': True,
-        })
-        senders[email_addr]['has_app_password'] = True
 
     return jsonify({'success': True, 'senders': sorted(senders.values(), key=lambda x: x['email'])[:limit], 'service_accounts': []})
 
@@ -1512,14 +1475,15 @@ def api_inbox_retrieve_workspace_senders():
                     email_addr = (user.get('primaryEmail') or '').lower()
                     if not email_addr:
                         continue
-                    password = _find_sender_password(email_addr)
                     retrieved.append({
                         'email': email_addr,
                         'name': user.get('name', {}).get('fullName') or email_addr.split('@')[0],
                         'domain': email_addr.split('@')[-1] if '@' in email_addr else '',
                         'source': f'service_account:{sa.name}',
+                        'service_account_id': sa.id,
+                        'service_account_name': sa.name,
                         'status': 'suspended' if user.get('suspended') else 'active',
-                        'has_app_password': bool(password),
+                        'send_method': 'workspace_api',
                     })
                 page_token = resp.get('nextPageToken')
                 if not page_token:
@@ -1529,18 +1493,7 @@ def api_inbox_retrieve_workspace_senders():
     deduped = {row['email']: row for row in retrieved}
     return jsonify({'success': True, 'senders': sorted(deduped.values(), key=lambda x: x['email']), 'errors': errors, 'count': len(deduped)})
 
-def _find_sender_password(email_addr):
-    email_addr = (email_addr or '').lower()
-    if '@' not in email_addr:
-        return None
-    username, domain = email_addr.split('@', 1)
-    record = UserAppPassword.query.filter_by(username=username, domain=domain).first() or UserAppPassword.query.filter_by(username=username, domain='*').first()
-    if record:
-        return record.app_password
-    aws_record = AwsGeneratedPassword.query.filter_by(email=email_addr).first()
-    return aws_record.app_password if aws_record else None
-
-def _send_test_email_smtp(sender, password, recipient, subject, html_body, text_body, test_identifier):
+def _build_test_mime_message(sender, recipient, subject, html_body, text_body, test_identifier):
     msg = MIMEMultipart('alternative')
     msg['Subject'] = subject
     msg['From'] = sender
@@ -1551,11 +1504,24 @@ def _send_test_email_smtp(sender, password, recipient, subject, html_body, text_
     msg.attach(MIMEText((text_body or '') + f"\n\nTest ID: {test_identifier}", 'plain', 'utf-8'))
     if html_body:
         msg.attach(MIMEText(html_body + f"<p style=\"font-size:11px;color:#64748b\">Test ID: {test_identifier}</p>", 'html', 'utf-8'))
-    with smtplib.SMTP('smtp.gmail.com', 587, timeout=30) as server:
-        server.starttls()
-        server.login(sender, password)
-        server.send_message(msg)
-    return msg['Message-ID']
+    return msg
+
+def _send_test_email_gmail_api(service_account_id, sender, recipient, subject, html_body, text_body, test_identifier):
+    from google.oauth2 import service_account as google_service_account
+    from googleapiclient.discovery import build
+    sa = ServiceAccount.query.get(service_account_id)
+    if not sa or not sa.json_content:
+        raise ValueError('Selected Workspace service account is missing or has no JSON key.')
+    credentials_info = json.loads(sa.json_content)
+    creds = google_service_account.Credentials.from_service_account_info(
+        credentials_info,
+        scopes=['https://www.googleapis.com/auth/gmail.send']
+    ).with_subject(sender)
+    gmail = build('gmail', 'v1', credentials=creds, cache_discovery=False)
+    msg = _build_test_mime_message(sender, recipient, subject, html_body, text_body, test_identifier)
+    raw = base64.urlsafe_b64encode(msg.as_bytes()).decode('utf-8')
+    result = gmail.users().messages().send(userId='me', body={'raw': raw}).execute()
+    return result.get('id') or msg['Message-ID']
 
 @app.route('/api/inbox-intelligence/tests', methods=['GET', 'POST'])
 @login_required
@@ -1578,16 +1544,31 @@ def api_inbox_tests():
             'created_by': t.created_by,
         } for t in tests]})
     data = request.get_json(silent=True) or {}
-    senders = [s.strip().lower() for s in data.get('senders', []) if s.strip()]
+    sender_payload = data.get('senders', [])
+    senders = []
+    for item in sender_payload:
+        if isinstance(item, dict):
+            email_addr = (item.get('email') or '').strip().lower()
+            service_account_id = item.get('service_account_id')
+            if email_addr and service_account_id:
+                senders.append({'email': email_addr, 'service_account_id': int(service_account_id)})
+        elif isinstance(item, str) and item.strip():
+            senders.append({'email': item.strip().lower(), 'service_account_id': None})
     inbox_ids = [int(x) for x in data.get('inbox_account_ids', [])]
-    subject = (data.get('subject') or '').strip()
-    html_body = data.get('html_body') or ''
-    text_body = data.get('text_body') or ''
+    template_id = int(data.get('template_id') or 0)
+    template = InboxStaticTemplate.query.get(template_id) if template_id else None
+    subject = (data.get('subject') or (template.name if template else '')).strip()
+    html_body = data.get('html_body') if data.get('html_body') is not None else (template.html_content if template else '')
+    text_body = data.get('text_body') if data.get('text_body') is not None else (template.plain_text if template else '')
     name = (data.get('name') or f"Inbox Test {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}").strip()
     if not senders:
-        return jsonify({'success': False, 'error': 'Select at least one Workspace sender'}), 400
+        return jsonify({'success': False, 'error': 'Select at least one Workspace API sender from a selected Workspace account'}), 400
+    if any(not s.get('service_account_id') for s in senders):
+        return jsonify({'success': False, 'error': 'Every sender must come from a selected Workspace account so Gmail API delegation can send it.'}), 400
     if not inbox_ids:
         return jsonify({'success': False, 'error': 'Select at least one connected test inbox'}), 400
+    if not template:
+        return jsonify({'success': False, 'error': 'Select an inbox-derived template from Template Studio before running the test'}), 400
     if not subject:
         return jsonify({'success': False, 'error': 'Subject is required'}), 400
     if not text_body and not html_body:
@@ -1599,6 +1580,7 @@ def api_inbox_tests():
     test = InboxDeliverabilityTest(
         test_id=test_id,
         name=name,
+        template_id=template.id,
         subject=subject,
         html_body=html_body,
         text_body=text_body,
@@ -1613,21 +1595,15 @@ def api_inbox_tests():
     )
     db.session.add(test)
     db.session.flush()
-    for sender in senders:
-        password = _find_sender_password(sender)
+    for sender_info in senders:
+        sender = sender_info['email']
         for inbox in inboxes:
             identifier = f"{test_id}-{uuid.uuid4().hex[:6].upper()}"
             row = InboxDeliverabilityMessage(test_id=test_id, workspace_sender=sender, imap_account_id=inbox.id, recipient=inbox.email, test_identifier=identifier, subject=subject, status='QUEUED', placement='PENDING')
             db.session.add(row)
             db.session.flush()
-            if not password:
-                row.status = 'FAILED'
-                row.placement = 'FAILED'
-                row.error_message = 'No app password found for this Workspace sender.'
-                test.failed_count += 1
-                continue
             try:
-                row.provider_message_id = _send_test_email_smtp(sender, password, inbox.email, subject, html_body, text_body, identifier)
+                row.provider_message_id = _send_test_email_gmail_api(sender_info['service_account_id'], sender, inbox.email, subject, html_body, text_body, identifier)
                 row.sent_at = datetime.utcnow()
                 row.status = 'WAITING_FOR_DELIVERY'
                 row.placement = 'PENDING'
@@ -1915,6 +1891,42 @@ def api_inbox_static_templates():
     db.session.add(template)
     db.session.commit()
     return jsonify({'success': True, 'template': _serialize_static_template(template), 'message': 'Static template saved'})
+
+@app.route('/api/inbox-intelligence/static-templates/from-messages', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_static_templates_from_messages():
+    data = request.get_json(silent=True) or {}
+    message_ids = [int(x) for x in data.get('message_ids', [])]
+    if not message_ids:
+        return jsonify({'success': False, 'error': 'Select at least one inbox email template source'}), 400
+    messages = InboxEmailMessage.query.filter(InboxEmailMessage.id.in_(message_ids)).all()
+    if not messages:
+        return jsonify({'success': False, 'error': 'No matching inbox emails found'}), 404
+    created = []
+    for message in messages:
+        html_content = message.html_content or f"<html><body><h1 data-region=\"headline\">{html_utils.escape(message.subject or '(no subject)')}</h1><div data-region=\"body\">{html_utils.escape(message.plain_text or message.preview or '')}</div></body></html>"
+        plain_text = message.plain_text or message.preview or ''
+        editable, locked = _detect_template_regions(html_content)
+        if not editable:
+            editable = [
+                {'id': 'headline', 'region_key': 'HEADLINE', 'type': 'inbox-derived', 'editable': True, 'locked': False},
+                {'id': 'body', 'region_key': 'BODY', 'type': 'inbox-derived', 'editable': True, 'locked': False},
+            ]
+        sender_domain = message.sender_domain or (message.sender.split('@')[-1].lower() if message.sender and '@' in message.sender else 'inbox')
+        template = InboxStaticTemplate(
+            name=f"Inbox Template - {message.subject or sender_domain}",
+            html_content=html_content,
+            plain_text=plain_text,
+            status='active',
+            editable_regions_json=json.dumps(editable),
+            locked_regions_json=json.dumps(locked),
+            created_by=session.get('user')
+        )
+        db.session.add(template)
+        created.append(template)
+    db.session.commit()
+    return jsonify({'success': True, 'templates': [_serialize_static_template(t) for t in created], 'count': len(created), 'message': f'Created {len(created)} inbox-derived template(s)'})
 
 @app.route('/api/inbox-intelligence/static-templates/<int:template_id>', methods=['GET', 'DELETE'])
 @login_required

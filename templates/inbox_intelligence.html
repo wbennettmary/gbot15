@@ -462,13 +462,11 @@
         <button class="ii-tab active" data-tab="overview">Overview</button>
         <button class="ii-tab" data-tab="connected">Connected Inboxes</button>
         <button class="ii-tab" data-tab="explorer">Inbox Explorer</button>
-        <button class="ii-tab" data-tab="content">Content Intelligence</button>
-        <button class="ii-tab" data-tab="staticTemplates">Static Templates</button>
+        <button class="ii-tab" data-tab="staticTemplates">Template Library</button>
         <button class="ii-tab" data-tab="templates">Template Studio</button>
-        <button class="ii-tab" data-tab="ai">AI Generator</button>
-        <button class="ii-tab" data-tab="tests">Deliverability Tests</button>
-        <button class="ii-tab" data-tab="senders">Workspace Senders</button>
-        <button class="ii-tab" data-tab="history">Test History</button>
+        <button class="ii-tab" data-tab="senders">Workspace Accounts</button>
+        <button class="ii-tab" data-tab="tests">Run Test</button>
+        <button class="ii-tab" data-tab="history">Results</button>
         <button class="ii-tab" data-tab="settings">Settings</button>
     </nav>
 
@@ -577,7 +575,14 @@
                 <select class="ii-select"><option>Any date</option><option>Last 24 hours</option><option>7 days</option></select>
             </aside>
             <main class="ii-panel">
-                <h3>Messages</h3>
+                <div class="ii-row justify-content-between mb-3">
+                    <div>
+                        <h3>Messages</h3>
+                        <div class="ii-muted">Select real received emails here, then convert them into inbox-derived templates.</div>
+                    </div>
+                    <button class="ii-btn ii-btn-primary" type="button" onclick="createTemplatesFromSelectedMessages()"><i class="fas fa-file-import"></i> Create Templates</button>
+                </div>
+                <div class="ii-muted mb-2" id="selectedMessageStatus">No inbox emails selected.</div>
                 <div id="messageList" class="ii-card text-center py-5">
                     <i class="fas fa-envelope-open-text fa-3x text-muted mb-3"></i>
                     <h4>No synchronized messages</h4>
@@ -592,6 +597,9 @@
                         <h4>Select a message</h4>
                         <p class="ii-muted mb-0">Sanitized HTML, plain-text content, headers, links, images, and structure analysis will appear here.</p>
                     </div>
+                </div>
+                <div class="ii-row mt-3">
+                    <button class="ii-btn ii-btn-primary" type="button" id="selectCurrentMessageBtn" onclick="toggleCurrentMessageTemplateSource()" disabled><i class="fas fa-check-square"></i> Select As Template Source</button>
                 </div>
                 <h4 class="mt-3">Structure Analysis</h4>
                 <div class="ii-row" id="messageStructure"><span class="ii-chip gray">No message selected</span></div>
@@ -849,21 +857,25 @@ merge_recipe_id, content_blueprint_id</pre>
     <section id="templates" class="ii-tabpane">
         <div class="ii-grid ii-layout-2">
             <div class="ii-panel">
-                <div class="ii-row justify-content-between"><h3>Template Studio</h3><select class="ii-select" style="width: 180px;"><option>Insert variable</option><option>{{ '{{first_name}}' }}</option><option>{{ '{{company}}' }}</option><option>{{ '{{unsubscribe_url}}' }}</option></select></div>
+                <div class="ii-row justify-content-between">
+                    <div>
+                        <h3>Template Studio</h3>
+                        <div class="ii-muted">Select an inbox-derived template, adjust the test content, then trigger it with selected API sender users.</div>
+                    </div>
+                    <select class="ii-select" style="width: 180px;"><option>Insert variable</option><option>{{ '{{first_name}}' }}</option><option>{{ '{{company}}' }}</option><option>{{ '{{unsubscribe_url}}' }}</option></select>
+                </div>
                 <div class="ii-form-grid">
-                    <div class="ii-field"><label>Subject</label><input class="ii-input" placeholder="Template subject"></div>
-                    <div class="ii-field"><label>Preview text</label><input class="ii-input" placeholder="Template preview text"></div>
+                    <div class="ii-field" style="grid-column: 1 / -1;"><label>Inbox template</label><select class="ii-select" id="studioTemplateSelect" onchange="selectStudioTemplate(this.value)"><option value="">Select a template from the library</option></select></div>
+                    <div class="ii-field"><label>Subject</label><input class="ii-input" id="studioSubjectInput" placeholder="Template subject"></div>
+                    <div class="ii-field"><label>Preview text</label><input class="ii-input" id="studioPreheaderInput" placeholder="Template preview text"></div>
                     <div class="ii-field"><label>Editor mode</label><select class="ii-select"><option>Rich text</option><option>Raw HTML</option><option>Plain text</option></select></div>
                     <div class="ii-field"><label>Preview size</label><select class="ii-select" id="previewSize"><option>Desktop</option><option>Tablet</option><option>Mobile</option></select></div>
-                    <div class="ii-field" style="grid-column: 1 / -1;"><label>HTML body</label><textarea class="ii-textarea" placeholder="Create, paste, or merge sanitized HTML content here."></textarea></div>
-                    <div class="ii-field" style="grid-column: 1 / -1;"><label>Plain Text Version</label><textarea class="ii-textarea" placeholder="Plain-text version generated from final content or edited manually."></textarea></div>
+                    <div class="ii-field" style="grid-column: 1 / -1;"><label>HTML body</label><textarea class="ii-textarea" id="studioHtmlInput" placeholder="Selected inbox-derived HTML template appears here."></textarea></div>
+                    <div class="ii-field" style="grid-column: 1 / -1;"><label>Plain Text Version</label><textarea class="ii-textarea" id="studioTextInput" placeholder="Plain-text version generated from final content or edited manually."></textarea></div>
                 </div>
                 <div class="ii-row mt-3">
-                    <button class="ii-btn"><i class="fas fa-heading"></i> Heading</button>
-                    <button class="ii-btn"><i class="fas fa-align-left"></i> Text</button>
-                    <button class="ii-btn"><i class="fas fa-image"></i> Image</button>
-                    <button class="ii-btn"><i class="fas fa-square"></i> Button</button>
-                    <button class="ii-btn"><i class="fas fa-minus"></i> Divider</button>
+                    <button class="ii-btn ii-btn-primary" type="button" onclick="runDeliverabilityTest()"><i class="fas fa-paper-plane"></i> Trigger With Selected Users</button>
+                    <span class="ii-muted" id="studioStatus">Select a template, Workspace API senders, and receiving IMAP inboxes.</span>
                 </div>
             </div>
             <div class="ii-panel">
@@ -928,8 +940,8 @@ merge_recipe_id, content_blueprint_id</pre>
                     <div class="ii-field" style="grid-column: 1 / -1;"><label>Plain-text body</label><textarea class="ii-textarea" id="testTextInput" placeholder="Plain-text body for the controlled test."></textarea></div>
                 </div>
                 <div class="ii-steps">
-                    <div class="ii-step"><div><strong>Select Template</strong><p class="ii-muted mb-0">Existing template, AI-generated draft, or custom content.</p></div></div>
-                    <div class="ii-step"><div><strong>Select Workspace Senders</strong><div id="testSenderSelector" class="mt-2 ii-muted">Search sender accounts from Workspace Sender Accounts.</div></div></div>
+                    <div class="ii-step"><div><strong>Select Inbox-Derived Template</strong><div id="testTemplateSelector" class="mt-2 ii-muted">Choose the template in Template Studio first.</div></div></div>
+                    <div class="ii-step"><div><strong>Select Workspace API Senders</strong><div id="testSenderSelector" class="mt-2 ii-muted">Retrieve users from selected Workspace accounts.</div></div></div>
                     <div class="ii-step"><div><strong>Select Receiving IMAP Inboxes</strong><div id="testInboxSelector" class="mt-2 ii-muted">The app sends each test to these connected IMAP inbox email addresses and polls those same inboxes for placement.</div></div></div>
                     <div class="ii-step"><div><strong>Configure</strong><p class="ii-muted mb-0">Subject, From name, Reply-To, HTML, plain text, and dummy variables.</p></div></div>
                     <div class="ii-step"><div><strong>Run Test</strong><p class="ii-muted mb-0">Each message receives a unique X-Test-ID and is polled during the observation window.</p></div></div>
@@ -950,12 +962,12 @@ merge_recipe_id, content_blueprint_id</pre>
 
     <section id="senders" class="ii-tabpane">
         <div class="ii-panel">
-            <div class="ii-row justify-content-between mb-3"><h3>Workspace Sender Accounts</h3><div class="ii-row"><select class="ii-select" style="width: 160px;"><option>All domains</option></select><select class="ii-select" style="width: 160px;"><option>All statuses</option></select></div></div>
+            <div class="ii-row justify-content-between mb-3"><h3>Workspace Accounts & API Senders</h3><div class="ii-row"><select class="ii-select" style="width: 160px;"><option>All domains</option></select><select class="ii-select" style="width: 160px;"><option>All statuses</option></select></div></div>
             <div class="ii-card mb-3">
                 <div class="ii-row justify-content-between">
                     <div>
                         <h4>Saved Workspace Accounts</h4>
-                        <p class="ii-muted mb-0">Select existing service accounts from the dashboard, authenticate, and retrieve Workspace users for testing.</p>
+                        <p class="ii-muted mb-0">Select existing service accounts from the dashboard, authenticate, and retrieve Workspace users. Sending uses Gmail API delegation, not app passwords.</p>
                     </div>
                     <button class="ii-btn ii-btn-primary" type="button" onclick="retrieveWorkspaceUsers()"><i class="fas fa-users-gear"></i> Retrieve Selected Users</button>
                 </div>
@@ -967,12 +979,12 @@ merge_recipe_id, content_blueprint_id</pre>
                 <div id="workspaceRetrieveStatus" class="ii-muted mt-2"></div>
             </div>
             <div class="ii-row mb-3">
-                <input class="ii-input" id="workspaceSenderSearchInput" style="max-width: 420px;" placeholder="Search retrieved sender email, domain, or name">
+                <input class="ii-input" id="workspaceSenderSearchInput" style="max-width: 420px;" placeholder="Search retrieved API sender email, domain, or name">
                 <button class="ii-btn" type="button" onclick="searchWorkspaceSenders()"><i class="fas fa-search"></i> Search Senders</button>
             </div>
             <table class="ii-table" id="workspaceSendersTable">
                 <tr><th>Sender</th><th>Status</th><th>Tests</th><th>Inbox Rate</th><th>Spam Rate</th><th>Selection</th></tr>
-                <tr><td colspan="6" class="text-center ii-muted">Search Workspace sender users manually. The page does not load all accounts automatically.</td></tr>
+                <tr><td colspan="6" class="text-center ii-muted">Retrieve users from selected Workspace accounts or search previously retrieved API sender users manually.</td></tr>
             </table>
         </div>
     </section>
@@ -1025,6 +1037,9 @@ merge_recipe_id, content_blueprint_id</pre>
         staticTemplates: [],
         workspaceSenders: [],
         serviceAccounts: [],
+        activeMessageId: null,
+        selectedMessageIds: new Set(),
+        selectedTemplateId: null,
         selectedServiceAccountIds: new Set(),
         selectedSenderEmails: new Set(),
         selectedInboxIds: new Set(),
@@ -1117,6 +1132,25 @@ merge_recipe_id, content_blueprint_id</pre>
         renderTestInboxSelector();
     }
 
+    function renderSelectedMessageStatus() {
+        const el = document.getElementById('selectedMessageStatus');
+        if (el) el.textContent = iiState.selectedMessageIds.size ? `${iiState.selectedMessageIds.size} inbox email template source(s) selected.` : 'No inbox emails selected.';
+    }
+
+    function toggleMessageSelection(id, checked) {
+        if (checked) iiState.selectedMessageIds.add(id);
+        else iiState.selectedMessageIds.delete(id);
+        renderSelectedMessageStatus();
+    }
+
+    function toggleCurrentMessageTemplateSource() {
+        if (!iiState.activeMessageId) return;
+        const shouldSelect = !iiState.selectedMessageIds.has(iiState.activeMessageId);
+        toggleMessageSelection(iiState.activeMessageId, shouldSelect);
+        renderInboxMessagesList();
+        loadMessageDetail(iiState.activeMessageId);
+    }
+
     function selectAllInboxSources(checked) {
         iiState.imapAccounts.forEach((account) => {
             if (checked) iiState.selectedInboxIds.add(account.id);
@@ -1198,6 +1232,10 @@ merge_recipe_id, content_blueprint_id</pre>
         if (search) params.set('search', search);
         const data = await iiFetch('/api/inbox-intelligence/messages?' + params.toString());
         iiState.messages = data.messages || [];
+        renderInboxMessagesList();
+    }
+
+    function renderInboxMessagesList() {
         const list = document.getElementById('messageList');
         if (!iiState.messages.length) {
             list.className = 'ii-card text-center py-5';
@@ -1207,22 +1245,30 @@ merge_recipe_id, content_blueprint_id</pre>
             return;
         }
         list.className = '';
-        list.innerHTML = iiState.messages.map((m) => `<div class="ii-message" onclick="loadMessageDetail(${m.id})">
-            <div class="ii-row justify-content-between"><strong>${escapeHtml(m.sender || 'Unknown sender')}</strong><span class="ii-muted">${m.received_at ? new Date(m.received_at).toLocaleString() : ''}</span></div>
+        list.innerHTML = iiState.messages.map((m) => `<div class="ii-message ${iiState.activeMessageId === m.id ? 'active' : ''}" onclick="loadMessageDetail(${m.id})">
+            <div class="ii-row justify-content-between"><label onclick="event.stopPropagation()"><input type="checkbox" ${iiState.selectedMessageIds.has(m.id) ? 'checked' : ''} onchange="toggleMessageSelection(${m.id}, this.checked)"> <strong>${escapeHtml(m.sender || 'Unknown sender')}</strong></label><span class="ii-muted">${m.received_at ? new Date(m.received_at).toLocaleString() : ''}</span></div>
             <div>${escapeHtml(m.subject || '(no subject)')}</div>
             <div class="ii-muted">${escapeHtml(m.sender_domain || '')} · ${escapeHtml(m.folder || '')} ${m.has_attachments ? '· attachment' : ''}</div>
             <div class="ii-muted">${escapeHtml(m.preview || '')}</div>
         </div>`).join('');
+        renderSelectedMessageStatus();
     }
 
     async function loadMessageDetail(id) {
         const data = await iiFetch(`/api/inbox-intelligence/messages/${id}`);
         const m = data.message;
+        iiState.activeMessageId = id;
         const bodyText = (m.plain_text || m.preview || 'No plain-text content synchronized.').slice(0, 12000);
         document.getElementById('messageDetail').innerHTML = `<div class="ii-muted">From ${escapeHtml(m.sender || '')}</div>
             <div class="ii-muted">To ${escapeHtml(m.recipient || '')}</div>
             <h4>${escapeHtml(m.subject || '(no subject)')}</h4>
             <pre class="ii-detail-text ii-preview-frame mt-2">${escapeHtml(bodyText)}${(m.plain_text || '').length > 12000 ? '\n\n[Message body truncated for faster preview.]' : ''}</pre>`;
+        const btn = document.getElementById('selectCurrentMessageBtn');
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = iiState.selectedMessageIds.has(id) ? '<i class="fas fa-square-check"></i> Selected As Template Source' : '<i class="fas fa-check-square"></i> Select As Template Source';
+        }
+        renderInboxMessagesList();
         const html = m.html_content || '';
         const links = (html.match(/href=/gi) || []).length;
         const images = (html.match(/<img/gi) || []).length;
@@ -1231,15 +1277,31 @@ merge_recipe_id, content_blueprint_id</pre>
         document.getElementById('messageHeaders').textContent = JSON.stringify(m.headers || {}, null, 2);
     }
 
+    async function createTemplatesFromSelectedMessages() {
+        if (!iiState.selectedMessageIds.size) {
+            alert('Select one or more inbox emails first.');
+            return;
+        }
+        const data = await iiFetch('/api/inbox-intelligence/static-templates/from-messages', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({message_ids: [...iiState.selectedMessageIds]})
+        });
+        iiState.selectedMessageIds.clear();
+        await loadStaticTemplates();
+        renderInboxMessagesList();
+        alert(data.message || 'Inbox templates created.');
+    }
+
     async function searchWorkspaceSenders() {
         const input = document.getElementById('workspaceSenderSearchInput');
         const query = (input?.value || '').trim();
         const table = document.getElementById('workspaceSendersTable');
         if (query.length < 2) {
-            table.innerHTML = '<tr><th>Sender</th><th>Status</th><th>Source</th><th>Domain</th><th>App Password</th><th>Selection</th></tr><tr><td colspan="6" class="text-center ii-muted">Type at least 2 characters to search Workspace sender users.</td></tr>';
+            table.innerHTML = '<tr><th>Sender</th><th>Status</th><th>Source Account</th><th>Domain</th><th>Send Method</th><th>Selection</th></tr><tr><td colspan="6" class="text-center ii-muted">Type at least 2 characters to search Workspace API sender users.</td></tr>';
             return;
         }
-        table.innerHTML = '<tr><th>Sender</th><th>Status</th><th>Source</th><th>Domain</th><th>App Password</th><th>Selection</th></tr><tr><td colspan="6" class="text-center ii-muted">Searching sender users...</td></tr>';
+        table.innerHTML = '<tr><th>Sender</th><th>Status</th><th>Source Account</th><th>Domain</th><th>Send Method</th><th>Selection</th></tr><tr><td colspan="6" class="text-center ii-muted">Searching sender users...</td></tr>';
         const data = await iiFetch(`/api/inbox-intelligence/workspace-senders?q=${encodeURIComponent(query)}`);
         iiState.workspaceSenders = data.senders || [];
         renderWorkspaceSenders();
@@ -1270,6 +1332,7 @@ merge_recipe_id, content_blueprint_id</pre>
     function renderStaticTemplates() {
         const list = document.getElementById('staticTemplateList');
         const parser = document.getElementById('staticTemplateParserOutput');
+        renderStudioTemplateSelector();
         if (!iiState.staticTemplates.length) {
             list.className = 'ii-card text-center py-5';
             list.innerHTML = `<i class="fas fa-file-code fa-3x text-muted mb-3"></i>
@@ -1284,6 +1347,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 <div class="ii-row justify-content-between"><strong>${escapeHtml(template.name)}</strong><span class="ii-chip ${template.is_default ? 'blue' : 'green'}">${escapeHtml(template.status)}</span></div>
                 <div class="ii-muted mt-1">Static HTML · Editable Regions: ${template.editable_region_count} · Locked Regions: ${template.locked_region_count} · Version: ${template.version}</div>
                 <div class="ii-row mt-3">
+                    <button class="ii-btn" type="button" onclick="selectStudioTemplate(${template.id})">Use In Studio</button>
                     <button class="ii-btn" type="button" onclick="loadStaticTemplateDetail(${template.id})">Preview</button>
                     <button class="ii-btn" type="button" onclick="deleteStaticTemplate(${template.id})">Archive</button>
                 </div>
@@ -1293,6 +1357,39 @@ merge_recipe_id, content_blueprint_id</pre>
             editable_regions: iiState.staticTemplates[0].editable_regions,
             locked_regions: iiState.staticTemplates[0].locked_regions
         }, null, 2);
+    }
+
+    function renderStudioTemplateSelector() {
+        const select = document.getElementById('studioTemplateSelect');
+        const testSelector = document.getElementById('testTemplateSelector');
+        if (select) {
+            select.innerHTML = '<option value="">Select a template from the library</option>' + iiState.staticTemplates.map((template) => `<option value="${template.id}" ${iiState.selectedTemplateId === template.id ? 'selected' : ''}>${escapeHtml(template.name)}</option>`).join('');
+        }
+        if (testSelector) {
+            const selected = iiState.staticTemplates.find((template) => template.id === iiState.selectedTemplateId);
+            testSelector.innerHTML = selected ? `<span class="ii-chip blue">${escapeHtml(selected.name)}</span>` : '<span class="ii-muted">Choose the template in Template Studio first.</span>';
+        }
+    }
+
+    async function selectStudioTemplate(id) {
+        const templateId = parseInt(id, 10);
+        if (!templateId) {
+            iiState.selectedTemplateId = null;
+            renderStudioTemplateSelector();
+            return;
+        }
+        const data = await iiFetch(`/api/inbox-intelligence/static-templates/${templateId}`);
+        iiState.selectedTemplateId = templateId;
+        document.getElementById('studioTemplateSelect').value = String(templateId);
+        document.getElementById('studioSubjectInput').value = data.template.name || '';
+        document.getElementById('studioHtmlInput').value = data.template.html_content || '';
+        document.getElementById('studioTextInput').value = data.template.plain_text || '';
+        document.getElementById('testSubjectInput').value = data.template.name || '';
+        document.getElementById('testHtmlInput').value = data.template.html_content || '';
+        document.getElementById('testTextInput').value = data.template.plain_text || '';
+        document.getElementById('templatePreview').innerHTML = data.template.html_content || '<div class="ii-muted">No HTML content.</div>';
+        document.getElementById('studioStatus').textContent = 'Template selected. Select Workspace API senders and receiving IMAP inboxes, then trigger the test.';
+        renderStudioTemplateSelector();
     }
 
     async function saveStaticTemplate(event) {
@@ -1374,16 +1471,16 @@ merge_recipe_id, content_blueprint_id</pre>
     function renderWorkspaceSenders() {
         const table = document.getElementById('workspaceSendersTable');
         if (!iiState.workspaceSenders.length) {
-            table.innerHTML = '<tr><th>Sender</th><th>Status</th><th>Source</th><th>Domain</th><th>App Password</th><th>Selection</th></tr><tr><td colspan="6" class="text-center ii-muted">No matching Workspace sender users found. Search manually or retrieve users from selected service accounts.</td></tr>';
+            table.innerHTML = '<tr><th>Sender</th><th>Status</th><th>Source Account</th><th>Domain</th><th>Send Method</th><th>Selection</th></tr><tr><td colspan="6" class="text-center ii-muted">No matching Workspace API sender users found. Retrieve users from selected Workspace accounts.</td></tr>';
             return;
         }
-        table.innerHTML = '<tr><th>Sender</th><th>Status</th><th>Source</th><th>Domain</th><th>App Password</th><th>Selection</th></tr>' + iiState.workspaceSenders.map((sender) => `
+        table.innerHTML = '<tr><th>Sender</th><th>Status</th><th>Source Account</th><th>Domain</th><th>Send Method</th><th>Selection</th></tr>' + iiState.workspaceSenders.map((sender) => `
             <tr>
                 <td>${escapeHtml(sender.email)}</td>
                 <td><span class="ii-chip ${sender.status === 'active' ? 'green' : 'yellow'}">${escapeHtml(sender.status || 'active')}</span></td>
-                <td>${escapeHtml(sender.source || '')}</td>
+                <td>${escapeHtml(sender.service_account_name || sender.source || '')}</td>
                 <td>${escapeHtml(sender.domain || '')}</td>
-                <td><span class="ii-chip ${sender.has_app_password ? 'green' : 'red'}">${sender.has_app_password ? 'Available' : 'Missing'}</span></td>
+                <td><span class="ii-chip ${sender.service_account_id ? 'green' : 'yellow'}">${sender.service_account_id ? 'Gmail API' : 'Needs selected account'}</span></td>
                 <td><input type="checkbox" ${iiState.selectedSenderEmails.has(sender.email) ? 'checked' : ''} onchange="toggleSender('${escapeHtml(sender.email)}', this.checked)"></td>
             </tr>`).join('');
     }
@@ -1400,7 +1497,7 @@ merge_recipe_id, content_blueprint_id</pre>
             el.innerHTML = '<span class="ii-muted">Search Workspace Sender Accounts first, then select the senders for this test.</span>';
             return;
         }
-        el.innerHTML = iiState.workspaceSenders.map((sender) => `<label class="d-block mb-1"><input type="checkbox" ${iiState.selectedSenderEmails.has(sender.email) ? 'checked' : ''} onchange="toggleSender('${escapeHtml(sender.email)}', this.checked)"> ${escapeHtml(sender.email)} ${sender.has_app_password ? '' : '<span class="ii-chip red">missing app password</span>'}</label>`).join('');
+        el.innerHTML = iiState.workspaceSenders.map((sender) => `<label class="d-block mb-1"><input type="checkbox" ${iiState.selectedSenderEmails.has(sender.email) ? 'checked' : ''} onchange="toggleSender('${escapeHtml(sender.email)}', this.checked)"> ${escapeHtml(sender.email)} <span class="ii-chip ${sender.service_account_id ? 'green' : 'yellow'}">${sender.service_account_id ? 'Gmail API' : 'select from account'}</span></label>`).join('');
     }
 
     function renderTestInboxSelector() {
@@ -1416,12 +1513,16 @@ merge_recipe_id, content_blueprint_id</pre>
         const status = document.getElementById('testRunStatus');
         status.textContent = 'Creating test...';
         try {
+            const selectedSenders = iiState.workspaceSenders
+                .filter((sender) => iiState.selectedSenderEmails.has(sender.email))
+                .map((sender) => ({email: sender.email, service_account_id: sender.service_account_id}));
             const payload = {
                 name: document.getElementById('testNameInput').value,
-                subject: document.getElementById('testSubjectInput').value,
-                html_body: document.getElementById('testHtmlInput').value,
-                text_body: document.getElementById('testTextInput').value,
-                senders: [...iiState.selectedSenderEmails],
+                template_id: iiState.selectedTemplateId,
+                subject: document.getElementById('studioSubjectInput')?.value || document.getElementById('testSubjectInput').value,
+                html_body: document.getElementById('studioHtmlInput')?.value || document.getElementById('testHtmlInput').value,
+                text_body: document.getElementById('studioTextInput')?.value || document.getElementById('testTextInput').value,
+                senders: selectedSenders,
                 inbox_account_ids: [...iiState.selectedInboxIds]
             };
             const data = await iiFetch('/api/inbox-intelligence/tests', {
@@ -1430,10 +1531,14 @@ merge_recipe_id, content_blueprint_id</pre>
                 body: JSON.stringify(payload)
             });
             status.textContent = `Test ${data.test_id} created. Sent ${data.sent}, failed ${data.failed}.`;
+            const studioStatus = document.getElementById('studioStatus');
+            if (studioStatus) studioStatus.textContent = `Test ${data.test_id} created with selected API senders.`;
             await loadTests();
             await pollDeliverabilityTest(data.test_id);
         } catch (err) {
             status.textContent = err.message;
+            const studioStatus = document.getElementById('studioStatus');
+            if (studioStatus) studioStatus.textContent = err.message;
         }
     }
 
