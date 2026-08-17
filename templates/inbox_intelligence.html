@@ -187,6 +187,19 @@
     .ii-chip.gray { background: #f1f5f9; color: #475569; border-color: #e2e8f0; }
     .ii-chip.blue { background: #dbeafe; color: #1d4ed8; border-color: #bfdbfe; }
 
+    .ii-spinner {
+        width: 14px;
+        height: 14px;
+        border: 2px solid currentColor;
+        border-right-color: transparent;
+        border-radius: 999px;
+        animation: ii-spin 0.75s linear infinite;
+    }
+
+    @keyframes ii-spin {
+        to { transform: rotate(360deg); }
+    }
+
     .ii-table {
         width: 100%;
         border-collapse: collapse;
@@ -1484,7 +1497,7 @@ merge_recipe_id, content_blueprint_id</pre>
                         <h3>User Inbox Analytics</h3>
                         <p class="ii-muted mb-0">Live placement, user health, and domain decisions from the latest synced user inbox test.</p>
                     </div>
-                    <div class="ii-row"><span class="ii-muted" id="userInboxLastSync">No sync yet</span><button class="ii-btn" type="button" onclick="syncUserInboxAnalytics()"><i class="fas fa-arrows-rotate"></i> Sync fresh data</button></div>
+                    <div class="ii-row"><span class="ii-muted" id="userInboxLastSync">No sync yet</span><button class="ii-btn" id="userInboxSyncButton" type="button" onclick="syncUserInboxAnalytics()"><i class="fas fa-arrows-rotate"></i> Sync fresh data</button></div>
                 </div>
                 <div class="ii-result-summary" id="userInboxAnalyticsSummary">
                     <div class="ii-result-pill"><span class="ii-muted">Users</span><strong>0</strong></div>
@@ -2905,8 +2918,10 @@ merge_recipe_id, content_blueprint_id</pre>
 
     async function pollUserInboxTest(testId) {
         const status = document.getElementById('userInboxTestStatus');
+        const syncLabel = document.getElementById('userInboxLastSync');
         try {
-            await iiFetch(`/api/inbox-intelligence/tests/${testId}/poll`, {method: 'POST'});
+            setUserInboxSyncing(true, 'Syncing IMAP inboxes...');
+            const pollData = await iiFetch(`/api/inbox-intelligence/tests/${testId}/poll`, {method: 'POST'});
             const data = await iiFetch(`/api/inbox-intelligence/tests/${testId}`);
             const rows = data.test.messages || [];
             renderAnalyticsSummary('userInboxAnalyticsSummary', rows, 'Users');
@@ -2916,15 +2931,29 @@ merge_recipe_id, content_blueprint_id</pre>
             renderUserInboxUserActions(rows);
             renderUserInboxSpamInsights(rows);
             const summary = matrixSummary(rows);
-            const syncLabel = document.getElementById('userInboxLastSync');
             if (syncLabel) syncLabel.textContent = `Last sync: ${new Date().toLocaleTimeString()}`;
-            if (status) status.textContent = `Analytics updated for ${testId}. Inbox ${summary.inbox}, spam ${summary.spam}, missing ${summary.pending + summary.failed}, external ${summary.unobserved}.`;
+            const syncWarning = pollData.sync_errors?.length ? ` IMAP warnings: ${pollData.sync_errors.slice(0, 2).join(' | ')}` : '';
+            if (status) status.textContent = `Analytics updated for ${testId}. Inbox ${summary.inbox}, spam ${summary.spam}, missing ${summary.pending + summary.failed}, external ${summary.unobserved}.${syncWarning}`;
             await loadTests();
         } catch (err) {
             if (status) status.textContent = `Could not sync analytics: ${err.message}`;
             const cards = document.getElementById('userInboxAnalyticsCards');
             if (cards) cards.innerHTML = `<div class="ii-analytics-card ii-muted">Could not sync analytics: ${escapeHtml(err.message)}</div>`;
+        } finally {
+            setUserInboxSyncing(false);
         }
+    }
+
+    function setUserInboxSyncing(isSyncing, label = 'Syncing fresh recipient data...') {
+        const button = document.getElementById('userInboxSyncButton');
+        const syncLabel = document.getElementById('userInboxLastSync');
+        if (button) {
+            button.disabled = isSyncing;
+            button.innerHTML = isSyncing
+                ? '<span class="ii-spinner" aria-hidden="true"></span> Syncing...'
+                : '<i class="fas fa-arrows-rotate"></i> Sync fresh data';
+        }
+        if (isSyncing && syncLabel) syncLabel.textContent = label;
     }
 
     async function syncUserInboxAnalytics() {
@@ -2933,7 +2962,7 @@ merge_recipe_id, content_blueprint_id</pre>
             status.textContent = 'Run a User Inbox Test first, then sync fresh data.';
             return;
         }
-        status.textContent = 'Syncing fresh recipient data...';
+        status.textContent = 'Syncing fresh recipient data from connected IMAP inboxes...';
         await pollUserInboxTest(iiState.userInboxTestId);
     }
 

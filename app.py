@@ -1,7 +1,7 @@
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import logging
 import random
@@ -1199,7 +1199,7 @@ def _serialize_imap_account(account):
         'spam_count': account.spam_count or 0,
     }
 
-def _sync_imap_account(account, folder='INBOX', limit=50):
+def _sync_imap_account(account, folder='INBOX', limit=50, mark_errors=True):
     conn = None
     synced = 0
     try:
@@ -1247,6 +1247,7 @@ def _sync_imap_account(account, folder='INBOX', limit=50):
             preview = re.sub(r'\s+', ' ', preview_source).strip()[:240]
             headers = {
                 'message_id': msg.get('Message-ID'),
+                'x_test_id': msg.get('X-Test-ID'),
                 'authentication_results': msg.get('Authentication-Results'),
                 'return_path': msg.get('Return-Path'),
                 'content_type': msg.get('Content-Type'),
@@ -1281,8 +1282,8 @@ def _sync_imap_account(account, folder='INBOX', limit=50):
         return synced, None
     except Exception as e:
         db.session.rollback()
-        account.connection_status = 'error'
-        account.last_error = str(e)
+        account.connection_status = 'error' if mark_errors else 'connected'
+        account.last_error = str(e) if mark_errors else account.last_error
         db.session.add(account)
         db.session.commit()
         return synced, str(e)
@@ -2085,6 +2086,60 @@ def _detect_message_placements(inbox, identifiers):
         except Exception:
             pass
 
+def _placement_from_folder(folder):
+    return 'SPAM' if any(x in (folder or '').lower() for x in ['spam', 'junk', 'bulk']) else 'INBOX'
+
+def _sync_test_inbox_folders(inbox):
+    synced_total = 0
+    errors = []
+    for index, folder in enumerate(['INBOX', '[Gmail]/Spam', 'Spam', 'Junk', 'Bulk Mail']):
+        synced, error = _sync_imap_account(inbox, folder=folder, limit=120, mark_errors=(index == 0))
+        if error:
+            if folder == 'INBOX':
+                errors.append(f'{folder}: {error}')
+            continue
+        synced_total += synced
+    return synced_total, errors
+
+def _detect_message_placements_from_synced(inbox_id, rows):
+    results = {}
+    if not rows:
+        return results
+    earliest_sent = min((row.sent_at for row in rows if row.sent_at), default=None)
+    q = InboxEmailMessage.query.filter_by(imap_account_id=inbox_id)
+    if earliest_sent:
+        q = q.filter(or_(InboxEmailMessage.received_at == None, InboxEmailMessage.received_at >= earliest_sent - timedelta(minutes=15)))
+    messages = q.order_by(InboxEmailMessage.received_at.desc().nullslast(), InboxEmailMessage.id.desc()).limit(500).all()
+    for row in rows:
+        row_sender = (row.workspace_sender or '').lower()
+        row_subject = (row.subject or '').strip().lower()
+        for message in messages:
+            try:
+                headers = json.loads(message.headers_json or '{}')
+            except Exception:
+                headers = {}
+            searchable = '\n'.join([
+                message.message_id or '',
+                headers.get('message_id') or '',
+                headers.get('x_test_id') or '',
+                message.subject or '',
+                message.sender or '',
+                message.preview or '',
+                message.plain_text or '',
+                message.html_content or '',
+            ])
+            if row.test_identifier and row.test_identifier in searchable:
+                results[row.test_identifier] = (_placement_from_folder(message.folder), message.folder)
+                break
+            message_sender = parseaddr(message.sender or '')[1].lower()
+            subject_matches = row_subject and (message.subject or '').strip().lower() == row_subject
+            sender_matches = row_sender and message_sender == row_sender
+            recent_enough = not row.sent_at or not message.received_at or message.received_at >= row.sent_at - timedelta(minutes=15)
+            if subject_matches and sender_matches and recent_enough:
+                results[row.test_identifier] = (_placement_from_folder(message.folder), message.folder)
+                break
+    return results
+
 @app.route('/api/inbox-intelligence/tests/<test_id>/poll', methods=['POST'])
 @login_required
 @permission_required('inbox_intelligence')
@@ -2094,6 +2149,7 @@ def api_inbox_poll_test(test_id):
         return jsonify({'success': False, 'error': 'Test not found'}), 404
     messages = InboxDeliverabilityMessage.query.filter_by(test_id=test_id).all()
     pending_by_inbox = {}
+    sync_errors = []
     for row in messages:
         if row.status in ('FAILED', 'COMPLETED', 'SENT_EXTERNAL'):
             continue
@@ -2114,7 +2170,12 @@ def api_inbox_poll_test(test_id):
                 row.error_message = 'Receiving inbox no longer exists.'
             continue
         try:
+            _, errors = _sync_test_inbox_folders(inbox)
+            sync_errors.extend([f'{inbox.email}: {error}' for error in errors])
             placements = _detect_message_placements(inbox, [row.test_identifier for row in rows])
+            remaining_rows = [row for row in rows if placements.get(row.test_identifier, ('PENDING', None))[0] == 'PENDING']
+            fallback_placements = _detect_message_placements_from_synced(inbox.id, remaining_rows)
+            placements.update(fallback_placements)
             for row in rows:
                 placement, folder = placements.get(row.test_identifier, ('PENDING', None))
                 row.placement = placement
@@ -2127,7 +2188,7 @@ def api_inbox_poll_test(test_id):
                 row.error_message = str(e)
     _refresh_deliverability_counts(test)
     db.session.commit()
-    return jsonify({'success': True, 'test': {'test_id': test.test_id, 'status': test.status, 'inbox_count': test.inbox_count, 'spam_count': test.spam_count, 'pending_count': test.pending_count, 'failed_count': test.failed_count, 'sent_count': test.sent_count}})
+    return jsonify({'success': True, 'sync_errors': sync_errors, 'test': {'test_id': test.test_id, 'status': test.status, 'inbox_count': test.inbox_count, 'spam_count': test.spam_count, 'pending_count': test.pending_count, 'failed_count': test.failed_count, 'sent_count': test.sent_count}})
 
 @app.route('/api/inbox-intelligence/tests/<test_id>', methods=['GET'])
 @login_required
