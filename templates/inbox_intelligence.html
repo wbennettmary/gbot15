@@ -510,6 +510,38 @@
         margin-top: 12px;
     }
 
+    .ii-account-tabs {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 14px;
+    }
+
+    .ii-account-tab {
+        border: 1px solid #dbe4ef;
+        border-radius: 8px;
+        background: #fff;
+        padding: 10px 12px;
+        display: grid;
+        gap: 5px;
+        min-width: 220px;
+        max-width: 320px;
+        cursor: pointer;
+    }
+
+    .ii-account-tab.active {
+        border-color: #2563eb;
+        background: #eff6ff;
+        box-shadow: 0 10px 24px rgba(37, 99, 235, 0.08);
+    }
+
+    .ii-account-tab-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+    }
+
     .ii-user-select-card {
         display: block;
         cursor: pointer;
@@ -850,6 +882,7 @@
         .ii-source-card .ii-select { width: 100%; max-width: none !important; }
         .ii-template-actions .ii-btn { flex-basis: calc(50% - 4px); }
         .ii-analytics-row { grid-template-columns: 1fr; }
+        .ii-account-tab { max-width: none; width: 100%; }
     }
 </style>
 
@@ -1767,6 +1800,7 @@ merge_recipe_id, content_blueprint_id</pre>
         userInboxHiddenImapRecipients: new Set(),
         userInboxTemplatePage: 0,
         userInboxSenderPage: 0,
+        userInboxAccountFilter: 'all',
         userInboxCopyBuckets: {inboxDomains: [], spamDomains: [], inboxUsers: [], spamUsers: []},
         serviceAccounts: [],
         activeMessageId: null,
@@ -2779,6 +2813,57 @@ merge_recipe_id, content_blueprint_id</pre>
         );
     }
 
+    function senderAccountKey(sender) {
+        return String(sender?.service_account_id || sender?.service_account_name || sender?.source || 'unassigned');
+    }
+
+    function userInboxAccountGroups() {
+        const groups = {};
+        iiState.workspaceSenders.forEach((sender) => {
+            const key = senderAccountKey(sender);
+            groups[key] ||= {
+                key,
+                label: sender.service_account_admin_email || sender.service_account_name || sender.source || 'Unassigned account',
+                name: sender.service_account_name || sender.source || 'Workspace account',
+                users: [],
+                selectable: 0,
+                selected: 0,
+                excludedAdmins: 0
+            };
+            groups[key].users.push(sender);
+            if (isAdminWorkspaceSender(sender)) groups[key].excludedAdmins += 1;
+            else if (sender.service_account_id) {
+                groups[key].selectable += 1;
+                if (iiState.selectedSenderEmails.has(sender.email)) groups[key].selected += 1;
+            }
+        });
+        return Object.values(groups).sort((a, b) => a.label.localeCompare(b.label));
+    }
+
+    function setUserInboxAccountFilter(key) {
+        iiState.userInboxAccountFilter = key || 'all';
+        iiState.userInboxSenderPage = 0;
+        renderUserInboxSenderSelector();
+    }
+
+    function toggleUserInboxAccountSelection(key, checked) {
+        iiState.workspaceSenders
+            .filter((sender) => senderAccountKey(sender) === key)
+            .forEach((sender) => {
+                if (!sender.service_account_id || isAdminWorkspaceSender(sender)) {
+                    iiState.selectedSenderEmails.delete(sender.email);
+                    return;
+                }
+                if (checked) iiState.selectedSenderEmails.add(sender.email);
+                else iiState.selectedSenderEmails.delete(sender.email);
+            });
+        iiState.userInboxAccountFilter = key;
+        iiState.userInboxSenderPage = 0;
+        renderWorkspaceSenders();
+        renderTestSenderSelector();
+        renderUserInboxSenderSelector();
+    }
+
     function toggleSender(email, checked) {
         const sender = iiState.workspaceSenders.find((item) => item.email === email);
         if (checked && isAdminWorkspaceSender(sender)) return;
@@ -2834,19 +2919,45 @@ merge_recipe_id, content_blueprint_id</pre>
             el.innerHTML = 'Retrieve users with Manual Account Lookup or List Management Source first.';
             return;
         }
+        const groups = userInboxAccountGroups();
+        const activeFilterExists = iiState.userInboxAccountFilter === 'all' || groups.some((group) => group.key === iiState.userInboxAccountFilter);
+        if (!activeFilterExists) iiState.userInboxAccountFilter = 'all';
+        const filteredSenders = iiState.userInboxAccountFilter === 'all'
+            ? iiState.workspaceSenders
+            : iiState.workspaceSenders.filter((sender) => senderAccountKey(sender) === iiState.userInboxAccountFilter);
         const pageSize = 20;
-        const pageCount = Math.max(1, Math.ceil(iiState.workspaceSenders.length / pageSize));
+        const pageCount = Math.max(1, Math.ceil(filteredSenders.length / pageSize));
         iiState.userInboxSenderPage = Math.min(iiState.userInboxSenderPage || 0, pageCount - 1);
         const start = iiState.userInboxSenderPage * pageSize;
-        const pageSenders = iiState.workspaceSenders.slice(start, start + pageSize);
+        const pageSenders = filteredSenders.slice(start, start + pageSize);
+        const accountTabs = `
+            <div class="ii-account-tabs">
+                <div class="ii-account-tab ${iiState.userInboxAccountFilter === 'all' ? 'active' : ''}" onclick="setUserInboxAccountFilter('all')">
+                    <div class="ii-account-tab-head"><strong>All accounts</strong><span class="ii-chip blue">${apiReady.length}</span></div>
+                    <div class="ii-muted">${selected.length} selected across retrieved users</div>
+                </div>
+                ${groups.map((group) => `
+                    <div class="ii-account-tab ${iiState.userInboxAccountFilter === group.key ? 'active' : ''}" onclick="setUserInboxAccountFilter(${JSON.stringify(group.key)})">
+                        <div class="ii-account-tab-head">
+                            <strong class="ii-email-text">${escapeHtml(group.label)}</strong>
+                            <input type="checkbox" onclick="event.stopPropagation()" onchange="toggleUserInboxAccountSelection(${JSON.stringify(group.key)}, this.checked)" ${group.selectable && group.selected === group.selectable ? 'checked' : ''} ${group.selectable ? '' : 'disabled'}>
+                        </div>
+                        <div class="ii-muted ii-email-text">${escapeHtml(group.name)}</div>
+                        <div class="ii-row">
+                            <span class="ii-chip green">${group.selected}/${group.selectable} selected</span>
+                            ${group.excludedAdmins ? `<span class="ii-chip red">${group.excludedAdmins} admin excluded</span>` : ''}
+                        </div>
+                    </div>`).join('')}
+            </div>`;
         el.className = 'ii-card';
         el.innerHTML = `
             <div class="ii-row justify-content-between mb-3">
                 <strong>Retrieved Workspace API Users</strong>
-                <span class="ii-muted">Showing ${start + 1}-${Math.min(start + pageSize, iiState.workspaceSenders.length)} of ${iiState.workspaceSenders.length} · ${apiReady.length} API-ready</span>
+                <span class="ii-muted">Showing ${filteredSenders.length ? start + 1 : 0}-${Math.min(start + pageSize, filteredSenders.length)} of ${filteredSenders.length} in view · ${apiReady.length} API-ready</span>
             </div>
+            ${accountTabs}
             <div class="ii-user-grid">
-                ${pageSenders.map((sender) => `
+                ${pageSenders.length ? pageSenders.map((sender) => `
                     <label class="ii-card ii-user-select-card">
                         <div class="ii-row justify-content-between">
                             <span class="ii-user-line"><input type="checkbox" ${iiState.selectedSenderEmails.has(sender.email) ? 'checked' : ''} ${sender.service_account_id && !isAdminWorkspaceSender(sender) ? '' : 'disabled'} onchange="toggleSender('${escapeHtml(sender.email)}', this.checked)"> <strong>${escapeHtml(sender.name || sender.email.split('@')[0])}</strong></span>
@@ -2854,7 +2965,7 @@ merge_recipe_id, content_blueprint_id</pre>
                         </div>
                         <div class="ii-muted ii-email-text mt-1">${escapeHtml(sender.email)}</div>
                         <div class="ii-muted ii-domain-text mt-1">${escapeHtml(sender.service_account_name || sender.source || '')} · ${escapeHtml(sender.domain || '')}</div>
-                    </label>`).join('')}
+                    </label>`).join('') : '<div class="ii-card ii-muted">No users in this account view.</div>'}
             </div>
             <div class="ii-user-pager">
                 <span class="ii-muted">Page ${iiState.userInboxSenderPage + 1}/${pageCount}. Selection is kept across pages.</span>

@@ -1516,6 +1516,7 @@ def _retrieve_workspace_senders_from_service_accounts(service_accounts, max_per_
                         'source': f'service_account:{sa.name}',
                         'service_account_id': sa.id,
                         'service_account_name': sa.name,
+                        'service_account_admin_email': sa.admin_email,
                         'is_admin': False,
                         'status': 'suspended' if user.get('suspended') else 'active',
                         'send_method': 'workspace_api',
