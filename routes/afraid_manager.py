@@ -595,6 +595,14 @@ def parse_manual_subdomain_labels(values):
         raise ValueError(f"Duplicate manual subdomain(s): {', '.join(sorted(set(duplicates)))}")
     return labels
 
+def normalize_domain_name(value):
+    domain = (value or '').strip().lower().rstrip('.')
+    if not domain:
+        return ''
+    if not re.fullmatch(r'(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?', domain):
+        raise ValueError(f"Invalid domain '{value}'. Enter one domain per line, like example.com.")
+    return domain
+
 def unique_generated_label(base_domain, used_fqdns, max_attempts=100):
     for _ in range(max_attempts):
         label = normalize_subdomain_label(generated_label())
@@ -640,8 +648,15 @@ def delete_existing_subdomains():
 def create_batch_subdomains():
     data = request.get_json(silent=True) or {}
     tld = data.get('tld', '').strip().lower()
-    base_domain = data.get('base_domain', '').strip().lower()
-    base_domains = [d.strip().lower() for d in data.get('base_domains', []) if d.strip()]
+    try:
+        base_domain = normalize_domain_name(data.get('base_domain', ''))
+        base_domains = []
+        for raw_domain in data.get('base_domains', []):
+            domain_name = normalize_domain_name(raw_domain)
+            if domain_name and domain_name not in base_domains:
+                base_domains.append(domain_name)
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
     if base_domain and base_domain not in base_domains:
         base_domains.append(base_domain)
     raw_afraid_count = data.get('afraid_count')
@@ -665,11 +680,24 @@ def create_batch_subdomains():
         for selected_domain in base_domains:
             domain_record = AfraidDomain.query.filter_by(domain_name=selected_domain).first()
             if not domain_record:
-                return jsonify({'success': False, 'error': f"FreeDNS domain '{selected_domain}' is not cached. Fetch Registry first."}), 404
+                domain_record = AfraidDomain(
+                    domain_name=selected_domain,
+                    tld=selected_domain.rsplit('.', 1)[-1] if '.' in selected_domain else None,
+                    source='manual'
+                )
+                db.session.add(domain_record)
             if domain_record.last_used_at and domain_record.last_used_at >= used_cutoff():
                 return jsonify({'success': False, 'error': f"FreeDNS domain '{selected_domain}' is already marked used. Reactivate it first or wait 30 days."}), 400
-            if domain_record.registry_status != 'public' or not domain_record.domain_id:
+            if not domain_record.domain_id:
+                domain_record.domain_id = svc.get_domain_id(selected_domain)
+            if not domain_record.domain_id:
+                return jsonify({
+                    'success': False,
+                    'error': svc.last_error or f"FreeDNS domain '{selected_domain}' is not a usable public registry domain."
+                }), 400
+            if domain_record.registry_status not in ('public', None):
                 return jsonify({'success': False, 'error': f"FreeDNS domain '{selected_domain}' is not a usable public registry domain."}), 400
+            domain_record.registry_status = 'public'
             afraid_domains.append(domain_record)
     else:
         afraid_domains = get_rotated_afraid_domains(tld, afraid_count or 5000)

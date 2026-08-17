@@ -117,16 +117,23 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Domains In Selected TLD</label>
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <div class="small text-muted">Available domains are used for creation. Used domains can be reactivated here.</div>
-                                <button type="button" class="btn btn-sm btn-primary" id="btnReactivateSelectedDomains">
-                                    Reactivate Selected Used
-                                </button>
+                        <div class="row g-3 mb-3 align-items-stretch">
+                            <div class="col-lg-6">
+                                <label class="form-label fw-semibold">Domains In Selected TLD</label>
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <div class="small text-muted">Available domains are used for creation. Used domains can be reactivated here.</div>
+                                    <button type="button" class="btn btn-sm btn-primary" id="btnReactivateSelectedDomains">
+                                        Reactivate Selected Used
+                                    </button>
+                                </div>
+                                <div id="tldDomainList" class="border rounded p-2" style="height: 220px; overflow-y: auto;">
+                                    <div class="text-muted small">Select a TLD group to view public domains.</div>
+                                </div>
                             </div>
-                            <div id="tldDomainList" class="border rounded p-2" style="max-height: 220px; overflow-y: auto;">
-                                <div class="text-muted small">Select a TLD group to view public domains.</div>
+                            <div class="col-lg-6">
+                                <label for="manualBaseDomainsInput" class="form-label fw-semibold">Manual Input Domains</label>
+                                <textarea class="form-control font-monospace" id="manualBaseDomainsInput" rows="8" placeholder="example.com&#10;example.net" style="height: 220px;"></textarea>
+                                <div class="form-text" id="manualBaseDomainsCount">0 manual domains</div>
                             </div>
                         </div>
                         <div class="row">
@@ -335,6 +342,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('btnDeleteSelectedSubdomains').addEventListener('click', deleteSelectedSubdomains);
     document.getElementById('btnStartProcess').addEventListener('click', startProcess);
     document.getElementById('manualSubdomainsInput').addEventListener('input', updateManualSubdomainsCount);
+    document.getElementById('manualBaseDomainsInput').addEventListener('input', updateManualBaseDomainsCount);
     document.getElementById('btnReactivateSelectedDomains').addEventListener('click', reactivateSelectedDomains);
     document.getElementById('btnRefreshAfraidLists').addEventListener('click', loadAfraidLists);
     document.getElementById('lists-tab').addEventListener('shown.bs.tab', loadAfraidLists);
@@ -350,6 +358,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('destinationInput').addEventListener('input', updateCloudflareCountState);
     updateCloudflareCountState();
     updateManualSubdomainsCount();
+    updateManualBaseDomainsCount();
 
     const cookieForm = document.getElementById('cookieForm');
     if (cookieForm) {
@@ -671,7 +680,10 @@ async function reactivateDomains(domain_names) {
 function syncSelectedTldDomains() {
     const selected = [...document.querySelectorAll('.tld-domain-check:checked')].map(el => el.value);
     const afraidCountInput = document.getElementById('afraidCountInput');
-    if (selected.length) {
+    const manualBaseDomains = getManualBaseDomains();
+    if (manualBaseDomains.length) {
+        afraidCountInput.value = selected.length + manualBaseDomains.length;
+    } else if (selected.length) {
         afraidCountInput.value = selected.length;
     } else {
         afraidCountInput.value = '';
@@ -768,6 +780,26 @@ function updateManualSubdomainsCount() {
     }
 }
 
+function getManualBaseDomains() {
+    const domains = document.getElementById('manualBaseDomainsInput').value
+        .split('\n')
+        .map(line => line.trim().toLowerCase())
+        .filter(Boolean);
+    return [...new Set(domains)];
+}
+
+function updateManualBaseDomainsCount() {
+    const lines = getManualBaseDomains();
+    const countEl = document.getElementById('manualBaseDomainsCount');
+    countEl.textContent = `${lines.length} manual domain${lines.length === 1 ? '' : 's'}`;
+    if (lines.length) {
+        const selectedCount = document.querySelectorAll('.tld-domain-check:checked').length;
+        document.getElementById('afraidCountInput').value = selectedCount + lines.length;
+    } else {
+        syncSelectedTldDomains();
+    }
+}
+
 async function loadExistingSubdomains() {
     const tbody = document.getElementById('subdomainsTableBody');
     document.getElementById('selectAllSubdomains').checked = false;
@@ -841,6 +873,8 @@ async function startProcess() {
     btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Running...';
     try {
         const selectedDomains = [...document.querySelectorAll('.tld-domain-check:checked')].map(el => el.value);
+        const manualBaseDomains = getManualBaseDomains();
+        const baseDomains = [...new Set([...selectedDomains, ...manualBaseDomains])];
         const selectedDestination = document.getElementById('destinationInput').value.trim() || document.getElementById('cloudflareSelect').value;
         const destinations = selectedDestination ? [selectedDestination] : [];
         const manualSubdomains = getManualSubdomains();
@@ -853,9 +887,9 @@ async function startProcess() {
             subdomains: manualSubdomains,
             ttl: document.getElementById('ttlInput').value
         };
-        if (selectedDomains.length) {
-            payload.base_domains = selectedDomains;
-            payload.afraid_count = selectedDomains.length;
+        if (baseDomains.length) {
+            payload.base_domains = baseDomains;
+            payload.afraid_count = baseDomains.length;
         }
         const res = await fetch('/api/afraid/create-batch', {
             method: 'POST',
