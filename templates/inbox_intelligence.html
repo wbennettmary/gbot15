@@ -1806,6 +1806,7 @@ merge_recipe_id, content_blueprint_id</pre>
         userInboxAccountFilter: 'all',
         userInboxListAccounts: [],
         userInboxListAccountOnly: false,
+        selectedUserInboxListAccountIds: new Set(),
         userInboxCopyBuckets: {inboxDomains: [], spamDomains: [], inboxUsers: [], spamUsers: []},
         serviceAccounts: [],
         activeMessageId: null,
@@ -2244,6 +2245,7 @@ merge_recipe_id, content_blueprint_id</pre>
             iiState.userInboxListAccountOnly = accountsOnly;
             if (accountsOnly) {
                 iiState.selectedSenderEmails = new Set();
+                iiState.selectedUserInboxListAccountIds = new Set(iiState.userInboxListAccounts.map((account) => account.id));
                 iiState.userInboxSenderPage = 0;
                 const notes = [];
                 if (data.unmatched?.length) notes.push(`${data.unmatched.length} unmatched list line(s)`);
@@ -2263,6 +2265,7 @@ merge_recipe_id, content_blueprint_id</pre>
             iiState.selectedSenderEmails = new Set(returnedEmails);
             iiState.userInboxListAccounts = [];
             iiState.userInboxListAccountOnly = false;
+            iiState.selectedUserInboxListAccountIds = new Set();
             iiState.userInboxSenderPage = 0;
             const notes = [];
             if (data.unmatched?.length) notes.push(`${data.unmatched.length} unmatched list line(s)`);
@@ -2928,20 +2931,46 @@ merge_recipe_id, content_blueprint_id</pre>
         el.innerHTML = iiState.workspaceSenders.map((sender) => `<label class="d-block mb-1"><input type="checkbox" ${iiState.selectedSenderEmails.has(sender.email) ? 'checked' : ''} ${isAdminWorkspaceSender(sender) ? 'disabled' : ''} onchange="toggleSender('${escapeHtml(sender.email)}', this.checked)"> ${escapeHtml(sender.email)} <span class="ii-chip ${isAdminWorkspaceSender(sender) ? 'red' : sender.service_account_id ? 'green' : 'yellow'}">${isAdminWorkspaceSender(sender) ? 'admin excluded' : sender.service_account_id ? 'Gmail API' : 'select from account'}</span></label>`).join('');
     }
 
+    function toggleUserInboxListAccount(id, checked) {
+        const accountId = Number(id);
+        if (checked) iiState.selectedUserInboxListAccountIds.add(accountId);
+        else iiState.selectedUserInboxListAccountIds.delete(accountId);
+        renderUserInboxSenderSelector();
+    }
+
+    function clearUserInboxListAccountCards() {
+        iiState.userInboxListAccounts = [];
+        iiState.userInboxListAccountOnly = false;
+        iiState.selectedUserInboxListAccountIds = new Set();
+        iiState.selectedSenderEmails = new Set();
+        iiState.workspaceSenders = [];
+        iiState.userInboxSenderPage = 0;
+        iiState.userInboxAccountFilter = 'all';
+        const status = document.getElementById('userInboxWorkspaceListStatus');
+        if (status) status.textContent = 'Cleared retrieved Workspace users and admin/account tabs.';
+        renderWorkspaceSenders();
+        renderTestSenderSelector();
+        renderUserInboxSenderSelector();
+    }
+
     function renderUserInboxListAccountCards(el) {
         const count = document.getElementById('userInboxSelectedUserCount');
-        if (count) count.textContent = `0 selected · ${iiState.userInboxListAccounts.length} account cards`;
+        const selectedCount = iiState.selectedUserInboxListAccountIds.size;
+        if (count) count.textContent = `${selectedCount} selected account(s) · ${iiState.userInboxListAccounts.length} account cards`;
         el.className = 'ii-card';
         el.innerHTML = `
             <div class="ii-row justify-content-between mb-3">
                 <strong>Retrieved Workspace Admin Accounts</strong>
-                <span class="ii-muted">${iiState.userInboxListAccounts.length} account(s) from selected list</span>
+                <div class="ii-row">
+                    <span class="ii-muted">${selectedCount}/${iiState.userInboxListAccounts.length} selected for all-user send</span>
+                    <button class="ii-btn" type="button" onclick="clearUserInboxListAccountCards()"><i class="fas fa-xmark"></i> Clear tabs</button>
+                </div>
             </div>
             <div class="ii-account-tabs">
                 ${iiState.userInboxListAccounts.length ? iiState.userInboxListAccounts.map((account) => `
-                    <div class="ii-account-tab">
+                    <div class="ii-account-tab ${iiState.selectedUserInboxListAccountIds.has(account.id) ? 'active' : ''}" onclick="toggleUserInboxListAccount(${account.id}, !iiState.selectedUserInboxListAccountIds.has(${account.id}))">
                         <div class="ii-account-tab-head">
-                            <strong class="ii-email-text">${escapeHtml(account.admin_email || account.name || 'Workspace admin')}</strong>
+                            <strong class="ii-email-text"><input type="checkbox" onclick="event.stopPropagation()" onchange="toggleUserInboxListAccount(${account.id}, this.checked)" ${iiState.selectedUserInboxListAccountIds.has(account.id) ? 'checked' : ''}> ${escapeHtml(account.admin_email || account.name || 'Workspace admin')}</strong>
                             <span class="ii-chip ${account.is_active ? 'green' : 'yellow'}">${account.is_active ? 'active' : 'inactive'}</span>
                         </div>
                         <div class="ii-muted ii-email-text">${escapeHtml(account.name || 'Service account')}</div>
@@ -3004,7 +3033,10 @@ merge_recipe_id, content_blueprint_id</pre>
         el.innerHTML = `
             <div class="ii-row justify-content-between mb-3">
                 <strong>Retrieved Workspace API Users</strong>
-                <span class="ii-muted">Showing ${filteredSenders.length ? start + 1 : 0}-${Math.min(start + pageSize, filteredSenders.length)} of ${filteredSenders.length} in view · ${apiReady.length} API-ready</span>
+                <div class="ii-row">
+                    <span class="ii-muted">Showing ${filteredSenders.length ? start + 1 : 0}-${Math.min(start + pageSize, filteredSenders.length)} of ${filteredSenders.length} in view · ${apiReady.length} API-ready</span>
+                    <button class="ii-btn" type="button" onclick="clearUserInboxListAccountCards()"><i class="fas fa-xmark"></i> Clear users</button>
+                </div>
             </div>
             ${accountTabs}
             <div class="ii-user-grid">
@@ -3266,6 +3298,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 .filter((sender) => iiState.selectedSenderEmails.has(sender.email))
                 .filter((sender) => !isAdminWorkspaceSender(sender))
                 .map((sender) => ({email: sender.email, name: sender.name || '', service_account_id: sender.service_account_id}));
+            const selectedListAccountIds = iiState.userInboxListAccountOnly ? [...iiState.selectedUserInboxListAccountIds] : [];
             const customHeaders = document.getElementById('userInboxHeadersInput').value;
             const headerSubjectMatch = customHeaders.match(/^Subject:\s*(.+)$/im);
             const subject = document.getElementById('userInboxSubjectInput').value.trim() || (headerSubjectMatch ? headerSubjectMatch[1].trim() : '');
@@ -3274,7 +3307,7 @@ merge_recipe_id, content_blueprint_id</pre>
             const recipient = selectedUserInboxRecipient();
             const recipients = recipient ? [recipient.email] : [];
             const selectedInboxIds = recipient?.source === 'imap' && recipient.imap_account_id ? [recipient.imap_account_id] : [];
-            if (!selectedSenders.length) throw new Error('Select Workspace API users first.');
+            if (!selectedSenders.length && !selectedListAccountIds.length) throw new Error('Select Workspace API users or Workspace admin/account tabs first.');
             if (!subject) throw new Error('Subject is required in the Subject field or custom headers.');
             if (!html.trim() && !text.trim()) throw new Error('Static HTML or plain-text template is required.');
             if (!recipients.length && !selectedInboxIds.length) throw new Error('Select or add one recipient.');
@@ -3289,6 +3322,7 @@ merge_recipe_id, content_blueprint_id</pre>
                     text_body: text,
                     custom_headers: customHeaders,
                     senders: selectedSenders,
+                    service_account_ids: selectedListAccountIds,
                     recipient_emails: recipients,
                     inbox_account_ids: selectedInboxIds,
                     async_send: true

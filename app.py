@@ -1948,6 +1948,24 @@ def api_inbox_tests():
                 senders.append({'email': email_addr, 'name': sender_name, 'service_account_id': int(service_account_id)})
         elif isinstance(item, str) and item.strip():
             senders.append({'email': item.strip().lower(), 'name': '', 'service_account_id': None})
+    service_account_ids = []
+    for value in data.get('service_account_ids', []):
+        try:
+            account_id = int(value)
+        except (TypeError, ValueError):
+            continue
+        if account_id and account_id not in service_account_ids:
+            service_account_ids.append(account_id)
+    if service_account_ids:
+        accounts = ServiceAccount.query.filter(ServiceAccount.id.in_(service_account_ids)).all()
+        expanded_senders, expansion_errors = _retrieve_workspace_senders_from_service_accounts(accounts, max_per_account=None)
+        existing = {sender['email'] for sender in senders}
+        for sender in expanded_senders:
+            if sender['email'] not in existing:
+                senders.append({'email': sender['email'], 'name': sender.get('name') or '', 'service_account_id': sender['service_account_id']})
+                existing.add(sender['email'])
+        if expansion_errors and not expanded_senders:
+            return jsonify({'success': False, 'error': f"Could not retrieve users from selected admin/account tabs: {expansion_errors[0].get('error', 'Unknown error')}"}), 400
     inbox_ids = [int(x) for x in data.get('inbox_account_ids', [])]
     recipient_emails = []
     for value in data.get('recipient_emails', []):
