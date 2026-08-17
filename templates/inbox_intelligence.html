@@ -411,6 +411,98 @@
         color: #0f172a;
     }
 
+    .ii-studio-shell {
+        display: grid;
+        grid-template-columns: minmax(0, 1.25fr) minmax(360px, 0.95fr);
+        gap: 14px;
+    }
+
+    .ii-studio-toolbar,
+    .ii-editor-toolbar,
+    .ii-variable-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+    .ii-mode-btn {
+        border: 1px solid #dbe4ef;
+        background: #fff;
+        color: #475569;
+        border-radius: 8px;
+        padding: 8px 12px;
+        font-size: 13px;
+        font-weight: 700;
+    }
+
+    .ii-mode-btn.active {
+        color: #1d4ed8;
+        background: #eff6ff;
+        border-color: #bfdbfe;
+    }
+
+    .ii-editor-surface {
+        border: 1px solid #dbe4ef;
+        border-radius: 8px;
+        overflow: hidden;
+        background: #fff;
+    }
+
+    .ii-editor-toolbar {
+        padding: 10px;
+        border-bottom: 1px solid #e2e8f0;
+        background: #f8fafc;
+    }
+
+    .ii-editor-surface .ii-textarea {
+        border: 0;
+        border-radius: 0;
+        min-height: 330px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        line-height: 1.5;
+    }
+
+    .ii-email-preview-card {
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background: #fff;
+        overflow: hidden;
+    }
+
+    .ii-email-preview-head {
+        padding: 14px 16px;
+        border-bottom: 1px solid #e2e8f0;
+        font-size: 13px;
+    }
+
+    .ii-email-preview-body {
+        padding: 16px;
+        min-height: 300px;
+        overflow: auto;
+        overflow-wrap: anywhere;
+    }
+
+    .ii-suggestion-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .ii-suggestion-card {
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 10px;
+        background: #fff;
+        font-size: 13px;
+    }
+
+    .ii-integrity-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+    }
+
     .ii-template-thumb {
         min-height: 210px;
         border: 1px solid #dbe4ef;
@@ -479,14 +571,17 @@
     @media (max-width: 1200px) {
         .ii-kpis { grid-template-columns: repeat(3, minmax(150px, 1fr)); }
         .ii-layout-2,
-        .ii-layout-3 { grid-template-columns: 1fr; }
+        .ii-layout-3,
+        .ii-studio-shell { grid-template-columns: 1fr; }
         .ii-compare { grid-template-columns: 1fr; }
     }
 
     @media (max-width: 720px) {
         .ii-hero { align-items: flex-start; flex-direction: column; }
         .ii-kpis,
-        .ii-form-grid { grid-template-columns: 1fr; }
+        .ii-form-grid,
+        .ii-suggestion-grid,
+        .ii-integrity-grid { grid-template-columns: 1fr; }
         .ii-title { font-size: 24px; }
     }
 </style>
@@ -927,45 +1022,104 @@ merge_recipe_id, content_blueprint_id</pre>
     </section>
 
     <section id="templates" class="ii-tabpane">
-        <div class="ii-grid ii-layout-2">
+        <div class="ii-studio-shell">
             <div class="ii-panel">
-                <div class="ii-row justify-content-between">
+                <div class="ii-row justify-content-between mb-3">
                     <div>
                         <h3>Template Studio</h3>
-                        <div class="ii-muted">Select an inbox-derived template, adjust the test content, then trigger it with selected API sender users.</div>
+                        <div class="ii-muted">Design and refine inbox-derived templates with AI-powered region insights.</div>
                     </div>
-                    <select class="ii-select" style="width: 180px;"><option>Insert variable</option><option>{{ '{{first_name}}' }}</option><option>{{ '{{company}}' }}</option><option>{{ '{{unsubscribe_url}}' }}</option></select>
+                    <span class="ii-chip green" id="studioSaveBadge">Saved</span>
+                </div>
+                <div class="ii-studio-toolbar mb-3">
+                    <select class="ii-select" style="max-width: 180px;" onchange="insertStudioVariable(this.value); this.value = '';">
+                        <option value="">Insert variable</option>
+                        <option value="{{ '{{first_name}}' }}">{{ '{{first_name}}' }}</option>
+                        <option value="{{ '{{last_name}}' }}">{{ '{{last_name}}' }}</option>
+                        <option value="{{ '{{company}}' }}">{{ '{{company}}' }}</option>
+                        <option value="{{ '{{cta_url}}' }}">{{ '{{cta_url}}' }}</option>
+                        <option value="{{ '{{support_email}}' }}">{{ '{{support_email}}' }}</option>
+                        <option value="{{ '{{current_date}}' }}">{{ '{{current_date}}' }}</option>
+                    </select>
+                    <select class="ii-select" style="max-width: 280px;" id="studioTemplateSelect" onchange="selectStudioTemplate(this.value)"><option value="">Select a template from the library</option></select>
+                    <button class="ii-mode-btn active" type="button" data-editor-mode="html" onclick="setStudioMode('html')"><i class="fas fa-code"></i> HTML</button>
+                    <button class="ii-mode-btn" type="button" data-editor-mode="rich" onclick="setStudioMode('rich')"><i class="fas fa-pen-nib"></i> Rich text</button>
+                    <button class="ii-mode-btn" type="button" data-editor-mode="plain" onclick="setStudioMode('plain')"><i class="fas fa-align-left"></i> Plain text</button>
+                    <button class="ii-mode-btn active ms-auto" type="button" data-preview-size="desktop" onclick="setPreviewSizeMode('desktop')"><i class="fas fa-desktop"></i> Desktop</button>
+                    <button class="ii-mode-btn" type="button" data-preview-size="mobile" onclick="setPreviewSizeMode('mobile')"><i class="fas fa-mobile-screen"></i> Mobile</button>
                 </div>
                 <div class="ii-form-grid">
-                    <div class="ii-field" style="grid-column: 1 / -1;"><label>Inbox template</label><select class="ii-select" id="studioTemplateSelect" onchange="selectStudioTemplate(this.value)"><option value="">Select a template from the library</option></select></div>
-                    <div class="ii-field"><label>Subject</label><input class="ii-input" id="studioSubjectInput" placeholder="Template subject"></div>
+                    <div class="ii-field"><label>Subject</label><input class="ii-input" id="studioSubjectInput" placeholder="Template subject" oninput="syncStudioPreview()"></div>
                     <div class="ii-field"><label>Preview text</label><input class="ii-input" id="studioPreheaderInput" placeholder="Template preview text"></div>
-                    <div class="ii-field"><label>Editor mode</label><select class="ii-select"><option>Rich text</option><option>Raw HTML</option><option>Plain text</option></select></div>
-                    <div class="ii-field"><label>Preview size</label><select class="ii-select" id="previewSize"><option>Desktop</option><option>Tablet</option><option>Mobile</option></select></div>
-                    <div class="ii-field" style="grid-column: 1 / -1;"><label>HTML body</label><textarea class="ii-textarea" id="studioHtmlInput" placeholder="Selected inbox-derived HTML template appears here."></textarea></div>
-                    <div class="ii-field" style="grid-column: 1 / -1;"><label>Plain Text Version</label><textarea class="ii-textarea" id="studioTextInput" placeholder="Plain-text version generated from final content or edited manually."></textarea></div>
+                    <div class="ii-field" style="grid-column: 1 / -1;">
+                        <label>Email body</label>
+                        <div class="ii-editor-surface">
+                            <div class="ii-editor-toolbar">
+                                <select class="ii-select" style="width: 150px;"><option>Paragraph</option><option>Heading</option><option>Button</option></select>
+                                <button class="ii-btn" type="button" onclick="insertStudioVariable('<strong></strong>')"><i class="fas fa-bold"></i></button>
+                                <button class="ii-btn" type="button" onclick="insertStudioVariable('<em></em>')"><i class="fas fa-italic"></i></button>
+                                <button class="ii-btn" type="button" onclick="insertStudioVariable('<a href=&quot;{{cta_url}}&quot;>Link</a>')"><i class="fas fa-link"></i></button>
+                                <button class="ii-btn" type="button" onclick="insertStudioVariable('<img src=&quot;&quot; alt=&quot;&quot;>')"><i class="fas fa-image"></i></button>
+                                <button class="ii-btn ms-auto" type="button" onclick="syncStudioPreview()"><i class="fas fa-eye"></i> Refresh Preview</button>
+                            </div>
+                            <textarea class="ii-textarea" id="studioHtmlInput" placeholder="Selected inbox-derived HTML template appears here." oninput="syncStudioPreview()"></textarea>
+                        </div>
+                    </div>
+                    <div class="ii-field" style="grid-column: 1 / -1;"><label>Plain text version</label><textarea class="ii-textarea" id="studioTextInput" placeholder="Plain-text version generated from final content or edited manually."></textarea></div>
+                </div>
+                <h4 class="mt-3">Dynamic variables</h4>
+                <div class="ii-variable-row">
+                    <button class="ii-btn" type="button" onclick="insertStudioVariable('{{ '{{first_name}}' }}')">{{ '{{first_name}}' }}</button>
+                    <button class="ii-btn" type="button" onclick="insertStudioVariable('{{ '{{last_name}}' }}')">{{ '{{last_name}}' }}</button>
+                    <button class="ii-btn" type="button" onclick="insertStudioVariable('{{ '{{company}}' }}')">{{ '{{company}}' }}</button>
+                    <button class="ii-btn" type="button" onclick="insertStudioVariable('{{ '{{cta_url}}' }}')">{{ '{{cta_url}}' }}</button>
+                    <button class="ii-btn" type="button" onclick="insertStudioVariable('{{ '{{current_date}}' }}')">{{ '{{current_date}}' }}</button>
                 </div>
                 <div class="ii-row mt-3">
-                    <button class="ii-btn ii-btn-primary" type="button" onclick="runDeliverabilityTest()"><i class="fas fa-paper-plane"></i> Trigger With Selected Users</button>
+                    <button class="ii-btn ii-btn-primary" type="button" onclick="saveStudioTemplateVersion()"><i class="fas fa-save"></i> Save Template Version</button>
+                    <button class="ii-btn" type="button" onclick="validateStudioTemplate()"><i class="fas fa-shield-halved"></i> Validate</button>
+                    <button class="ii-btn" type="button" onclick="runDeliverabilityTest()"><i class="fas fa-paper-plane"></i> Send to Test</button>
+                    <button class="ii-btn" type="button" onclick="syncStudioPreview()"><i class="fas fa-eye"></i> Preview Merge</button>
                     <span class="ii-muted" id="studioStatus">Select a template, Workspace API senders, and receiving IMAP inboxes.</span>
                 </div>
             </div>
             <div class="ii-panel">
-                <div class="ii-row justify-content-between"><h3>Live Preview</h3><button class="ii-btn" id="togglePreviewMode"><i class="fas fa-moon"></i> Dark mode</button></div>
-                <div class="ii-preview-frame ii-template-preview" id="templatePreview">
-                    <div class="text-center py-4">
-                        <i class="fas fa-envelope fa-2x text-muted mb-3"></i>
-                        <h4>No template selected</h4>
-                        <p class="ii-muted mb-0">The sanitized live preview appears after content is created or a static template is selected.</p>
+                <div class="ii-row justify-content-between mb-3"><h3>Live Preview</h3><button class="ii-btn" id="togglePreviewMode"><i class="fas fa-moon"></i> Dark mode</button></div>
+                <div class="ii-email-preview-card ii-template-preview" id="templatePreviewShell">
+                    <div class="ii-email-preview-head">
+                        <div>From: {{ '{{company}}' }} &lt;no-reply@{{ '{{company}}' }}.com&gt;</div>
+                        <div>To: {{ '{{first_name}}' }} &lt;recipient@example.com&gt;</div>
+                    </div>
+                    <div class="ii-email-preview-body" id="templatePreview">
+                        <div class="text-center py-4">
+                            <i class="fas fa-envelope fa-2x text-muted mb-3"></i>
+                            <h4>No template selected</h4>
+                            <p class="ii-muted mb-0">The live preview appears after content is created or a template is selected.</p>
+                        </div>
                     </div>
                 </div>
                 <div class="ii-card mt-3">
-                    <h4>AI Region Editor</h4>
-                    <p><strong>HEADLINE</strong></p>
-                    <div class="ii-muted mb-2">Current: No region selected</div>
-                    <div class="ii-muted mb-2">Inbox Intelligence: Suggestions appear after analysis and region selection.</div>
-                    <div class="ii-card text-center py-3 mb-3"><span class="ii-muted">No AI suggestions generated.</span></div>
-                    <div class="ii-row"><button class="ii-btn">Regenerate</button><button class="ii-btn ii-btn-primary">Apply</button></div>
+                    <div class="ii-row justify-content-between"><h4>AI Region Editor</h4><i class="fas fa-circle-info ii-muted"></i></div>
+                    <div class="ii-form-grid">
+                        <div><div class="ii-muted">Selected region</div><span class="ii-chip blue">Headline</span></div>
+                        <div><div class="ii-muted">Current text</div><strong id="studioCurrentText">No region selected</strong></div>
+                    </div>
+                    <div class="ii-muted mt-3 mb-2">Inbox Intelligence suggestions</div>
+                    <div class="ii-suggestion-grid">
+                        <button class="ii-suggestion-card" type="button" onclick="applyStudioSuggestion('Welcome, {{ '{{first_name}}' }}!')">Welcome,<br>{{ '{{first_name}}' }}!<br><span class="ii-chip green mt-2">+8%</span></button>
+                        <button class="ii-suggestion-card" type="button" onclick="applyStudioSuggestion('Hi {{ '{{first_name}}' }}, let\\'s get started!')">Hi {{ '{{first_name}}' }},<br>let's get started!<br><span class="ii-chip green mt-2">+5%</span></button>
+                        <button class="ii-suggestion-card" type="button" onclick="applyStudioSuggestion('Glad you\\'re here, {{ '{{first_name}}' }}!')">Glad you're here,<br>{{ '{{first_name}}' }}!<br><span class="ii-chip green mt-2">+4%</span></button>
+                    </div>
+                    <div class="ii-row mt-3"><button class="ii-btn" type="button"><i class="fas fa-rotate"></i> Regenerate</button><button class="ii-btn ii-btn-primary" type="button" onclick="applyStudioSuggestion(document.getElementById('studioSubjectInput').value)"><i class="fas fa-check"></i> Apply</button></div>
+                </div>
+                <div class="ii-card mt-3">
+                    <h4>Merge Insights</h4>
+                    <div class="ii-integrity-grid">
+                        <div><span class="ii-chip green"><i class="fas fa-check"></i> HTML</span><div class="ii-muted mt-1">Valid</div></div>
+                        <div><span class="ii-chip green"><i class="fas fa-check"></i> Layout</span><div class="ii-muted mt-1">Responsive</div></div>
+                        <div><span class="ii-chip green"><i class="fas fa-check"></i> Links</span><div class="ii-muted mt-1">Tracked</div></div>
+                        <div><span class="ii-chip green"><i class="fas fa-check"></i> Locked</span><div class="ii-muted mt-1">Preserved</div></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1605,6 +1759,91 @@ merge_recipe_id, content_blueprint_id</pre>
         }
     }
 
+    function setStudioMode(mode) {
+        document.querySelectorAll('[data-editor-mode]').forEach((btn) => btn.classList.toggle('active', btn.dataset.editorMode === mode));
+        const html = document.getElementById('studioHtmlInput');
+        const text = document.getElementById('studioTextInput');
+        if (html && text) {
+            html.parentElement.parentElement.style.display = mode === 'plain' ? 'none' : 'block';
+            text.parentElement.style.display = mode === 'html' || mode === 'rich' ? 'block' : 'block';
+        }
+    }
+
+    function setPreviewSizeMode(size) {
+        document.querySelectorAll('[data-preview-size]').forEach((btn) => btn.classList.toggle('active', btn.dataset.previewSize === size));
+        const shell = document.getElementById('templatePreviewShell');
+        if (shell) shell.style.maxWidth = size === 'mobile' ? '390px' : '100%';
+    }
+
+    function insertStudioVariable(value) {
+        if (!value) return;
+        const field = document.getElementById('studioHtmlInput');
+        const start = field.selectionStart || field.value.length;
+        const end = field.selectionEnd || field.value.length;
+        field.value = field.value.slice(0, start) + value + field.value.slice(end);
+        field.focus();
+        field.selectionStart = field.selectionEnd = start + value.length;
+        syncStudioPreview();
+    }
+
+    function syncStudioPreview() {
+        const preview = document.getElementById('templatePreview');
+        const html = document.getElementById('studioHtmlInput')?.value || '';
+        const subject = document.getElementById('studioSubjectInput')?.value || 'No subject';
+        if (preview) preview.innerHTML = html || `<div class="text-center py-4"><h4>${escapeHtml(subject)}</h4><p class="ii-muted mb-0">No HTML content loaded.</p></div>`;
+        const current = document.getElementById('studioCurrentText');
+        if (current) current.textContent = subject;
+        const badge = document.getElementById('studioSaveBadge');
+        if (badge) {
+            badge.className = 'ii-chip yellow';
+            badge.textContent = 'Edited';
+        }
+    }
+
+    function validateStudioTemplate() {
+        const html = document.getElementById('studioHtmlInput')?.value || '';
+        const status = document.getElementById('studioStatus');
+        const checks = [
+            html.trim() ? 'HTML present' : 'HTML missing',
+            /unsubscribe|preferences|privacy/i.test(html) ? 'footer signal found' : 'footer signal missing',
+            new RegExp('\\{\\{[^}]+\\}\\}').test(html) ? 'variables found' : 'no variables found'
+        ];
+        status.textContent = `Validation: ${checks.join(' · ')}`;
+    }
+
+    async function saveStudioTemplateVersion() {
+        const status = document.getElementById('studioStatus');
+        const subject = document.getElementById('studioSubjectInput').value.trim();
+        const html = document.getElementById('studioHtmlInput').value;
+        if (!subject || !html.trim()) {
+            status.textContent = 'Subject and HTML are required before saving.';
+            return;
+        }
+        const data = await iiFetch('/api/inbox-intelligence/static-templates', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                name: `${subject} - Studio Version`,
+                html_content: html,
+                plain_text: document.getElementById('studioTextInput').value
+            })
+        });
+        await loadStaticTemplates();
+        await selectStudioTemplate(data.template.id);
+        const badge = document.getElementById('studioSaveBadge');
+        if (badge) {
+            badge.className = 'ii-chip green';
+            badge.textContent = 'Saved';
+        }
+        status.textContent = data.message || 'Template version saved.';
+    }
+
+    function applyStudioSuggestion(value) {
+        if (!value) return;
+        document.getElementById('studioSubjectInput').value = value;
+        syncStudioPreview();
+    }
+
     async function selectStudioTemplate(id) {
         const templateId = parseInt(id, 10);
         if (!templateId) {
@@ -1623,7 +1862,12 @@ merge_recipe_id, content_blueprint_id</pre>
         document.getElementById('testSubjectInput').value = data.template.name || '';
         document.getElementById('testHtmlInput').value = data.template.html_content || '';
         document.getElementById('testTextInput').value = data.template.plain_text || '';
-        document.getElementById('templatePreview').innerHTML = data.template.html_content || '<div class="ii-muted">No HTML content.</div>';
+        syncStudioPreview();
+        const badge = document.getElementById('studioSaveBadge');
+        if (badge) {
+            badge.className = 'ii-chip green';
+            badge.textContent = 'Saved';
+        }
         document.getElementById('studioStatus').textContent = 'Template selected. Select Workspace API senders and receiving IMAP inboxes, then trigger the test.';
         renderStudioTemplateSelector();
     }

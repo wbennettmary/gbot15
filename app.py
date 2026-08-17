@@ -1528,6 +1528,60 @@ def _custom_header_value(header_text, header_name):
             return value.strip()
     return ''
 
+def _replace_email_tokens(value, sender, recipient, subject, test_identifier, message_id):
+    replacements = {
+        '[date]': formatdate(localtime=True),
+        '[to]': recipient,
+        '[from]': sender,
+        '[subject]': subject,
+        '[test_id]': test_identifier,
+        '[message_id]': message_id,
+    }
+    result = value or ''
+    for token, replacement in replacements.items():
+        result = result.replace(token, replacement)
+    return result
+
+def _custom_header_names(header_text):
+    names = set()
+    for raw_line in (header_text or '').splitlines():
+        line = raw_line.strip()
+        if ':' not in line:
+            continue
+        names.add(line.split(':', 1)[0].strip().lower())
+    return names
+
+def _raw_mime_boundary(header_text):
+    content_type = _custom_header_value(header_text, 'Content-Type')
+    boundary_match = re.search(r'boundary=["\']?([^"\';]+)', content_type or '', re.IGNORECASE)
+    return boundary_match.group(1) if boundary_match else ''
+
+def _should_send_raw_custom_mime(custom_headers, html_body, text_body):
+    boundary = _raw_mime_boundary(custom_headers)
+    body = html_body or text_body or ''
+    return bool(boundary and f'--{boundary}' in body)
+
+def _build_raw_custom_mime_bytes(sender, recipient, subject, html_body, text_body, test_identifier, custom_headers):
+    message_id = _custom_header_value(custom_headers, 'Message-ID') or make_msgid(idstring=test_identifier)
+    header_names = _custom_header_names(custom_headers)
+    header_lines = []
+    defaults = {
+        'from': f'From: {sender}',
+        'to': f'To: {recipient}',
+        'date': f'Date: {formatdate(localtime=True)}',
+        'message-id': f'Message-ID: {message_id}',
+        'subject': f'Subject: {subject}',
+        'mime-version': 'MIME-Version: 1.0',
+        'x-test-id': f'X-Test-ID: {test_identifier}',
+    }
+    for key, line in defaults.items():
+        if key not in header_names:
+            header_lines.append(line)
+    for name, value in _parse_custom_header_lines(custom_headers, sender, recipient, subject, test_identifier, message_id):
+        header_lines.append(f'{name}: {value}')
+    body = _replace_email_tokens(html_body or text_body or '', sender, recipient, subject, test_identifier, message_id)
+    return ('\r\n'.join(header_lines) + '\r\n\r\n' + body).encode('utf-8')
+
 def _apply_custom_headers(msg, header_text, sender, recipient, subject, test_identifier):
     message_id = msg.get('Message-ID') or make_msgid(idstring=test_identifier)
     for name, value in _parse_custom_header_lines(header_text, sender, recipient, subject, test_identifier, message_id):
@@ -1570,10 +1624,16 @@ def _send_test_email_gmail_api(service_account_id, sender, recipient, subject, h
         scopes=['https://www.googleapis.com/auth/gmail.send']
     ).with_subject(sender)
     gmail = build('gmail', 'v1', credentials=creds, cache_discovery=False)
-    msg = _build_test_mime_message(sender, recipient, subject, html_body, text_body, test_identifier, custom_headers)
-    raw = base64.urlsafe_b64encode(msg.as_bytes()).decode('utf-8')
+    if _should_send_raw_custom_mime(custom_headers, html_body, text_body):
+        raw_bytes = _build_raw_custom_mime_bytes(sender, recipient, subject, html_body, text_body, test_identifier, custom_headers)
+        fallback_message_id = _custom_header_value(custom_headers, 'Message-ID') or make_msgid(idstring=test_identifier)
+    else:
+        msg = _build_test_mime_message(sender, recipient, subject, html_body, text_body, test_identifier, custom_headers)
+        raw_bytes = msg.as_bytes()
+        fallback_message_id = msg['Message-ID']
+    raw = base64.urlsafe_b64encode(raw_bytes).decode('utf-8')
     result = gmail.users().messages().send(userId='me', body={'raw': raw}).execute()
-    return result.get('id') or msg['Message-ID']
+    return result.get('id') or fallback_message_id
 
 @app.route('/api/inbox-intelligence/tests', methods=['GET', 'POST'])
 @login_required
