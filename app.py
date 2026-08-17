@@ -1493,7 +1493,47 @@ def api_inbox_retrieve_workspace_senders():
     deduped = {row['email']: row for row in retrieved}
     return jsonify({'success': True, 'senders': sorted(deduped.values(), key=lambda x: x['email']), 'errors': errors, 'count': len(deduped)})
 
-def _build_test_mime_message(sender, recipient, subject, html_body, text_body, test_identifier):
+def _parse_custom_header_lines(header_text, sender, recipient, subject, test_identifier, message_id):
+    values = {
+        '[date]': formatdate(localtime=True),
+        '[to]': recipient,
+        '[from]': sender,
+        '[subject]': subject,
+        '[test_id]': test_identifier,
+        '[message_id]': message_id,
+    }
+    headers = []
+    for raw_line in (header_text or '').splitlines():
+        line = raw_line.strip()
+        if not line or ':' not in line:
+            continue
+        name, value = line.split(':', 1)
+        name = name.strip()
+        value = value.strip()
+        if not name or re.search(r'[\r\n:]', name):
+            continue
+        for token, replacement in values.items():
+            value = value.replace(token, replacement)
+        headers.append((name, value))
+    return headers
+
+def _apply_custom_headers(msg, header_text, sender, recipient, subject, test_identifier):
+    message_id = msg.get('Message-ID') or make_msgid(idstring=test_identifier)
+    for name, value in _parse_custom_header_lines(header_text, sender, recipient, subject, test_identifier, message_id):
+        lower_name = name.lower()
+        if lower_name == 'content-type':
+            boundary_match = re.search(r'boundary=["\']?([^"\';]+)', value, re.IGNORECASE)
+            if boundary_match:
+                msg.set_boundary(boundary_match.group(1))
+            continue
+        if lower_name == 'mime-version':
+            continue
+        if name in msg:
+            msg.replace_header(name, value)
+        else:
+            msg[name] = value
+
+def _build_test_mime_message(sender, recipient, subject, html_body, text_body, test_identifier, custom_headers=None):
     msg = MIMEMultipart('alternative')
     msg['Subject'] = subject
     msg['From'] = sender
@@ -1504,9 +1544,10 @@ def _build_test_mime_message(sender, recipient, subject, html_body, text_body, t
     msg.attach(MIMEText((text_body or '') + f"\n\nTest ID: {test_identifier}", 'plain', 'utf-8'))
     if html_body:
         msg.attach(MIMEText(html_body + f"<p style=\"font-size:11px;color:#64748b\">Test ID: {test_identifier}</p>", 'html', 'utf-8'))
+    _apply_custom_headers(msg, custom_headers, sender, recipient, subject, test_identifier)
     return msg
 
-def _send_test_email_gmail_api(service_account_id, sender, recipient, subject, html_body, text_body, test_identifier):
+def _send_test_email_gmail_api(service_account_id, sender, recipient, subject, html_body, text_body, test_identifier, custom_headers=None):
     from google.oauth2 import service_account as google_service_account
     from googleapiclient.discovery import build
     sa = ServiceAccount.query.get(service_account_id)
@@ -1518,7 +1559,7 @@ def _send_test_email_gmail_api(service_account_id, sender, recipient, subject, h
         scopes=['https://www.googleapis.com/auth/gmail.send']
     ).with_subject(sender)
     gmail = build('gmail', 'v1', credentials=creds, cache_discovery=False)
-    msg = _build_test_mime_message(sender, recipient, subject, html_body, text_body, test_identifier)
+    msg = _build_test_mime_message(sender, recipient, subject, html_body, text_body, test_identifier, custom_headers)
     raw = base64.urlsafe_b64encode(msg.as_bytes()).decode('utf-8')
     result = gmail.users().messages().send(userId='me', body={'raw': raw}).execute()
     return result.get('id') or msg['Message-ID']
@@ -1565,6 +1606,7 @@ def api_inbox_tests():
     subject = (data.get('subject') or (template.name if template else '')).strip()
     html_body = data.get('html_body') if data.get('html_body') is not None else (template.html_content if template else '')
     text_body = data.get('text_body') if data.get('text_body') is not None else (template.plain_text if template else '')
+    custom_headers = data.get('custom_headers') or ''
     name = (data.get('name') or f"Inbox Test {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}").strip()
     if not senders:
         return jsonify({'success': False, 'error': 'Select at least one Workspace API sender from a selected Workspace account'}), 400
@@ -1616,7 +1658,7 @@ def api_inbox_tests():
             db.session.add(row)
             db.session.flush()
             try:
-                row.provider_message_id = _send_test_email_gmail_api(sender_info['service_account_id'], sender, inbox.email, subject, html_body, text_body, identifier)
+                row.provider_message_id = _send_test_email_gmail_api(sender_info['service_account_id'], sender, inbox.email, subject, html_body, text_body, identifier, custom_headers)
                 row.sent_at = datetime.utcnow()
                 row.status = 'WAITING_FOR_DELIVERY'
                 row.placement = 'PENDING'
