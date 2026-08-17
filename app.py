@@ -1481,9 +1481,9 @@ def _retrieve_workspace_senders_from_service_accounts(service_accounts, max_per_
             svc = GoogleDomainsService(sa.name)
             admin_service = svc._get_admin_service()
             page_token = None
+            account_count = 0
             while True:
                 resp = admin_service.users().list(customer='my_customer', maxResults=500, pageToken=page_token, orderBy='email').execute()
-                account_count = 0
                 for user in resp.get('users', []):
                     email_addr = (user.get('primaryEmail') or '').lower()
                     if not email_addr:
@@ -1951,6 +1951,42 @@ def _detect_message_placement(inbox, identifier):
         except Exception:
             pass
 
+def _detect_message_placements(inbox, identifiers):
+    folders = ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk', 'Bulk Mail']
+    results = {identifier: ('PENDING', None) for identifier in identifiers}
+    pending = set(identifier for identifier in identifiers if identifier)
+    conn = None
+    try:
+        conn = _imap_connect(inbox)
+        for folder in folders:
+            if not pending:
+                break
+            status, _ = conn.select(folder, readonly=True)
+            if status != 'OK':
+                continue
+            for identifier in list(pending):
+                search_terms = [
+                    f'HEADER X-Test-ID "{identifier}"',
+                    f'TEXT "{identifier}"',
+                    f'HEADER Message-ID "{identifier}"',
+                    f'SUBJECT "{identifier}"',
+                ]
+                for search_term in search_terms:
+                    status, data = conn.uid('search', None, search_term)
+                    if status == 'OK' and data and data[0]:
+                        placement = 'SPAM' if any(x in folder.lower() for x in ['spam', 'junk', 'bulk']) else 'INBOX'
+                        results[identifier] = (placement, folder)
+                        pending.discard(identifier)
+                        break
+        return results
+    finally:
+        try:
+            if conn:
+                conn.close()
+                conn.logout()
+        except Exception:
+            pass
+
 @app.route('/api/inbox-intelligence/tests/<test_id>/poll', methods=['POST'])
 @login_required
 @permission_required('inbox_intelligence')
@@ -1959,6 +1995,7 @@ def api_inbox_poll_test(test_id):
     if not test:
         return jsonify({'success': False, 'error': 'Test not found'}), 404
     messages = InboxDeliverabilityMessage.query.filter_by(test_id=test_id).all()
+    pending_by_inbox = {}
     for row in messages:
         if row.status in ('FAILED', 'COMPLETED', 'SENT_EXTERNAL'):
             continue
@@ -1967,21 +2004,27 @@ def api_inbox_poll_test(test_id):
             row.placement = 'UNOBSERVED'
             row.error_message = 'Recipient is external; connect it as an IMAP inbox to observe inbox/spam placement.'
             continue
-        inbox = InboxImapAccount.query.get(row.imap_account_id)
+        pending_by_inbox.setdefault(row.imap_account_id, []).append(row)
+    for inbox_id, rows in pending_by_inbox.items():
+        inbox = InboxImapAccount.query.get(inbox_id)
         if not inbox:
-            row.status = 'FAILED'
-            row.placement = 'FAILED'
-            row.error_message = 'Receiving inbox no longer exists.'
+            for row in rows:
+                row.status = 'FAILED'
+                row.placement = 'FAILED'
+                row.error_message = 'Receiving inbox no longer exists.'
             continue
         try:
-            placement, folder = _detect_message_placement(inbox, row.test_identifier)
-            row.placement = placement
-            row.folder = folder
-            if placement != 'PENDING':
-                row.detected_at = datetime.utcnow()
-                row.status = 'COMPLETED'
+            placements = _detect_message_placements(inbox, [row.test_identifier for row in rows])
+            for row in rows:
+                placement, folder = placements.get(row.test_identifier, ('PENDING', None))
+                row.placement = placement
+                row.folder = folder
+                if placement != 'PENDING':
+                    row.detected_at = datetime.utcnow()
+                    row.status = 'COMPLETED'
         except Exception as e:
-            row.error_message = str(e)
+            for row in rows:
+                row.error_message = str(e)
     completed = InboxDeliverabilityMessage.query.filter_by(test_id=test_id, status='COMPLETED').count()
     external = InboxDeliverabilityMessage.query.filter_by(test_id=test_id, status='SENT_EXTERNAL').count()
     failed = InboxDeliverabilityMessage.query.filter_by(test_id=test_id, status='FAILED').count()

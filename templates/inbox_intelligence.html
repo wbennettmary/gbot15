@@ -2792,7 +2792,7 @@ merge_recipe_id, content_blueprint_id</pre>
             body: JSON.stringify({
                 name: `User Inbox Template - ${subject}`,
                 subject,
-                html_content: html || `<html><body>${escapeHtml(text).replace(/\n/g, '<br>')}</body></html>`,
+                html_content: html,
                 plain_text: text,
                 custom_headers: customHeaders
             })
@@ -2862,7 +2862,7 @@ merge_recipe_id, content_blueprint_id</pre>
 
     async function runUserInboxTest() {
         const status = document.getElementById('userInboxTestStatus');
-        status.textContent = 'Saving User Inbox template...';
+        status.textContent = 'Creating user inbox test...';
         try {
             const selectedSenders = iiState.workspaceSenders
                 .filter((sender) => iiState.selectedSenderEmails.has(sender.email))
@@ -2874,23 +2874,11 @@ merge_recipe_id, content_blueprint_id</pre>
             const text = document.getElementById('userInboxTextInput').value;
             const recipients = (document.getElementById('userInboxRecipientsInput').value || '')
                 .split(/\n|,/).map((item) => item.trim().toLowerCase()).filter(Boolean);
+            const selectedInboxIds = [...iiState.selectedInboxIds];
             if (!selectedSenders.length) throw new Error('Select Workspace API users first.');
             if (!subject) throw new Error('Subject is required in the Subject field or custom headers.');
             if (!html.trim() && !text.trim()) throw new Error('Static HTML or plain-text template is required.');
-            if (!recipients.length) throw new Error('Type at least one recipient.');
-
-            await iiFetch('/api/inbox-intelligence/user-inbox-templates', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    name: `User Inbox Test Template - ${subject || 'custom headers'}`,
-                    subject,
-                    html_content: html || `<html><body>${escapeHtml(text).replace(/\n/g, '<br>')}</body></html>`,
-                    plain_text: text,
-                    custom_headers: customHeaders
-                })
-            });
-            await loadUserInboxTemplates();
+            if (!recipients.length && !selectedInboxIds.length) throw new Error('Type at least one recipient or select connected IMAP inboxes.');
             status.textContent = 'Sending user inbox test...';
             const testData = await iiFetch('/api/inbox-intelligence/tests', {
                 method: 'POST',
@@ -2902,7 +2890,8 @@ merge_recipe_id, content_blueprint_id</pre>
                     text_body: text,
                     custom_headers: customHeaders,
                     senders: selectedSenders,
-                    recipient_emails: recipients
+                    recipient_emails: recipients,
+                    inbox_account_ids: selectedInboxIds
                 })
             });
             iiState.userInboxTestId = testData.test_id;
