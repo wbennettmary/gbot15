@@ -485,7 +485,7 @@ class InboxDeliverabilityMessage(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     test_id = db.Column(db.String(80), db.ForeignKey('inbox_deliverability_test.test_id'), nullable=False, index=True)
     workspace_sender = db.Column(db.String(255), nullable=False)
-    imap_account_id = db.Column(db.Integer, db.ForeignKey('inbox_imap_account.id'), nullable=False)
+    imap_account_id = db.Column(db.Integer, db.ForeignKey('inbox_imap_account.id'), nullable=True)
     recipient = db.Column(db.String(255), nullable=False)
     test_identifier = db.Column(db.String(120), unique=True, nullable=False, index=True)
     provider_message_id = db.Column(db.String(500), nullable=True)

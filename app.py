@@ -315,6 +315,28 @@ with app.app_context():
             db.session.rollback()
         except:
             pass
+
+    # Auto-migration: Allow deliverability rows for external recipients without a connected IMAP inbox.
+    try:
+        from sqlalchemy import inspect
+        inspector = inspect(db.engine)
+        table_names = inspector.get_table_names()
+        if 'inbox_deliverability_message' in table_names:
+            columns = {col['name']: col for col in inspector.get_columns('inbox_deliverability_message')}
+            if columns.get('imap_account_id') and not columns['imap_account_id'].get('nullable', True):
+                if 'postgresql' in str(db.engine.url):
+                    logging.info("Dropping NOT NULL constraint from inbox_deliverability_message.imap_account_id...")
+                    with db.engine.connect() as conn:
+                        conn.execute(text('ALTER TABLE "inbox_deliverability_message" ALTER COLUMN imap_account_id DROP NOT NULL'))
+                        conn.commit()
+                else:
+                    logging.warning("SQLite cannot alter inbox_deliverability_message.imap_account_id nullability in place; new databases will use nullable recipients.")
+    except Exception as e:
+        logging.warning(f"Could not auto-migrate inbox deliverability external recipients: {e}")
+        try:
+            db.session.rollback()
+        except:
+            pass
      
     # Auto-migration: Add ever_used column if it doesn't exist
     # Auto-migration: Add ever_used column if it doesn't exist
@@ -1800,24 +1822,25 @@ def api_inbox_tests():
     if any(not s.get('service_account_id') for s in senders):
         return jsonify({'success': False, 'error': 'Every sender must come from a selected Workspace account so Gmail API delegation can send it.'}), 400
     if not inbox_ids and not recipient_emails:
-        return jsonify({'success': False, 'error': 'Type or select at least one connected recipient inbox'}), 400
+        return jsonify({'success': False, 'error': 'Type or select at least one recipient email'}), 400
     if not template:
         return jsonify({'success': False, 'error': 'Select an inbox email template in Run Test or Template Studio before triggering the test'}), 400
     if not subject:
         return jsonify({'success': False, 'error': 'Subject is required'}), 400
     if not text_body and not html_body:
         return jsonify({'success': False, 'error': 'HTML or plain-text body is required'}), 400
-    inbox_query = InboxImapAccount.query
+    recipient_targets = []
     if recipient_emails:
-        inboxes = inbox_query.filter(func.lower(InboxImapAccount.email).in_(recipient_emails)).all()
-        found = {inbox.email.lower() for inbox in inboxes}
-        missing = [email for email in recipient_emails if email not in found]
-        if missing:
-            return jsonify({'success': False, 'error': 'Recipient inboxes must be connected IMAP accounts before they can be tested: ' + ', '.join(missing)}), 400
+        inboxes = InboxImapAccount.query.filter(func.lower(InboxImapAccount.email).in_(recipient_emails)).all()
+        by_email = {inbox.email.lower(): inbox for inbox in inboxes}
+        for email_value in recipient_emails:
+            inbox = by_email.get(email_value)
+            recipient_targets.append({'email': email_value, 'imap_account_id': inbox.id if inbox else None})
     else:
-        inboxes = inbox_query.filter(InboxImapAccount.id.in_(inbox_ids)).all()
-    if not inboxes:
-        return jsonify({'success': False, 'error': 'No valid inbox accounts selected'}), 400
+        inboxes = InboxImapAccount.query.filter(InboxImapAccount.id.in_(inbox_ids)).all()
+        recipient_targets = [{'email': inbox.email.lower(), 'imap_account_id': inbox.id} for inbox in inboxes]
+    if not recipient_targets:
+        return jsonify({'success': False, 'error': 'No valid recipients selected'}), 400
     test_id = f"DLV-{uuid.uuid4().hex[:8].upper()}"
     test = InboxDeliverabilityTest(
         test_id=test_id,
@@ -1827,7 +1850,7 @@ def api_inbox_tests():
         html_body=html_body,
         text_body=text_body,
         status='RUNNING',
-        total_messages=len(senders) * len(inboxes),
+        total_messages=len(senders) * len(recipient_targets),
         sent_count=0,
         inbox_count=0,
         spam_count=0,
@@ -1839,18 +1862,26 @@ def api_inbox_tests():
     db.session.flush()
     for sender_info in senders:
         sender = sender_info['email']
-        for inbox in inboxes:
+        for recipient_info in recipient_targets:
             identifier = f"{test_id}-{uuid.uuid4().hex[:6].upper()}"
-            row = InboxDeliverabilityMessage(test_id=test_id, workspace_sender=sender, imap_account_id=inbox.id, recipient=inbox.email, test_identifier=identifier, subject=subject, status='QUEUED', placement='PENDING')
+            recipient_imap_id = recipient_info.get('imap_account_id')
+            stored_imap_id = recipient_imap_id
+            if not stored_imap_id and 'sqlite' in str(db.engine.url):
+                stored_imap_id = 0
+            row = InboxDeliverabilityMessage(test_id=test_id, workspace_sender=sender, imap_account_id=stored_imap_id, recipient=recipient_info['email'], test_identifier=identifier, subject=subject, status='QUEUED', placement='PENDING')
             db.session.add(row)
             db.session.flush()
             try:
-                row.provider_message_id = _send_test_email_gmail_api(sender_info['service_account_id'], sender, inbox.email, subject, html_body, text_body, identifier, custom_headers)
+                row.provider_message_id = _send_test_email_gmail_api(sender_info['service_account_id'], sender, recipient_info['email'], subject, html_body, text_body, identifier, custom_headers)
                 row.sent_at = datetime.utcnow()
-                row.status = 'WAITING_FOR_DELIVERY'
-                row.placement = 'PENDING'
+                if recipient_imap_id:
+                    row.status = 'WAITING_FOR_DELIVERY'
+                    row.placement = 'PENDING'
+                    test.pending_count += 1
+                else:
+                    row.status = 'SENT_EXTERNAL'
+                    row.placement = 'UNOBSERVED'
                 test.sent_count += 1
-                test.pending_count += 1
             except Exception as e:
                 row.status = 'FAILED'
                 row.placement = 'FAILED'
@@ -1900,7 +1931,12 @@ def api_inbox_poll_test(test_id):
         return jsonify({'success': False, 'error': 'Test not found'}), 404
     messages = InboxDeliverabilityMessage.query.filter_by(test_id=test_id).all()
     for row in messages:
-        if row.status in ('FAILED', 'COMPLETED'):
+        if row.status in ('FAILED', 'COMPLETED', 'SENT_EXTERNAL'):
+            continue
+        if not row.imap_account_id:
+            row.status = 'SENT_EXTERNAL'
+            row.placement = 'UNOBSERVED'
+            row.error_message = 'Recipient is external; connect it as an IMAP inbox to observe inbox/spam placement.'
             continue
         inbox = InboxImapAccount.query.get(row.imap_account_id)
         if not inbox:
@@ -1918,6 +1954,7 @@ def api_inbox_poll_test(test_id):
         except Exception as e:
             row.error_message = str(e)
     completed = InboxDeliverabilityMessage.query.filter_by(test_id=test_id, status='COMPLETED').count()
+    external = InboxDeliverabilityMessage.query.filter_by(test_id=test_id, status='SENT_EXTERNAL').count()
     failed = InboxDeliverabilityMessage.query.filter_by(test_id=test_id, status='FAILED').count()
     inbox_count = InboxDeliverabilityMessage.query.filter_by(test_id=test_id, placement='INBOX').count()
     spam_count = InboxDeliverabilityMessage.query.filter_by(test_id=test_id, placement='SPAM').count()
@@ -1926,7 +1963,7 @@ def api_inbox_poll_test(test_id):
     test.spam_count = spam_count
     test.pending_count = pending
     test.failed_count = failed
-    if completed + failed >= test.total_messages:
+    if completed + failed + external >= test.total_messages:
         test.status = 'COMPLETED' if failed == 0 else 'PARTIAL'
         test.completed_at = datetime.utcnow()
     else:
@@ -1953,9 +1990,10 @@ def api_inbox_test_detail(test_id):
         'spam_count': test.spam_count,
         'pending_count': test.pending_count,
         'failed_count': test.failed_count,
-        'messages': [{
+            'messages': [{
             'sender': m.workspace_sender,
             'recipient': m.recipient,
+            'imap_account_id': m.imap_account_id,
             'test_identifier': m.test_identifier,
             'placement': m.placement,
             'folder': m.folder,
