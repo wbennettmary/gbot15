@@ -1098,19 +1098,17 @@ merge_recipe_id, content_blueprint_id</pre>
                         </div>
                     </div>
                 </div>
-                <div class="ii-card mt-3">
-                    <div class="ii-row justify-content-between"><h4>AI Region Editor</h4><i class="fas fa-circle-info ii-muted"></i></div>
-                    <div class="ii-form-grid">
-                        <div><div class="ii-muted">Selected region</div><span class="ii-chip blue">Headline</span></div>
+                    <div class="ii-card mt-3">
+                        <div class="ii-row justify-content-between"><h4>AI Region Editor</h4><i class="fas fa-circle-info ii-muted"></i></div>
+                        <div class="ii-form-grid">
+                        <div class="ii-field"><label>Selected region</label><select class="ii-select" id="studioRegionSelect"><option value="headline">Headline</option><option value="preheader">Preheader</option><option value="cta">CTA</option><option value="body">Body copy</option></select></div>
                         <div><div class="ii-muted">Current text</div><strong id="studioCurrentText">No region selected</strong></div>
                     </div>
                     <div class="ii-muted mt-3 mb-2">Inbox Intelligence suggestions</div>
-                    <div class="ii-suggestion-grid">
-                        <button class="ii-suggestion-card" type="button" onclick="applyStudioSuggestion('Welcome, {{ '{{first_name}}' }}!')">Welcome,<br>{{ '{{first_name}}' }}!<br><span class="ii-chip green mt-2">+8%</span></button>
-                        <button class="ii-suggestion-card" type="button" onclick="applyStudioSuggestion('Hi {{ '{{first_name}}' }}, let\\'s get started!')">Hi {{ '{{first_name}}' }},<br>let's get started!<br><span class="ii-chip green mt-2">+5%</span></button>
-                        <button class="ii-suggestion-card" type="button" onclick="applyStudioSuggestion('Glad you\\'re here, {{ '{{first_name}}' }}!')">Glad you're here,<br>{{ '{{first_name}}' }}!<br><span class="ii-chip green mt-2">+4%</span></button>
+                    <div class="ii-suggestion-grid" id="aiSuggestionGrid">
+                        <div class="ii-card ii-muted">Generate suggestions from the selected template region.</div>
                     </div>
-                    <div class="ii-row mt-3"><button class="ii-btn" type="button"><i class="fas fa-rotate"></i> Regenerate</button><button class="ii-btn ii-btn-primary" type="button" onclick="applyStudioSuggestion(document.getElementById('studioSubjectInput').value)"><i class="fas fa-check"></i> Apply</button></div>
+                    <div class="ii-row mt-3"><button class="ii-btn" type="button" onclick="generateAiRegionSuggestions()"><i class="fas fa-rotate"></i> Generate AI Suggestions</button><button class="ii-btn ii-btn-primary" type="button" onclick="applyStudioSuggestion(document.getElementById('studioSubjectInput').value)"><i class="fas fa-check"></i> Apply Current Text</button><span class="ii-muted" id="aiRegionStatus"></span></div>
                 </div>
                 <div class="ii-card mt-3">
                     <h4>Merge Insights</h4>
@@ -1249,6 +1247,22 @@ merge_recipe_id, content_blueprint_id</pre>
                 <div id="serviceAccountSelector" class="mt-3 ii-muted">Search for saved Workspace service accounts to retrieve users.</div>
                 <div id="workspaceRetrieveStatus" class="ii-muted mt-2"></div>
             </div>
+            <div class="ii-card mb-3">
+                <div class="ii-row justify-content-between">
+                    <div>
+                        <h4>List Management Users</h4>
+                        <p class="ii-muted mb-0">Choose a saved list, resolve its accounts to Workspace API service accounts, retrieve all users, then select them for testing.</p>
+                    </div>
+                    <button class="ii-btn" type="button" onclick="loadWorkspaceLists()"><i class="fas fa-arrows-rotate"></i> Refresh Lists</button>
+                </div>
+                <div class="ii-row mt-3">
+                    <select class="ii-select" id="workspaceListSelect" style="max-width: 420px;"><option value="">Loading lists...</option></select>
+                    <button class="ii-btn ii-btn-primary" type="button" onclick="retrieveWorkspaceListUsers()"><i class="fas fa-list-check"></i> Retrieve List Users</button>
+                    <button class="ii-btn" type="button" onclick="selectAllWorkspaceSenders(true)"><i class="fas fa-check-double"></i> Select All Users</button>
+                    <button class="ii-btn" type="button" onclick="selectAllWorkspaceSenders(false)"><i class="fas fa-xmark"></i> Clear Users</button>
+                </div>
+                <div id="workspaceListStatus" class="ii-muted mt-2"></div>
+            </div>
             <div class="ii-row mb-3">
                 <input class="ii-input" id="workspaceSenderSearchInput" style="max-width: 420px;" placeholder="Search retrieved API sender email, domain, or name">
                 <button class="ii-btn" type="button" onclick="searchWorkspaceSenders()"><i class="fas fa-search"></i> Search Senders</button>
@@ -1307,6 +1321,8 @@ merge_recipe_id, content_blueprint_id</pre>
         messages: [],
         staticTemplates: [],
         workspaceSenders: [],
+        workspaceLists: [],
+        aiSuggestions: [],
         serviceAccounts: [],
         activeMessageId: null,
         selectedMessageIds: new Set(),
@@ -1638,6 +1654,58 @@ merge_recipe_id, content_blueprint_id</pre>
         renderServiceAccountSelector();
     }
 
+    async function loadWorkspaceLists() {
+        const select = document.getElementById('workspaceListSelect');
+        const status = document.getElementById('workspaceListStatus');
+        if (select) select.innerHTML = '<option value="">Loading saved lists...</option>';
+        try {
+            const data = await iiFetch('/api/inbox-intelligence/workspace-lists');
+            iiState.workspaceLists = data.lists || [];
+            if (!select) return;
+            if (!iiState.workspaceLists.length) {
+                select.innerHTML = '<option value="">No saved lists found</option>';
+                if (status) status.textContent = 'Create a list in List Management first.';
+                return;
+            }
+            select.innerHTML = '<option value="">Select List Management source</option>' + iiState.workspaceLists.map((list) => `<option value="${list.id}">${escapeHtml(list.name)} · ${list.account_count} account(s) · ${escapeHtml(list.status)}</option>`).join('');
+            if (status) status.textContent = `${iiState.workspaceLists.length} saved list(s) available.`;
+        } catch (err) {
+            if (select) select.innerHTML = '<option value="">Could not load lists</option>';
+            if (status) status.textContent = err.message;
+        }
+    }
+
+    async function retrieveWorkspaceListUsers() {
+        const listId = document.getElementById('workspaceListSelect')?.value;
+        const status = document.getElementById('workspaceListStatus');
+        if (!listId) {
+            if (status) status.textContent = 'Select a List Management source first.';
+            return;
+        }
+        if (status) status.textContent = 'Resolving list accounts to Workspace API service accounts and retrieving users...';
+        try {
+            const data = await iiFetch('/api/inbox-intelligence/workspace-senders/retrieve-list', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({list_id: listId})
+            });
+            const byEmail = {};
+            iiState.workspaceSenders.forEach((sender) => { byEmail[sender.email] = sender; });
+            (data.senders || []).forEach((sender) => { byEmail[sender.email] = sender; });
+            iiState.workspaceSenders = Object.values(byEmail).sort((a, b) => a.email.localeCompare(b.email));
+            const notes = [];
+            if (data.unmatched?.length) notes.push(`${data.unmatched.length} unmatched list line(s)`);
+            if (data.ambiguous?.length) notes.push(`${data.ambiguous.length} ambiguous line(s)`);
+            if (data.errors?.length) notes.push(`${data.errors.length} retrieval error(s)`);
+            if (status) status.textContent = `Retrieved ${data.count || 0} users from ${data.service_account_count || 0} Workspace API account(s).${notes.length ? ' ' + notes.join(', ') + '.' : ''}`;
+            renderWorkspaceSenders();
+            renderTestSenderSelector();
+            renderUserInboxSenderSelector();
+        } catch (err) {
+            if (status) status.textContent = err.message;
+        }
+    }
+
     async function loadStaticTemplates() {
         const data = await iiFetch('/api/inbox-intelligence/static-templates');
         iiState.staticTemplates = data.templates || [];
@@ -1800,6 +1868,53 @@ merge_recipe_id, content_blueprint_id</pre>
         }
     }
 
+    function renderAiSuggestions(message) {
+        const grid = document.getElementById('aiSuggestionGrid');
+        if (!grid) return;
+        if (message && !iiState.aiSuggestions.length) {
+            grid.innerHTML = `<div class="ii-card ii-muted">${escapeHtml(message)}</div>`;
+            return;
+        }
+        if (!iiState.aiSuggestions.length) {
+            grid.innerHTML = '<div class="ii-card ii-muted">Generate suggestions from the selected template region.</div>';
+            return;
+        }
+        grid.innerHTML = iiState.aiSuggestions.map((item, index) => `
+            <button class="ii-suggestion-card" type="button" onclick="applyAiSuggestion(${index})">
+                ${escapeHtml(item.text).replace(/\n/g, '<br>')}
+                <br><span class="ii-chip green mt-2">${escapeHtml(item.expected_lift || '+4%')}</span>
+                <div class="ii-muted mt-2">${escapeHtml(item.rationale || '')}</div>
+            </button>`).join('');
+    }
+
+    async function generateAiRegionSuggestions() {
+        const status = document.getElementById('aiRegionStatus');
+        const region = document.getElementById('studioRegionSelect')?.value || 'headline';
+        if (status) status.textContent = 'Generating with AI...';
+        renderAiSuggestions('Generating suggestions...');
+        try {
+            const data = await iiFetch('/api/inbox-intelligence/ai-region-editor', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    region,
+                    current_text: document.getElementById('studioCurrentText')?.textContent || '',
+                    subject: document.getElementById('studioSubjectInput')?.value || '',
+                    html_body: document.getElementById('studioHtmlInput')?.value || '',
+                    text_body: document.getElementById('studioTextInput')?.value || '',
+                    custom_prompt: document.getElementById('templateAiPromptInput')?.value || ''
+                })
+            });
+            iiState.aiSuggestions = data.suggestions || [];
+            renderAiSuggestions(data.message);
+            if (status) status.textContent = data.provider === 'openrouter' ? `Generated with ${data.model || 'OpenRouter'}.` : (data.message || 'Generated local suggestions.');
+        } catch (err) {
+            iiState.aiSuggestions = [];
+            renderAiSuggestions(err.message);
+            if (status) status.textContent = err.message;
+        }
+    }
+
     function validateStudioTemplate() {
         const html = document.getElementById('studioHtmlInput')?.value || '';
         const status = document.getElementById('studioStatus');
@@ -1840,8 +1955,24 @@ merge_recipe_id, content_blueprint_id</pre>
 
     function applyStudioSuggestion(value) {
         if (!value) return;
-        document.getElementById('studioSubjectInput').value = value;
+        const region = document.getElementById('studioRegionSelect')?.value || 'headline';
+        if (region === 'preheader') {
+            document.getElementById('studioPreheaderInput').value = value;
+        } else if (region === 'body' || region === 'cta') {
+            insertStudioVariable(value);
+            return;
+        } else {
+            document.getElementById('studioSubjectInput').value = value;
+        }
         syncStudioPreview();
+    }
+
+    function applyAiSuggestion(index) {
+        const item = iiState.aiSuggestions[index];
+        if (!item) return;
+        applyStudioSuggestion(item.text);
+        const status = document.getElementById('aiRegionStatus');
+        if (status) status.textContent = 'Suggestion applied to the selected region.';
     }
 
     async function selectStudioTemplate(id) {
@@ -1969,6 +2100,17 @@ merge_recipe_id, content_blueprint_id</pre>
     function toggleSender(email, checked) {
         if (checked) iiState.selectedSenderEmails.add(email);
         else iiState.selectedSenderEmails.delete(email);
+        renderTestSenderSelector();
+        renderUserInboxSenderSelector();
+    }
+
+    function selectAllWorkspaceSenders(checked) {
+        iiState.workspaceSenders.forEach((sender) => {
+            if (!sender.service_account_id) return;
+            if (checked) iiState.selectedSenderEmails.add(sender.email);
+            else iiState.selectedSenderEmails.delete(sender.email);
+        });
+        renderWorkspaceSenders();
         renderTestSenderSelector();
         renderUserInboxSenderSelector();
     }
@@ -2310,6 +2452,7 @@ merge_recipe_id, content_blueprint_id</pre>
             loadStaticTemplates(),
             loadTemplateAiPrompt(),
             loadTests(),
+            loadWorkspaceLists(),
             loadOpenRouterConfig()
         ]).catch((err) => console.error(err));
         renderUserInboxSenderSelector();

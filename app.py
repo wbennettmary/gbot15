@@ -1450,17 +1450,7 @@ def api_inbox_workspace_accounts_search():
     } for sa in accounts]
     return jsonify({'success': True, 'service_accounts': service_accounts})
 
-@app.route('/api/inbox-intelligence/workspace-senders/retrieve', methods=['POST'])
-@login_required
-@permission_required('inbox_intelligence')
-def api_inbox_retrieve_workspace_senders():
-    data = request.get_json(silent=True) or {}
-    account_ids = [int(x) for x in data.get('service_account_ids', [])]
-    if not account_ids:
-        return jsonify({'success': False, 'error': 'Select at least one saved Workspace service account'}), 400
-    service_accounts = ServiceAccount.query.filter(ServiceAccount.id.in_(account_ids)).all()
-    if not service_accounts:
-        return jsonify({'success': False, 'error': 'No matching service accounts found'}), 404
+def _retrieve_workspace_senders_from_service_accounts(service_accounts):
     from services.google_domains_service import GoogleDomainsService
     retrieved = []
     errors = []
@@ -1491,7 +1481,104 @@ def api_inbox_retrieve_workspace_senders():
         except Exception as e:
             errors.append({'account': sa.name, 'error': str(e)})
     deduped = {row['email']: row for row in retrieved}
-    return jsonify({'success': True, 'senders': sorted(deduped.values(), key=lambda x: x['email']), 'errors': errors, 'count': len(deduped)})
+    return sorted(deduped.values(), key=lambda x: x['email']), errors
+
+def _parse_workspace_list_keys(raw_accounts):
+    keys = []
+    for raw_line in (raw_accounts or '').splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        key = re.split(r'[:,\s]+', line, 1)[0].strip().lower()
+        if key and key not in keys:
+            keys.append(key)
+    return keys
+
+def _resolve_workspace_list_service_accounts(workspace_list):
+    service_accounts = {}
+    unmatched = []
+    ambiguous = []
+    for key in _parse_workspace_list_keys(workspace_list.raw_accounts):
+        matches = []
+        if key.isdigit():
+            account = ServiceAccount.query.get(int(key))
+            if account:
+                matches.append(account)
+        exact_matches = ServiceAccount.query.filter(or_(
+            func.lower(ServiceAccount.name) == key,
+            func.lower(ServiceAccount.admin_email) == key,
+            func.lower(ServiceAccount.client_email) == key
+        )).all()
+        matches.extend(exact_matches)
+        if '@' in key and not matches:
+            domain = key.split('@', 1)[1]
+            domain_matches = ServiceAccount.query.filter(or_(
+                func.lower(ServiceAccount.admin_email).like(f'%@{domain}'),
+                func.lower(ServiceAccount.client_email).like(f'%@{domain}')
+            )).all()
+            matches.extend(domain_matches)
+        unique = {account.id: account for account in matches}
+        if len(unique) == 1:
+            account = next(iter(unique.values()))
+            service_accounts[account.id] = account
+        elif len(unique) > 1:
+            ambiguous.append(key)
+        else:
+            unmatched.append(key)
+    return list(service_accounts.values()), unmatched, ambiguous
+
+@app.route('/api/inbox-intelligence/workspace-lists', methods=['GET'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_workspace_lists():
+    lists = WorkspaceList.query.order_by(WorkspaceList.created_at.desc()).all()
+    return jsonify({'success': True, 'lists': [{
+        'id': lst.id,
+        'name': lst.name,
+        'account_count': lst.get_account_count(),
+        'status': lst.compute_status(),
+        'created_at': lst.created_at.isoformat() + 'Z' if lst.created_at else None,
+    } for lst in lists]})
+
+@app.route('/api/inbox-intelligence/workspace-senders/retrieve-list', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_retrieve_workspace_senders_from_list():
+    data = request.get_json(silent=True) or {}
+    try:
+        list_id = int(data.get('list_id') or 0)
+    except (TypeError, ValueError):
+        list_id = 0
+    workspace_list = WorkspaceList.query.get(list_id) if list_id else None
+    if not workspace_list:
+        return jsonify({'success': False, 'error': 'Select a saved List Management list'}), 400
+    service_accounts, unmatched, ambiguous = _resolve_workspace_list_service_accounts(workspace_list)
+    if not service_accounts:
+        return jsonify({'success': False, 'error': 'No saved Workspace service accounts matched this list. Add service account name, admin email, client email, or service account ID per line.', 'unmatched': unmatched, 'ambiguous': ambiguous}), 400
+    senders, errors = _retrieve_workspace_senders_from_service_accounts(service_accounts)
+    return jsonify({
+        'success': True,
+        'senders': senders,
+        'errors': errors,
+        'unmatched': unmatched,
+        'ambiguous': ambiguous,
+        'count': len(senders),
+        'service_account_count': len(service_accounts),
+    })
+
+@app.route('/api/inbox-intelligence/workspace-senders/retrieve', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_retrieve_workspace_senders():
+    data = request.get_json(silent=True) or {}
+    account_ids = [int(x) for x in data.get('service_account_ids', [])]
+    if not account_ids:
+        return jsonify({'success': False, 'error': 'Select at least one saved Workspace service account'}), 400
+    service_accounts = ServiceAccount.query.filter(ServiceAccount.id.in_(account_ids)).all()
+    if not service_accounts:
+        return jsonify({'success': False, 'error': 'No matching service accounts found'}), 404
+    senders, errors = _retrieve_workspace_senders_from_service_accounts(service_accounts)
+    return jsonify({'success': True, 'senders': senders, 'errors': errors, 'count': len(senders)})
 
 def _parse_custom_header_lines(header_text, sender, recipient, subject, test_identifier, message_id):
     values = {
@@ -1985,6 +2072,119 @@ def api_inbox_openrouter_config():
     config.max_tokens = int(data.get('max_tokens') or 1800)
     db.session.commit()
     return jsonify({'success': True, 'message': 'OpenRouter configuration saved'})
+
+def _local_template_region_suggestions(subject, html_body, text_body, custom_prompt, region):
+    source = subject or text_body or re.sub(r'<[^>]+>', ' ', html_body or '')
+    source = re.sub(r'\s+', ' ', source).strip()
+    if not source:
+        source = 'Your update is ready'
+    compact = source[:90].rstrip(' .')
+    prompt_hint = re.sub(r'\s+', ' ', custom_prompt or '').strip()[:80]
+    base = [
+        f"{compact}",
+        f"{compact} for {{{{first_name}}}}",
+        f"Quick update: {compact}",
+    ]
+    if region == 'cta':
+        base = ['Review the details', 'Open your update', 'Continue to next step']
+    elif region == 'preheader':
+        base = [f"Details inside for {{{{first_name}}}}.", 'A short update with the next action.', f"{compact}."]
+    suggestions = []
+    for idx, text in enumerate(base[:3], start=1):
+        suggestions.append({
+            'text': text,
+            'rationale': prompt_hint or 'Local fallback generated because OpenRouter is not configured or unavailable.',
+            'expected_lift': f"+{max(2, 8 - idx * 2)}%",
+        })
+    return suggestions
+
+def _extract_json_object(text_value):
+    text_value = (text_value or '').strip()
+    if not text_value:
+        return None
+    try:
+        return json.loads(text_value)
+    except Exception:
+        match = re.search(r'\{.*\}', text_value, re.DOTALL)
+        if not match:
+            return None
+        try:
+            return json.loads(match.group(0))
+        except Exception:
+            return None
+
+@app.route('/api/inbox-intelligence/ai-region-editor', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_ai_region_editor():
+    data = request.get_json(silent=True) or {}
+    subject = (data.get('subject') or '').strip()
+    html_body = data.get('html_body') or ''
+    text_body = data.get('text_body') or ''
+    custom_prompt = data.get('custom_prompt') or ''
+    region = (data.get('region') or 'headline').strip().lower()
+    current_text = (data.get('current_text') or subject or '').strip()
+    fallback = _local_template_region_suggestions(subject, html_body, text_body, custom_prompt, region)
+    config = InboxOpenRouterConfig.query.first()
+    api_key = ''
+    if config and config.encrypted_api_key:
+        try:
+            api_key = _unprotect_secret(config.encrypted_api_key)
+        except Exception as e:
+            app.logger.warning(f"Unable to decrypt OpenRouter key: {e}")
+    if not api_key:
+        return jsonify({'success': True, 'provider': 'local_fallback', 'message': 'OpenRouter API key is not configured; local suggestions were generated.', 'suggestions': fallback})
+    model = (config.custom_model or config.default_model or config.fallback_model or 'openai/gpt-4o-mini').strip()
+    payload = {
+        'model': model,
+        'temperature': float(config.temperature if config else 0.7),
+        'max_tokens': int(config.max_tokens if config else 1800),
+        'messages': [
+            {'role': 'system', 'content': 'You are an email template region editor. Return only compact JSON with a suggestions array. Preserve merge tags like {{first_name}} and do not rewrite locked layout, headers, footers, legal text, or tracking structure.'},
+            {'role': 'user', 'content': json.dumps({
+                'region': region,
+                'current_text': current_text,
+                'subject': subject,
+                'plain_text': text_body[:4000],
+                'html_excerpt': html_body[:6000],
+                'custom_prompt': custom_prompt,
+                'return_schema': {'suggestions': [{'text': 'string', 'rationale': 'string', 'expected_lift': '+n%'}]}
+            })}
+        ]
+    }
+    try:
+        import requests
+        response = requests.post(
+            'https://openrouter.ai/api/v1/chat/completions',
+            headers={
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': 'application/json',
+                'HTTP-Referer': request.host_url.rstrip('/'),
+                'X-Title': 'GBot Inbox Intelligence',
+            },
+            json=payload,
+            timeout=45
+        )
+        response.raise_for_status()
+        content = (((response.json() or {}).get('choices') or [{}])[0].get('message') or {}).get('content') or ''
+        parsed = _extract_json_object(content) or {}
+        suggestions = parsed.get('suggestions') or []
+        normalized = []
+        for item in suggestions[:6]:
+            if isinstance(item, str):
+                normalized.append({'text': item, 'rationale': 'Generated by OpenRouter.', 'expected_lift': '+4%'})
+            elif isinstance(item, dict) and item.get('text'):
+                normalized.append({
+                    'text': str(item.get('text') or ''),
+                    'rationale': str(item.get('rationale') or 'Generated by OpenRouter.'),
+                    'expected_lift': str(item.get('expected_lift') or '+4%'),
+                })
+        if not normalized:
+            normalized = fallback
+        return jsonify({'success': True, 'provider': 'openrouter', 'model': model, 'suggestions': normalized})
+    except Exception as e:
+        app.logger.error(f"OpenRouter AI Region Editor failed: {e}")
+        return jsonify({'success': True, 'provider': 'local_fallback', 'message': f'OpenRouter failed, local suggestions were generated: {e}', 'suggestions': fallback})
 
 def _detect_template_regions(html_content):
     html_content = html_content or ''
