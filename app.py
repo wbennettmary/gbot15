@@ -9,11 +9,19 @@ import string
 import csv
 import io
 import smtplib
+import imaplib
 import tempfile
 import time
 import sqlite3
 import traceback
-from sqlalchemy import text
+import base64
+import hashlib
+import hmac
+import ssl
+from email import message_from_bytes
+from email.header import decode_header, make_header
+from email.utils import parsedate_to_datetime, parseaddr, formatdate, make_msgid
+from sqlalchemy import text, or_
 from werkzeug.security import generate_password_hash, check_password_hash
 import logging.handlers
 import threading
@@ -30,7 +38,7 @@ from email.mime.multipart import MIMEMultipart
 import re
 
 from core_logic import google_api, unique_random_alias, get_random_name_pools
-from database import db, User, WhitelistedIP, UsedDomain, GoogleAccount, GoogleToken, Scope, ServerConfig, UserAppPassword, AutomationAccount, RetrievedUser, NamecheapConfig, DomainOperation, AwsConfig, ServiceAccount, CloudflareConfig, Notification, WorkspaceList, AwsGeneratedPassword
+from database import db, User, WhitelistedIP, UsedDomain, GoogleAccount, GoogleToken, Scope, ServerConfig, UserAppPassword, AutomationAccount, RetrievedUser, NamecheapConfig, DomainOperation, AwsConfig, ServiceAccount, CloudflareConfig, Notification, WorkspaceList, AwsGeneratedPassword, InboxImapAccount, InboxEmailMessage, InboxStaticTemplate, InboxOpenRouterConfig, InboxDeliverabilityTest, InboxDeliverabilityMessage
 from routes.dns_manager import dns_manager
 from routes.aws_manager import aws_manager
 from routes.digitalocean_manager import digitalocean_manager
@@ -1060,6 +1068,743 @@ def list_management():
 def inbox_intelligence():
     """Inbox Intelligence workspace for mailbox analysis and controlled deliverability testing."""
     return render_template('inbox_intelligence.html', user=session.get('user'), role=session.get('role'))
+
+INBOX_PROVIDER_DEFAULTS = {
+    'gmail': ('imap.gmail.com', 993),
+    'google workspace': ('imap.gmail.com', 993),
+    'outlook': ('outlook.office365.com', 993),
+    'hotmail': ('outlook.office365.com', 993),
+    'microsoft 365': ('outlook.office365.com', 993),
+    'yahoo': ('imap.mail.yahoo.com', 993),
+    'generic imap': ('', 993),
+    'generic': ('', 993),
+}
+
+def _crypto_key():
+    secret = app.config.get('SECRET_KEY') or os.environ.get('SECRET_KEY') or 'gbot-local-secret'
+    return hashlib.sha256(str(secret).encode('utf-8')).digest()
+
+def _protect_secret(value):
+    raw = (value or '').encode('utf-8')
+    key = _crypto_key()
+    stream = bytearray()
+    counter = 0
+    while len(stream) < len(raw):
+        stream.extend(hmac.new(key, counter.to_bytes(4, 'big'), hashlib.sha256).digest())
+        counter += 1
+    token = bytes([b ^ stream[i] for i, b in enumerate(raw)])
+    return base64.urlsafe_b64encode(token).decode('ascii')
+
+def _unprotect_secret(value):
+    token = base64.urlsafe_b64decode((value or '').encode('ascii'))
+    key = _crypto_key()
+    stream = bytearray()
+    counter = 0
+    while len(stream) < len(token):
+        stream.extend(hmac.new(key, counter.to_bytes(4, 'big'), hashlib.sha256).digest())
+        counter += 1
+    raw = bytes([b ^ stream[i] for i, b in enumerate(token)])
+    return raw.decode('utf-8')
+
+def _decode_header_value(value):
+    if not value:
+        return ''
+    try:
+        return str(make_header(decode_header(value)))
+    except Exception:
+        return str(value)
+
+def _message_text_parts(msg):
+    plain_parts = []
+    html_parts = []
+    has_attachments = False
+    if msg.is_multipart():
+        for part in msg.walk():
+            disposition = (part.get('Content-Disposition') or '').lower()
+            content_type = part.get_content_type()
+            if 'attachment' in disposition:
+                has_attachments = True
+                continue
+            if content_type not in ('text/plain', 'text/html'):
+                continue
+            try:
+                payload = part.get_payload(decode=True) or b''
+                text = payload.decode(part.get_content_charset() or 'utf-8', errors='replace')
+            except Exception:
+                text = ''
+            if content_type == 'text/plain':
+                plain_parts.append(text)
+            elif content_type == 'text/html':
+                html_parts.append(text)
+    else:
+        try:
+            payload = msg.get_payload(decode=True) or b''
+            text = payload.decode(msg.get_content_charset() or 'utf-8', errors='replace')
+        except Exception:
+            text = ''
+        if msg.get_content_type() == 'text/html':
+            html_parts.append(text)
+        else:
+            plain_parts.append(text)
+    return '\n'.join(plain_parts).strip(), '\n'.join(html_parts).strip(), has_attachments
+
+def _imap_connect(account):
+    password = _unprotect_secret(account.encrypted_password)
+    if account.tls_enabled:
+        conn = imaplib.IMAP4_SSL(account.imap_host, int(account.imap_port or 993), ssl_context=ssl.create_default_context())
+    else:
+        conn = imaplib.IMAP4(account.imap_host, int(account.imap_port or 143))
+    conn.login(account.username, password)
+    return conn
+
+def _serialize_imap_account(account):
+    return {
+        'id': account.id,
+        'provider': account.provider,
+        'email': account.email,
+        'imap_host': account.imap_host,
+        'imap_port': account.imap_port,
+        'tls_enabled': bool(account.tls_enabled),
+        'username': account.username,
+        'connection_status': account.connection_status,
+        'auto_sync_enabled': bool(account.auto_sync_enabled),
+        'last_synced_at': account.last_synced_at.isoformat() + 'Z' if account.last_synced_at else None,
+        'last_error': account.last_error,
+        'message_count': account.message_count or 0,
+        'folder_count': account.folder_count or 0,
+        'inbox_count': account.inbox_count or 0,
+        'spam_count': account.spam_count or 0,
+    }
+
+def _sync_imap_account(account, folder='INBOX', limit=50):
+    conn = None
+    synced = 0
+    try:
+        account.connection_status = 'syncing'
+        account.last_error = None
+        db.session.commit()
+        conn = _imap_connect(account)
+        folders_status, folders_data = conn.list()
+        account.folder_count = len(folders_data or []) if folders_status == 'OK' else account.folder_count
+        status, _ = conn.select(folder, readonly=True)
+        if status != 'OK':
+            raise RuntimeError(f"Could not open folder {folder}")
+        status, data = conn.uid('search', None, 'ALL')
+        if status != 'OK':
+            raise RuntimeError("Could not search mailbox")
+        uids = (data[0] or b'').split()[-int(limit):]
+        for uid in reversed(uids):
+            fetch_status, fetch_data = conn.uid('fetch', uid, '(RFC822)')
+            if fetch_status != 'OK' or not fetch_data:
+                continue
+            raw_msg = None
+            for item in fetch_data:
+                if isinstance(item, tuple) and item[1]:
+                    raw_msg = item[1]
+                    break
+            if not raw_msg:
+                continue
+            msg = message_from_bytes(raw_msg)
+            sender_raw = _decode_header_value(msg.get('From'))
+            sender_email = parseaddr(sender_raw)[1]
+            sender_domain = sender_email.split('@')[-1].lower() if '@' in sender_email else ''
+            recipient = _decode_header_value(msg.get('To'))
+            subject = _decode_header_value(msg.get('Subject'))
+            date_header = msg.get('Date')
+            received_at = None
+            if date_header:
+                try:
+                    received_at = parsedate_to_datetime(date_header)
+                    if received_at and received_at.tzinfo:
+                        received_at = received_at.replace(tzinfo=None)
+                except Exception:
+                    received_at = None
+            plain_text, html_content, has_attachments = _message_text_parts(msg)
+            preview_source = plain_text or re.sub(r'<[^>]+>', ' ', html_content or '')
+            preview = re.sub(r'\s+', ' ', preview_source).strip()[:240]
+            headers = {
+                'message_id': msg.get('Message-ID'),
+                'authentication_results': msg.get('Authentication-Results'),
+                'return_path': msg.get('Return-Path'),
+                'content_type': msg.get('Content-Type'),
+                'list_unsubscribe': msg.get('List-Unsubscribe'),
+            }
+            existing = InboxEmailMessage.query.filter_by(imap_account_id=account.id, folder=folder, uid=uid.decode()).first()
+            if not existing:
+                existing = InboxEmailMessage(imap_account_id=account.id, folder=folder, uid=uid.decode())
+                db.session.add(existing)
+            existing.provider = account.provider
+            existing.message_id = msg.get('Message-ID')
+            existing.sender = sender_raw
+            existing.sender_domain = sender_domain
+            existing.recipient = recipient
+            existing.subject = subject
+            existing.preview = preview
+            existing.plain_text = plain_text[:100000] if plain_text else ''
+            existing.html_content = html_content[:200000] if html_content else ''
+            existing.headers_json = json.dumps(headers)
+            existing.has_attachments = has_attachments
+            existing.received_at = received_at
+            synced += 1
+        account.last_synced_at = datetime.utcnow()
+        account.connection_status = 'connected'
+        account.message_count = InboxEmailMessage.query.filter_by(imap_account_id=account.id).count()
+        account.inbox_count = InboxEmailMessage.query.filter_by(imap_account_id=account.id, folder='INBOX').count()
+        account.spam_count = InboxEmailMessage.query.filter(
+            InboxEmailMessage.imap_account_id == account.id,
+            InboxEmailMessage.folder.ilike('%spam%')
+        ).count()
+        db.session.commit()
+        return synced, None
+    except Exception as e:
+        db.session.rollback()
+        account.connection_status = 'error'
+        account.last_error = str(e)
+        db.session.add(account)
+        db.session.commit()
+        return synced, str(e)
+    finally:
+        try:
+            if conn:
+                conn.close()
+                conn.logout()
+        except Exception:
+            pass
+
+@app.route('/api/inbox-intelligence/imap-accounts', methods=['GET', 'POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_imap_accounts():
+    if request.method == 'GET':
+        accounts = InboxImapAccount.query.order_by(InboxImapAccount.created_at.desc()).all()
+        return jsonify({'success': True, 'accounts': [_serialize_imap_account(a) for a in accounts]})
+    data = request.get_json(silent=True) or {}
+    provider = (data.get('provider') or 'generic').strip().lower()
+    email_addr = (data.get('email') or '').strip().lower()
+    username = (data.get('username') or email_addr).strip()
+    password = data.get('password') or ''
+    host_default, port_default = INBOX_PROVIDER_DEFAULTS.get(provider, ('', 993))
+    imap_host = (data.get('imap_host') or host_default).strip()
+    imap_port = int(data.get('imap_port') or port_default or 993)
+    tls_enabled = bool(data.get('tls_enabled', True))
+    auto_sync_enabled = bool(data.get('auto_sync_enabled', True))
+    if not email_addr or '@' not in email_addr:
+        return jsonify({'success': False, 'error': 'Valid inbox email is required'}), 400
+    if not imap_host:
+        return jsonify({'success': False, 'error': 'IMAP hostname is required'}), 400
+    existing = InboxImapAccount.query.filter_by(email=email_addr).first()
+    if existing and not password:
+        password = _unprotect_secret(existing.encrypted_password)
+    if not password:
+        return jsonify({'success': False, 'error': 'Password or app password is required'}), 400
+    account = existing or InboxImapAccount(email=email_addr)
+    account.provider = provider
+    account.imap_host = imap_host
+    account.imap_port = imap_port
+    account.tls_enabled = tls_enabled
+    account.username = username
+    account.encrypted_password = _protect_secret(password)
+    account.auto_sync_enabled = auto_sync_enabled
+    account.connection_status = 'configured'
+    account.created_by = session.get('user')
+    db.session.add(account)
+    db.session.commit()
+    if data.get('test_connection', True):
+        synced, error = _sync_imap_account(account, limit=min(10, int(data.get('sync_limit') or 10)))
+        if error:
+            return jsonify({'success': False, 'error': error, 'account': _serialize_imap_account(account)}), 400
+        return jsonify({'success': True, 'message': f'Inbox saved and synchronized {synced} message(s).', 'account': _serialize_imap_account(account)})
+    return jsonify({'success': True, 'message': 'Inbox saved.', 'account': _serialize_imap_account(account)})
+
+@app.route('/api/inbox-intelligence/imap-accounts/<int:account_id>/sync', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_sync_account(account_id):
+    account = InboxImapAccount.query.get(account_id)
+    if not account:
+        return jsonify({'success': False, 'error': 'IMAP account not found'}), 404
+    data = request.get_json(silent=True) or {}
+    synced, error = _sync_imap_account(account, folder=data.get('folder') or 'INBOX', limit=min(200, int(data.get('limit') or 50)))
+    if error:
+        return jsonify({'success': False, 'error': error, 'account': _serialize_imap_account(account)}), 400
+    return jsonify({'success': True, 'synced': synced, 'account': _serialize_imap_account(account)})
+
+@app.route('/api/inbox-intelligence/imap-accounts/<int:account_id>', methods=['DELETE'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_delete_account(account_id):
+    account = InboxImapAccount.query.get(account_id)
+    if not account:
+        return jsonify({'success': False, 'error': 'IMAP account not found'}), 404
+    InboxEmailMessage.query.filter_by(imap_account_id=account.id).delete()
+    db.session.delete(account)
+    db.session.commit()
+    return jsonify({'success': True})
+
+@app.route('/api/inbox-intelligence/messages', methods=['GET'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_messages():
+    q = InboxEmailMessage.query
+    account_id = request.args.get('account_id')
+    folder = request.args.get('folder')
+    search = (request.args.get('search') or '').strip()
+    if account_id:
+        q = q.filter_by(imap_account_id=int(account_id))
+    if folder:
+        q = q.filter(InboxEmailMessage.folder.ilike(folder))
+    if search:
+        like = f"%{search}%"
+        q = q.filter(or_(InboxEmailMessage.sender.ilike(like), InboxEmailMessage.subject.ilike(like), InboxEmailMessage.sender_domain.ilike(like), InboxEmailMessage.preview.ilike(like)))
+    messages = q.order_by(InboxEmailMessage.received_at.desc().nullslast(), InboxEmailMessage.id.desc()).limit(min(500, int(request.args.get('limit') or 100))).all()
+    return jsonify({'success': True, 'messages': [{
+        'id': m.id,
+        'imap_account_id': m.imap_account_id,
+        'provider': m.provider,
+        'folder': m.folder,
+        'sender': m.sender,
+        'sender_domain': m.sender_domain,
+        'recipient': m.recipient,
+        'subject': m.subject,
+        'preview': m.preview,
+        'has_attachments': bool(m.has_attachments),
+        'received_at': m.received_at.isoformat() + 'Z' if m.received_at else None,
+    } for m in messages]})
+
+@app.route('/api/inbox-intelligence/messages/<int:message_id>', methods=['GET'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_message_detail(message_id):
+    m = InboxEmailMessage.query.get(message_id)
+    if not m:
+        return jsonify({'success': False, 'error': 'Message not found'}), 404
+    return jsonify({'success': True, 'message': {
+        'id': m.id,
+        'sender': m.sender,
+        'recipient': m.recipient,
+        'subject': m.subject,
+        'preview': m.preview,
+        'plain_text': m.plain_text,
+        'html_content': m.html_content,
+        'headers': json.loads(m.headers_json or '{}'),
+        'folder': m.folder,
+        'provider': m.provider,
+        'received_at': m.received_at.isoformat() + 'Z' if m.received_at else None,
+    }})
+
+@app.route('/api/inbox-intelligence/workspace-senders', methods=['GET'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_workspace_senders():
+    senders = {}
+    for row in RetrievedUser.query.order_by(RetrievedUser.email.asc()).all():
+        senders[row.email.lower()] = {
+            'email': row.email.lower(),
+            'name': row.name,
+            'domain': row.domain or (row.email.split('@')[-1].lower() if '@' in row.email else ''),
+            'source': 'retrieved_user',
+            'status': row.status or 'active',
+            'has_app_password': False,
+        }
+    for row in UserAppPassword.query.all():
+        email_addr = f"{row.username}@{row.domain}".lower() if row.domain != '*' else row.username.lower()
+        if '@' not in email_addr:
+            continue
+        senders.setdefault(email_addr, {
+            'email': email_addr,
+            'name': row.username,
+            'domain': email_addr.split('@')[-1],
+            'source': 'app_password',
+            'status': 'active',
+            'has_app_password': True,
+        })
+        senders[email_addr]['has_app_password'] = True
+    for row in AwsGeneratedPassword.query.all():
+        email_addr = (row.email or '').lower()
+        if '@' not in email_addr:
+            continue
+        senders.setdefault(email_addr, {
+            'email': email_addr,
+            'name': email_addr.split('@')[0],
+            'domain': email_addr.split('@')[-1],
+            'source': 'aws_generated_password',
+            'status': 'active',
+            'has_app_password': True,
+        })
+        senders[email_addr]['has_app_password'] = True
+    service_accounts = [{
+        'id': sa.id,
+        'name': sa.name,
+        'admin_email': sa.admin_email,
+        'client_email': sa.client_email,
+        'is_active': bool(sa.is_active),
+    } for sa in ServiceAccount.query.order_by(ServiceAccount.name.asc()).all()]
+    return jsonify({'success': True, 'senders': sorted(senders.values(), key=lambda x: x['email']), 'service_accounts': service_accounts})
+
+@app.route('/api/inbox-intelligence/workspace-senders/retrieve', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_retrieve_workspace_senders():
+    data = request.get_json(silent=True) or {}
+    account_ids = [int(x) for x in data.get('service_account_ids', [])]
+    if not account_ids:
+        return jsonify({'success': False, 'error': 'Select at least one saved Workspace service account'}), 400
+    service_accounts = ServiceAccount.query.filter(ServiceAccount.id.in_(account_ids)).all()
+    if not service_accounts:
+        return jsonify({'success': False, 'error': 'No matching service accounts found'}), 404
+    from services.google_domains_service import GoogleDomainsService
+    retrieved = []
+    errors = []
+    for sa in service_accounts:
+        try:
+            svc = GoogleDomainsService(sa.name)
+            admin_service = svc._get_admin_service()
+            page_token = None
+            while True:
+                resp = admin_service.users().list(customer='my_customer', maxResults=500, pageToken=page_token, orderBy='email').execute()
+                for user in resp.get('users', []):
+                    email_addr = (user.get('primaryEmail') or '').lower()
+                    if not email_addr:
+                        continue
+                    password = _find_sender_password(email_addr)
+                    retrieved.append({
+                        'email': email_addr,
+                        'name': user.get('name', {}).get('fullName') or email_addr.split('@')[0],
+                        'domain': email_addr.split('@')[-1] if '@' in email_addr else '',
+                        'source': f'service_account:{sa.name}',
+                        'status': 'suspended' if user.get('suspended') else 'active',
+                        'has_app_password': bool(password),
+                    })
+                page_token = resp.get('nextPageToken')
+                if not page_token:
+                    break
+        except Exception as e:
+            errors.append({'account': sa.name, 'error': str(e)})
+    deduped = {row['email']: row for row in retrieved}
+    return jsonify({'success': True, 'senders': sorted(deduped.values(), key=lambda x: x['email']), 'errors': errors, 'count': len(deduped)})
+
+def _find_sender_password(email_addr):
+    email_addr = (email_addr or '').lower()
+    if '@' not in email_addr:
+        return None
+    username, domain = email_addr.split('@', 1)
+    record = UserAppPassword.query.filter_by(username=username, domain=domain).first() or UserAppPassword.query.filter_by(username=username, domain='*').first()
+    if record:
+        return record.app_password
+    aws_record = AwsGeneratedPassword.query.filter_by(email=email_addr).first()
+    return aws_record.app_password if aws_record else None
+
+def _send_test_email_smtp(sender, password, recipient, subject, html_body, text_body, test_identifier):
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = subject
+    msg['From'] = sender
+    msg['To'] = recipient
+    msg['Date'] = formatdate(localtime=True)
+    msg['Message-ID'] = make_msgid(idstring=test_identifier)
+    msg['X-Test-ID'] = test_identifier
+    msg.attach(MIMEText((text_body or '') + f"\n\nTest ID: {test_identifier}", 'plain', 'utf-8'))
+    if html_body:
+        msg.attach(MIMEText(html_body + f"<p style=\"font-size:11px;color:#64748b\">Test ID: {test_identifier}</p>", 'html', 'utf-8'))
+    with smtplib.SMTP('smtp.gmail.com', 587, timeout=30) as server:
+        server.starttls()
+        server.login(sender, password)
+        server.send_message(msg)
+    return msg['Message-ID']
+
+@app.route('/api/inbox-intelligence/tests', methods=['GET', 'POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_tests():
+    if request.method == 'GET':
+        tests = InboxDeliverabilityTest.query.order_by(InboxDeliverabilityTest.created_at.desc()).limit(100).all()
+        return jsonify({'success': True, 'tests': [{
+            'test_id': t.test_id,
+            'name': t.name,
+            'subject': t.subject,
+            'status': t.status,
+            'total_messages': t.total_messages,
+            'sent_count': t.sent_count,
+            'inbox_count': t.inbox_count,
+            'spam_count': t.spam_count,
+            'pending_count': t.pending_count,
+            'failed_count': t.failed_count,
+            'created_at': t.created_at.isoformat() + 'Z' if t.created_at else None,
+            'created_by': t.created_by,
+        } for t in tests]})
+    data = request.get_json(silent=True) or {}
+    senders = [s.strip().lower() for s in data.get('senders', []) if s.strip()]
+    inbox_ids = [int(x) for x in data.get('inbox_account_ids', [])]
+    subject = (data.get('subject') or '').strip()
+    html_body = data.get('html_body') or ''
+    text_body = data.get('text_body') or ''
+    name = (data.get('name') or f"Inbox Test {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}").strip()
+    if not senders:
+        return jsonify({'success': False, 'error': 'Select at least one Workspace sender'}), 400
+    if not inbox_ids:
+        return jsonify({'success': False, 'error': 'Select at least one connected test inbox'}), 400
+    if not subject:
+        return jsonify({'success': False, 'error': 'Subject is required'}), 400
+    if not text_body and not html_body:
+        return jsonify({'success': False, 'error': 'HTML or plain-text body is required'}), 400
+    inboxes = InboxImapAccount.query.filter(InboxImapAccount.id.in_(inbox_ids)).all()
+    if not inboxes:
+        return jsonify({'success': False, 'error': 'No valid inbox accounts selected'}), 400
+    test_id = f"DLV-{uuid.uuid4().hex[:8].upper()}"
+    test = InboxDeliverabilityTest(
+        test_id=test_id,
+        name=name,
+        subject=subject,
+        html_body=html_body,
+        text_body=text_body,
+        status='RUNNING',
+        total_messages=len(senders) * len(inboxes),
+        sent_count=0,
+        inbox_count=0,
+        spam_count=0,
+        pending_count=0,
+        failed_count=0,
+        created_by=session.get('user')
+    )
+    db.session.add(test)
+    db.session.flush()
+    for sender in senders:
+        password = _find_sender_password(sender)
+        for inbox in inboxes:
+            identifier = f"{test_id}-{uuid.uuid4().hex[:6].upper()}"
+            row = InboxDeliverabilityMessage(test_id=test_id, workspace_sender=sender, imap_account_id=inbox.id, recipient=inbox.email, test_identifier=identifier, subject=subject, status='QUEUED', placement='PENDING')
+            db.session.add(row)
+            db.session.flush()
+            if not password:
+                row.status = 'FAILED'
+                row.placement = 'FAILED'
+                row.error_message = 'No app password found for this Workspace sender.'
+                test.failed_count += 1
+                continue
+            try:
+                row.provider_message_id = _send_test_email_smtp(sender, password, inbox.email, subject, html_body, text_body, identifier)
+                row.sent_at = datetime.utcnow()
+                row.status = 'WAITING_FOR_DELIVERY'
+                row.placement = 'PENDING'
+                test.sent_count += 1
+                test.pending_count += 1
+            except Exception as e:
+                row.status = 'FAILED'
+                row.placement = 'FAILED'
+                row.error_message = str(e)
+                test.failed_count += 1
+    if test.sent_count == 0 and test.failed_count:
+        test.status = 'FAILED'
+        test.completed_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({'success': True, 'test_id': test_id, 'message': 'Deliverability test created.', 'sent': test.sent_count, 'failed': test.failed_count})
+
+def _detect_message_placement(inbox, identifier):
+    folders = ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk', 'Bulk Mail']
+    conn = None
+    try:
+        conn = _imap_connect(inbox)
+        for folder in folders:
+            status, _ = conn.select(folder, readonly=True)
+            if status != 'OK':
+                continue
+            search_term = f'TEXT "{identifier}"'
+            status, data = conn.uid('search', None, search_term)
+            if status == 'OK' and data and data[0]:
+                placement = 'SPAM' if any(x in folder.lower() for x in ['spam', 'junk', 'bulk']) else 'INBOX'
+                return placement, folder
+        return 'PENDING', None
+    finally:
+        try:
+            if conn:
+                conn.close()
+                conn.logout()
+        except Exception:
+            pass
+
+@app.route('/api/inbox-intelligence/tests/<test_id>/poll', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_poll_test(test_id):
+    test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
+    if not test:
+        return jsonify({'success': False, 'error': 'Test not found'}), 404
+    messages = InboxDeliverabilityMessage.query.filter_by(test_id=test_id).all()
+    for row in messages:
+        if row.status in ('FAILED', 'COMPLETED'):
+            continue
+        inbox = InboxImapAccount.query.get(row.imap_account_id)
+        if not inbox:
+            row.status = 'FAILED'
+            row.placement = 'FAILED'
+            row.error_message = 'Receiving inbox no longer exists.'
+            continue
+        try:
+            placement, folder = _detect_message_placement(inbox, row.test_identifier)
+            row.placement = placement
+            row.folder = folder
+            if placement != 'PENDING':
+                row.detected_at = datetime.utcnow()
+                row.status = 'COMPLETED'
+        except Exception as e:
+            row.error_message = str(e)
+    completed = InboxDeliverabilityMessage.query.filter_by(test_id=test_id, status='COMPLETED').count()
+    failed = InboxDeliverabilityMessage.query.filter_by(test_id=test_id, status='FAILED').count()
+    inbox_count = InboxDeliverabilityMessage.query.filter_by(test_id=test_id, placement='INBOX').count()
+    spam_count = InboxDeliverabilityMessage.query.filter_by(test_id=test_id, placement='SPAM').count()
+    pending = InboxDeliverabilityMessage.query.filter_by(test_id=test_id, placement='PENDING').count()
+    test.inbox_count = inbox_count
+    test.spam_count = spam_count
+    test.pending_count = pending
+    test.failed_count = failed
+    if completed + failed >= test.total_messages:
+        test.status = 'COMPLETED' if failed == 0 else 'PARTIAL'
+        test.completed_at = datetime.utcnow()
+    else:
+        test.status = 'CHECKING_INBOX'
+    db.session.commit()
+    return jsonify({'success': True, 'test': {'test_id': test.test_id, 'status': test.status, 'inbox_count': inbox_count, 'spam_count': spam_count, 'pending_count': pending, 'failed_count': failed}})
+
+@app.route('/api/inbox-intelligence/tests/<test_id>', methods=['GET'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_test_detail(test_id):
+    test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
+    if not test:
+        return jsonify({'success': False, 'error': 'Test not found'}), 404
+    messages = InboxDeliverabilityMessage.query.filter_by(test_id=test_id).order_by(InboxDeliverabilityMessage.id.asc()).all()
+    return jsonify({'success': True, 'test': {
+        'test_id': test.test_id,
+        'name': test.name,
+        'subject': test.subject,
+        'status': test.status,
+        'total_messages': test.total_messages,
+        'sent_count': test.sent_count,
+        'inbox_count': test.inbox_count,
+        'spam_count': test.spam_count,
+        'pending_count': test.pending_count,
+        'failed_count': test.failed_count,
+        'messages': [{
+            'sender': m.workspace_sender,
+            'recipient': m.recipient,
+            'test_identifier': m.test_identifier,
+            'placement': m.placement,
+            'folder': m.folder,
+            'status': m.status,
+            'error_message': m.error_message,
+            'sent_at': m.sent_at.isoformat() + 'Z' if m.sent_at else None,
+            'detected_at': m.detected_at.isoformat() + 'Z' if m.detected_at else None,
+        } for m in messages]
+    }})
+
+@app.route('/api/inbox-intelligence/openrouter-config', methods=['GET', 'POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_openrouter_config():
+    config = InboxOpenRouterConfig.query.first()
+    if request.method == 'GET':
+        return jsonify({'success': True, 'config': {
+            'has_api_key': bool(config and config.encrypted_api_key),
+            'default_model': config.default_model if config else '',
+            'custom_model': config.custom_model if config else '',
+            'fallback_model': config.fallback_model if config else '',
+            'temperature': config.temperature if config else 0.7,
+            'max_tokens': config.max_tokens if config else 1800,
+        }})
+    data = request.get_json(silent=True) or {}
+    if not config:
+        config = InboxOpenRouterConfig()
+        db.session.add(config)
+    if data.get('api_key'):
+        config.encrypted_api_key = _protect_secret(data.get('api_key'))
+    config.default_model = data.get('default_model') or ''
+    config.custom_model = data.get('custom_model') or ''
+    config.fallback_model = data.get('fallback_model') or ''
+    config.temperature = float(data.get('temperature') or 0.7)
+    config.max_tokens = int(data.get('max_tokens') or 1800)
+    db.session.commit()
+    return jsonify({'success': True, 'message': 'OpenRouter configuration saved'})
+
+def _detect_template_regions(html_content):
+    html_content = html_content or ''
+    regions = []
+    for match in re.finditer(r'<!--\s*APP:REGION:([A-Z0-9_-]+)\s*-->', html_content, re.IGNORECASE):
+        key = match.group(1).upper()
+        regions.append({'id': key.lower(), 'region_key': key, 'type': 'marked', 'editable': True, 'locked': False})
+    for match in re.finditer(r'data-region=["\']([^"\']+)["\']', html_content, re.IGNORECASE):
+        key = match.group(1).strip().upper()
+        if key and not any(r['region_key'] == key for r in regions):
+            regions.append({'id': key.lower(), 'region_key': key, 'type': 'data-region', 'editable': True, 'locked': False})
+    locked_checks = [
+        ('doctype', '<!doctype' in html_content.lower()),
+        ('head', '<head' in html_content.lower()),
+        ('responsive_css', '@media' in html_content.lower()),
+        ('outlook_mso', '<!--[if mso' in html_content.lower() or 'mso-' in html_content.lower()),
+        ('footer', bool(re.search(r'unsubscribe|preferences|privacy', html_content, re.IGNORECASE))),
+    ]
+    locked = [{'id': key, 'region_key': key.upper(), 'type': 'locked', 'editable': False, 'locked': True} for key, exists in locked_checks if exists]
+    return regions, locked
+
+def _serialize_static_template(template):
+    editable = json.loads(template.editable_regions_json or '[]')
+    locked = json.loads(template.locked_regions_json or '[]')
+    return {
+        'id': template.id,
+        'name': template.name,
+        'status': template.status,
+        'is_default': bool(template.is_default),
+        'version': template.version or 1,
+        'editable_regions': editable,
+        'locked_regions': locked,
+        'editable_region_count': len(editable),
+        'locked_region_count': len(locked),
+        'last_tested_at': template.last_tested_at.isoformat() + 'Z' if template.last_tested_at else None,
+        'inbox_rate': template.inbox_rate,
+        'created_at': template.created_at.isoformat() + 'Z' if template.created_at else None,
+        'updated_at': template.updated_at.isoformat() + 'Z' if template.updated_at else None,
+    }
+
+@app.route('/api/inbox-intelligence/static-templates', methods=['GET', 'POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_static_templates():
+    if request.method == 'GET':
+        templates = InboxStaticTemplate.query.filter(InboxStaticTemplate.status != 'archived').order_by(InboxStaticTemplate.updated_at.desc()).all()
+        return jsonify({'success': True, 'templates': [_serialize_static_template(t) for t in templates]})
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or '').strip()
+    html_content = data.get('html_content') or ''
+    plain_text = data.get('plain_text') or ''
+    if not name:
+        return jsonify({'success': False, 'error': 'Template name is required'}), 400
+    if not html_content.strip():
+        return jsonify({'success': False, 'error': 'HTML content is required'}), 400
+    editable, locked = _detect_template_regions(html_content)
+    template = InboxStaticTemplate(
+        name=name,
+        html_content=html_content,
+        plain_text=plain_text,
+        editable_regions_json=json.dumps(editable),
+        locked_regions_json=json.dumps(locked),
+        created_by=session.get('user')
+    )
+    db.session.add(template)
+    db.session.commit()
+    return jsonify({'success': True, 'template': _serialize_static_template(template), 'message': 'Static template saved'})
+
+@app.route('/api/inbox-intelligence/static-templates/<int:template_id>', methods=['GET', 'DELETE'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_static_template_detail(template_id):
+    template = InboxStaticTemplate.query.get(template_id)
+    if not template:
+        return jsonify({'success': False, 'error': 'Template not found'}), 404
+    if request.method == 'DELETE':
+        template.status = 'archived'
+        db.session.commit()
+        return jsonify({'success': True})
+    data = _serialize_static_template(template)
+    data.update({'html_content': template.html_content, 'plain_text': template.plain_text})
+    return jsonify({'success': True, 'template': data})
 
 @app.route('/api/lists', methods=['GET'])
 @login_required
