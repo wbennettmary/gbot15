@@ -1276,7 +1276,13 @@ merge_recipe_id, content_blueprint_id</pre>
                 <div id="userInboxSenderSelector" class="ii-card ii-muted">Retrieve/select Workspace API users first.</div>
             </div>
             <div class="ii-panel" style="grid-column: 1 / -1;">
-                <div class="ii-row justify-content-between mb-3"><h3>User Inbox Analytics</h3><button class="ii-btn" type="button" onclick="syncUserInboxAnalytics()"><i class="fas fa-arrows-rotate"></i> Sync fresh data</button></div>
+                <div class="ii-row justify-content-between mb-3">
+                    <div>
+                        <h3>User Inbox Analytics</h3>
+                        <p class="ii-muted mb-0">Live placement, user health, and domain decisions from the latest synced user inbox test.</p>
+                    </div>
+                    <div class="ii-row"><span class="ii-muted" id="userInboxLastSync">No sync yet</span><button class="ii-btn" type="button" onclick="syncUserInboxAnalytics()"><i class="fas fa-arrows-rotate"></i> Sync fresh data</button></div>
+                </div>
                 <div class="ii-result-summary" id="userInboxAnalyticsSummary">
                     <div class="ii-result-pill"><span class="ii-muted">Users</span><strong>0</strong></div>
                     <div class="ii-result-pill"><span class="ii-muted">Inbox</span><strong>0</strong></div>
@@ -1291,8 +1297,18 @@ merge_recipe_id, content_blueprint_id</pre>
                 </div>
                 <h4 class="mt-3">Provider Summary</h4>
                 <div class="ii-card" id="userInboxProviderSummary">Provider analytics appear after a test has results.</div>
+                <div class="ii-grid ii-layout-2 mt-3">
+                    <div class="ii-card">
+                        <div class="ii-row justify-content-between mb-2"><h4>Domain Results & Actions</h4><div class="ii-row"><button class="ii-btn" type="button" onclick="copyUserInboxBucket('inboxDomains')"><i class="fas fa-copy"></i> Copy inbox domains</button><button class="ii-btn" type="button" onclick="copyUserInboxBucket('spamDomains')"><i class="fas fa-copy"></i> Copy spam domains</button></div></div>
+                        <div id="userInboxDomainActions" class="ii-muted">Sync a test to classify sender domains.</div>
+                    </div>
+                    <div class="ii-card">
+                        <div class="ii-row justify-content-between mb-2"><h4>User Results & Actions</h4><div class="ii-row"><button class="ii-btn" type="button" onclick="copyUserInboxBucket('inboxUsers')"><i class="fas fa-copy"></i> Copy inbox users</button><button class="ii-btn" type="button" onclick="copyUserInboxBucket('spamUsers')"><i class="fas fa-copy"></i> Copy spam users</button></div></div>
+                        <div id="userInboxUserActions" class="ii-muted">Sync a test to classify Workspace users.</div>
+                    </div>
+                </div>
                 <h4 class="mt-3">Spam Improvement Targets</h4>
-                <div class="ii-card" id="userInboxSpamInsights">Sync a test to see spam percentage by sender, domain, and user display name.</div>
+                <div class="ii-card" id="userInboxSpamInsights">Sync a test to see which domains and users need name/domain changes.</div>
             </div>
         </div>
     </section>
@@ -1446,6 +1462,7 @@ merge_recipe_id, content_blueprint_id</pre>
         aiSuggestions: [],
         userInboxTemplates: [],
         userInboxTemplatePage: 0,
+        userInboxCopyBuckets: {inboxDomains: [], spamDomains: [], inboxUsers: [], spamUsers: []},
         serviceAccounts: [],
         activeMessageId: null,
         selectedMessageIds: new Set(),
@@ -2649,8 +2666,12 @@ merge_recipe_id, content_blueprint_id</pre>
         renderAnalyticsSummary('userInboxAnalyticsSummary', rows, 'Users');
         document.getElementById('userInboxAnalyticsTable').innerHTML = '<tr><th>User</th><th>Recipient</th><th>Placement</th><th>Signal</th><th>Test ID</th><th>Result</th></tr>' + renderResultRows(rows, testId, false);
         renderUserInboxProviderSummary(rows);
+        renderUserInboxDomainActions(rows);
+        renderUserInboxUserActions(rows);
         renderUserInboxSpamInsights(rows);
         const summary = matrixSummary(rows);
+        const syncLabel = document.getElementById('userInboxLastSync');
+        if (syncLabel) syncLabel.textContent = `Last sync: ${new Date().toLocaleTimeString()}`;
         document.getElementById('userInboxTestStatus').textContent = `Analytics updated for ${testId}. Inbox ${summary.inbox}, spam ${summary.spam}, missing ${summary.pending + summary.failed}, external ${summary.unobserved}.`;
         await loadTests();
     }
@@ -2846,6 +2867,127 @@ merge_recipe_id, content_blueprint_id</pre>
 
     function senderLookup(email) {
         return iiState.workspaceSenders.find((sender) => sender.email === email) || {};
+    }
+
+    function userInboxObservationStats(rows, keyFn) {
+        const buckets = {};
+        rows.forEach((row) => {
+            const key = keyFn(row);
+            if (!key) return;
+            buckets[key] ||= {key, total: 0, inbox: 0, spam: 0, pending: 0, failed: 0, unobserved: 0, rows: []};
+            buckets[key].total += 1;
+            buckets[key].rows.push(row);
+            if (row.placement === 'INBOX') buckets[key].inbox += 1;
+            else if (row.placement === 'SPAM') buckets[key].spam += 1;
+            else if (row.placement === 'PENDING') buckets[key].pending += 1;
+            else if (row.placement === 'UNOBSERVED') buckets[key].unobserved += 1;
+            else buckets[key].failed += 1;
+        });
+        return Object.values(buckets).map((bucket) => {
+            const observed = Math.max(0, bucket.total - bucket.unobserved);
+            const inboxRate = observed ? Math.round((bucket.inbox / observed) * 100) : null;
+            const spamRate = observed ? Math.round((bucket.spam / observed) * 100) : null;
+            return {...bucket, observed, inboxRate, spamRate};
+        }).sort((a, b) => (a.inboxRate ?? -1) - (b.inboxRate ?? -1));
+    }
+
+    function healthLabel(item) {
+        if (item.inboxRate === null) return {label: 'Unobserved', chip: 'gray'};
+        if (item.inboxRate >= 90) return {label: 'Inbox domain', chip: 'green'};
+        if (item.inboxRate < 70) return {label: 'Spam domain', chip: 'red'};
+        return {label: 'Needs attention', chip: 'yellow'};
+    }
+
+    function renderMiniHealthBar(item) {
+        const inbox = item.observed ? Math.round((item.inbox / item.observed) * 100) : 0;
+        const spam = item.observed ? Math.round((item.spam / item.observed) * 100) : 0;
+        const pending = item.observed ? Math.round((item.pending / item.observed) * 100) : 0;
+        return `<div style="display:flex;height:10px;overflow:hidden;border-radius:999px;background:#e2e8f0;">
+            <div style="width:${inbox}%;background:#22c55e;"></div>
+            <div style="width:${spam}%;background:#ef4444;"></div>
+            <div style="width:${pending}%;background:#f59e0b;"></div>
+        </div>`;
+    }
+
+    function renderUserInboxDomainActions(rows) {
+        const el = document.getElementById('userInboxDomainActions');
+        if (!el) return;
+        const domains = userInboxObservationStats(rows, (row) => (row.sender || '').split('@').pop().toLowerCase());
+        const inboxDomains = domains.filter((item) => item.inboxRate !== null && item.inboxRate >= 90).map((item) => item.key);
+        const spamDomains = domains.filter((item) => item.inboxRate !== null && item.inboxRate < 70).map((item) => item.key);
+        iiState.userInboxCopyBuckets.inboxDomains = inboxDomains;
+        iiState.userInboxCopyBuckets.spamDomains = spamDomains;
+        if (!domains.length) {
+            el.textContent = 'No domain analytics are available yet.';
+            return;
+        }
+        el.innerHTML = `
+            <div class="ii-result-summary mb-3">
+                <div class="ii-result-pill"><span class="ii-muted">Inbox domains</span><strong>${inboxDomains.length}</strong><div class="ii-muted">>= 90% inbox</div></div>
+                <div class="ii-result-pill"><span class="ii-muted">Spam domains</span><strong>${spamDomains.length}</strong><div class="ii-muted">&lt; 70% inbox</div></div>
+            </div>
+            <table class="ii-table">
+                <tr><th>Domain</th><th>Health</th><th>Inbox</th><th>Spam</th><th>Users</th><th>Score</th></tr>
+                ${domains.map((item) => {
+                    const health = healthLabel(item);
+                    const users = new Set(item.rows.map((row) => row.sender)).size;
+                    return `<tr>
+                        <td><strong>${escapeHtml(item.key)}</strong>${renderMiniHealthBar(item)}</td>
+                        <td><span class="ii-chip ${health.chip}">${health.label}</span></td>
+                        <td>${item.inboxRate === null ? '--' : item.inboxRate + '%'}</td>
+                        <td>${item.spamRate === null ? '--' : item.spamRate + '%'}</td>
+                        <td>${users}</td>
+                        <td>${item.inbox}/${item.observed || item.total}</td>
+                    </tr>`;
+                }).join('')}
+            </table>`;
+    }
+
+    function renderUserInboxUserActions(rows) {
+        const el = document.getElementById('userInboxUserActions');
+        if (!el) return;
+        const users = userInboxObservationStats(rows, (row) => row.sender || '').map((item) => {
+            const sender = senderLookup(item.key);
+            return {...item, displayName: sender.name || item.key.split('@')[0], domain: item.key.split('@').pop() || ''};
+        });
+        const inboxUsers = users.filter((item) => item.inboxRate !== null && item.inboxRate >= 90).map((item) => item.key);
+        const spamUsers = users.filter((item) => item.inboxRate !== null && item.inboxRate < 70).map((item) => item.key);
+        iiState.userInboxCopyBuckets.inboxUsers = inboxUsers;
+        iiState.userInboxCopyBuckets.spamUsers = spamUsers;
+        if (!users.length) {
+            el.textContent = 'No user analytics are available yet.';
+            return;
+        }
+        el.innerHTML = `
+            <div class="ii-result-summary mb-3">
+                <div class="ii-result-pill"><span class="ii-muted">Inbox users</span><strong>${inboxUsers.length}</strong><div class="ii-muted">>= 90% inbox</div></div>
+                <div class="ii-result-pill"><span class="ii-muted">Spam users</span><strong>${spamUsers.length}</strong><div class="ii-muted">&lt; 70% inbox</div></div>
+            </div>
+            <table class="ii-table">
+                <tr><th>User</th><th>Domain</th><th>Health</th><th>Inbox</th><th>Spam</th><th>Action Focus</th></tr>
+                ${users.map((item) => {
+                    const health = healthLabel(item);
+                    return `<tr>
+                        <td><strong>${escapeHtml(item.displayName)}</strong><div class="ii-muted">${escapeHtml(item.key)}</div></td>
+                        <td>${escapeHtml(item.domain)}</td>
+                        <td><span class="ii-chip ${health.chip}">${health.label.replace('domain', 'user')}</span></td>
+                        <td>${item.inboxRate === null ? '--' : item.inboxRate + '%'}</td>
+                        <td>${item.spamRate === null ? '--' : item.spamRate + '%'}</td>
+                        <td>${item.inboxRate !== null && item.inboxRate < 70 ? 'Review display name and domain' : item.inboxRate >= 90 ? 'Keep as inbox-safe sender' : 'Monitor next test'}</td>
+                    </tr>`;
+                }).join('')}
+            </table>`;
+    }
+
+    async function copyUserInboxBucket(bucketName) {
+        const values = iiState.userInboxCopyBuckets[bucketName] || [];
+        const status = document.getElementById('userInboxTestStatus');
+        if (!values.length) {
+            if (status) status.textContent = 'Nothing to copy for this bucket yet. Sync a test first.';
+            return;
+        }
+        await navigator.clipboard.writeText(values.join('\n'));
+        if (status) status.textContent = `Copied ${values.length} item(s).`;
     }
 
     function renderUserInboxSpamInsights(rows) {
