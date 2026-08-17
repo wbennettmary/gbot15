@@ -1582,6 +1582,15 @@ def _resolve_workspace_list_service_accounts(workspace_list):
             unmatched.append(key)
     return list(service_accounts.values()), unmatched, ambiguous
 
+def _workspace_service_account_payload(sa):
+    return {
+        'id': sa.id,
+        'name': sa.name,
+        'admin_email': sa.admin_email,
+        'client_email': sa.client_email,
+        'is_active': bool(sa.is_active),
+    }
+
 @app.route('/api/inbox-intelligence/workspace-lists', methods=['GET'])
 @login_required
 @permission_required('inbox_intelligence')
@@ -1609,16 +1618,31 @@ def api_inbox_retrieve_workspace_senders_from_list():
     except (TypeError, ValueError):
         max_per_account = 0
     max_per_account = min(max(max_per_account, 0), 500) or None
+    accounts_only = bool(data.get('accounts_only'))
     workspace_list = WorkspaceList.query.get(list_id) if list_id else None
     if not workspace_list:
         return jsonify({'success': False, 'error': 'Select a saved List Management list'}), 400
     service_accounts, unmatched, ambiguous = _resolve_workspace_list_service_accounts(workspace_list)
     if not service_accounts:
         return jsonify({'success': False, 'error': 'No saved Workspace service accounts matched this list. Add service account name, admin email, client email, or service account ID per line.', 'unmatched': unmatched, 'ambiguous': ambiguous}), 400
+    if accounts_only:
+        return jsonify({
+            'success': True,
+            'senders': [],
+            'service_accounts': [_workspace_service_account_payload(sa) for sa in service_accounts],
+            'errors': [],
+            'unmatched': unmatched,
+            'ambiguous': ambiguous,
+            'count': 0,
+            'service_account_count': len(service_accounts),
+            'max_per_account': None,
+            'accounts_only': True,
+        })
     senders, errors = _retrieve_workspace_senders_from_service_accounts(service_accounts, max_per_account=max_per_account)
     return jsonify({
         'success': True,
         'senders': senders,
+        'service_accounts': [_workspace_service_account_payload(sa) for sa in service_accounts],
         'errors': errors,
         'unmatched': unmatched,
         'ambiguous': ambiguous,

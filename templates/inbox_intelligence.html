@@ -1579,7 +1579,7 @@ merge_recipe_id, content_blueprint_id</pre>
                             <button class="ii-btn" type="button" onclick="loadWorkspaceLists()"><i class="fas fa-arrows-rotate"></i> Refresh</button>
                             <button class="ii-btn ii-btn-primary" type="button" onclick="retrieveUserInboxWorkspaceListUsers()"><i class="fas fa-list-check"></i> Retrieve List Users</button>
                         </div>
-                        <div id="userInboxWorkspaceListStatus" class="ii-muted mt-2">Leave users-per-account blank to retrieve all users. Set a number to sample that many users per account.</div>
+                        <div id="userInboxWorkspaceListStatus" class="ii-muted mt-2">Leave users-per-account blank to show only the admin/account cards. Set a number to retrieve and display that many users per account.</div>
                     </div>
                 </div>
                 <div class="ii-row justify-content-between"><h4>Selected Workspace API Users</h4><span class="ii-muted" id="userInboxSelectedUserCount">0 selected</span></div>
@@ -1804,6 +1804,8 @@ merge_recipe_id, content_blueprint_id</pre>
         userInboxTemplatePage: 0,
         userInboxSenderPage: 0,
         userInboxAccountFilter: 'all',
+        userInboxListAccounts: [],
+        userInboxListAccountOnly: false,
         userInboxCopyBuckets: {inboxDomains: [], spamDomains: [], inboxUsers: [], spamUsers: []},
         serviceAccounts: [],
         activeMessageId: null,
@@ -2124,6 +2126,8 @@ merge_recipe_id, content_blueprint_id</pre>
         table.innerHTML = '<tr><th>Sender</th><th>Status</th><th>Source Account</th><th>Domain</th><th>Send Method</th><th>Selection</th></tr><tr><td colspan="6" class="text-center ii-muted">Searching sender users...</td></tr>';
         const data = await iiFetch(`/api/inbox-intelligence/workspace-senders?q=${encodeURIComponent(query)}`);
         iiState.workspaceSenders = data.senders || [];
+        iiState.userInboxListAccounts = [];
+        iiState.userInboxListAccountOnly = false;
         iiState.userInboxSenderPage = 0;
         renderWorkspaceSenders();
         renderTestSenderSelector();
@@ -2195,6 +2199,8 @@ merge_recipe_id, content_blueprint_id</pre>
             iiState.workspaceSenders.forEach((sender) => { byEmail[sender.email] = sender; });
             (data.senders || []).forEach((sender) => { byEmail[sender.email] = sender; });
             iiState.workspaceSenders = Object.values(byEmail).sort((a, b) => a.email.localeCompare(b.email));
+            iiState.userInboxListAccounts = [];
+            iiState.userInboxListAccountOnly = false;
             iiState.userInboxSenderPage = 0;
             const notes = [];
             if (data.unmatched?.length) notes.push(`${data.unmatched.length} unmatched list line(s)`);
@@ -2225,14 +2231,27 @@ merge_recipe_id, content_blueprint_id</pre>
             return;
         }
         mirrorUserInboxListSelection();
-        const scopeLabel = maxPerAccount ? `${maxPerAccount} API user(s) per account` : 'all API users from each account';
+        const accountsOnly = !rawLimit;
+        const scopeLabel = accountsOnly ? 'admin/account cards only' : `${maxPerAccount} API user(s) per account`;
         if (userStatus) userStatus.textContent = `Retrieving ${scopeLabel} from the selected list...`;
         try {
             const data = await iiFetch('/api/inbox-intelligence/workspace-senders/retrieve-list', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({list_id: listId, max_per_account: maxPerAccount || 0})
+                body: JSON.stringify({list_id: listId, max_per_account: maxPerAccount || 0, accounts_only: accountsOnly})
             });
+            iiState.userInboxListAccounts = data.service_accounts || [];
+            iiState.userInboxListAccountOnly = accountsOnly;
+            if (accountsOnly) {
+                iiState.selectedSenderEmails = new Set();
+                iiState.userInboxSenderPage = 0;
+                const notes = [];
+                if (data.unmatched?.length) notes.push(`${data.unmatched.length} unmatched list line(s)`);
+                if (data.ambiguous?.length) notes.push(`${data.ambiguous.length} ambiguous line(s)`);
+                if (userStatus) userStatus.textContent = `Loaded ${iiState.userInboxListAccounts.length} admin/account card(s). Set users-per-account to retrieve test users.${notes.length ? ' ' + notes.join(', ') + '.' : ''}`;
+                renderUserInboxSenderSelector();
+                return;
+            }
             const byEmail = {};
             iiState.workspaceSenders.forEach((sender) => { byEmail[sender.email] = sender; });
             const returnedEmails = [];
@@ -2242,6 +2261,8 @@ merge_recipe_id, content_blueprint_id</pre>
             });
             iiState.workspaceSenders = Object.values(byEmail).sort((a, b) => a.email.localeCompare(b.email));
             iiState.selectedSenderEmails = new Set(returnedEmails);
+            iiState.userInboxListAccounts = [];
+            iiState.userInboxListAccountOnly = false;
             iiState.userInboxSenderPage = 0;
             const notes = [];
             if (data.unmatched?.length) notes.push(`${data.unmatched.length} unmatched list line(s)`);
@@ -2249,7 +2270,7 @@ merge_recipe_id, content_blueprint_id</pre>
             if (data.errors?.length) notes.push(`${data.errors.length} retrieval error(s)`);
             const excludedAdmins = (data.senders || []).filter((sender) => isAdminWorkspaceSender(sender)).length;
             if (excludedAdmins) notes.push(`${excludedAdmins} admin user(s) excluded`);
-            if (userStatus) userStatus.textContent = `Retrieved and selected ${returnedEmails.length} non-admin user(s), ${maxPerAccount ? `${maxPerAccount} per account` : 'all users per account'} from ${data.service_account_count || 0} account(s).${notes.length ? ' ' + notes.join(', ') + '.' : ''}`;
+            if (userStatus) userStatus.textContent = `Retrieved and selected ${returnedEmails.length} non-admin user(s), ${maxPerAccount} per account from ${data.service_account_count || 0} account(s).${notes.length ? ' ' + notes.join(', ') + '.' : ''}`;
             renderWorkspaceSenders();
             renderTestSenderSelector();
             renderUserInboxSenderSelector();
@@ -2907,9 +2928,36 @@ merge_recipe_id, content_blueprint_id</pre>
         el.innerHTML = iiState.workspaceSenders.map((sender) => `<label class="d-block mb-1"><input type="checkbox" ${iiState.selectedSenderEmails.has(sender.email) ? 'checked' : ''} ${isAdminWorkspaceSender(sender) ? 'disabled' : ''} onchange="toggleSender('${escapeHtml(sender.email)}', this.checked)"> ${escapeHtml(sender.email)} <span class="ii-chip ${isAdminWorkspaceSender(sender) ? 'red' : sender.service_account_id ? 'green' : 'yellow'}">${isAdminWorkspaceSender(sender) ? 'admin excluded' : sender.service_account_id ? 'Gmail API' : 'select from account'}</span></label>`).join('');
     }
 
+    function renderUserInboxListAccountCards(el) {
+        const count = document.getElementById('userInboxSelectedUserCount');
+        if (count) count.textContent = `0 selected · ${iiState.userInboxListAccounts.length} account cards`;
+        el.className = 'ii-card';
+        el.innerHTML = `
+            <div class="ii-row justify-content-between mb-3">
+                <strong>Retrieved Workspace Admin Accounts</strong>
+                <span class="ii-muted">${iiState.userInboxListAccounts.length} account(s) from selected list</span>
+            </div>
+            <div class="ii-account-tabs">
+                ${iiState.userInboxListAccounts.length ? iiState.userInboxListAccounts.map((account) => `
+                    <div class="ii-account-tab">
+                        <div class="ii-account-tab-head">
+                            <strong class="ii-email-text">${escapeHtml(account.admin_email || account.name || 'Workspace admin')}</strong>
+                            <span class="ii-chip ${account.is_active ? 'green' : 'yellow'}">${account.is_active ? 'active' : 'inactive'}</span>
+                        </div>
+                        <div class="ii-muted ii-email-text">${escapeHtml(account.name || 'Service account')}</div>
+                        <div class="ii-muted ii-email-text">${escapeHtml(account.client_email || '')}</div>
+                    </div>`).join('') : '<div class="ii-card ii-muted">No admin/account cards were resolved from this list.</div>'}
+            </div>
+            <div class="ii-muted mt-3">Set a users-per-account number, then retrieve again to show selectable test-user cards.</div>`;
+    }
+
     function renderUserInboxSenderSelector() {
         const el = document.getElementById('userInboxSenderSelector');
         if (!el) return;
+        if (iiState.userInboxListAccountOnly) {
+            renderUserInboxListAccountCards(el);
+            return;
+        }
         iiState.workspaceSenders.forEach((sender) => {
             if (isAdminWorkspaceSender(sender)) iiState.selectedSenderEmails.delete(sender.email);
         });
