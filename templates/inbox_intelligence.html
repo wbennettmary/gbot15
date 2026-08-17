@@ -1337,12 +1337,65 @@ merge_recipe_id, content_blueprint_id</pre>
     </section>
 
     <section id="history" class="ii-tabpane">
-        <div class="ii-panel">
-            <div class="ii-row justify-content-between mb-3"><h3>Test History</h3><input class="ii-input" style="max-width: 340px;" placeholder="Search sender, recipient, domain, subject, test ID"></div>
-            <table class="ii-table" id="testHistoryTable">
-                <tr><th>Test name</th><th>Date</th><th>Template</th><th>Senders</th><th>Inboxes</th><th>Sent</th><th>Inbox %</th><th>Spam %</th><th>Pending %</th><th>Created by</th></tr>
-                <tr><td colspan="10" class="text-center ii-muted">No deliverability tests have been stored yet.</td></tr>
-            </table>
+        <div class="ii-grid" id="resultsKpis" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
+            <div class="ii-card"><div class="ii-card-label">Total Tests</div><div class="ii-card-value">0</div><div class="ii-muted">No stored tests yet</div></div>
+            <div class="ii-card"><div class="ii-card-label">Inbox Rate</div><div class="ii-card-value">--</div><div class="ii-muted">No observed inbox data</div></div>
+            <div class="ii-card"><div class="ii-card-label">Spam Rate</div><div class="ii-card-value">--</div><div class="ii-muted">No observed spam data</div></div>
+            <div class="ii-card"><div class="ii-card-label">Pending</div><div class="ii-card-value">0</div><div class="ii-muted">No pending messages</div></div>
+            <div class="ii-card"><div class="ii-card-label">Failed</div><div class="ii-card-value">0</div><div class="ii-muted">No failed messages</div></div>
+            <div class="ii-card"><div class="ii-card-label">Completed</div><div class="ii-card-value">0</div><div class="ii-muted">No completed tests</div></div>
+        </div>
+        <div class="ii-grid ii-layout-2 mt-3">
+            <div class="ii-panel">
+                <div class="ii-row justify-content-between mb-3">
+                    <h3>Test History</h3>
+                    <button class="ii-btn" type="button" onclick="loadTests()"><i class="fas fa-arrows-rotate"></i> Refresh</button>
+                </div>
+                <div class="ii-row mb-3">
+                    <input class="ii-input" id="resultSearchInput" style="max-width: 420px;" placeholder="Search test name, ID, creator, status">
+                    <select class="ii-select" id="resultStatusFilter" style="max-width: 180px;">
+                        <option value="">All Statuses</option>
+                        <option value="COMPLETED">Completed</option>
+                        <option value="CHECKING_INBOX">Checking Inbox</option>
+                        <option value="RUNNING">Running</option>
+                        <option value="PARTIAL">Partial</option>
+                        <option value="FAILED">Failed</option>
+                    </select>
+                </div>
+                <div class="ii-table-wrap">
+                    <table class="ii-table" id="testHistoryTable">
+                        <tr><th>Test Name</th><th>Date</th><th>Status</th><th>Sent</th><th>Inbox</th><th>Spam</th><th>Pending</th><th>Failed</th><th>Created By</th><th>Actions</th></tr>
+                        <tr><td colspan="10" class="text-center ii-muted">No deliverability tests have been stored yet.</td></tr>
+                    </table>
+                </div>
+            </div>
+            <div class="ii-panel">
+                <div class="ii-row justify-content-between mb-3"><h3>Test Summary</h3><span class="ii-chip blue" id="selectedResultBadge">No test selected</span></div>
+                <div id="selectedResultSummary" class="ii-card ii-muted">Select a test from history to view real deliverability results.</div>
+                <h4 class="mt-3">Observed Placement</h4>
+                <div class="ii-result-summary" id="selectedObservedPlacement">
+                    <div class="ii-result-pill"><span class="ii-muted">Inbox</span><strong>0</strong></div>
+                    <div class="ii-result-pill"><span class="ii-muted">Spam</span><strong>0</strong></div>
+                    <div class="ii-result-pill"><span class="ii-muted">Pending</span><strong>0</strong></div>
+                    <div class="ii-result-pill"><span class="ii-muted">Failed</span><strong>0</strong></div>
+                </div>
+                <h4 class="mt-3">Provider Performance</h4>
+                <div class="ii-grid" id="selectedProviderPerformance" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));">
+                    <div class="ii-card ii-muted">Provider performance appears after a test is selected.</div>
+                </div>
+                <h4 class="mt-3">Test Timeline</h4>
+                <div class="ii-card" id="selectedTestTimeline">Timeline appears after a test is selected.</div>
+                <h4 class="mt-3">Quick Actions</h4>
+                <div class="ii-row">
+                    <button class="ii-btn" type="button" onclick="viewSelectedResultReport()"><i class="fas fa-file-lines"></i> View Report</button>
+                    <button class="ii-btn" type="button" onclick="duplicateSelectedResultTest()"><i class="fas fa-copy"></i> Duplicate Test</button>
+                    <button class="ii-btn" type="button" onclick="exportSelectedResultCsv()"><i class="fas fa-download"></i> Export CSV</button>
+                </div>
+            </div>
+        </div>
+        <div class="ii-panel mt-3">
+            <div class="ii-row justify-content-between mb-3"><h3>Provider Breakdown</h3><span class="ii-muted">Selected test, real message rows only</span></div>
+            <div id="selectedProviderBreakdown" class="ii-card ii-muted">Select a test to view provider breakdown.</div>
         </div>
     </section>
 
@@ -1394,6 +1447,7 @@ merge_recipe_id, content_blueprint_id</pre>
         selectedServiceAccountIds: new Set(),
         selectedSenderEmails: new Set(),
         selectedInboxIds: new Set(),
+        selectedResultsTest: null,
         tests: []
     };
 
@@ -2535,21 +2589,89 @@ merge_recipe_id, content_blueprint_id</pre>
     async function loadTests() {
         const data = await iiFetch('/api/inbox-intelligence/tests');
         iiState.tests = data.tests || [];
+        renderResultsOverview();
         renderTestHistory();
+        if (!iiState.selectedResultsTest && iiState.tests[0]?.test_id) {
+            await loadTestDetail(iiState.tests[0].test_id);
+        }
+    }
+
+    function percent(part, total, decimals = 1) {
+        if (!total) return '--';
+        return `${((part / total) * 100).toFixed(decimals)}%`;
+    }
+
+    function numericPercent(part, total) {
+        return total ? Math.round((part / total) * 100) : 0;
+    }
+
+    function statusClass(status) {
+        if (status === 'COMPLETED') return 'green';
+        if (status === 'FAILED') return 'red';
+        if (status === 'PARTIAL') return 'yellow';
+        if (status === 'CHECKING_INBOX' || status === 'RUNNING') return 'blue';
+        return 'gray';
+    }
+
+    function formatResultDate(value) {
+        return value ? new Date(value).toLocaleString() : '';
+    }
+
+    function testTotals(tests = iiState.tests) {
+        return tests.reduce((acc, test) => {
+            acc.total += 1;
+            acc.sent += Number(test.sent_count || 0);
+            acc.inbox += Number(test.inbox_count || 0);
+            acc.spam += Number(test.spam_count || 0);
+            acc.pending += Number(test.pending_count || 0);
+            acc.failed += Number(test.failed_count || 0);
+            if (test.status === 'COMPLETED') acc.completed += 1;
+            return acc;
+        }, {total: 0, sent: 0, inbox: 0, spam: 0, pending: 0, failed: 0, completed: 0});
+    }
+
+    function renderResultsOverview() {
+        const el = document.getElementById('resultsKpis');
+        if (!el) return;
+        const totals = testTotals();
+        el.innerHTML = `
+            <div class="ii-card"><div class="ii-card-label"><i class="fas fa-clipboard-list text-primary"></i> Total Tests</div><div class="ii-card-value">${totals.total}</div><div class="ii-muted">${totals.sent} sent message(s)</div></div>
+            <div class="ii-card"><div class="ii-card-label"><i class="fas fa-inbox text-success"></i> Inbox Rate</div><div class="ii-card-value">${percent(totals.inbox, totals.sent)}</div><div class="ii-muted">${totals.inbox} inbox placement(s)</div></div>
+            <div class="ii-card"><div class="ii-card-label"><i class="fas fa-shield-halved text-danger"></i> Spam Rate</div><div class="ii-card-value">${percent(totals.spam, totals.sent)}</div><div class="ii-muted">${totals.spam} spam placement(s)</div></div>
+            <div class="ii-card"><div class="ii-card-label"><i class="fas fa-clock text-warning"></i> Pending</div><div class="ii-card-value">${totals.pending}</div><div class="ii-muted">${percent(totals.pending, totals.sent)} of sent messages</div></div>
+            <div class="ii-card"><div class="ii-card-label"><i class="fas fa-circle-xmark text-danger"></i> Failed</div><div class="ii-card-value">${totals.failed}</div><div class="ii-muted">${percent(totals.failed, totals.sent)} of attempts</div></div>
+            <div class="ii-card"><div class="ii-card-label"><i class="fas fa-circle-check text-primary"></i> Completed</div><div class="ii-card-value">${totals.completed}</div><div class="ii-muted">${percent(totals.completed, totals.total)} of tests</div></div>`;
+    }
+
+    function filteredTests() {
+        const query = (document.getElementById('resultSearchInput')?.value || '').trim().toLowerCase();
+        const status = document.getElementById('resultStatusFilter')?.value || '';
+        return iiState.tests.filter((test) => {
+            const haystack = `${test.name || ''} ${test.test_id || ''} ${test.created_by || ''} ${test.status || ''}`.toLowerCase();
+            return (!query || haystack.includes(query)) && (!status || test.status === status);
+        });
     }
 
     function renderTestHistory() {
         const table = document.getElementById('testHistoryTable');
-        if (!iiState.tests.length) {
-            table.innerHTML = '<tr><th>Test name</th><th>Date</th><th>Status</th><th>Sent</th><th>Inbox</th><th>Spam</th><th>Pending</th><th>Failed</th><th>Created by</th></tr><tr><td colspan="9" class="text-center ii-muted">No deliverability tests have been stored yet.</td></tr>';
+        if (!table) return;
+        const tests = filteredTests();
+        if (!tests.length) {
+            table.innerHTML = '<tr><th>Test Name</th><th>Date</th><th>Status</th><th>Sent</th><th>Inbox</th><th>Spam</th><th>Pending</th><th>Failed</th><th>Created By</th><th>Actions</th></tr><tr><td colspan="10" class="text-center ii-muted">No matching deliverability tests found.</td></tr>';
             return;
         }
-        table.innerHTML = '<tr><th>Test name</th><th>Date</th><th>Status</th><th>Sent</th><th>Inbox</th><th>Spam</th><th>Pending</th><th>Failed</th><th>Created by</th></tr>' + iiState.tests.map((test) => `
-            <tr onclick="loadTestDetail('${escapeHtml(test.test_id)}')">
+        table.innerHTML = '<tr><th>Test Name</th><th>Date</th><th>Status</th><th>Sent</th><th>Inbox</th><th>Spam</th><th>Pending</th><th>Failed</th><th>Created By</th><th>Actions</th></tr>' + tests.map((test) => `
+            <tr onclick="loadTestDetail('${escapeHtml(test.test_id)}')" style="cursor: pointer; ${iiState.selectedResultsTest?.test_id === test.test_id ? 'background: #eff6ff;' : ''}">
                 <td>${escapeHtml(test.name)}<div class="ii-muted">${escapeHtml(test.test_id)}</div></td>
-                <td>${test.created_at ? new Date(test.created_at).toLocaleString() : ''}</td>
-                <td><span class="ii-chip blue">${escapeHtml(test.status)}</span></td>
-                <td>${test.sent_count}</td><td>${test.inbox_count}</td><td>${test.spam_count}</td><td>${test.pending_count}</td><td>${test.failed_count}</td><td>${escapeHtml(test.created_by || '')}</td>
+                <td>${formatResultDate(test.created_at)}</td>
+                <td><span class="ii-chip ${statusClass(test.status)}">${escapeHtml(test.status)}</span></td>
+                <td>${test.sent_count || 0}</td>
+                <td>${test.inbox_count || 0}<div class="ii-muted">${percent(test.inbox_count || 0, test.sent_count || 0)}</div></td>
+                <td>${test.spam_count || 0}<div class="ii-muted">${percent(test.spam_count || 0, test.sent_count || 0)}</div></td>
+                <td>${test.pending_count || 0}</td>
+                <td>${test.failed_count || 0}</td>
+                <td>${escapeHtml(test.created_by || '')}</td>
+                <td><button class="ii-btn" type="button" onclick="event.stopPropagation(); loadTestDetail('${escapeHtml(test.test_id)}')"><i class="fas fa-eye"></i></button></td>
             </tr>`).join('');
     }
 
@@ -2707,6 +2829,155 @@ merge_recipe_id, content_blueprint_id</pre>
             </div>`;
     }
 
+    function deliveryScore(test, rows) {
+        const summary = rows?.length ? matrixSummary(rows) : null;
+        const sent = rows?.length || Number(test?.sent_count || 0);
+        if (!sent) return null;
+        const inbox = summary ? summary.inbox : Number(test.inbox_count || 0);
+        const spam = summary ? summary.spam : Number(test.spam_count || 0);
+        const failed = summary ? summary.failed : Number(test.failed_count || 0);
+        const pending = summary ? summary.pending : Number(test.pending_count || 0);
+        return Math.max(0, Math.min(100, Math.round((inbox / sent) * 100 - (spam / sent) * 35 - (failed / sent) * 25 - (pending / sent) * 10)));
+    }
+
+    function scoreLabel(score) {
+        if (score === null) return 'No data';
+        if (score >= 80) return 'Strong';
+        if (score >= 60) return 'Good';
+        if (score >= 40) return 'Needs work';
+        return 'Poor';
+    }
+
+    function providerStatsFromRows(rows) {
+        const providers = {};
+        rows.forEach((row) => {
+            const provider = recipientProvider(row.recipient);
+            providers[provider] ||= {total: 0, inbox: 0, spam: 0, pending: 0, failed: 0, unobserved: 0};
+            providers[provider].total += 1;
+            if (row.placement === 'INBOX') providers[provider].inbox += 1;
+            else if (row.placement === 'SPAM') providers[provider].spam += 1;
+            else if (row.placement === 'PENDING') providers[provider].pending += 1;
+            else if (row.placement === 'UNOBSERVED') providers[provider].unobserved += 1;
+            else providers[provider].failed += 1;
+        });
+        return providers;
+    }
+
+    function renderSelectedResultDetail(test) {
+        const rows = test.messages || [];
+        const summary = matrixSummary(rows);
+        const score = deliveryScore(test, rows);
+        const badge = document.getElementById('selectedResultBadge');
+        if (badge) {
+            badge.className = `ii-chip ${statusClass(test.status)}`;
+            badge.textContent = test.status || 'Selected Test';
+        }
+        const summaryEl = document.getElementById('selectedResultSummary');
+        if (summaryEl) {
+            const circumference = 188;
+            const offset = score === null ? circumference : circumference - (score / 100) * circumference;
+            summaryEl.className = 'ii-card';
+            summaryEl.innerHTML = `
+                <div class="ii-row justify-content-between">
+                    <div>
+                        <h4>${escapeHtml(test.name || 'Selected test')} <span class="ii-muted">${escapeHtml(test.test_id || '')}</span></h4>
+                        <div class="ii-muted">Created by ${escapeHtml(test.created_by || '')}</div>
+                    </div>
+                    <span class="ii-chip ${statusClass(test.status)}">${escapeHtml(test.status || '')}</span>
+                </div>
+                <div class="ii-grid mt-3" style="grid-template-columns: 180px 1fr;">
+                    <div class="text-center">
+                        <svg width="140" height="90" viewBox="0 0 140 90" role="img" aria-label="Deliverability score">
+                            <path d="M25 75 A45 45 0 0 1 115 75" fill="none" stroke="#e2e8f0" stroke-width="10" stroke-linecap="round"></path>
+                            <path d="M25 75 A45 45 0 0 1 115 75" fill="none" stroke="${score !== null && score < 50 ? '#ef4444' : score !== null && score < 70 ? '#f59e0b' : '#22c55e'}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${circumference}" stroke-dashoffset="${offset}"></path>
+                        </svg>
+                        <div class="ii-card-value">${score === null ? '--' : score}<span class="ii-muted">/100</span></div>
+                        <div><span class="ii-chip ${score === null ? 'gray' : score >= 60 ? 'green' : score >= 40 ? 'yellow' : 'red'}">${scoreLabel(score)}</span></div>
+                    </div>
+                    <table class="ii-table">
+                        <tr><th>Status</th><td>${escapeHtml(test.status || '')}</td></tr>
+                        <tr><th>Started</th><td>${formatResultDate(test.created_at)}</td></tr>
+                        <tr><th>Completed</th><td>${formatResultDate(test.completed_at)}</td></tr>
+                        <tr><th>Sent</th><td>${test.sent_count || rows.length || 0}</td></tr>
+                        <tr><th>Subject</th><td>${escapeHtml(test.subject || '')}</td></tr>
+                    </table>
+                </div>`;
+        }
+        const observed = document.getElementById('selectedObservedPlacement');
+        if (observed) {
+            observed.innerHTML = `
+                <div class="ii-result-pill"><span class="ii-muted">Inbox</span><strong>${summary.inbox}</strong><div class="ii-muted">${percent(summary.inbox, rows.length)}</div></div>
+                <div class="ii-result-pill"><span class="ii-muted">Spam</span><strong>${summary.spam}</strong><div class="ii-muted">${percent(summary.spam, rows.length)}</div></div>
+                <div class="ii-result-pill"><span class="ii-muted">Pending</span><strong>${summary.pending}</strong><div class="ii-muted">${percent(summary.pending, rows.length)}</div></div>
+                <div class="ii-result-pill"><span class="ii-muted">Failed</span><strong>${summary.failed}</strong><div class="ii-muted">${percent(summary.failed, rows.length)}</div></div>`;
+        }
+        renderSelectedProviderPerformance(rows);
+        renderSelectedProviderBreakdown(rows);
+        renderSelectedTimeline(test, rows);
+    }
+
+    function renderSelectedProviderPerformance(rows) {
+        const el = document.getElementById('selectedProviderPerformance');
+        if (!el) return;
+        const providers = providerStatsFromRows(rows);
+        if (!Object.keys(providers).length) {
+            el.innerHTML = '<div class="ii-card ii-muted">No provider rows are available for this test.</div>';
+            return;
+        }
+        el.innerHTML = Object.entries(providers).map(([provider, stats]) => `
+            <div class="ii-card">
+                <h4>${escapeHtml(provider)}</h4>
+                <div class="ii-row justify-content-between"><span>Inbox</span><strong>${stats.inbox}</strong><span class="ii-muted">${percent(stats.inbox, stats.total)}</span></div>
+                <div class="ii-row justify-content-between"><span>Spam</span><strong>${stats.spam}</strong><span class="ii-muted">${percent(stats.spam, stats.total)}</span></div>
+                <div class="ii-row justify-content-between"><span>Pending</span><strong>${stats.pending}</strong><span class="ii-muted">${percent(stats.pending, stats.total)}</span></div>
+            </div>`).join('');
+    }
+
+    function renderSelectedProviderBreakdown(rows) {
+        const el = document.getElementById('selectedProviderBreakdown');
+        if (!el) return;
+        const providers = providerStatsFromRows(rows);
+        if (!Object.keys(providers).length) {
+            el.className = 'ii-card ii-muted';
+            el.textContent = 'No provider data is available for this selected test.';
+            return;
+        }
+        el.className = 'ii-card';
+        el.innerHTML = Object.entries(providers).map(([provider, stats]) => {
+            const inboxWidth = numericPercent(stats.inbox, stats.total);
+            const spamWidth = numericPercent(stats.spam, stats.total);
+            const pendingWidth = numericPercent(stats.pending, stats.total);
+            return `<div class="mb-3">
+                <div class="ii-row justify-content-between mb-1"><strong>${escapeHtml(provider)}</strong><span class="ii-muted">${stats.total} message(s) · ${percent(stats.inbox, stats.total)} inbox</span></div>
+                <div style="display: flex; height: 12px; overflow: hidden; border-radius: 999px; background: #e2e8f0;">
+                    <div style="width:${inboxWidth}%; background:#22c55e;"></div>
+                    <div style="width:${spamWidth}%; background:#ef4444;"></div>
+                    <div style="width:${pendingWidth}%; background:#f59e0b;"></div>
+                </div>
+                <div class="ii-row mt-1"><span class="ii-chip green">Inbox ${stats.inbox}</span><span class="ii-chip red">Spam ${stats.spam}</span><span class="ii-chip yellow">Pending ${stats.pending}</span><span class="ii-chip gray">Other ${stats.failed + stats.unobserved}</span></div>
+            </div>`;
+        }).join('');
+    }
+
+    function renderSelectedTimeline(test, rows) {
+        const el = document.getElementById('selectedTestTimeline');
+        if (!el) return;
+        const sentAt = rows.find((row) => row.sent_at)?.sent_at;
+        const detectedAt = rows.find((row) => row.detected_at)?.detected_at;
+        el.innerHTML = `
+            <div class="ii-row justify-content-between">
+                <div class="text-center"><span class="ii-chip blue"><i class="fas fa-lock"></i></span><div>Queued</div><div class="ii-muted">${formatResultDate(test.created_at)}</div></div>
+                <div class="text-center"><span class="ii-chip blue"><i class="fas fa-paper-plane"></i></span><div>Sent</div><div class="ii-muted">${formatResultDate(sentAt)}</div></div>
+                <div class="text-center"><span class="ii-chip yellow"><i class="fas fa-inbox"></i></span><div>Checking Inbox</div><div class="ii-muted">${summaryPendingLabel(rows)}</div></div>
+                <div class="text-center"><span class="ii-chip ${statusClass(test.status)}"><i class="fas fa-check"></i></span><div>${escapeHtml(test.status || 'Status')}</div><div class="ii-muted">${formatResultDate(test.completed_at || detectedAt)}</div></div>
+            </div>`;
+    }
+
+    function summaryPendingLabel(rows) {
+        const pending = rows.filter((row) => row.placement === 'PENDING').length;
+        return pending ? `${pending} pending` : 'No pending rows';
+    }
+
     function renderResultRows(rows, testId, includeMerge = true) {
         if (!rows.length) {
             return '<tr><td colspan="6" class="text-center ii-muted">No message-level results are available yet.</td></tr>';
@@ -2725,8 +2996,53 @@ merge_recipe_id, content_blueprint_id</pre>
     async function loadTestDetail(testId) {
         const data = await iiFetch(`/api/inbox-intelligence/tests/${testId}`);
         const rows = data.test.messages || [];
+        iiState.selectedResultsTest = data.test;
+        renderTestHistory();
+        renderSelectedResultDetail(data.test);
         renderAnalyticsSummary('resultsMatrixSummary', rows);
         document.getElementById('resultsMatrixTable').innerHTML = '<tr><th>Workspace Sender</th><th>Recipient</th><th>Placement</th><th>Signal</th><th>Test ID</th><th>Action</th></tr>' + renderResultRows(rows, testId, true);
+    }
+
+    function viewSelectedResultReport() {
+        if (!iiState.selectedResultsTest) {
+            alert('Select a test first.');
+            return;
+        }
+        loadTestDetail(iiState.selectedResultsTest.test_id);
+    }
+
+    function duplicateSelectedResultTest() {
+        const test = iiState.selectedResultsTest;
+        if (!test) {
+            alert('Select a test first.');
+            return;
+        }
+        document.getElementById('testNameInput').value = `${test.name || 'Deliverability Test'} Copy`;
+        document.getElementById('testSubjectInput').value = test.subject || '';
+        document.getElementById('testHtmlInput').value = test.html_body || '';
+        document.getElementById('testTextInput').value = test.text_body || '';
+        activateInboxTab('tests');
+    }
+
+    function exportSelectedResultCsv() {
+        const test = iiState.selectedResultsTest;
+        if (!test) {
+            alert('Select a test first.');
+            return;
+        }
+        const rows = test.messages || [];
+        const csvRows = [['sender', 'recipient', 'placement', 'status', 'folder', 'test_identifier', 'sent_at', 'detected_at']];
+        rows.forEach((row) => {
+            csvRows.push([row.sender, row.recipient, row.placement, row.status, row.folder || '', row.test_identifier, row.sent_at || '', row.detected_at || '']);
+        });
+        const csv = csvRows.map((row) => row.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+        const blob = new Blob([csv], {type: 'text/csv'});
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${test.test_id || 'deliverability-test'}.csv`;
+        link.click();
+        URL.revokeObjectURL(url);
     }
 
     async function startMergeFromTest(testId) {
@@ -2823,6 +3139,8 @@ merge_recipe_id, content_blueprint_id</pre>
         document.getElementById('userInboxWorkspaceAccountSearchInput')?.addEventListener('keydown', (event) => {
             if (event.key === 'Enter') searchUserInboxWorkspaceAccounts();
         });
+        document.getElementById('resultSearchInput')?.addEventListener('input', renderTestHistory);
+        document.getElementById('resultStatusFilter')?.addEventListener('change', renderTestHistory);
         document.getElementById('testRecipientInput')?.addEventListener('input', (event) => {
             event.target.dataset.manualEdit = 'true';
         });

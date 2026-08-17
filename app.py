@@ -1998,6 +1998,8 @@ def api_inbox_test_detail(test_id):
         'test_id': test.test_id,
         'name': test.name,
         'subject': test.subject,
+        'html_body': test.html_body,
+        'text_body': test.text_body,
         'status': test.status,
         'total_messages': test.total_messages,
         'sent_count': test.sent_count,
@@ -2005,7 +2007,10 @@ def api_inbox_test_detail(test_id):
         'spam_count': test.spam_count,
         'pending_count': test.pending_count,
         'failed_count': test.failed_count,
-            'messages': [{
+        'created_at': test.created_at.isoformat() + 'Z' if test.created_at else None,
+        'completed_at': test.completed_at.isoformat() + 'Z' if test.completed_at else None,
+        'created_by': test.created_by,
+        'messages': [{
             'sender': m.workspace_sender,
             'recipient': m.recipient,
             'imap_account_id': m.imap_account_id,
