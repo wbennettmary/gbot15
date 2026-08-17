@@ -488,6 +488,15 @@
         gap: 12px;
     }
 
+    .ii-user-pager {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-top: 12px;
+    }
+
     .ii-user-select-card {
         display: block;
         cursor: pointer;
@@ -539,6 +548,53 @@
 
     .ii-responsive-table .ii-table {
         min-width: 680px;
+    }
+
+    .ii-analytics-grid,
+    .ii-actions-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 12px;
+    }
+
+    .ii-analytics-card,
+    .ii-action-result-card {
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 12px;
+        background: #fff;
+        min-width: 0;
+    }
+
+    .ii-analytics-card {
+        display: grid;
+        gap: 8px;
+    }
+
+    .ii-analytics-title {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .ii-action-result-card {
+        display: grid;
+        gap: 8px;
+    }
+
+    .ii-rate-row {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+        font-size: 12px;
+    }
+
+    .ii-rate-row strong {
+        display: block;
+        color: #0f172a;
+        font-size: 15px;
     }
 
     .ii-studio-shell {
@@ -1412,10 +1468,11 @@ merge_recipe_id, content_blueprint_id</pre>
                         <h4>List Management Source</h4>
                         <div class="ii-row mt-2">
                             <select class="ii-select" id="userInboxWorkspaceListSelect" style="max-width: 420px;" onchange="mirrorUserInboxListSelection()"><option value="">Loading lists...</option></select>
+                            <input class="ii-input" id="userInboxUsersPerAccountInput" type="number" min="1" max="500" value="1" style="max-width: 170px;" title="Users per account" placeholder="Users per account">
                             <button class="ii-btn" type="button" onclick="loadWorkspaceLists()"><i class="fas fa-arrows-rotate"></i> Refresh</button>
-                            <button class="ii-btn ii-btn-primary" type="button" onclick="retrieveUserInboxWorkspaceListUsers()"><i class="fas fa-list-check"></i> Retrieve Entire List</button>
+                            <button class="ii-btn ii-btn-primary" type="button" onclick="retrieveUserInboxWorkspaceListUsers()"><i class="fas fa-list-check"></i> Retrieve List Sample</button>
                         </div>
-                        <div id="userInboxWorkspaceListStatus" class="ii-muted mt-2"></div>
+                        <div id="userInboxWorkspaceListStatus" class="ii-muted mt-2">Default: 1 API user per account. Increase the number to test more users from each account.</div>
                     </div>
                 </div>
                 <div class="ii-row justify-content-between"><h4>Selected Workspace API Users</h4><span class="ii-muted" id="userInboxSelectedUserCount">0 selected</span></div>
@@ -1435,11 +1492,8 @@ merge_recipe_id, content_blueprint_id</pre>
                     <div class="ii-result-pill"><span class="ii-muted">Spam</span><strong>0</strong></div>
                     <div class="ii-result-pill"><span class="ii-muted">Missing</span><strong>0</strong></div>
                 </div>
-                <div class="ii-table-wrap">
-                    <table class="ii-table ii-matrix" id="userInboxAnalyticsTable">
-                        <tr><th>User</th><th>Recipient</th><th>Placement</th><th>Status</th><th>Test ID</th><th>Signal</th></tr>
-                        <tr><td colspan="6" class="text-center ii-muted">Analytics appear after the user inbox test is triggered and polled.</td></tr>
-                    </table>
+                <div id="userInboxAnalyticsCards" class="ii-analytics-grid">
+                    <div class="ii-analytics-card ii-muted">Analytics appear after the user inbox test is triggered and polled.</div>
                 </div>
                 <h4 class="mt-3">Provider Summary</h4>
                 <div class="ii-card" id="userInboxProviderSummary">Provider analytics appear after a test has results.</div>
@@ -1608,6 +1662,7 @@ merge_recipe_id, content_blueprint_id</pre>
         aiSuggestions: [],
         userInboxTemplates: [],
         userInboxTemplatePage: 0,
+        userInboxSenderPage: 0,
         userInboxCopyBuckets: {inboxDomains: [], spamDomains: [], inboxUsers: [], spamUsers: []},
         serviceAccounts: [],
         activeMessageId: null,
@@ -1922,6 +1977,7 @@ merge_recipe_id, content_blueprint_id</pre>
         table.innerHTML = '<tr><th>Sender</th><th>Status</th><th>Source Account</th><th>Domain</th><th>Send Method</th><th>Selection</th></tr><tr><td colspan="6" class="text-center ii-muted">Searching sender users...</td></tr>';
         const data = await iiFetch(`/api/inbox-intelligence/workspace-senders?q=${encodeURIComponent(query)}`);
         iiState.workspaceSenders = data.senders || [];
+        iiState.userInboxSenderPage = 0;
         renderWorkspaceSenders();
         renderTestSenderSelector();
         renderUserInboxSenderSelector();
@@ -1992,6 +2048,7 @@ merge_recipe_id, content_blueprint_id</pre>
             iiState.workspaceSenders.forEach((sender) => { byEmail[sender.email] = sender; });
             (data.senders || []).forEach((sender) => { byEmail[sender.email] = sender; });
             iiState.workspaceSenders = Object.values(byEmail).sort((a, b) => a.email.localeCompare(b.email));
+            iiState.userInboxSenderPage = 0;
             const notes = [];
             if (data.unmatched?.length) notes.push(`${data.unmatched.length} unmatched list line(s)`);
             if (data.ambiguous?.length) notes.push(`${data.ambiguous.length} ambiguous line(s)`);
@@ -2012,11 +2069,42 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     async function retrieveUserInboxWorkspaceListUsers() {
-        mirrorUserInboxListSelection();
-        await retrieveWorkspaceListUsers();
-        const sharedStatus = document.getElementById('workspaceListStatus');
         const userStatus = document.getElementById('userInboxWorkspaceListStatus');
-        if (sharedStatus && userStatus) userStatus.textContent = sharedStatus.textContent;
+        const listId = document.getElementById('userInboxWorkspaceListSelect')?.value;
+        const maxPerAccount = Math.min(500, Math.max(1, parseInt(document.getElementById('userInboxUsersPerAccountInput')?.value || '1', 10) || 1));
+        if (!listId) {
+            if (userStatus) userStatus.textContent = 'Select a List Management source first.';
+            return;
+        }
+        mirrorUserInboxListSelection();
+        if (userStatus) userStatus.textContent = `Retrieving ${maxPerAccount} API user(s) per account from the selected list...`;
+        try {
+            const data = await iiFetch('/api/inbox-intelligence/workspace-senders/retrieve-list', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({list_id: listId, max_per_account: maxPerAccount})
+            });
+            const byEmail = {};
+            iiState.workspaceSenders.forEach((sender) => { byEmail[sender.email] = sender; });
+            const returnedEmails = [];
+            (data.senders || []).forEach((sender) => {
+                byEmail[sender.email] = sender;
+                if (sender.service_account_id) returnedEmails.push(sender.email);
+            });
+            iiState.workspaceSenders = Object.values(byEmail).sort((a, b) => a.email.localeCompare(b.email));
+            iiState.selectedSenderEmails = new Set(returnedEmails);
+            iiState.userInboxSenderPage = 0;
+            const notes = [];
+            if (data.unmatched?.length) notes.push(`${data.unmatched.length} unmatched list line(s)`);
+            if (data.ambiguous?.length) notes.push(`${data.ambiguous.length} ambiguous line(s)`);
+            if (data.errors?.length) notes.push(`${data.errors.length} retrieval error(s)`);
+            if (userStatus) userStatus.textContent = `Retrieved and selected ${returnedEmails.length} user(s), ${maxPerAccount} per account from ${data.service_account_count || 0} account(s).${notes.length ? ' ' + notes.join(', ') + '.' : ''}`;
+            renderWorkspaceSenders();
+            renderTestSenderSelector();
+            renderUserInboxSenderSelector();
+        } catch (err) {
+            if (userStatus) userStatus.textContent = err.message;
+        }
     }
 
     async function loadStaticTemplates() {
@@ -2516,6 +2604,7 @@ merge_recipe_id, content_blueprint_id</pre>
             iiState.workspaceSenders.forEach((sender) => { byEmail[sender.email] = sender; });
             (data.senders || []).forEach((sender) => { byEmail[sender.email] = sender; });
             iiState.workspaceSenders = Object.values(byEmail).sort((a, b) => a.email.localeCompare(b.email));
+            iiState.userInboxSenderPage = 0;
             const message = `Retrieved ${data.count || 0} sender user(s).${data.errors && data.errors.length ? ' Some accounts returned errors; check logs/details.' : ''}`;
             if (status) status.textContent = message;
             if (userStatus) userStatus.textContent = message;
@@ -2563,6 +2652,13 @@ merge_recipe_id, content_blueprint_id</pre>
         renderUserInboxSenderSelector();
     }
 
+    function changeUserInboxSenderPage(direction) {
+        const pageSize = 20;
+        const pageCount = Math.max(1, Math.ceil(iiState.workspaceSenders.length / pageSize));
+        iiState.userInboxSenderPage = Math.min(pageCount - 1, Math.max(0, iiState.userInboxSenderPage + direction));
+        renderUserInboxSenderSelector();
+    }
+
     function renderTestSenderSelector() {
         const el = document.getElementById('testSenderSelector');
         if (!iiState.workspaceSenders.length) {
@@ -2584,14 +2680,19 @@ merge_recipe_id, content_blueprint_id</pre>
             el.innerHTML = 'Retrieve users with Manual Account Lookup or List Management Source first.';
             return;
         }
+        const pageSize = 20;
+        const pageCount = Math.max(1, Math.ceil(iiState.workspaceSenders.length / pageSize));
+        iiState.userInboxSenderPage = Math.min(iiState.userInboxSenderPage || 0, pageCount - 1);
+        const start = iiState.userInboxSenderPage * pageSize;
+        const pageSenders = iiState.workspaceSenders.slice(start, start + pageSize);
         el.className = 'ii-card';
         el.innerHTML = `
             <div class="ii-row justify-content-between mb-3">
                 <strong>Retrieved Workspace API Users</strong>
-                <span class="ii-muted">${apiReady.length} API-ready user(s)</span>
+                <span class="ii-muted">Showing ${start + 1}-${Math.min(start + pageSize, iiState.workspaceSenders.length)} of ${iiState.workspaceSenders.length} · ${apiReady.length} API-ready</span>
             </div>
             <div class="ii-user-grid">
-                ${iiState.workspaceSenders.map((sender) => `
+                ${pageSenders.map((sender) => `
                     <label class="ii-card ii-user-select-card">
                         <div class="ii-row justify-content-between">
                             <span class="ii-user-line"><input type="checkbox" ${iiState.selectedSenderEmails.has(sender.email) ? 'checked' : ''} ${sender.service_account_id ? '' : 'disabled'} onchange="toggleSender('${escapeHtml(sender.email)}', this.checked)"> <strong>${escapeHtml(sender.name || sender.email.split('@')[0])}</strong></span>
@@ -2600,6 +2701,13 @@ merge_recipe_id, content_blueprint_id</pre>
                         <div class="ii-muted ii-email-text mt-1">${escapeHtml(sender.email)}</div>
                         <div class="ii-muted ii-domain-text mt-1">${escapeHtml(sender.service_account_name || sender.source || '')} · ${escapeHtml(sender.domain || '')}</div>
                     </label>`).join('')}
+            </div>
+            <div class="ii-user-pager">
+                <span class="ii-muted">Page ${iiState.userInboxSenderPage + 1}/${pageCount}. Selection is kept across pages.</span>
+                <div class="ii-row">
+                    <button class="ii-btn" type="button" ${iiState.userInboxSenderPage <= 0 ? 'disabled' : ''} onclick="changeUserInboxSenderPage(-1)"><i class="fas fa-chevron-left"></i> Previous</button>
+                    <button class="ii-btn" type="button" ${iiState.userInboxSenderPage >= pageCount - 1 ? 'disabled' : ''} onclick="changeUserInboxSenderPage(1)">Next <i class="fas fa-chevron-right"></i></button>
+                </div>
             </div>`;
     }
 
@@ -2806,20 +2914,27 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     async function pollUserInboxTest(testId) {
-        await iiFetch(`/api/inbox-intelligence/tests/${testId}/poll`, {method: 'POST'});
-        const data = await iiFetch(`/api/inbox-intelligence/tests/${testId}`);
-        const rows = data.test.messages || [];
-        renderAnalyticsSummary('userInboxAnalyticsSummary', rows, 'Users');
-        document.getElementById('userInboxAnalyticsTable').innerHTML = '<tr><th>User</th><th>Recipient</th><th>Placement</th><th>Signal</th><th>Test ID</th><th>Result</th></tr>' + renderResultRows(rows, testId, false);
-        renderUserInboxProviderSummary(rows);
-        renderUserInboxDomainActions(rows);
-        renderUserInboxUserActions(rows);
-        renderUserInboxSpamInsights(rows);
-        const summary = matrixSummary(rows);
-        const syncLabel = document.getElementById('userInboxLastSync');
-        if (syncLabel) syncLabel.textContent = `Last sync: ${new Date().toLocaleTimeString()}`;
-        document.getElementById('userInboxTestStatus').textContent = `Analytics updated for ${testId}. Inbox ${summary.inbox}, spam ${summary.spam}, missing ${summary.pending + summary.failed}, external ${summary.unobserved}.`;
-        await loadTests();
+        const status = document.getElementById('userInboxTestStatus');
+        try {
+            await iiFetch(`/api/inbox-intelligence/tests/${testId}/poll`, {method: 'POST'});
+            const data = await iiFetch(`/api/inbox-intelligence/tests/${testId}`);
+            const rows = data.test.messages || [];
+            renderAnalyticsSummary('userInboxAnalyticsSummary', rows, 'Users');
+            renderUserInboxAnalyticsCards(rows, testId);
+            renderUserInboxProviderSummary(rows);
+            renderUserInboxDomainActions(rows);
+            renderUserInboxUserActions(rows);
+            renderUserInboxSpamInsights(rows);
+            const summary = matrixSummary(rows);
+            const syncLabel = document.getElementById('userInboxLastSync');
+            if (syncLabel) syncLabel.textContent = `Last sync: ${new Date().toLocaleTimeString()}`;
+            if (status) status.textContent = `Analytics updated for ${testId}. Inbox ${summary.inbox}, spam ${summary.spam}, missing ${summary.pending + summary.failed}, external ${summary.unobserved}.`;
+            await loadTests();
+        } catch (err) {
+            if (status) status.textContent = `Could not sync analytics: ${err.message}`;
+            const cards = document.getElementById('userInboxAnalyticsCards');
+            if (cards) cards.innerHTML = `<div class="ii-analytics-card ii-muted">Could not sync analytics: ${escapeHtml(err.message)}</div>`;
+        }
     }
 
     async function syncUserInboxAnalytics() {
@@ -3011,6 +3126,38 @@ merge_recipe_id, content_blueprint_id</pre>
         }).join('');
     }
 
+    function renderUserInboxAnalyticsCards(rows, testId) {
+        const el = document.getElementById('userInboxAnalyticsCards');
+        if (!el) return;
+        if (!rows.length) {
+            el.innerHTML = '<div class="ii-analytics-card ii-muted">No message rows found for this test yet. Sync again after delivery has had time to complete.</div>';
+            return;
+        }
+        el.innerHTML = rows.map((row) => {
+            const sender = senderLookup(row.sender);
+            const displayName = sender.name || (row.sender || '').split('@')[0] || 'Workspace user';
+            const placement = row.placement || 'PENDING';
+            const status = row.status || 'PENDING';
+            const placementChip = placement === 'INBOX' ? 'green' : placement === 'SPAM' ? 'red' : placement === 'UNOBSERVED' ? 'gray' : 'yellow';
+            const statusChip = status === 'COMPLETED' ? 'green' : status === 'FAILED' ? 'red' : 'blue';
+            return `<div class="ii-analytics-card">
+                <div class="ii-analytics-title">
+                    <div>
+                        <strong>${escapeHtml(displayName)}</strong>
+                        <div class="ii-muted ii-email-text">${escapeHtml(row.sender || '')}</div>
+                    </div>
+                    <span class="ii-chip ${placementChip}">${escapeHtml(placement)}</span>
+                </div>
+                <div class="ii-rate-row">
+                    <div><span class="ii-muted">Recipient</span><strong class="ii-email-text">${escapeHtml(row.recipient || '')}</strong></div>
+                    <div><span class="ii-muted">Status</span><strong><span class="ii-chip ${statusChip}">${escapeHtml(status)}</span></strong></div>
+                    <div><span class="ii-muted">Test</span><strong class="ii-email-text">${escapeHtml(row.test_identifier || testId || '')}</strong></div>
+                </div>
+                <div class="ii-muted">${escapeHtml(row.signal || row.error_message || 'Waiting for latest inbox observation.')}</div>
+            </div>`;
+        }).join('');
+    }
+
     function senderLookup(email) {
         return iiState.workspaceSenders.find((sender) => sender.email === email) || {};
     }
@@ -3072,21 +3219,25 @@ merge_recipe_id, content_blueprint_id</pre>
                 <div class="ii-result-pill"><span class="ii-muted">Inbox domains</span><strong>${inboxDomains.length}</strong><div class="ii-muted">>= 90% inbox</div></div>
                 <div class="ii-result-pill"><span class="ii-muted">Spam domains</span><strong>${spamDomains.length}</strong><div class="ii-muted">&lt; 70% inbox</div></div>
             </div>
-            <div class="ii-responsive-table"><table class="ii-table">
-                <tr><th>Domain</th><th>Health</th><th>Inbox</th><th>Spam</th><th>Users</th><th>Score</th></tr>
+            <div class="ii-actions-grid">
                 ${domains.map((item) => {
                     const health = healthLabel(item);
                     const users = new Set(item.rows.map((row) => row.sender)).size;
-                    return `<tr>
-                        <td><strong>${escapeHtml(item.key)}</strong>${renderMiniHealthBar(item)}</td>
-                        <td><span class="ii-chip ${health.chip}">${health.label}</span></td>
-                        <td>${item.inboxRate === null ? '--' : item.inboxRate + '%'}</td>
-                        <td>${item.spamRate === null ? '--' : item.spamRate + '%'}</td>
-                        <td>${users}</td>
-                        <td>${item.inbox}/${item.observed || item.total}</td>
-                    </tr>`;
+                    return `<div class="ii-action-result-card">
+                        <div class="ii-analytics-title">
+                            <strong class="ii-domain-text">${escapeHtml(item.key)}</strong>
+                            <span class="ii-chip ${health.chip}">${health.label}</span>
+                        </div>
+                        ${renderMiniHealthBar(item)}
+                        <div class="ii-rate-row">
+                            <div><span class="ii-muted">Inbox</span><strong>${item.inboxRate === null ? '--' : item.inboxRate + '%'}</strong></div>
+                            <div><span class="ii-muted">Spam</span><strong>${item.spamRate === null ? '--' : item.spamRate + '%'}</strong></div>
+                            <div><span class="ii-muted">Users</span><strong>${users}</strong></div>
+                        </div>
+                        <div class="ii-muted">Score ${item.inbox}/${item.observed || item.total} observed messages</div>
+                    </div>`;
                 }).join('')}
-            </table></div>`;
+            </div>`;
     }
 
     function renderUserInboxUserActions(rows) {
@@ -3109,20 +3260,28 @@ merge_recipe_id, content_blueprint_id</pre>
                 <div class="ii-result-pill"><span class="ii-muted">Inbox users</span><strong>${inboxUsers.length}</strong><div class="ii-muted">>= 90% inbox</div></div>
                 <div class="ii-result-pill"><span class="ii-muted">Spam users</span><strong>${spamUsers.length}</strong><div class="ii-muted">&lt; 70% inbox</div></div>
             </div>
-            <div class="ii-responsive-table"><table class="ii-table">
-                <tr><th>User</th><th>Domain</th><th>Health</th><th>Inbox</th><th>Spam</th><th>Action Focus</th></tr>
+            <div class="ii-actions-grid">
                 ${users.map((item) => {
                     const health = healthLabel(item);
-                    return `<tr>
-                        <td><strong>${escapeHtml(item.displayName)}</strong><div class="ii-muted">${escapeHtml(item.key)}</div></td>
-                        <td>${escapeHtml(item.domain)}</td>
-                        <td><span class="ii-chip ${health.chip}">${health.label.replace('domain', 'user')}</span></td>
-                        <td>${item.inboxRate === null ? '--' : item.inboxRate + '%'}</td>
-                        <td>${item.spamRate === null ? '--' : item.spamRate + '%'}</td>
-                        <td>${item.inboxRate !== null && item.inboxRate < 70 ? 'Review display name and domain' : item.inboxRate >= 90 ? 'Keep as inbox-safe sender' : 'Monitor next test'}</td>
-                    </tr>`;
+                    const focus = item.inboxRate !== null && item.inboxRate < 70 ? 'Review display name and domain' : item.inboxRate >= 90 ? 'Keep as inbox-safe sender' : 'Monitor next test';
+                    return `<div class="ii-action-result-card">
+                        <div class="ii-analytics-title">
+                            <div>
+                                <strong>${escapeHtml(item.displayName)}</strong>
+                                <div class="ii-muted ii-email-text">${escapeHtml(item.key)}</div>
+                            </div>
+                            <span class="ii-chip ${health.chip}">${health.label.replace('domain', 'user')}</span>
+                        </div>
+                        ${renderMiniHealthBar(item)}
+                        <div class="ii-rate-row">
+                            <div><span class="ii-muted">Inbox</span><strong>${item.inboxRate === null ? '--' : item.inboxRate + '%'}</strong></div>
+                            <div><span class="ii-muted">Spam</span><strong>${item.spamRate === null ? '--' : item.spamRate + '%'}</strong></div>
+                            <div><span class="ii-muted">Domain</span><strong class="ii-domain-text">${escapeHtml(item.domain)}</strong></div>
+                        </div>
+                        <div class="ii-muted">${escapeHtml(focus)}</div>
+                    </div>`;
                 }).join('')}
-            </table></div>`;
+            </div>`;
     }
 
     function copyTextToClipboard(text) {

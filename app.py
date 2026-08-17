@@ -1472,7 +1472,7 @@ def api_inbox_workspace_accounts_search():
     } for sa in accounts]
     return jsonify({'success': True, 'service_accounts': service_accounts})
 
-def _retrieve_workspace_senders_from_service_accounts(service_accounts):
+def _retrieve_workspace_senders_from_service_accounts(service_accounts, max_per_account=None):
     from services.google_domains_service import GoogleDomainsService
     retrieved = []
     errors = []
@@ -1483,6 +1483,7 @@ def _retrieve_workspace_senders_from_service_accounts(service_accounts):
             page_token = None
             while True:
                 resp = admin_service.users().list(customer='my_customer', maxResults=500, pageToken=page_token, orderBy='email').execute()
+                account_count = 0
                 for user in resp.get('users', []):
                     email_addr = (user.get('primaryEmail') or '').lower()
                     if not email_addr:
@@ -1497,6 +1498,11 @@ def _retrieve_workspace_senders_from_service_accounts(service_accounts):
                         'status': 'suspended' if user.get('suspended') else 'active',
                         'send_method': 'workspace_api',
                     })
+                    account_count += 1
+                    if max_per_account and account_count >= max_per_account:
+                        break
+                if max_per_account and account_count >= max_per_account:
+                    break
                 page_token = resp.get('nextPageToken')
                 if not page_token:
                     break
@@ -1575,13 +1581,18 @@ def api_inbox_retrieve_workspace_senders_from_list():
         list_id = int(data.get('list_id') or 0)
     except (TypeError, ValueError):
         list_id = 0
+    try:
+        max_per_account = int(data.get('max_per_account') or 0)
+    except (TypeError, ValueError):
+        max_per_account = 0
+    max_per_account = min(max(max_per_account, 0), 500) or None
     workspace_list = WorkspaceList.query.get(list_id) if list_id else None
     if not workspace_list:
         return jsonify({'success': False, 'error': 'Select a saved List Management list'}), 400
     service_accounts, unmatched, ambiguous = _resolve_workspace_list_service_accounts(workspace_list)
     if not service_accounts:
         return jsonify({'success': False, 'error': 'No saved Workspace service accounts matched this list. Add service account name, admin email, client email, or service account ID per line.', 'unmatched': unmatched, 'ambiguous': ambiguous}), 400
-    senders, errors = _retrieve_workspace_senders_from_service_accounts(service_accounts)
+    senders, errors = _retrieve_workspace_senders_from_service_accounts(service_accounts, max_per_account=max_per_account)
     return jsonify({
         'success': True,
         'senders': senders,
@@ -1590,6 +1601,7 @@ def api_inbox_retrieve_workspace_senders_from_list():
         'ambiguous': ambiguous,
         'count': len(senders),
         'service_account_count': len(service_accounts),
+        'max_per_account': max_per_account,
     })
 
 @app.route('/api/inbox-intelligence/workspace-senders/retrieve', methods=['POST'])
