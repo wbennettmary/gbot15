@@ -686,8 +686,8 @@ def create_batch_subdomains():
                     source='manual'
                 )
                 db.session.add(domain_record)
-            if domain_record.last_used_at and domain_record.last_used_at >= used_cutoff():
-                return jsonify({'success': False, 'error': f"FreeDNS domain '{selected_domain}' is already marked used. Reactivate it first or wait 30 days."}), 400
+            # Manual domains are an explicit override. Do not block them because
+            # the local rotation cache says they were recently used.
             if not domain_record.domain_id:
                 domain_record.domain_id = svc.get_domain_id(selected_domain)
             if not domain_record.domain_id:
