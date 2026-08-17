@@ -205,6 +205,11 @@
         background: #f8fafc;
     }
 
+    .ii-table-wrap {
+        width: 100%;
+        overflow-x: auto;
+    }
+
     .ii-form-grid {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -354,9 +359,36 @@
         font-size: 12px;
     }
 
-    .ii-matrix td:not(:first-child),
-    .ii-matrix th:not(:first-child) {
-        text-align: center;
+    .ii-matrix {
+        table-layout: fixed;
+        min-width: 720px;
+    }
+
+    .ii-matrix th,
+    .ii-matrix td {
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    .ii-matrix th:nth-child(1),
+    .ii-matrix td:nth-child(1) { width: 30%; }
+    .ii-matrix th:nth-child(2),
+    .ii-matrix td:nth-child(2) { width: 22%; }
+    .ii-matrix th:nth-child(3),
+    .ii-matrix td:nth-child(3) { width: 12%; text-align: center; }
+    .ii-matrix th:nth-child(4),
+    .ii-matrix td:nth-child(4) { width: 14%; text-align: center; }
+    .ii-matrix th:nth-child(5),
+    .ii-matrix td:nth-child(5) { width: 14%; text-align: center; }
+    .ii-matrix th:nth-child(6),
+    .ii-matrix td:nth-child(6) { width: 8%; text-align: center; }
+
+    .ii-matrix-id {
+        display: inline-block;
+        max-width: 100%;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 12px;
+        line-height: 1.35;
     }
 
     .ii-template-thumb {
@@ -952,10 +984,12 @@ merge_recipe_id, content_blueprint_id</pre>
             </div>
             <div class="ii-panel">
                 <h3>Results Matrix</h3>
-                <table class="ii-table ii-matrix" id="resultsMatrixTable">
-                    <tr><th>Workspace Sender</th><th>Recipient</th><th>Placement</th><th>Status</th><th>Test ID</th><th>Merge</th></tr>
-                    <tr><td colspan="6" class="text-center ii-muted">Results matrix appears after a controlled test finishes polling selected inboxes.</td></tr>
-                </table>
+                <div class="ii-table-wrap">
+                    <table class="ii-table ii-matrix" id="resultsMatrixTable">
+                        <tr><th>Workspace Sender</th><th>Recipient</th><th>Placement</th><th>Status</th><th>Test ID</th><th>Merge</th></tr>
+                        <tr><td colspan="6" class="text-center ii-muted">Results matrix appears after a controlled test finishes polling selected inboxes.</td></tr>
+                    </table>
+                </div>
                 <h4 class="mt-3">Sender Health Score</h4>
                 <div class="ii-card"><div class="ii-card-label">Deliverability Score</div><div class="ii-card-value">-- / 100</div><div class="ii-muted">Internal score appears after observed tests, authentication signals, and provider consistency are available.</div></div>
             </div>
@@ -1605,6 +1639,12 @@ merge_recipe_id, content_blueprint_id</pre>
             </tr>`).join('');
     }
 
+    function compactTestIdentifier(value) {
+        const text = String(value || '');
+        if (text.length <= 18) return text;
+        return `${text.slice(0, 8)}...${text.slice(-6)}`;
+    }
+
     async function loadTestDetail(testId) {
         const data = await iiFetch(`/api/inbox-intelligence/tests/${testId}`);
         const rows = data.test.messages || [];
@@ -1614,7 +1654,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 <td>${escapeHtml(row.recipient)}</td>
                 <td><span class="ii-chip ${row.placement === 'INBOX' ? 'green' : row.placement === 'SPAM' ? 'red' : row.placement === 'FAILED' ? 'red' : 'gray'}">${escapeHtml(row.placement)}</span></td>
                 <td>${escapeHtml(row.status)}</td>
-                <td>${escapeHtml(row.test_identifier)}</td>
+                <td><span class="ii-matrix-id" title="${escapeHtml(row.test_identifier)}">${escapeHtml(compactTestIdentifier(row.test_identifier))}</span></td>
                 <td>${row.placement === 'INBOX' ? `<button class="ii-btn" type="button" onclick="startMergeFromTest('${escapeHtml(testId)}')"><i class="fas fa-code-merge"></i> Start Merge</button>` : '<span class="ii-muted">Waiting</span>'}</td>
             </tr>`).join('');
     }
