@@ -21,7 +21,7 @@ import hmac
 import ssl
 from email import message_from_bytes
 from email.header import decode_header, make_header
-from email.utils import parsedate_to_datetime, parseaddr, formatdate, make_msgid
+from email.utils import parsedate_to_datetime, parseaddr, formatdate, make_msgid, formataddr
 from sqlalchemy import text, or_, func
 from werkzeug.security import generate_password_hash, check_password_hash
 import logging.handlers
@@ -1602,11 +1602,22 @@ def api_inbox_retrieve_workspace_senders():
     senders, errors = _retrieve_workspace_senders_from_service_accounts(service_accounts)
     return jsonify({'success': True, 'senders': senders, 'errors': errors, 'count': len(senders)})
 
-def _parse_custom_header_lines(header_text, sender, recipient, subject, test_identifier, message_id):
+def _sender_display_name(sender, sender_name=None):
+    if sender_name:
+        return re.sub(r'\s+', ' ', str(sender_name)).strip()
+    local = (sender or '').split('@', 1)[0]
+    cleaned = re.sub(r'[._+-]+', ' ', local).strip()
+    return ' '.join(part.capitalize() for part in cleaned.split()) or sender
+
+def _format_sender_header(sender, sender_name=None):
+    return formataddr((_sender_display_name(sender, sender_name), sender))
+
+def _parse_custom_header_lines(header_text, sender, recipient, subject, test_identifier, message_id, sender_name=None):
+    formatted_sender = _format_sender_header(sender, sender_name)
     values = {
         '[date]': formatdate(localtime=True),
         '[to]': recipient,
-        '[from]': sender,
+        '[from]': formatted_sender,
         '[subject]': subject,
         '[test_id]': test_identifier,
         '[message_id]': message_id,
@@ -1626,6 +1637,8 @@ def _parse_custom_header_lines(header_text, sender, recipient, subject, test_ide
             continue
         for token, replacement in values.items():
             value = value.replace(token, replacement)
+        if name.lower() == 'from':
+            value = formatted_sender
         headers.append((name, value))
     return headers
 
@@ -1640,11 +1653,11 @@ def _custom_header_value(header_text, header_name):
             return value.strip()
     return ''
 
-def _replace_email_tokens(value, sender, recipient, subject, test_identifier, message_id):
+def _replace_email_tokens(value, sender, recipient, subject, test_identifier, message_id, sender_name=None):
     replacements = {
         '[date]': formatdate(localtime=True),
         '[to]': recipient,
-        '[from]': sender,
+        '[from]': _format_sender_header(sender, sender_name),
         '[subject]': subject,
         '[test_id]': test_identifier,
         '[message_id]': message_id,
@@ -1698,12 +1711,13 @@ def _should_send_raw_custom_mime(custom_headers, html_body, text_body):
     normalized_body = _normalize_mime_boundary_delimiters(body, boundary)
     return bool(f'--{boundary}' in normalized_body or (_custom_content_type_is_multipart(custom_headers) and _body_looks_like_mime_parts(body)))
 
-def _build_raw_custom_mime_bytes(sender, recipient, subject, html_body, text_body, test_identifier, custom_headers):
+def _build_raw_custom_mime_bytes(sender, recipient, subject, html_body, text_body, test_identifier, custom_headers, sender_name=None):
     message_id = _custom_header_value(custom_headers, 'Message-ID') or make_msgid(idstring=test_identifier)
     header_names = _custom_header_names(custom_headers)
+    formatted_sender = _format_sender_header(sender, sender_name)
     header_lines = []
     defaults = {
-        'from': f'From: {sender}',
+        'from': f'From: {formatted_sender}',
         'to': f'To: {recipient}',
         'date': f'Date: {formatdate(localtime=True)}',
         'message-id': f'Message-ID: {message_id}',
@@ -1714,15 +1728,15 @@ def _build_raw_custom_mime_bytes(sender, recipient, subject, html_body, text_bod
     for key, line in defaults.items():
         if key not in header_names:
             header_lines.append(line)
-    for name, value in _parse_custom_header_lines(custom_headers, sender, recipient, subject, test_identifier, message_id):
+    for name, value in _parse_custom_header_lines(custom_headers, sender, recipient, subject, test_identifier, message_id, sender_name):
         header_lines.append(f'{name}: {value}')
-    body = _replace_email_tokens(html_body or text_body or '', sender, recipient, subject, test_identifier, message_id)
+    body = _replace_email_tokens(html_body or text_body or '', sender, recipient, subject, test_identifier, message_id, sender_name)
     body = _normalize_mime_boundary_delimiters(body, _raw_mime_boundary(custom_headers))
     return ('\r\n'.join(header_lines) + '\r\n\r\n' + body).encode('utf-8')
 
-def _apply_custom_headers(msg, header_text, sender, recipient, subject, test_identifier):
+def _apply_custom_headers(msg, header_text, sender, recipient, subject, test_identifier, sender_name=None):
     message_id = msg.get('Message-ID') or make_msgid(idstring=test_identifier)
-    for name, value in _parse_custom_header_lines(header_text, sender, recipient, subject, test_identifier, message_id):
+    for name, value in _parse_custom_header_lines(header_text, sender, recipient, subject, test_identifier, message_id, sender_name):
         lower_name = name.lower()
         if lower_name == 'content-type':
             boundary_match = re.search(r'boundary=["\']?([^"\';]+)', value, re.IGNORECASE)
@@ -1736,10 +1750,10 @@ def _apply_custom_headers(msg, header_text, sender, recipient, subject, test_ide
         else:
             msg[name] = value
 
-def _build_test_mime_message(sender, recipient, subject, html_body, text_body, test_identifier, custom_headers=None):
+def _build_test_mime_message(sender, recipient, subject, html_body, text_body, test_identifier, custom_headers=None, sender_name=None):
     msg = MIMEMultipart('alternative')
     msg['Subject'] = subject
-    msg['From'] = sender
+    msg['From'] = _format_sender_header(sender, sender_name)
     msg['To'] = recipient
     msg['Date'] = formatdate(localtime=True)
     msg['Message-ID'] = make_msgid(idstring=test_identifier)
@@ -1747,10 +1761,10 @@ def _build_test_mime_message(sender, recipient, subject, html_body, text_body, t
     msg.attach(MIMEText((text_body or '') + f"\n\nTest ID: {test_identifier}", 'plain', 'utf-8'))
     if html_body:
         msg.attach(MIMEText(html_body + f"<p style=\"font-size:11px;color:#64748b\">Test ID: {test_identifier}</p>", 'html', 'utf-8'))
-    _apply_custom_headers(msg, custom_headers, sender, recipient, subject, test_identifier)
+    _apply_custom_headers(msg, custom_headers, sender, recipient, subject, test_identifier, sender_name)
     return msg
 
-def _send_test_email_gmail_api(service_account_id, sender, recipient, subject, html_body, text_body, test_identifier, custom_headers=None):
+def _send_test_email_gmail_api(service_account_id, sender, recipient, subject, html_body, text_body, test_identifier, custom_headers=None, sender_name=None):
     from google.oauth2 import service_account as google_service_account
     from googleapiclient.discovery import build
     sa = ServiceAccount.query.get(service_account_id)
@@ -1763,10 +1777,10 @@ def _send_test_email_gmail_api(service_account_id, sender, recipient, subject, h
     ).with_subject(sender)
     gmail = build('gmail', 'v1', credentials=creds, cache_discovery=False)
     if _should_send_raw_custom_mime(custom_headers, html_body, text_body):
-        raw_bytes = _build_raw_custom_mime_bytes(sender, recipient, subject, html_body, text_body, test_identifier, custom_headers)
+        raw_bytes = _build_raw_custom_mime_bytes(sender, recipient, subject, html_body, text_body, test_identifier, custom_headers, sender_name)
         fallback_message_id = _custom_header_value(custom_headers, 'Message-ID') or make_msgid(idstring=test_identifier)
     else:
-        msg = _build_test_mime_message(sender, recipient, subject, html_body, text_body, test_identifier, custom_headers)
+        msg = _build_test_mime_message(sender, recipient, subject, html_body, text_body, test_identifier, custom_headers, sender_name)
         raw_bytes = msg.as_bytes()
         fallback_message_id = msg['Message-ID']
     raw = base64.urlsafe_b64encode(raw_bytes).decode('utf-8')
@@ -1799,11 +1813,12 @@ def api_inbox_tests():
     for item in sender_payload:
         if isinstance(item, dict):
             email_addr = (item.get('email') or '').strip().lower()
+            sender_name = (item.get('name') or '').strip()
             service_account_id = item.get('service_account_id')
             if email_addr and service_account_id:
-                senders.append({'email': email_addr, 'service_account_id': int(service_account_id)})
+                senders.append({'email': email_addr, 'name': sender_name, 'service_account_id': int(service_account_id)})
         elif isinstance(item, str) and item.strip():
-            senders.append({'email': item.strip().lower(), 'service_account_id': None})
+            senders.append({'email': item.strip().lower(), 'name': '', 'service_account_id': None})
     inbox_ids = [int(x) for x in data.get('inbox_account_ids', [])]
     recipient_emails = []
     for value in data.get('recipient_emails', []):
@@ -1872,7 +1887,7 @@ def api_inbox_tests():
             db.session.add(row)
             db.session.flush()
             try:
-                row.provider_message_id = _send_test_email_gmail_api(sender_info['service_account_id'], sender, recipient_info['email'], subject, html_body, text_body, identifier, custom_headers)
+                row.provider_message_id = _send_test_email_gmail_api(sender_info['service_account_id'], sender, recipient_info['email'], subject, html_body, text_body, identifier, custom_headers, sender_info.get('name'))
                 row.sent_at = datetime.utcnow()
                 if recipient_imap_id:
                     row.status = 'WAITING_FOR_DELIVERY'

@@ -2273,7 +2273,7 @@ merge_recipe_id, content_blueprint_id</pre>
         try {
             const selectedSenders = iiState.workspaceSenders
                 .filter((sender) => iiState.selectedSenderEmails.has(sender.email))
-                .map((sender) => ({email: sender.email, service_account_id: sender.service_account_id}));
+                .map((sender) => ({email: sender.email, name: sender.name || '', service_account_id: sender.service_account_id}));
             const payload = {
                 name: document.getElementById('testNameInput').value,
                 template_id: iiState.selectedTemplateId,
@@ -2307,7 +2307,7 @@ merge_recipe_id, content_blueprint_id</pre>
         try {
             const selectedSenders = iiState.workspaceSenders
                 .filter((sender) => iiState.selectedSenderEmails.has(sender.email))
-                .map((sender) => ({email: sender.email, service_account_id: sender.service_account_id}));
+                .map((sender) => ({email: sender.email, name: sender.name || '', service_account_id: sender.service_account_id}));
             const customHeaders = document.getElementById('userInboxHeadersInput').value;
             const headerSubjectMatch = customHeaders.match(/^Subject:\s*(.+)$/im);
             const subject = document.getElementById('userInboxSubjectInput').value.trim() || (headerSubjectMatch ? headerSubjectMatch[1].trim() : '');
