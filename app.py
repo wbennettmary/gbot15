@@ -22,7 +22,7 @@ import ssl
 from email import message_from_bytes
 from email.header import decode_header, make_header
 from email.utils import parsedate_to_datetime, parseaddr, formatdate, make_msgid
-from sqlalchemy import text, or_
+from sqlalchemy import text, or_, func
 from werkzeug.security import generate_password_hash, check_password_hash
 import logging.handlers
 import threading
@@ -1555,6 +1555,11 @@ def api_inbox_tests():
         elif isinstance(item, str) and item.strip():
             senders.append({'email': item.strip().lower(), 'service_account_id': None})
     inbox_ids = [int(x) for x in data.get('inbox_account_ids', [])]
+    recipient_emails = []
+    for value in data.get('recipient_emails', []):
+        email_value = (value or '').strip().lower()
+        if email_value and email_value not in recipient_emails:
+            recipient_emails.append(email_value)
     template_id = int(data.get('template_id') or 0)
     template = InboxStaticTemplate.query.get(template_id) if template_id else None
     subject = (data.get('subject') or (template.name if template else '')).strip()
@@ -1565,15 +1570,23 @@ def api_inbox_tests():
         return jsonify({'success': False, 'error': 'Select at least one Workspace API sender from a selected Workspace account'}), 400
     if any(not s.get('service_account_id') for s in senders):
         return jsonify({'success': False, 'error': 'Every sender must come from a selected Workspace account so Gmail API delegation can send it.'}), 400
-    if not inbox_ids:
-        return jsonify({'success': False, 'error': 'Select at least one connected test inbox'}), 400
+    if not inbox_ids and not recipient_emails:
+        return jsonify({'success': False, 'error': 'Type or select at least one connected recipient inbox'}), 400
     if not template:
-        return jsonify({'success': False, 'error': 'Select an inbox-derived template from Template Studio before running the test'}), 400
+        return jsonify({'success': False, 'error': 'Select an inbox email template in Run Test or Template Studio before triggering the test'}), 400
     if not subject:
         return jsonify({'success': False, 'error': 'Subject is required'}), 400
     if not text_body and not html_body:
         return jsonify({'success': False, 'error': 'HTML or plain-text body is required'}), 400
-    inboxes = InboxImapAccount.query.filter(InboxImapAccount.id.in_(inbox_ids)).all()
+    inbox_query = InboxImapAccount.query
+    if recipient_emails:
+        inboxes = inbox_query.filter(func.lower(InboxImapAccount.email).in_(recipient_emails)).all()
+        found = {inbox.email.lower() for inbox in inboxes}
+        missing = [email for email in recipient_emails if email not in found]
+        if missing:
+            return jsonify({'success': False, 'error': 'Recipient inboxes must be connected IMAP accounts before they can be tested: ' + ', '.join(missing)}), 400
+    else:
+        inboxes = inbox_query.filter(InboxImapAccount.id.in_(inbox_ids)).all()
     if not inboxes:
         return jsonify({'success': False, 'error': 'No valid inbox accounts selected'}), 400
     test_id = f"DLV-{uuid.uuid4().hex[:8].upper()}"

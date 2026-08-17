@@ -934,13 +934,15 @@ merge_recipe_id, content_blueprint_id</pre>
             <div class="ii-panel">
                 <h3>Deliverability Test Builder</h3>
                 <div class="ii-form-grid mb-3">
+                    <div class="ii-field" style="grid-column: 1 / -1;"><label>Inbox-derived template</label><select class="ii-select" id="testTemplateSelect" onchange="selectStudioTemplate(this.value)"><option value="">Select the inbox email template to test</option></select></div>
                     <div class="ii-field"><label>Test name</label><input class="ii-input" id="testNameInput" placeholder="Controlled inbox placement test"></div>
                     <div class="ii-field"><label>Subject</label><input class="ii-input" id="testSubjectInput" placeholder="Required subject"></div>
                     <div class="ii-field" style="grid-column: 1 / -1;"><label>HTML body</label><textarea class="ii-textarea" id="testHtmlInput" placeholder="Sanitized HTML body for the controlled test."></textarea></div>
                     <div class="ii-field" style="grid-column: 1 / -1;"><label>Plain-text body</label><textarea class="ii-textarea" id="testTextInput" placeholder="Plain-text body for the controlled test."></textarea></div>
+                    <div class="ii-field" style="grid-column: 1 / -1;"><label>Recipient inboxes, one per line</label><textarea class="ii-textarea" id="testRecipientInput" placeholder="recipient1@example.com&#10;recipient2@example.com"></textarea><div class="ii-muted mt-1">Recipients must be connected IMAP inboxes so the app can poll inbox/spam placement.</div></div>
                 </div>
                 <div class="ii-steps">
-                    <div class="ii-step"><div><strong>Select Inbox-Derived Template</strong><div id="testTemplateSelector" class="mt-2 ii-muted">Choose the template in Template Studio first.</div></div></div>
+                    <div class="ii-step"><div><strong>Select Inbox-Derived Template</strong><div id="testTemplateSelector" class="mt-2 ii-muted">Choose the inbox email template above or in Template Studio.</div></div></div>
                     <div class="ii-step"><div><strong>Select Workspace API Senders</strong><div id="testSenderSelector" class="mt-2 ii-muted">Retrieve users from selected Workspace accounts.</div></div></div>
                     <div class="ii-step"><div><strong>Select Receiving IMAP Inboxes</strong><div id="testInboxSelector" class="mt-2 ii-muted">The app sends each test to these connected IMAP inbox email addresses and polls those same inboxes for placement.</div></div></div>
                     <div class="ii-step"><div><strong>Configure</strong><p class="ii-muted mb-0">Subject, From name, Reply-To, HTML, plain text, and dummy variables.</p></div></div>
@@ -1066,6 +1068,11 @@ merge_recipe_id, content_blueprint_id</pre>
         }[char]));
     }
 
+    function activateInboxTab(tabName) {
+        document.querySelectorAll('.ii-tab').forEach((item) => item.classList.toggle('active', item.dataset.tab === tabName));
+        document.querySelectorAll('.ii-tabpane').forEach((pane) => pane.classList.toggle('active', pane.id === tabName));
+    }
+
     async function iiFetch(url, options = {}) {
         const res = await fetch(url, options);
         const data = await res.json().catch(() => ({}));
@@ -1130,6 +1137,7 @@ merge_recipe_id, content_blueprint_id</pre>
         if (checked) iiState.selectedInboxIds.add(id);
         else iiState.selectedInboxIds.delete(id);
         renderTestInboxSelector();
+        syncRecipientInputFromSelectedInboxes();
     }
 
     function renderSelectedMessageStatus() {
@@ -1158,6 +1166,7 @@ merge_recipe_id, content_blueprint_id</pre>
         });
         renderInboxSourceSelector();
         renderTestInboxSelector();
+        syncRecipientInputFromSelectedInboxes();
     }
 
     function renderMessageAccountFilter() {
@@ -1174,6 +1183,7 @@ merge_recipe_id, content_blueprint_id</pre>
         renderInboxSourceSelector();
         renderMessageAccountFilter();
         renderTestInboxSelector();
+        syncRecipientInputFromSelectedInboxes();
     }
 
     async function saveImapAccount(event) {
@@ -1289,8 +1299,13 @@ merge_recipe_id, content_blueprint_id</pre>
         });
         iiState.selectedMessageIds.clear();
         await loadStaticTemplates();
+        const firstTemplate = (data.templates || [])[0];
+        if (firstTemplate?.id) {
+            await selectStudioTemplate(firstTemplate.id);
+            activateInboxTab('templates');
+        }
         renderInboxMessagesList();
-        alert(data.message || 'Inbox templates created.');
+        document.getElementById('studioStatus').textContent = `${data.message || 'Inbox template created.'} Select API senders and recipients, then trigger the test.`;
     }
 
     async function searchWorkspaceSenders() {
@@ -1361,13 +1376,17 @@ merge_recipe_id, content_blueprint_id</pre>
 
     function renderStudioTemplateSelector() {
         const select = document.getElementById('studioTemplateSelect');
+        const testSelect = document.getElementById('testTemplateSelect');
         const testSelector = document.getElementById('testTemplateSelector');
         if (select) {
             select.innerHTML = '<option value="">Select a template from the library</option>' + iiState.staticTemplates.map((template) => `<option value="${template.id}" ${iiState.selectedTemplateId === template.id ? 'selected' : ''}>${escapeHtml(template.name)}</option>`).join('');
         }
+        if (testSelect) {
+            testSelect.innerHTML = '<option value="">Select the inbox email template to test</option>' + iiState.staticTemplates.map((template) => `<option value="${template.id}" ${iiState.selectedTemplateId === template.id ? 'selected' : ''}>${escapeHtml(template.name)}</option>`).join('');
+        }
         if (testSelector) {
             const selected = iiState.staticTemplates.find((template) => template.id === iiState.selectedTemplateId);
-            testSelector.innerHTML = selected ? `<span class="ii-chip blue">${escapeHtml(selected.name)}</span>` : '<span class="ii-muted">Choose the template in Template Studio first.</span>';
+            testSelector.innerHTML = selected ? `<span class="ii-chip blue">${escapeHtml(selected.name)}</span>` : '<span class="ii-muted">Choose the inbox email template above or in Template Studio.</span>';
         }
     }
 
@@ -1381,6 +1400,8 @@ merge_recipe_id, content_blueprint_id</pre>
         const data = await iiFetch(`/api/inbox-intelligence/static-templates/${templateId}`);
         iiState.selectedTemplateId = templateId;
         document.getElementById('studioTemplateSelect').value = String(templateId);
+        const testSelect = document.getElementById('testTemplateSelect');
+        if (testSelect) testSelect.value = String(templateId);
         document.getElementById('studioSubjectInput').value = data.template.name || '';
         document.getElementById('studioHtmlInput').value = data.template.html_content || '';
         document.getElementById('studioTextInput').value = data.template.plain_text || '';
@@ -1509,6 +1530,20 @@ merge_recipe_id, content_blueprint_id</pre>
         el.innerHTML = iiState.imapAccounts.map((account) => `<label class="d-block mb-1"><input type="checkbox" ${iiState.selectedInboxIds.has(account.id) ? 'checked' : ''} onchange="toggleInboxSource(${account.id}, this.checked)"> ${escapeHtml(account.email)}</label>`).join('');
     }
 
+    function syncRecipientInputFromSelectedInboxes() {
+        const input = document.getElementById('testRecipientInput');
+        if (!input || input.dataset.manualEdit === 'true') return;
+        const emails = iiState.imapAccounts
+            .filter((account) => iiState.selectedInboxIds.has(account.id))
+            .map((account) => account.email);
+        input.value = emails.join('\n');
+    }
+
+    function parseRecipientInput() {
+        const value = document.getElementById('testRecipientInput')?.value || '';
+        return value.split(/\n|,/).map((item) => item.trim().toLowerCase()).filter(Boolean);
+    }
+
     async function runDeliverabilityTest() {
         const status = document.getElementById('testRunStatus');
         status.textContent = 'Creating test...';
@@ -1523,6 +1558,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 html_body: document.getElementById('studioHtmlInput')?.value || document.getElementById('testHtmlInput').value,
                 text_body: document.getElementById('studioTextInput')?.value || document.getElementById('testTextInput').value,
                 senders: selectedSenders,
+                recipient_emails: parseRecipientInput(),
                 inbox_account_ids: [...iiState.selectedInboxIds]
             };
             const data = await iiFetch('/api/inbox-intelligence/tests', {
@@ -1673,6 +1709,9 @@ merge_recipe_id, content_blueprint_id</pre>
         });
         document.getElementById('workspaceAccountSearchInput')?.addEventListener('keydown', (event) => {
             if (event.key === 'Enter') searchWorkspaceAccounts();
+        });
+        document.getElementById('testRecipientInput')?.addEventListener('input', (event) => {
+            event.target.dataset.manualEdit = 'true';
         });
         document.getElementById('imapProviderInput')?.dispatchEvent(new Event('change'));
 
