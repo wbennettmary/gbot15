@@ -1199,6 +1199,52 @@ def _serialize_imap_account(account):
         'spam_count': account.spam_count or 0,
     }
 
+def _upsert_imap_message(account, folder, uid, raw_msg):
+    uid_value = uid.decode() if isinstance(uid, bytes) else str(uid)
+    msg = message_from_bytes(raw_msg)
+    sender_raw = _decode_header_value(msg.get('From'))
+    sender_email = parseaddr(sender_raw)[1]
+    sender_domain = sender_email.split('@')[-1].lower() if '@' in sender_email else ''
+    recipient = _decode_header_value(msg.get('To'))
+    subject = _decode_header_value(msg.get('Subject'))
+    date_header = msg.get('Date')
+    received_at = None
+    if date_header:
+        try:
+            received_at = parsedate_to_datetime(date_header)
+            if received_at and received_at.tzinfo:
+                received_at = received_at.replace(tzinfo=None)
+        except Exception:
+            received_at = None
+    plain_text, html_content, has_attachments = _message_text_parts(msg)
+    preview_source = plain_text or re.sub(r'<[^>]+>', ' ', html_content or '')
+    preview = re.sub(r'\s+', ' ', preview_source).strip()[:240]
+    headers = {
+        'message_id': _decode_header_value(msg.get('Message-ID')),
+        'x_test_id': _decode_header_value(msg.get('X-Test-ID')),
+        'authentication_results': _decode_header_value(msg.get('Authentication-Results')),
+        'return_path': _decode_header_value(msg.get('Return-Path')),
+        'content_type': _decode_header_value(msg.get('Content-Type')),
+        'list_unsubscribe': _decode_header_value(msg.get('List-Unsubscribe')),
+    }
+    existing = InboxEmailMessage.query.filter_by(imap_account_id=account.id, folder=folder, uid=uid_value).first()
+    if not existing:
+        existing = InboxEmailMessage(imap_account_id=account.id, folder=folder, uid=uid_value)
+        db.session.add(existing)
+    existing.provider = account.provider
+    existing.message_id = headers['message_id']
+    existing.sender = sender_raw
+    existing.sender_domain = sender_domain
+    existing.recipient = recipient
+    existing.subject = subject
+    existing.preview = preview
+    existing.plain_text = plain_text[:100000] if plain_text else ''
+    existing.html_content = html_content[:200000] if html_content else ''
+    existing.headers_json = json.dumps(headers)
+    existing.has_attachments = has_attachments
+    existing.received_at = received_at
+    return existing
+
 def _sync_imap_account(account, folder='INBOX', limit=50, mark_errors=True):
     conn = None
     synced = 0
@@ -1227,48 +1273,7 @@ def _sync_imap_account(account, folder='INBOX', limit=50, mark_errors=True):
                     break
             if not raw_msg:
                 continue
-            msg = message_from_bytes(raw_msg)
-            sender_raw = _decode_header_value(msg.get('From'))
-            sender_email = parseaddr(sender_raw)[1]
-            sender_domain = sender_email.split('@')[-1].lower() if '@' in sender_email else ''
-            recipient = _decode_header_value(msg.get('To'))
-            subject = _decode_header_value(msg.get('Subject'))
-            date_header = msg.get('Date')
-            received_at = None
-            if date_header:
-                try:
-                    received_at = parsedate_to_datetime(date_header)
-                    if received_at and received_at.tzinfo:
-                        received_at = received_at.replace(tzinfo=None)
-                except Exception:
-                    received_at = None
-            plain_text, html_content, has_attachments = _message_text_parts(msg)
-            preview_source = plain_text or re.sub(r'<[^>]+>', ' ', html_content or '')
-            preview = re.sub(r'\s+', ' ', preview_source).strip()[:240]
-            headers = {
-                'message_id': msg.get('Message-ID'),
-                'x_test_id': msg.get('X-Test-ID'),
-                'authentication_results': msg.get('Authentication-Results'),
-                'return_path': msg.get('Return-Path'),
-                'content_type': msg.get('Content-Type'),
-                'list_unsubscribe': msg.get('List-Unsubscribe'),
-            }
-            existing = InboxEmailMessage.query.filter_by(imap_account_id=account.id, folder=folder, uid=uid.decode()).first()
-            if not existing:
-                existing = InboxEmailMessage(imap_account_id=account.id, folder=folder, uid=uid.decode())
-                db.session.add(existing)
-            existing.provider = account.provider
-            existing.message_id = msg.get('Message-ID')
-            existing.sender = sender_raw
-            existing.sender_domain = sender_domain
-            existing.recipient = recipient
-            existing.subject = subject
-            existing.preview = preview
-            existing.plain_text = plain_text[:100000] if plain_text else ''
-            existing.html_content = html_content[:200000] if html_content else ''
-            existing.headers_json = json.dumps(headers)
-            existing.has_attachments = has_attachments
-            existing.received_at = received_at
+            _upsert_imap_message(account, folder, uid, raw_msg)
             synced += 1
         account.last_synced_at = datetime.utcnow()
         account.connection_status = 'connected'
@@ -2169,6 +2174,61 @@ def _sync_test_inbox_folders(inbox):
         synced_total += synced
     return synced_total, errors
 
+def _sync_imap_messages_for_test_id(inbox, test_id):
+    folders = ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk', 'Bulk Mail']
+    synced = 0
+    searched = 0
+    errors = []
+    conn = None
+    token = (test_id or '').strip()
+    if not token:
+        return {'synced_messages': 0, 'searched_folders': 0, 'errors': []}
+    try:
+        conn = _imap_connect(inbox)
+        for folder in folders:
+            status, _ = conn.select(folder, readonly=True)
+            if status != 'OK':
+                continue
+            searched += 1
+            found_uids = set()
+            for search_term in (f'HEADER X-Test-ID "{token}"', f'TEXT "{token}"'):
+                status, data = conn.uid('search', None, search_term)
+                if status == 'OK' and data and data[0]:
+                    found_uids.update(data[0].split())
+            for uid in found_uids:
+                fetch_status, fetch_data = conn.uid('fetch', uid, '(RFC822)')
+                if fetch_status != 'OK' or not fetch_data:
+                    continue
+                raw_msg = None
+                for item in fetch_data:
+                    if isinstance(item, tuple) and item[1]:
+                        raw_msg = item[1]
+                        break
+                if not raw_msg:
+                    continue
+                _upsert_imap_message(inbox, folder, uid, raw_msg)
+                synced += 1
+        inbox.last_synced_at = datetime.utcnow()
+        inbox.connection_status = 'connected'
+        inbox.message_count = InboxEmailMessage.query.filter_by(imap_account_id=inbox.id).count()
+        inbox.inbox_count = InboxEmailMessage.query.filter_by(imap_account_id=inbox.id, folder='INBOX').count()
+        inbox.spam_count = InboxEmailMessage.query.filter(
+            InboxEmailMessage.imap_account_id == inbox.id,
+            InboxEmailMessage.folder.ilike('%spam%')
+        ).count()
+        db.session.add(inbox)
+        db.session.flush()
+    except Exception as e:
+        errors.append(str(e))
+    finally:
+        try:
+            if conn:
+                conn.close()
+                conn.logout()
+        except Exception:
+            pass
+    return {'synced_messages': synced, 'searched_folders': searched, 'errors': errors}
+
 def _message_database_searchable(message):
     try:
         headers = json.loads(message.headers_json or '{}')
@@ -2375,7 +2435,7 @@ def api_inbox_poll_test(test_id):
     messages = InboxDeliverabilityMessage.query.filter_by(test_id=test_id).all()
     pending_by_inbox = {}
     sync_errors = []
-    diagnostic = {'checked_rows': 0, 'matched_rows': 0, 'queued_checked': 0, 'scanned_messages': 0, 'match_modes': {'exact': 0, 'broad_sender': 0, 'sender_subject': 0}}
+    diagnostic = {'checked_rows': 0, 'matched_rows': 0, 'queued_checked': 0, 'scanned_messages': 0, 'synced_messages': 0, 'searched_folders': 0, 'match_modes': {'exact': 0, 'broad_sender': 0, 'sender_subject': 0}}
     for row in messages:
         if row.status in ('FAILED', 'COMPLETED', 'SENT_EXTERNAL'):
             continue
@@ -2397,6 +2457,10 @@ def api_inbox_poll_test(test_id):
                 row.error_message = 'Receiving inbox no longer exists.'
             continue
         try:
+            sync_info = _sync_imap_messages_for_test_id(inbox, test.test_id)
+            diagnostic['synced_messages'] += sync_info.get('synced_messages', 0)
+            diagnostic['searched_folders'] += sync_info.get('searched_folders', 0)
+            sync_errors.extend([f'{inbox.email}: {error}' for error in sync_info.get('errors', [])])
             placements, scan_info = _detect_message_placements_from_synced(inbox.id, rows, test_id=test.test_id)
             diagnostic['scanned_messages'] += scan_info.get('scanned_messages', 0)
             for mode, count in (scan_info.get('match_modes') or {}).items():

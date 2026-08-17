@@ -3366,7 +3366,7 @@ merge_recipe_id, content_blueprint_id</pre>
             const summary = matrixSummary(rows);
             if (syncLabel) syncLabel.textContent = `Last sync: ${new Date().toLocaleTimeString()}`;
             const syncWarning = pollData.sync_errors?.length ? ` IMAP warnings: ${pollData.sync_errors.slice(0, 2).join(' | ')}` : '';
-            const diagnostic = pollData.diagnostic ? ` Sync checked ${pollData.diagnostic.checked_rows || 0}, searched ${pollData.diagnostic.scanned_messages || 0} database message(s), matched ${pollData.diagnostic.matched_rows || 0}.` : '';
+            const diagnostic = pollData.diagnostic ? ` Sync checked ${pollData.diagnostic.checked_rows || 0}, imported ${pollData.diagnostic.synced_messages || 0} fresh test message(s), searched ${pollData.diagnostic.scanned_messages || 0} database message(s), matched ${pollData.diagnostic.matched_rows || 0}.` : '';
             if (status) status.textContent = userInboxStatusText(data.test, summary, `${diagnostic}${syncWarning}`);
             await loadTests();
         } catch (err) {
