@@ -2127,53 +2127,93 @@ def _sync_test_inbox_folders(inbox):
         synced_total += synced
     return synced_total, errors
 
-def _detect_message_placements_from_synced(inbox_id, rows):
+def _message_database_searchable(message):
+    try:
+        headers = json.loads(message.headers_json or '{}')
+    except Exception:
+        headers = {}
+    return '\n'.join([
+        message.message_id or '',
+        headers.get('message_id') or '',
+        headers.get('x_test_id') or '',
+        message.subject or '',
+        message.sender or '',
+        message.recipient or '',
+        message.preview or '',
+        message.plain_text or '',
+        message.html_content or '',
+    ])
+
+def _detect_message_placements_from_synced(inbox_id, rows, test_id=None):
     results = {}
+    info = {'scanned_messages': 0, 'match_modes': {'exact': 0, 'broad_sender': 0, 'sender_subject': 0}, 'errors': []}
     if not rows:
-        return results
-    broad_tokens = sorted({row.test_identifier.rsplit('-', 1)[0] for row in rows if row.test_identifier and '-' in row.test_identifier}, key=len, reverse=True)
+        return results, info
+    identifiers = {row.test_identifier for row in rows if row.test_identifier}
+    broad_tokens = set()
+    if test_id:
+        broad_tokens.add(test_id)
+    broad_tokens.update(identifier.rsplit('-', 1)[0] for identifier in identifiers if '-' in identifier)
+    broad_tokens = sorted((token for token in broad_tokens if token), key=len, reverse=True)
     earliest_sent = min((row.sent_at for row in rows if row.sent_at), default=None)
+    id_filters = []
+    for token in sorted(identifiers.union(broad_tokens), key=len, reverse=True):
+        like_token = f'%{token}%'
+        id_filters.extend([
+            InboxEmailMessage.headers_json.ilike(like_token),
+            InboxEmailMessage.message_id.ilike(like_token),
+            InboxEmailMessage.subject.ilike(like_token),
+            InboxEmailMessage.preview.ilike(like_token),
+            InboxEmailMessage.plain_text.ilike(like_token),
+            InboxEmailMessage.html_content.ilike(like_token),
+        ])
     q = InboxEmailMessage.query.filter_by(imap_account_id=inbox_id)
-    if earliest_sent:
-        q = q.filter(or_(InboxEmailMessage.received_at == None, InboxEmailMessage.received_at >= earliest_sent - timedelta(hours=6)))
-    messages = q.order_by(InboxEmailMessage.received_at.desc().nullslast(), InboxEmailMessage.id.desc()).limit(500).all()
+    if id_filters:
+        q = q.filter(or_(*id_filters))
+    messages = q.order_by(InboxEmailMessage.received_at.desc().nullslast(), InboxEmailMessage.id.desc()).limit(5000).all()
+    if not messages:
+        fallback = InboxEmailMessage.query.filter_by(imap_account_id=inbox_id)
+        if earliest_sent:
+            fallback = fallback.filter(or_(InboxEmailMessage.received_at == None, InboxEmailMessage.received_at >= earliest_sent - timedelta(hours=12)))
+        messages = fallback.order_by(InboxEmailMessage.received_at.desc().nullslast(), InboxEmailMessage.id.desc()).limit(1000).all()
+    info['scanned_messages'] = len(messages)
+    indexed_messages = []
+    for message in messages:
+        searchable = _message_database_searchable(message)
+        indexed_messages.append({
+            'message': message,
+            'searchable': searchable,
+            'searchable_lower': searchable.lower(),
+            'sender': parseaddr(message.sender or '')[1].lower(),
+            'recipient': (message.recipient or '').lower(),
+            'subject': (message.subject or '').strip().lower(),
+        })
     for row in rows:
         row_sender = (row.workspace_sender or '').lower()
+        row_recipient = (row.recipient or '').lower()
         row_subject = (row.subject or '').strip().lower()
-        for message in messages:
-            try:
-                headers = json.loads(message.headers_json or '{}')
-            except Exception:
-                headers = {}
-            searchable = '\n'.join([
-                message.message_id or '',
-                headers.get('message_id') or '',
-                headers.get('x_test_id') or '',
-                message.subject or '',
-                message.sender or '',
-                message.preview or '',
-                message.plain_text or '',
-                message.html_content or '',
-            ])
-            if row.test_identifier and row.test_identifier in searchable:
+        for record in indexed_messages:
+            message = record['message']
+            if row.test_identifier and row.test_identifier.lower() in record['searchable_lower']:
                 results[row.test_identifier] = (_placement_from_folder(message.folder), message.folder)
+                info['match_modes']['exact'] += 1
                 break
-            if any(token and token in searchable for token in broad_tokens):
-                message_sender = parseaddr(message.sender or '')[1].lower()
-                row_recipient = (row.recipient or '').lower()
-                recipient_matches = not row_recipient or row_recipient in (message.recipient or '').lower()
-                sender_matches = row_sender and message_sender == row_sender
+            if any(token and token.lower() in record['searchable_lower'] for token in broad_tokens):
+                recipient_matches = not row_recipient or row_recipient in record['recipient']
+                sender_matches = row_sender and record['sender'] == row_sender
                 if sender_matches and recipient_matches:
                     results[row.test_identifier] = (_placement_from_folder(message.folder), message.folder)
+                    info['match_modes']['broad_sender'] += 1
                     break
-            message_sender = parseaddr(message.sender or '')[1].lower()
-            subject_matches = row_subject and (message.subject or '').strip().lower() == row_subject
-            sender_matches = row_sender and message_sender == row_sender
+            subject_matches = row_subject and record['subject'] == row_subject
+            sender_matches = row_sender and record['sender'] == row_sender
+            recipient_matches = not row_recipient or row_recipient in record['recipient']
             recent_enough = not row.sent_at or not message.received_at or message.received_at >= row.sent_at - timedelta(hours=6)
-            if subject_matches and sender_matches and recent_enough:
+            if subject_matches and sender_matches and recipient_matches and recent_enough:
                 results[row.test_identifier] = (_placement_from_folder(message.folder), message.folder)
+                info['match_modes']['sender_subject'] += 1
                 break
-    return results
+    return results, info
 
 def _message_record_from_raw(raw_msg, folder):
     msg = message_from_bytes(raw_msg)
@@ -2315,7 +2355,7 @@ def api_inbox_poll_test(test_id):
                 row.error_message = 'Receiving inbox no longer exists.'
             continue
         try:
-            placements, scan_info = _scan_imap_for_test_rows(inbox, rows)
+            placements, scan_info = _detect_message_placements_from_synced(inbox.id, rows, test_id=test.test_id)
             diagnostic['scanned_messages'] += scan_info.get('scanned_messages', 0)
             for mode, count in (scan_info.get('match_modes') or {}).items():
                 diagnostic['match_modes'][mode] = diagnostic['match_modes'].get(mode, 0) + count

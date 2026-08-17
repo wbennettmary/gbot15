@@ -1592,7 +1592,10 @@ merge_recipe_id, content_blueprint_id</pre>
                         <p class="ii-muted mb-0">Live placement, user health, and domain decisions from the latest synced user inbox test.</p>
                     </div>
                     <div class="ii-row">
-                        <input class="ii-input" id="userInboxManualTestIdInput" style="max-width: 220px;" placeholder="DLV-82436339 or full X-Test-ID">
+                        <div class="ii-field mb-0" style="max-width: 260px;">
+                            <label>Test ID to sync</label>
+                            <input class="ii-input" id="userInboxManualTestIdInput" placeholder="DLV-82436339">
+                        </div>
                         <span class="ii-muted" id="userInboxLastSync">No sync yet</span>
                         <button class="ii-btn" id="userInboxSyncButton" type="button" onclick="syncUserInboxAnalytics()"><i class="fas fa-arrows-rotate"></i> Sync fresh data</button>
                     </div>
@@ -3246,6 +3249,7 @@ merge_recipe_id, content_blueprint_id</pre>
             iiState.userInboxTestId = testData.test_id;
             const manualInput = document.getElementById('userInboxManualTestIdInput');
             if (manualInput) manualInput.value = testData.test_id;
+            localStorage.setItem('ii_user_inbox_last_test_id', testData.test_id);
             status.textContent = `Test ${testData.test_id} queued with ${testData.queued || 0} message(s). Sending in background; sync will update as messages arrive.`;
             await pollUserInboxTest(testData.test_id);
         } catch (err) {
@@ -3257,7 +3261,7 @@ merge_recipe_id, content_blueprint_id</pre>
         const status = document.getElementById('userInboxTestStatus');
         const syncLabel = document.getElementById('userInboxLastSync');
         try {
-            setUserInboxSyncing(true, 'Syncing IMAP inboxes...');
+            setUserInboxSyncing(true, 'Searching saved inbox messages...');
             const pollData = await iiFetch(`/api/inbox-intelligence/tests/${testId}/poll`, {method: 'POST'});
             const data = await iiFetch(`/api/inbox-intelligence/tests/${testId}`);
             const rows = data.test.messages || [];
@@ -3270,7 +3274,7 @@ merge_recipe_id, content_blueprint_id</pre>
             const summary = matrixSummary(rows);
             if (syncLabel) syncLabel.textContent = `Last sync: ${new Date().toLocaleTimeString()}`;
             const syncWarning = pollData.sync_errors?.length ? ` IMAP warnings: ${pollData.sync_errors.slice(0, 2).join(' | ')}` : '';
-            const diagnostic = pollData.diagnostic ? ` Sync checked ${pollData.diagnostic.checked_rows || 0}, scanned ${pollData.diagnostic.scanned_messages || 0} delivered message(s), matched ${pollData.diagnostic.matched_rows || 0}.` : '';
+            const diagnostic = pollData.diagnostic ? ` Sync checked ${pollData.diagnostic.checked_rows || 0}, searched ${pollData.diagnostic.scanned_messages || 0} database message(s), matched ${pollData.diagnostic.matched_rows || 0}.` : '';
             if (status) status.textContent = userInboxStatusText(data.test, summary, `${diagnostic}${syncWarning}`);
             await loadTests();
         } catch (err) {
@@ -3311,7 +3315,8 @@ merge_recipe_id, content_blueprint_id</pre>
         }
         iiState.userInboxTestId = testId;
         if (manualInput) manualInput.value = testId;
-        status.textContent = 'Syncing fresh recipient data from connected IMAP inboxes...';
+        localStorage.setItem('ii_user_inbox_last_test_id', testId);
+        status.textContent = 'Syncing analytics from saved inbox messages...';
         await pollUserInboxTest(testId);
     }
 
@@ -4095,6 +4100,12 @@ merge_recipe_id, content_blueprint_id</pre>
         });
         document.getElementById('imapProviderInput')?.dispatchEvent(new Event('change'));
         loadUserInboxRecipientState();
+        const savedUserInboxTestId = normalizeUserInboxTestId(localStorage.getItem('ii_user_inbox_last_test_id') || '');
+        if (savedUserInboxTestId) {
+            iiState.userInboxTestId = savedUserInboxTestId;
+            const manualInput = document.getElementById('userInboxManualTestIdInput');
+            if (manualInput) manualInput.value = savedUserInboxTestId;
+        }
         updateUserInboxDiagnostics();
 
         Promise.allSettled([
