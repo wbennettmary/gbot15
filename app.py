@@ -1517,6 +1517,17 @@ def _parse_custom_header_lines(header_text, sender, recipient, subject, test_ide
         headers.append((name, value))
     return headers
 
+def _custom_header_value(header_text, header_name):
+    target = (header_name or '').lower()
+    for raw_line in (header_text or '').splitlines():
+        line = raw_line.strip()
+        if not line or ':' not in line:
+            continue
+        name, value = line.split(':', 1)
+        if name.strip().lower() == target:
+            return value.strip()
+    return ''
+
 def _apply_custom_headers(msg, header_text, sender, recipient, subject, test_identifier):
     message_id = msg.get('Message-ID') or make_msgid(idstring=test_identifier)
     for name, value in _parse_custom_header_lines(header_text, sender, recipient, subject, test_identifier, message_id):
@@ -1603,10 +1614,10 @@ def api_inbox_tests():
             recipient_emails.append(email_value)
     template_id = int(data.get('template_id') or 0)
     template = InboxStaticTemplate.query.get(template_id) if template_id else None
-    subject = (data.get('subject') or (template.name if template else '')).strip()
+    custom_headers = data.get('custom_headers') or ''
+    subject = (data.get('subject') or _custom_header_value(custom_headers, 'Subject') or (template.name if template else '')).strip()
     html_body = data.get('html_body') if data.get('html_body') is not None else (template.html_content if template else '')
     text_body = data.get('text_body') if data.get('text_body') is not None else (template.plain_text if template else '')
-    custom_headers = data.get('custom_headers') or ''
     name = (data.get('name') or f"Inbox Test {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}").strip()
     if not senders:
         return jsonify({'success': False, 'error': 'Select at least one Workspace API sender from a selected Workspace account'}), 400
@@ -1684,11 +1695,17 @@ def _detect_message_placement(inbox, identifier):
             status, _ = conn.select(folder, readonly=True)
             if status != 'OK':
                 continue
-            search_term = f'TEXT "{identifier}"'
-            status, data = conn.uid('search', None, search_term)
-            if status == 'OK' and data and data[0]:
-                placement = 'SPAM' if any(x in folder.lower() for x in ['spam', 'junk', 'bulk']) else 'INBOX'
-                return placement, folder
+            search_terms = [
+                f'HEADER X-Test-ID "{identifier}"',
+                f'TEXT "{identifier}"',
+                f'HEADER Message-ID "{identifier}"',
+                f'SUBJECT "{identifier}"',
+            ]
+            for search_term in search_terms:
+                status, data = conn.uid('search', None, search_term)
+                if status == 'OK' and data and data[0]:
+                    placement = 'SPAM' if any(x in folder.lower() for x in ['spam', 'junk', 'bulk']) else 'INBOX'
+                    return placement, folder
         return 'PENDING', None
     finally:
         try:
@@ -2006,6 +2023,52 @@ def api_inbox_static_templates_from_messages():
         created.append(template)
     db.session.commit()
     return jsonify({'success': True, 'templates': [_serialize_static_template(t) for t in created], 'count': len(created), 'message': f'Created {len(created)} inbox-derived template(s)'})
+
+@app.route('/api/inbox-intelligence/static-templates/ai-action', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_static_templates_ai_action():
+    data = request.get_json(silent=True) or {}
+    template_ids = [int(x) for x in data.get('template_ids', [])]
+    action = (data.get('action') or 'modify').strip().lower()
+    prompt = (data.get('prompt') or '').strip()
+    if not template_ids:
+        return jsonify({'success': False, 'error': 'Select at least one template for the AI agent'}), 400
+    templates = InboxStaticTemplate.query.filter(InboxStaticTemplate.id.in_(template_ids), InboxStaticTemplate.status != 'archived').all()
+    if not templates:
+        return jsonify({'success': False, 'error': 'No active selected templates found'}), 404
+    if action not in ('modify', 'merge'):
+        return jsonify({'success': False, 'error': 'AI action must be modify or merge'}), 400
+
+    if action == 'merge':
+        html_parts = [f"<!-- SOURCE TEMPLATE: {html_utils.escape(t.name)} -->\n{t.html_content or ''}" for t in templates]
+        text_parts = [t.plain_text or '' for t in templates if t.plain_text]
+        name = 'AI Merge Draft - ' + ', '.join(t.name for t in templates[:2])
+        html_content = '\n\n'.join(html_parts)
+        plain_text = '\n\n'.join(text_parts)
+    else:
+        source = templates[0]
+        name = f"AI Modify Draft - {source.name}"
+        html_content = source.html_content or ''
+        plain_text = source.plain_text or ''
+
+    if prompt:
+        html_content = f"<!-- AI_AGENT_PROMPT: {html_utils.escape(prompt)} -->\n{html_content}"
+        plain_text = f"AI agent prompt: {prompt}\n\n{plain_text}" if plain_text else f"AI agent prompt: {prompt}"
+    editable, locked = _detect_template_regions(html_content)
+    draft = InboxStaticTemplate(
+        name=name[:255],
+        html_content=html_content,
+        plain_text=plain_text,
+        status='draft',
+        editable_regions_json=json.dumps(editable),
+        locked_regions_json=json.dumps(locked),
+        version=1,
+        created_by=session.get('user')
+    )
+    db.session.add(draft)
+    db.session.commit()
+    return jsonify({'success': True, 'template': _serialize_static_template(draft), 'message': f'AI {action} draft created from {len(templates)} selected template(s).'})
 
 @app.route('/api/inbox-intelligence/static-templates/<int:template_id>', methods=['GET', 'DELETE'])
 @login_required

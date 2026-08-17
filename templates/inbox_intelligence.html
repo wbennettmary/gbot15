@@ -707,6 +707,20 @@
                     </div>
                     <div class="ii-row mt-3"><button class="ii-btn ii-btn-primary" type="submit"><i class="fas fa-save"></i> Save Template</button><span class="ii-muted" id="staticTemplateStatus"></span></div>
                 </form>
+                <div class="ii-card mb-3">
+                    <div class="ii-row justify-content-between">
+                        <div>
+                            <h4>Selected Template Actions</h4>
+                            <div class="ii-muted" id="selectedTemplateActionStatus">No templates selected.</div>
+                        </div>
+                        <div class="ii-actions">
+                            <button class="ii-btn" type="button" onclick="selectAllStaticTemplates(true)">Select All</button>
+                            <button class="ii-btn" type="button" onclick="selectAllStaticTemplates(false)">Clear</button>
+                            <button class="ii-btn" type="button" onclick="runTemplateAiAction('modify')"><i class="fas fa-wand-magic-sparkles"></i> AI Modify</button>
+                            <button class="ii-btn ii-btn-primary" type="button" onclick="runTemplateAiAction('merge')"><i class="fas fa-code-merge"></i> AI Merge</button>
+                        </div>
+                    </div>
+                </div>
                 <div id="staticTemplateList" class="ii-card text-center py-5">
                     <i class="fas fa-file-code fa-3x text-muted mb-3"></i>
                     <h4>No static templates uploaded</h4>
@@ -1143,6 +1157,7 @@ merge_recipe_id, content_blueprint_id</pre>
         activeMessageId: null,
         selectedMessageIds: new Set(),
         selectedTemplateId: null,
+        selectedTemplateIds: new Set(),
         userInboxTestId: null,
         selectedServiceAccountIds: new Set(),
         selectedSenderEmails: new Set(),
@@ -1510,7 +1525,10 @@ merge_recipe_id, content_blueprint_id</pre>
         list.className = 'ii-grid';
         list.innerHTML = iiState.staticTemplates.map((template) => `
             <div class="ii-card">
-                <div class="ii-row justify-content-between"><strong>${escapeHtml(template.name)}</strong><span class="ii-chip ${template.is_default ? 'blue' : 'green'}">${escapeHtml(template.status)}</span></div>
+                <div class="ii-row justify-content-between">
+                    <label><input type="checkbox" ${iiState.selectedTemplateIds.has(template.id) ? 'checked' : ''} onchange="toggleStaticTemplateSelection(${template.id}, this.checked)"> <strong>${escapeHtml(template.name)}</strong></label>
+                    <span class="ii-chip ${template.status === 'draft' ? 'yellow' : template.is_default ? 'blue' : 'green'}">${escapeHtml(template.status)}</span>
+                </div>
                 <div class="ii-muted mt-1">Static HTML · Editable Regions: ${template.editable_region_count} · Locked Regions: ${template.locked_region_count} · Version: ${template.version}</div>
                 <div class="ii-row mt-3">
                     <button class="ii-btn" type="button" onclick="selectStudioTemplate(${template.id})">Use In Studio</button>
@@ -1518,11 +1536,57 @@ merge_recipe_id, content_blueprint_id</pre>
                     <button class="ii-btn" type="button" onclick="deleteStaticTemplate(${template.id})">Archive</button>
                 </div>
             </div>`).join('');
+        renderSelectedStaticTemplateStatus();
         parser.textContent = JSON.stringify({
             template: iiState.staticTemplates[0].name,
             editable_regions: iiState.staticTemplates[0].editable_regions,
             locked_regions: iiState.staticTemplates[0].locked_regions
         }, null, 2);
+    }
+
+    function renderSelectedStaticTemplateStatus() {
+        const el = document.getElementById('selectedTemplateActionStatus');
+        if (!el) return;
+        const selected = iiState.staticTemplates.filter((template) => iiState.selectedTemplateIds.has(template.id));
+        el.textContent = selected.length ? `${selected.length} template(s) selected for AI modification/merge.` : 'No templates selected.';
+    }
+
+    function toggleStaticTemplateSelection(id, checked) {
+        if (checked) iiState.selectedTemplateIds.add(id);
+        else iiState.selectedTemplateIds.delete(id);
+        renderSelectedStaticTemplateStatus();
+    }
+
+    function selectAllStaticTemplates(checked) {
+        if (checked) iiState.staticTemplates.forEach((template) => iiState.selectedTemplateIds.add(template.id));
+        else iiState.selectedTemplateIds.clear();
+        renderStaticTemplates();
+    }
+
+    async function runTemplateAiAction(action) {
+        const status = document.getElementById('selectedTemplateActionStatus');
+        if (!iiState.selectedTemplateIds.size) {
+            status.textContent = 'Select at least one template first.';
+            return;
+        }
+        status.textContent = `Creating AI ${action} draft...`;
+        try {
+            const data = await iiFetch('/api/inbox-intelligence/static-templates/ai-action', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    action,
+                    template_ids: [...iiState.selectedTemplateIds],
+                    prompt: document.getElementById('templateAiPromptInput').value
+                })
+            });
+            iiState.selectedTemplateIds.clear();
+            await loadStaticTemplates();
+            await selectStudioTemplate(data.template.id);
+            status.textContent = data.message || 'AI draft created.';
+        } catch (err) {
+            status.textContent = err.message;
+        }
     }
 
     function renderStudioTemplateSelector() {
@@ -1752,14 +1816,15 @@ merge_recipe_id, content_blueprint_id</pre>
             const selectedSenders = iiState.workspaceSenders
                 .filter((sender) => iiState.selectedSenderEmails.has(sender.email))
                 .map((sender) => ({email: sender.email, service_account_id: sender.service_account_id}));
-            const subject = document.getElementById('userInboxSubjectInput').value.trim();
+            const customHeaders = document.getElementById('userInboxHeadersInput').value;
+            const headerSubjectMatch = customHeaders.match(/^Subject:\s*(.+)$/im);
+            const subject = document.getElementById('userInboxSubjectInput').value.trim() || (headerSubjectMatch ? headerSubjectMatch[1].trim() : '');
             const html = document.getElementById('userInboxHtmlInput').value;
             const text = document.getElementById('userInboxTextInput').value;
-            const customHeaders = document.getElementById('userInboxHeadersInput').value;
             const recipients = (document.getElementById('userInboxRecipientsInput').value || '')
                 .split(/\n|,/).map((item) => item.trim().toLowerCase()).filter(Boolean);
             if (!selectedSenders.length) throw new Error('Select Workspace API users first.');
-            if (!subject) throw new Error('Subject is required.');
+            if (!subject) throw new Error('Subject is required in the Subject field or custom headers.');
             if (!html.trim() && !text.trim()) throw new Error('Static HTML or plain-text template is required.');
             if (!recipients.length) throw new Error('Type at least one connected IMAP recipient.');
 
@@ -1767,7 +1832,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
-                    name: `User Inbox Test Template - ${subject}`,
+                    name: `User Inbox Test Template - ${subject || 'custom headers'}`,
                     html_content: html || `<html><body>${escapeHtml(text).replace(/\n/g, '<br>')}</body></html>`,
                     plain_text: text
                 })
