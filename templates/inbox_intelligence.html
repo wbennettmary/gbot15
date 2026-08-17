@@ -336,10 +336,76 @@
         text-align: center;
     }
 
+    .ii-template-thumb {
+        min-height: 210px;
+        border: 1px solid #dbe4ef;
+        border-radius: 8px;
+        background: linear-gradient(180deg, #f8fafc 0%, #ffffff 46%, #eff6ff 100%);
+        padding: 16px;
+        display: grid;
+        align-content: start;
+        gap: 10px;
+    }
+
+    .ii-email-block {
+        border: 1px dashed #cbd5e1;
+        border-radius: 8px;
+        padding: 10px;
+        background: rgba(255, 255, 255, 0.78);
+    }
+
+    .ii-email-block.editable {
+        border-color: #2563eb;
+        background: #eff6ff;
+    }
+
+    .ii-email-block.locked {
+        border-color: #94a3b8;
+        background: #f8fafc;
+    }
+
+    .ii-region-list {
+        display: grid;
+        gap: 8px;
+    }
+
+    .ii-region {
+        display: grid;
+        grid-template-columns: 24px 1fr auto;
+        gap: 10px;
+        align-items: center;
+        padding: 10px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background: #fff;
+        font-size: 13px;
+    }
+
+    .ii-region.active {
+        border-color: #2563eb;
+        background: #eff6ff;
+    }
+
+    .ii-compare {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+    }
+
+    .ii-diff-row {
+        display: grid;
+        grid-template-columns: 1fr 120px;
+        gap: 12px;
+        padding: 9px 0;
+        border-bottom: 1px solid #e2e8f0;
+        font-size: 13px;
+    }
+
     @media (max-width: 1200px) {
         .ii-kpis { grid-template-columns: repeat(3, minmax(150px, 1fr)); }
         .ii-layout-2,
         .ii-layout-3 { grid-template-columns: 1fr; }
+        .ii-compare { grid-template-columns: 1fr; }
     }
 
     @media (max-width: 720px) {
@@ -374,6 +440,7 @@
         <button class="ii-tab" data-tab="connected">Connected Inboxes</button>
         <button class="ii-tab" data-tab="explorer">Inbox Explorer</button>
         <button class="ii-tab" data-tab="content">Content Intelligence</button>
+        <button class="ii-tab" data-tab="staticTemplates">Static Templates</button>
         <button class="ii-tab" data-tab="templates">Template Studio</button>
         <button class="ii-tab" data-tab="ai">AI Generator</button>
         <button class="ii-tab" data-tab="tests">Deliverability Tests</button>
@@ -569,6 +636,268 @@
         </div>
     </section>
 
+    <section id="staticTemplates" class="ii-tabpane">
+        <div class="ii-grid ii-layout-2 mb-3">
+            <div class="ii-panel">
+                <div class="ii-row justify-content-between mb-3">
+                    <div>
+                        <h3>Static Template Library</h3>
+                        <p class="ii-muted mb-0">Owned HTML templates remain the primary layout framework. AI can only update configured regions.</p>
+                    </div>
+                    <div class="ii-actions">
+                        <button class="ii-btn"><i class="fas fa-upload"></i> Upload HTML</button>
+                        <button class="ii-btn"><i class="fas fa-paste"></i> Paste HTML</button>
+                        <button class="ii-btn ii-btn-primary"><i class="fas fa-file-import"></i> Import Template</button>
+                    </div>
+                </div>
+                <div class="ii-grid" style="grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));">
+                    {% set static_templates = [
+                        ('Welcome Template', 'Active', '7', 'Today', '#DLV-82923', '96%'),
+                        ('Product Update', 'Active', '9', 'Yesterday', '#DLV-82911', '91%'),
+                        ('Account Notice', 'Default', '6', '3 days ago', '#DLV-82890', '100%')
+                    ] %}
+                    {% for name, status, regions, updated, tested, inbox_rate in static_templates %}
+                    <div class="ii-card">
+                        <div class="ii-template-thumb mb-3">
+                            <div class="ii-email-block locked"><i class="fas fa-lock me-1"></i> Header, CSS, Outlook/MSO</div>
+                            <div class="ii-email-block editable"><strong>{{ name }}</strong><br><span class="ii-muted">Headline region</span></div>
+                            <div class="ii-email-block editable">Body copy and CTA regions</div>
+                            <div class="ii-email-block locked"><i class="fas fa-lock me-1"></i> Footer and legal links</div>
+                        </div>
+                        <div class="ii-row justify-content-between">
+                            <strong>{{ name }}</strong>
+                            <span class="ii-chip {{ 'blue' if status == 'Default' else 'green' }}">{{ status }}</span>
+                        </div>
+                        <div class="ii-muted mt-1">Type: Static HTML · Editable Regions: {{ regions }} · Last Updated: {{ updated }} · Last Tested: {{ tested }} · Inbox Placement: {{ inbox_rate }}</div>
+                        <div class="ii-row mt-3">
+                            <button class="ii-btn">Preview</button>
+                            <button class="ii-btn">Edit Regions</button>
+                            <button class="ii-btn">Configure Merge</button>
+                            <button class="ii-btn">Duplicate</button>
+                            <button class="ii-btn">Run Test</button>
+                            <button class="ii-btn">Archive</button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="ii-panel">
+                <h3>StaticTemplateParser Output</h3>
+                <p class="ii-muted">Deterministic markers and HTML parsing run before semantic AI classification.</p>
+                <pre class="ii-preview-frame" style="white-space: pre-wrap; font-size: 12px;">{
+  "template": "welcome-template",
+  "regions": [
+    {"id": "preheader", "type": "text"},
+    {"id": "hero_image", "type": "image"},
+    {"id": "headline", "type": "heading"},
+    {"id": "main_copy", "type": "rich_text"},
+    {"id": "primary_cta", "type": "button"},
+    {"id": "footer", "type": "locked"}
+  ]
+}</pre>
+                <h4 class="mt-3">Supported Region Markers</h4>
+                <pre class="ii-muted mb-0">&lt;!-- APP:REGION:HEADLINE --&gt;
+...
+&lt;!-- APP:ENDREGION --&gt;</pre>
+            </div>
+        </div>
+
+        <div class="ii-grid ii-layout-2 mb-3">
+            <div class="ii-panel">
+                <h3>Configure Editable Regions</h3>
+                <div class="ii-region-list">
+                    <div class="ii-region active"><span>✓</span><div><strong>Preheader</strong><div class="ii-muted">Text · AI editable · Dynamic</div></div><span class="ii-chip green">Editable</span></div>
+                    <div class="ii-region"><span>✓</span><div><strong>Hero Image</strong><div class="ii-muted">Image · Preserve static by default</div></div><span class="ii-chip yellow">Optional</span></div>
+                    <div class="ii-region"><span>✓</span><div><strong>Headline</strong><div class="ii-muted">H1 · Detected role: Headline</div></div><span class="ii-chip green">Editable</span></div>
+                    <div class="ii-region"><span>✓</span><div><strong>Main Text</strong><div class="ii-muted">Rich text · Reusable</div></div><span class="ii-chip green">Editable</span></div>
+                    <div class="ii-region"><span>✓</span><div><strong>Primary CTA</strong><div class="ii-muted">Button label editable · URL locked</div></div><span class="ii-chip blue">Dynamic</span></div>
+                    <div class="ii-region"><span><i class="fas fa-lock"></i></span><div><strong>Responsive CSS</strong><div class="ii-muted">Media queries, MSO, table structure</div></div><span class="ii-chip gray">Locked</span></div>
+                    <div class="ii-region"><span><i class="fas fa-lock"></i></span><div><strong>Footer Layout</strong><div class="ii-muted">Legal, unsubscribe, preferences, privacy links</div></div><span class="ii-chip gray">Locked</span></div>
+                </div>
+                <h4 class="mt-3">Content Mapping</h4>
+                <table class="ii-table">
+                    <tr><th>AI Field</th><th>Template Region</th><th>Override</th></tr>
+                    <tr><td>Preheader</td><td>PREHEADER</td><td><button class="ii-btn">Change</button></td></tr>
+                    <tr><td>Headline</td><td>HEADLINE</td><td><button class="ii-btn">Change</button></td></tr>
+                    <tr><td>Body</td><td>MAIN_BODY</td><td><button class="ii-btn">Change</button></td></tr>
+                    <tr><td>CTA Text</td><td>PRIMARY_CTA_TEXT</td><td><button class="ii-btn">Change</button></td></tr>
+                    <tr><td>CTA URL</td><td>PRIMARY_CTA_URL</td><td><span class="ii-chip gray"><i class="fas fa-lock"></i> Locked</span></td></tr>
+                </table>
+            </div>
+            <div class="ii-panel">
+                <div class="ii-row justify-content-between">
+                    <h3>Visual Region Mapper</h3>
+                    <span class="ii-chip blue">Click preview regions</span>
+                </div>
+                <div class="ii-template-thumb" style="min-height: 360px;">
+                    <div class="ii-email-block locked"><i class="fas fa-lock me-1"></i> Brand Logo · Locked</div>
+                    <div class="ii-email-block editable"><strong>H1</strong><br>Detected Role: Headline<br><span class="ii-chip green mt-2">AI Editable · HEADLINE</span></div>
+                    <div class="ii-email-block editable">Current: Your workspace is ready<br><span class="ii-muted">Inbox Intelligence: short direct headings are common.</span></div>
+                    <div class="ii-email-block editable">Primary CTA label · Destination locked</div>
+                    <div class="ii-email-block locked"><i class="fas fa-lock me-1"></i> Footer, unsubscribe, privacy links</div>
+                </div>
+                <div class="ii-form-grid mt-3">
+                    <div class="ii-field"><label>Image handling</label><select class="ii-select"><option>Preserve Static Image</option><option>Replace Image</option><option>Remove Optional Image</option></select></div>
+                    <div class="ii-field"><label>Link permissions</label><select class="ii-select"><option>Text can change, URL locked</option><option>Text and URL can change</option><option>Neither can change</option></select></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="ii-panel mb-3">
+            <div class="ii-row justify-content-between mb-3">
+                <h3>Merge Studio</h3>
+                <button class="ii-btn ii-btn-primary"><i class="fas fa-code-merge"></i> Generate Merged Version</button>
+            </div>
+            <div class="ii-grid" style="grid-template-columns: 320px minmax(0, 1fr);">
+                <aside class="ii-grid">
+                    <div class="ii-card">
+                        <h4>Step 1 - Base Template</h4>
+                        <select class="ii-select mb-2"><option>Welcome Template</option><option>Product Template</option><option>Account Template</option><option>Newsletter Template</option><option>Custom Template</option></select>
+                        <div class="ii-template-thumb" style="min-height: 170px;"><div class="ii-email-block locked">Static layout selected</div><div class="ii-email-block editable">Editable content regions</div></div>
+                    </div>
+                    <div class="ii-card">
+                        <h4>Step 2 - Inbox Sources</h4>
+                        <label class="d-block mb-1"><input type="checkbox" checked> Gmail Seed 01</label>
+                        <label class="d-block mb-1"><input type="checkbox" checked> Outlook Seed 02</label>
+                        <label class="d-block mb-1"><input type="checkbox" checked> Yahoo Seed 03</label>
+                        <label class="d-block mb-2"><input type="checkbox"> Gmail Seed 04</label>
+                        <span class="ii-chip blue">Selected Messages: 8</span>
+                    </div>
+                    <div class="ii-card">
+                        <h4>Merge Mode</h4>
+                        <select class="ii-select mb-2"><option>Content Only</option><option>Content + Structure</option><option>Assisted Manual</option></select>
+                        <label class="ii-muted">Inbox Influence</label>
+                        <input type="range" class="w-100" min="0" max="100" value="45">
+                        <div class="ii-row justify-content-between ii-muted"><span>Low</span><span>Medium</span><span>High</span></div>
+                    </div>
+                </aside>
+                <main class="ii-grid">
+                    <div class="ii-grid ii-layout-2">
+                        <div class="ii-card">
+                            <h4>Use From Inbox Intelligence</h4>
+                            <label class="d-block mb-1"><input type="checkbox" checked> Subject characteristics</label>
+                            <label class="d-block mb-1"><input type="checkbox" checked> Preheader characteristics</label>
+                            <label class="d-block mb-1"><input type="checkbox" checked> Headline style</label>
+                            <label class="d-block mb-1"><input type="checkbox" checked> Body structure</label>
+                            <label class="d-block mb-1"><input type="checkbox" checked> CTA characteristics</label>
+                            <label class="d-block mb-1"><input type="checkbox"> Image characteristics</label>
+                            <label class="d-block"><input type="checkbox"> Footer characteristics</label>
+                        </div>
+                        <div class="ii-card">
+                            <h4>Preserve From Static Template</h4>
+                            <label class="d-block mb-1"><input type="checkbox" checked> Layout</label>
+                            <label class="d-block mb-1"><input type="checkbox" checked> Colors</label>
+                            <label class="d-block mb-1"><input type="checkbox" checked> Typography</label>
+                            <label class="d-block mb-1"><input type="checkbox" checked> Logo, images, buttons</label>
+                            <label class="d-block mb-1"><input type="checkbox" checked> Footer</label>
+                            <label class="d-block mb-1"><input type="checkbox" checked> Responsive CSS</label>
+                            <label class="d-block"><input type="checkbox" checked> Outlook compatibility</label>
+                        </div>
+                    </div>
+                    <div class="ii-card">
+                        <h4>Content Blueprint</h4>
+                        <div class="ii-form-grid">
+                            <div class="ii-field"><label>Subject</label><input class="ii-input" value="Short / direct"></div>
+                            <div class="ii-field"><label>Preheader</label><input class="ii-input" value="One-line supporting message"></div>
+                            <div class="ii-field"><label>Opening</label><input class="ii-input" value="Personal greeting"></div>
+                            <div class="ii-field"><label>Hero</label><input class="ii-input" value="Single visual"></div>
+                            <div class="ii-field"><label>Headline</label><input class="ii-input" value="Benefit-oriented"></div>
+                            <div class="ii-field"><label>CTA</label><input class="ii-input" value="Single primary action"></div>
+                            <div class="ii-field" style="grid-column: 1 / -1;"><label>Body</label><textarea class="ii-textarea">2 short paragraphs. Closing is a short supporting paragraph.</textarea></div>
+                            <div class="ii-field" style="grid-column: 1 / -1;"><label>AI Instructions</label><textarea class="ii-textarea">Use the analyzed content blueprint, keep the message professional and concise, use one CTA, and preserve the purpose of my static template.</textarea></div>
+                        </div>
+                    </div>
+                    <div class="ii-compare">
+                        <div class="ii-card">
+                            <h4>Source Static</h4>
+                            <div class="ii-template-thumb"><div class="ii-email-block locked">Logo unchanged</div><div class="ii-email-block">Welcome to our service</div><div class="ii-email-block">Original static content.</div><div class="ii-email-block locked">Footer unchanged</div></div>
+                        </div>
+                        <div class="ii-card">
+                            <h4>Merged Version</h4>
+                            <div class="ii-template-thumb"><div class="ii-email-block locked">Logo unchanged</div><div class="ii-email-block editable">Your workspace is ready</div><div class="ii-email-block editable">Original content transformed into two concise paragraphs.</div><div class="ii-email-block locked">Footer unchanged</div></div>
+                        </div>
+                    </div>
+                    <div class="ii-card">
+                        <div class="ii-row mb-2"><button class="ii-btn">Original</button><button class="ii-btn ii-btn-primary">Merged</button><button class="ii-btn">Difference</button></div>
+                        {% for region, state in [('Headline', 'Modified'), ('Body', 'Modified'), ('CTA', 'Modified'), ('Logo', 'Unchanged'), ('Layout', 'Unchanged'), ('Footer', 'Unchanged'), ('CSS', 'Unchanged')] %}
+                        <div class="ii-diff-row"><span>{{ region }}</span><span class="ii-chip {{ 'yellow' if state == 'Modified' else 'gray' }}">{{ state }}</span></div>
+                        {% endfor %}
+                    </div>
+                </main>
+            </div>
+        </div>
+
+        <div class="ii-grid ii-layout-2">
+            <div class="ii-panel">
+                <h3>Version Management</h3>
+                <table class="ii-table">
+                    <tr><th>Version</th><th>Description</th><th>Actions</th></tr>
+                    <tr><td>v1</td><td>Original</td><td><button class="ii-btn">Restore</button> <button class="ii-btn">Compare</button></td></tr>
+                    <tr><td>v2</td><td>AI Merge - Gmail Samples</td><td><button class="ii-btn">Test</button> <button class="ii-btn">Set Active</button></td></tr>
+                    <tr><td>v3</td><td>AI Merge - Gmail + Outlook</td><td><button class="ii-btn">Duplicate</button> <button class="ii-btn">Delete Version</button></td></tr>
+                    <tr><td>v4</td><td>Manual Revision</td><td><button class="ii-btn">Set Active</button></td></tr>
+                </table>
+                <h4 class="mt-3">Template Integrity</h4>
+                <div class="ii-row">
+                    <span class="ii-chip green">HTML structure</span>
+                    <span class="ii-chip green">Responsive rules</span>
+                    <span class="ii-chip green">Protected regions</span>
+                    <span class="ii-chip green">Outlook markup</span>
+                    <span class="ii-chip green">Required links</span>
+                    <span class="ii-chip green">Variables</span>
+                    <span class="ii-chip green">PASS</span>
+                </div>
+            </div>
+            <div class="ii-panel">
+                <h3>Recipes & Collections</h3>
+                <div class="ii-card mb-3">
+                    <h4>Merge Recipe: Transactional Welcome</h4>
+                    <div class="ii-muted">Static Template: Welcome-v1 · Inbox Source Group: Transactional Inbox Samples · Model: Configured OpenRouter Model · Mode: Content Only · Regions: Headline, Body, CTA, Preheader</div>
+                    <div class="ii-row mt-2"><button class="ii-btn">Reuse Recipe</button><button class="ii-btn">Duplicate</button><button class="ii-btn">Run Merge</button></div>
+                </div>
+                <h4>Inbox Intelligence Collections</h4>
+                <div class="ii-row">
+                    <span class="ii-chip blue">Transactional</span>
+                    <span class="ii-chip blue">Welcome Emails</span>
+                    <span class="ii-chip blue">Account Notifications</span>
+                    <span class="ii-chip blue">Newsletters</span>
+                    <span class="ii-chip blue">Product Updates</span>
+                    <span class="ii-chip blue">Receipts</span>
+                </div>
+                <h4 class="mt-3">Final Email Object</h4>
+                <pre class="ii-muted mb-0">subject, preheader, html, text, base_template_id,
+base_template_version, merged_template_version,
+merge_recipe_id, content_blueprint_id</pre>
+            </div>
+        </div>
+
+        <div class="ii-grid ii-layout-2 mt-3">
+            <div class="ii-panel">
+                <h3>Subject & Preheader Generation</h3>
+                <table class="ii-table">
+                    <tr><th>Candidate</th><th>Characters</th><th>Words</th><th>Tone</th><th>Action</th></tr>
+                    <tr><td>Your account is ready</td><td>21</td><td>4</td><td>Direct</td><td><button class="ii-btn">Use Subject</button></td></tr>
+                    <tr><td>Everything is ready inside</td><td>27</td><td>4</td><td>Warm</td><td><button class="ii-btn">Use Subject</button></td></tr>
+                    <tr><td>Open your new workspace</td><td>23</td><td>4</td><td>Concise</td><td><button class="ii-btn">Use Subject</button></td></tr>
+                </table>
+                <div class="ii-form-grid mt-3">
+                    <div class="ii-field"><label>Subject</label><input class="ii-input" value="Your account is ready"></div>
+                    <div class="ii-field"><label>Preheader</label><input class="ii-input" value="Everything you need to get started is inside."></div>
+                </div>
+                <div class="ii-row mt-3"><button class="ii-btn">Generate More</button><button class="ii-btn ii-btn-primary">Manual Edit</button></div>
+            </div>
+            <div class="ii-panel">
+                <h3>Merge Engine Architecture</h3>
+                <p class="ii-muted">TemplateMergeEngine extracts known editable regions, generates original replacement content, validates replacements, inserts into known regions, rebuilds HTML, then verifies protected structure was not changed. The complete static HTML is not sent to AI for unrestricted rewriting.</p>
+                <div class="ii-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
+                    <div class="ii-card"><div class="ii-card-label">Services</div><div class="ii-muted">StaticTemplateService, StaticTemplateParser, TemplateRegionService, ContentBlueprintService, TemplateMergeEngine, TemplateIntegrityValidator, EmailHTMLSanitizer, EmailRenderService</div></div>
+                    <div class="ii-card"><div class="ii-card-label">Data Model</div><div class="ii-muted">static_templates, template_regions, inbox_content_collections, content_blueprints, merge_recipes, merge_jobs, merged_template_versions, integrity_reports</div></div>
+                    <div class="ii-card"><div class="ii-card-label">Merge Job</div><div class="ii-muted">template version, blueprint, recipe, OpenRouter model, status, generated subject/preheader/regions, output version, integrity status</div></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <section id="templates" class="ii-tabpane">
         <div class="ii-grid ii-layout-2">
             <div class="ii-panel">
@@ -579,6 +908,11 @@
                     <div class="ii-field"><label>Editor mode</label><select class="ii-select"><option>Rich text</option><option>Raw HTML</option><option>Plain text</option></select></div>
                     <div class="ii-field"><label>Preview size</label><select class="ii-select" id="previewSize"><option>Desktop</option><option>Tablet</option><option>Mobile</option></select></div>
                     <div class="ii-field" style="grid-column: 1 / -1;"><label>HTML body</label><textarea class="ii-textarea">&lt;h1&gt;New dashboard&lt;/h1&gt;&lt;p&gt;Hi {{ '{{first_name}}' }}, your dashboard is ready.&lt;/p&gt;&lt;a href="#"&gt;View dashboard&lt;/a&gt;</textarea></div>
+                    <div class="ii-field" style="grid-column: 1 / -1;"><label>Plain Text Version</label><textarea class="ii-textarea">New dashboard
+
+Hi Ava, your dashboard is ready.
+
+View dashboard: https://example.com/dashboard</textarea></div>
                 </div>
                 <div class="ii-row mt-3">
                     <button class="ii-btn"><i class="fas fa-heading"></i> Heading</button>
@@ -595,6 +929,14 @@
                     <p>Hi Ava, your dashboard has new engagement reporting and workspace-level trends.</p>
                     <p><a class="ii-btn ii-btn-primary" href="#">View dashboard</a></p>
                     <hr><p class="ii-muted">Manage preferences · Unsubscribe</p>
+                </div>
+                <div class="ii-card mt-3">
+                    <h4>AI Region Editor</h4>
+                    <p><strong>HEADLINE</strong></p>
+                    <div class="ii-muted mb-2">Current: Your workspace is ready</div>
+                    <div class="ii-muted mb-2">Inbox Intelligence: Short direct headings are common in the selected messages.</div>
+                    <ol class="mb-3"><li>Your workspace is ready</li><li>Start from your new dashboard</li><li>A clearer workspace view is here</li></ol>
+                    <div class="ii-row"><button class="ii-btn">Regenerate</button><button class="ii-btn ii-btn-primary">Apply</button></div>
                 </div>
             </div>
         </div>
