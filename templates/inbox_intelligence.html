@@ -2953,6 +2953,16 @@ merge_recipe_id, content_blueprint_id</pre>
         renderUserInboxSenderSelector();
     }
 
+    function clearUserInboxSelections() {
+        iiState.selectedUserInboxListAccountIds = new Set();
+        iiState.selectedSenderEmails = new Set();
+        const status = document.getElementById('userInboxWorkspaceListStatus');
+        if (status) status.textContent = 'Unselected all retrieved Workspace tabs and users.';
+        renderWorkspaceSenders();
+        renderTestSenderSelector();
+        renderUserInboxSenderSelector();
+    }
+
     function renderUserInboxListAccountCards(el) {
         const count = document.getElementById('userInboxSelectedUserCount');
         const selectedCount = iiState.selectedUserInboxListAccountIds.size;
@@ -2963,7 +2973,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 <strong>Retrieved Workspace Admin Accounts</strong>
                 <div class="ii-row">
                     <span class="ii-muted">${selectedCount}/${iiState.userInboxListAccounts.length} selected for all-user send</span>
-                    <button class="ii-btn" type="button" onclick="clearUserInboxListAccountCards()"><i class="fas fa-xmark"></i> Clear tabs</button>
+                    <button class="ii-btn" type="button" onclick="clearUserInboxSelections()"><i class="fas fa-xmark"></i> Clear tabs</button>
                 </div>
             </div>
             <div class="ii-account-tabs">
@@ -3035,7 +3045,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 <strong>Retrieved Workspace API Users</strong>
                 <div class="ii-row">
                     <span class="ii-muted">Showing ${filteredSenders.length ? start + 1 : 0}-${Math.min(start + pageSize, filteredSenders.length)} of ${filteredSenders.length} in view · ${apiReady.length} API-ready</span>
-                    <button class="ii-btn" type="button" onclick="clearUserInboxListAccountCards()"><i class="fas fa-xmark"></i> Clear users</button>
+                    <button class="ii-btn" type="button" onclick="clearUserInboxSelections()"><i class="fas fa-xmark"></i> Clear users</button>
                 </div>
             </div>
             ${accountTabs}
