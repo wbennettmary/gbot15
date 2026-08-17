@@ -2201,7 +2201,7 @@ merge_recipe_id, content_blueprint_id</pre>
             const returnedEmails = [];
             (data.senders || []).forEach((sender) => {
                 byEmail[sender.email] = sender;
-                if (sender.service_account_id) returnedEmails.push(sender.email);
+                if (sender.service_account_id && !isAdminWorkspaceSender(sender)) returnedEmails.push(sender.email);
             });
             iiState.workspaceSenders = Object.values(byEmail).sort((a, b) => a.email.localeCompare(b.email));
             iiState.selectedSenderEmails = new Set(returnedEmails);
@@ -2210,7 +2210,9 @@ merge_recipe_id, content_blueprint_id</pre>
             if (data.unmatched?.length) notes.push(`${data.unmatched.length} unmatched list line(s)`);
             if (data.ambiguous?.length) notes.push(`${data.ambiguous.length} ambiguous line(s)`);
             if (data.errors?.length) notes.push(`${data.errors.length} retrieval error(s)`);
-            if (userStatus) userStatus.textContent = `Retrieved and selected ${returnedEmails.length} user(s), ${maxPerAccount ? `${maxPerAccount} per account` : 'all users per account'} from ${data.service_account_count || 0} account(s).${notes.length ? ' ' + notes.join(', ') + '.' : ''}`;
+            const excludedAdmins = (data.senders || []).filter((sender) => isAdminWorkspaceSender(sender)).length;
+            if (excludedAdmins) notes.push(`${excludedAdmins} admin user(s) excluded`);
+            if (userStatus) userStatus.textContent = `Retrieved and selected ${returnedEmails.length} non-admin user(s), ${maxPerAccount ? `${maxPerAccount} per account` : 'all users per account'} from ${data.service_account_count || 0} account(s).${notes.length ? ' ' + notes.join(', ') + '.' : ''}`;
             renderWorkspaceSenders();
             renderTestSenderSelector();
             renderUserInboxSenderSelector();
@@ -2758,15 +2760,28 @@ merge_recipe_id, content_blueprint_id</pre>
         table.innerHTML = '<tr><th>Sender</th><th>Status</th><th>Source Account</th><th>Domain</th><th>Send Method</th><th>Selection</th></tr>' + iiState.workspaceSenders.map((sender) => `
             <tr>
                 <td>${escapeHtml(sender.email)}</td>
-                <td><span class="ii-chip ${sender.status === 'active' ? 'green' : 'yellow'}">${escapeHtml(sender.status || 'active')}</span></td>
+                <td><span class="ii-chip ${isAdminWorkspaceSender(sender) ? 'red' : sender.status === 'active' ? 'green' : 'yellow'}">${escapeHtml(isAdminWorkspaceSender(sender) ? 'admin excluded' : sender.status || 'active')}</span></td>
                 <td>${escapeHtml(sender.service_account_name || sender.source || '')}</td>
                 <td>${escapeHtml(sender.domain || '')}</td>
                 <td><span class="ii-chip ${sender.service_account_id ? 'green' : 'yellow'}">${sender.service_account_id ? 'Gmail API' : 'Needs selected account'}</span></td>
-                <td><input type="checkbox" ${iiState.selectedSenderEmails.has(sender.email) ? 'checked' : ''} onchange="toggleSender('${escapeHtml(sender.email)}', this.checked)"></td>
+                <td><input type="checkbox" ${iiState.selectedSenderEmails.has(sender.email) ? 'checked' : ''} ${isAdminWorkspaceSender(sender) ? 'disabled' : ''} onchange="toggleSender('${escapeHtml(sender.email)}', this.checked)"></td>
             </tr>`).join('');
     }
 
+    function isAdminWorkspaceSender(sender) {
+        const email = String(sender?.email || '').toLowerCase();
+        const local = email.split('@')[0] || '';
+        const selectedAdminEmails = new Set(iiState.serviceAccounts.map((account) => String(account.admin_email || '').toLowerCase()).filter(Boolean));
+        return Boolean(
+            sender?.is_admin ||
+            selectedAdminEmails.has(email) ||
+            ['admin', 'admins', 'administrator', 'superadmin', 'workspaceadmin', 'googleadmin'].includes(local)
+        );
+    }
+
     function toggleSender(email, checked) {
+        const sender = iiState.workspaceSenders.find((item) => item.email === email);
+        if (checked && isAdminWorkspaceSender(sender)) return;
         if (checked) iiState.selectedSenderEmails.add(email);
         else iiState.selectedSenderEmails.delete(email);
         renderTestSenderSelector();
@@ -2776,6 +2791,10 @@ merge_recipe_id, content_blueprint_id</pre>
     function selectAllWorkspaceSenders(checked) {
         iiState.workspaceSenders.forEach((sender) => {
             if (!sender.service_account_id) return;
+            if (isAdminWorkspaceSender(sender)) {
+                iiState.selectedSenderEmails.delete(sender.email);
+                return;
+            }
             if (checked) iiState.selectedSenderEmails.add(sender.email);
             else iiState.selectedSenderEmails.delete(sender.email);
         });
@@ -2797,13 +2816,16 @@ merge_recipe_id, content_blueprint_id</pre>
             el.innerHTML = '<span class="ii-muted">Search Workspace Sender Accounts first, then select the senders for this test.</span>';
             return;
         }
-        el.innerHTML = iiState.workspaceSenders.map((sender) => `<label class="d-block mb-1"><input type="checkbox" ${iiState.selectedSenderEmails.has(sender.email) ? 'checked' : ''} onchange="toggleSender('${escapeHtml(sender.email)}', this.checked)"> ${escapeHtml(sender.email)} <span class="ii-chip ${sender.service_account_id ? 'green' : 'yellow'}">${sender.service_account_id ? 'Gmail API' : 'select from account'}</span></label>`).join('');
+        el.innerHTML = iiState.workspaceSenders.map((sender) => `<label class="d-block mb-1"><input type="checkbox" ${iiState.selectedSenderEmails.has(sender.email) ? 'checked' : ''} ${isAdminWorkspaceSender(sender) ? 'disabled' : ''} onchange="toggleSender('${escapeHtml(sender.email)}', this.checked)"> ${escapeHtml(sender.email)} <span class="ii-chip ${isAdminWorkspaceSender(sender) ? 'red' : sender.service_account_id ? 'green' : 'yellow'}">${isAdminWorkspaceSender(sender) ? 'admin excluded' : sender.service_account_id ? 'Gmail API' : 'select from account'}</span></label>`).join('');
     }
 
     function renderUserInboxSenderSelector() {
         const el = document.getElementById('userInboxSenderSelector');
         if (!el) return;
-        const apiReady = iiState.workspaceSenders.filter((sender) => sender.service_account_id);
+        iiState.workspaceSenders.forEach((sender) => {
+            if (isAdminWorkspaceSender(sender)) iiState.selectedSenderEmails.delete(sender.email);
+        });
+        const apiReady = iiState.workspaceSenders.filter((sender) => sender.service_account_id && !isAdminWorkspaceSender(sender));
         const selected = iiState.workspaceSenders.filter((sender) => iiState.selectedSenderEmails.has(sender.email));
         const count = document.getElementById('userInboxSelectedUserCount');
         if (count) count.textContent = `${selected.length} selected · ${apiReady.length} retrieved`;
@@ -2827,8 +2849,8 @@ merge_recipe_id, content_blueprint_id</pre>
                 ${pageSenders.map((sender) => `
                     <label class="ii-card ii-user-select-card">
                         <div class="ii-row justify-content-between">
-                            <span class="ii-user-line"><input type="checkbox" ${iiState.selectedSenderEmails.has(sender.email) ? 'checked' : ''} ${sender.service_account_id ? '' : 'disabled'} onchange="toggleSender('${escapeHtml(sender.email)}', this.checked)"> <strong>${escapeHtml(sender.name || sender.email.split('@')[0])}</strong></span>
-                            <span class="ii-chip ${sender.service_account_id ? 'green' : 'yellow'}">${sender.service_account_id ? 'Gmail API' : 'No API account'}</span>
+                            <span class="ii-user-line"><input type="checkbox" ${iiState.selectedSenderEmails.has(sender.email) ? 'checked' : ''} ${sender.service_account_id && !isAdminWorkspaceSender(sender) ? '' : 'disabled'} onchange="toggleSender('${escapeHtml(sender.email)}', this.checked)"> <strong>${escapeHtml(sender.name || sender.email.split('@')[0])}</strong></span>
+                            <span class="ii-chip ${isAdminWorkspaceSender(sender) ? 'red' : sender.service_account_id ? 'green' : 'yellow'}">${isAdminWorkspaceSender(sender) ? 'Admin excluded' : sender.service_account_id ? 'Gmail API' : 'No API account'}</span>
                         </div>
                         <div class="ii-muted ii-email-text mt-1">${escapeHtml(sender.email)}</div>
                         <div class="ii-muted ii-domain-text mt-1">${escapeHtml(sender.service_account_name || sender.source || '')} · ${escapeHtml(sender.domain || '')}</div>
@@ -3045,6 +3067,7 @@ merge_recipe_id, content_blueprint_id</pre>
         try {
             const selectedSenders = iiState.workspaceSenders
                 .filter((sender) => iiState.selectedSenderEmails.has(sender.email))
+                .filter((sender) => !isAdminWorkspaceSender(sender))
                 .map((sender) => ({email: sender.email, name: sender.name || '', service_account_id: sender.service_account_id}));
             const payload = {
                 name: document.getElementById('testNameInput').value,
@@ -3079,6 +3102,7 @@ merge_recipe_id, content_blueprint_id</pre>
         try {
             const selectedSenders = iiState.workspaceSenders
                 .filter((sender) => iiState.selectedSenderEmails.has(sender.email))
+                .filter((sender) => !isAdminWorkspaceSender(sender))
                 .map((sender) => ({email: sender.email, name: sender.name || '', service_account_id: sender.service_account_id}));
             const customHeaders = document.getElementById('userInboxHeadersInput').value;
             const headerSubjectMatch = customHeaders.match(/^Subject:\s*(.+)$/im);

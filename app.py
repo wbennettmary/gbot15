@@ -1473,6 +1473,24 @@ def api_inbox_workspace_accounts_search():
     } for sa in accounts]
     return jsonify({'success': True, 'service_accounts': service_accounts})
 
+def _workspace_user_is_admin(user, email_addr, service_account):
+    email_addr = (email_addr or '').lower()
+    admin_email = (getattr(service_account, 'admin_email', '') or '').lower()
+    return bool(
+        user.get('isAdmin') or
+        user.get('isDelegatedAdmin') or
+        (admin_email and email_addr == admin_email)
+    )
+
+def _email_is_reserved_admin_sender(email_addr, service_account=None):
+    email_addr = (email_addr or '').lower()
+    local = email_addr.split('@', 1)[0]
+    admin_email = (getattr(service_account, 'admin_email', '') or '').lower() if service_account else ''
+    return bool(
+        (admin_email and email_addr == admin_email) or
+        local in {'admin', 'admins', 'administrator', 'superadmin', 'workspaceadmin', 'googleadmin'}
+    )
+
 def _retrieve_workspace_senders_from_service_accounts(service_accounts, max_per_account=None):
     from services.google_domains_service import GoogleDomainsService
     retrieved = []
@@ -1489,6 +1507,8 @@ def _retrieve_workspace_senders_from_service_accounts(service_accounts, max_per_
                     email_addr = (user.get('primaryEmail') or '').lower()
                     if not email_addr:
                         continue
+                    if _workspace_user_is_admin(user, email_addr, sa) or _email_is_reserved_admin_sender(email_addr, sa):
+                        continue
                     retrieved.append({
                         'email': email_addr,
                         'name': user.get('name', {}).get('fullName') or email_addr.split('@')[0],
@@ -1496,6 +1516,7 @@ def _retrieve_workspace_senders_from_service_accounts(service_accounts, max_per_
                         'source': f'service_account:{sa.name}',
                         'service_account_id': sa.id,
                         'service_account_name': sa.name,
+                        'is_admin': False,
                         'status': 'suspended' if user.get('suspended') else 'active',
                         'send_method': 'workspace_api',
                     })
@@ -1920,6 +1941,10 @@ def api_inbox_tests():
         return jsonify({'success': False, 'error': 'Select at least one Workspace API sender from a selected Workspace account'}), 400
     if any(not s.get('service_account_id') for s in senders):
         return jsonify({'success': False, 'error': 'Every sender must come from a selected Workspace account so Gmail API delegation can send it.'}), 400
+    service_account_map = {sa.id: sa for sa in ServiceAccount.query.filter(ServiceAccount.id.in_([s['service_account_id'] for s in senders])).all()}
+    admin_senders = [s['email'] for s in senders if _email_is_reserved_admin_sender(s['email'], service_account_map.get(s['service_account_id']))]
+    if admin_senders:
+        return jsonify({'success': False, 'error': f"Admin sender accounts cannot be used for tests: {', '.join(admin_senders[:5])}"}), 400
     if not inbox_ids and not recipient_emails:
         return jsonify({'success': False, 'error': 'Type or select at least one recipient email'}), 400
     if not subject:
