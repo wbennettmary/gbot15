@@ -16,6 +16,7 @@ import sqlite3
 import traceback
 import base64
 import hashlib
+import html as html_utils
 import hmac
 import ssl
 from email import message_from_bytes
@@ -1396,8 +1397,22 @@ def api_inbox_message_detail(message_id):
 @login_required
 @permission_required('inbox_intelligence')
 def api_inbox_workspace_senders():
+    query = (request.args.get('q') or '').strip().lower()
+    try:
+        limit = min(max(int(request.args.get('limit') or 50), 1), 100)
+    except ValueError:
+        limit = 50
+    if len(query) < 2:
+        return jsonify({'success': True, 'senders': [], 'service_accounts': [], 'message': 'Search by sender email, domain, or name to load Workspace senders.'})
+
+    like = f'%{query}%'
     senders = {}
-    for row in RetrievedUser.query.order_by(RetrievedUser.email.asc()).all():
+    retrieved_rows = RetrievedUser.query.filter(or_(
+        RetrievedUser.email.ilike(like),
+        RetrievedUser.name.ilike(like),
+        RetrievedUser.domain.ilike(like)
+    )).order_by(RetrievedUser.email.asc()).limit(limit).all()
+    for row in retrieved_rows:
         senders[row.email.lower()] = {
             'email': row.email.lower(),
             'name': row.name,
@@ -1406,7 +1421,16 @@ def api_inbox_workspace_senders():
             'status': row.status or 'active',
             'has_app_password': False,
         }
-    for row in UserAppPassword.query.all():
+
+    password_filters = [UserAppPassword.username.ilike(like), UserAppPassword.domain.ilike(like)]
+    if '@' in query:
+        local_part, domain_part = query.rsplit('@', 1)
+        if local_part:
+            password_filters.append(UserAppPassword.username.ilike(f'%{local_part}%'))
+        if domain_part:
+            password_filters.append(UserAppPassword.domain.ilike(f'%{domain_part}%'))
+    app_password_rows = UserAppPassword.query.filter(or_(*password_filters)).limit(limit).all()
+    for row in app_password_rows:
         email_addr = f"{row.username}@{row.domain}".lower() if row.domain != '*' else row.username.lower()
         if '@' not in email_addr:
             continue
@@ -1419,7 +1443,9 @@ def api_inbox_workspace_senders():
             'has_app_password': True,
         })
         senders[email_addr]['has_app_password'] = True
-    for row in AwsGeneratedPassword.query.all():
+
+    aws_password_rows = AwsGeneratedPassword.query.filter(AwsGeneratedPassword.email.ilike(like)).limit(limit).all()
+    for row in aws_password_rows:
         email_addr = (row.email or '').lower()
         if '@' not in email_addr:
             continue
@@ -1432,14 +1458,34 @@ def api_inbox_workspace_senders():
             'has_app_password': True,
         })
         senders[email_addr]['has_app_password'] = True
+
+    return jsonify({'success': True, 'senders': sorted(senders.values(), key=lambda x: x['email'])[:limit], 'service_accounts': []})
+
+@app.route('/api/inbox-intelligence/workspace-accounts/search', methods=['GET'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_workspace_accounts_search():
+    query = (request.args.get('q') or '').strip()
+    try:
+        limit = min(max(int(request.args.get('limit') or 25), 1), 50)
+    except ValueError:
+        limit = 25
+    if len(query) < 2:
+        return jsonify({'success': True, 'service_accounts': [], 'message': 'Search by service account name, admin email, or client email.'})
+    like = f'%{query}%'
+    accounts = ServiceAccount.query.filter(or_(
+        ServiceAccount.name.ilike(like),
+        ServiceAccount.admin_email.ilike(like),
+        ServiceAccount.client_email.ilike(like)
+    )).order_by(ServiceAccount.name.asc()).limit(limit).all()
     service_accounts = [{
         'id': sa.id,
         'name': sa.name,
         'admin_email': sa.admin_email,
         'client_email': sa.client_email,
         'is_active': bool(sa.is_active),
-    } for sa in ServiceAccount.query.order_by(ServiceAccount.name.asc()).all()]
-    return jsonify({'success': True, 'senders': sorted(senders.values(), key=lambda x: x['email']), 'service_accounts': service_accounts})
+    } for sa in accounts]
+    return jsonify({'success': True, 'service_accounts': service_accounts})
 
 @app.route('/api/inbox-intelligence/workspace-senders/retrieve', methods=['POST'])
 @login_required
@@ -1695,6 +1741,85 @@ def api_inbox_test_detail(test_id):
             'detected_at': m.detected_at.isoformat() + 'Z' if m.detected_at else None,
         } for m in messages]
     }})
+
+def _sanitize_merge_html(value):
+    value = value or ''
+    value = re.sub(r'<script\b[^<]*(?:(?!</script>)<[^<]*)*</script>', '', value, flags=re.IGNORECASE)
+    value = re.sub(r'\son[a-z]+\s*=\s*["\'][^"\']*["\']', '', value, flags=re.IGNORECASE)
+    return value
+
+def _replace_template_region(html_content, region_names, replacement, allow_html=False):
+    replacement = _sanitize_merge_html(replacement) if allow_html else html_utils.escape(replacement or '')
+    escaped_names = '|'.join(re.escape(name) for name in region_names)
+    pattern = re.compile(
+        rf'(<(?P<tag>[a-zA-Z0-9]+)(?P<attrs>[^>]*data-region=["\'](?:{escaped_names})["\'][^>]*)>)(?P<body>.*?)(</(?P=tag)>)',
+        re.IGNORECASE | re.DOTALL
+    )
+    return pattern.sub(lambda match: f"{match.group(1)}{replacement}{match.group(5)}", html_content, count=1)
+
+def _merge_test_content_into_template(template, test):
+    html_content = template.html_content or ''
+    text_content = test.text_body or template.plain_text or ''
+    if test.subject:
+        html_content = _replace_template_region(html_content, ['headline', 'subject', 'title'], test.subject)
+    if test.html_body or test.text_body:
+        body_html = test.html_body or f"<p>{html_utils.escape(test.text_body or '')}</p>"
+        html_content = _replace_template_region(html_content, ['body', 'main_body', 'content', 'copy'], body_html, allow_html=True)
+    return html_content, text_content
+
+@app.route('/api/inbox-intelligence/tests/<test_id>/start-merge', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_start_merge(test_id):
+    test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
+    if not test:
+        return jsonify({'success': False, 'error': 'Test not found'}), 404
+    inbox_hit = InboxDeliverabilityMessage.query.filter_by(test_id=test_id, placement='INBOX').order_by(InboxDeliverabilityMessage.detected_at.desc()).first()
+    if not inbox_hit:
+        return jsonify({'success': False, 'error': 'Wait until at least one selected IMAP receiving inbox reports INBOX placement before starting the merge.'}), 400
+
+    data = request.get_json(silent=True) or {}
+    template = None
+    if data.get('static_template_id'):
+        template = InboxStaticTemplate.query.get(int(data.get('static_template_id')))
+    if not template:
+        template = InboxStaticTemplate.query.filter_by(is_default=True).filter(InboxStaticTemplate.status != 'archived').first()
+    if not template:
+        template = InboxStaticTemplate.query.filter(InboxStaticTemplate.status != 'archived').order_by(InboxStaticTemplate.updated_at.desc()).first()
+    if not template:
+        return jsonify({'success': False, 'error': 'Upload or save a static inbox template before starting the merge.'}), 400
+
+    source_message = InboxEmailMessage.query.filter(
+        InboxEmailMessage.imap_account_id == inbox_hit.imap_account_id,
+        or_(
+            InboxEmailMessage.subject == test.subject,
+            InboxEmailMessage.plain_text.ilike(f'%{inbox_hit.test_identifier}%'),
+            InboxEmailMessage.html_content.ilike(f'%{inbox_hit.test_identifier}%')
+        )
+    ).order_by(InboxEmailMessage.received_at.desc()).first()
+
+    merged_html, merged_text = _merge_test_content_into_template(template, test)
+    editable, locked = _detect_template_regions(merged_html)
+    merged = InboxStaticTemplate(
+        name=f"{template.name} - Inbox Merge {test.test_id}",
+        html_content=merged_html,
+        plain_text=merged_text,
+        editable_regions_json=json.dumps(editable or json.loads(template.editable_regions_json or '[]')),
+        locked_regions_json=json.dumps(locked or json.loads(template.locked_regions_json or '[]')),
+        status='draft',
+        version=(template.version or 1) + 1,
+        created_by=session.get('user')
+    )
+    db.session.add(merged)
+    db.session.commit()
+    return jsonify({
+        'success': True,
+        'message': 'Inbox placement confirmed. A merged draft was created from the selected static template.',
+        'merged_template': _serialize_static_template(merged),
+        'source_message_id': source_message.id if source_message else None,
+        'recipient': inbox_hit.recipient,
+        'workspace_sender': inbox_hit.workspace_sender
+    })
 
 @app.route('/api/inbox-intelligence/openrouter-config', methods=['GET', 'POST'])
 @login_required

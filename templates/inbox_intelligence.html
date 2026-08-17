@@ -132,6 +132,13 @@
         grid-template-columns: 280px minmax(360px, 1fr) 360px;
     }
 
+    .ii-layout-3 > *,
+    .ii-card,
+    .ii-panel,
+    .ii-message {
+        min-width: 0;
+    }
+
     .ii-panel {
         padding: 18px;
     }
@@ -281,6 +288,9 @@
     .ii-message {
         padding: 12px;
         border-bottom: 1px solid #e2e8f0;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        cursor: pointer;
     }
 
     .ii-message.active {
@@ -294,6 +304,19 @@
         padding: 18px;
         background: #fff;
         min-height: 220px;
+        max-width: 100%;
+        overflow: auto;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    .ii-detail-text,
+    #messageDetail,
+    #messageHeaders {
+        max-width: 100%;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        word-break: break-word;
     }
 
     .ii-template-preview.dark {
@@ -906,8 +929,8 @@ merge_recipe_id, content_blueprint_id</pre>
                 </div>
                 <div class="ii-steps">
                     <div class="ii-step"><div><strong>Select Template</strong><p class="ii-muted mb-0">Existing template, AI-generated draft, or custom content.</p></div></div>
-                    <div class="ii-step"><div><strong>Select Workspace Senders</strong><div id="testSenderSelector" class="mt-2 ii-muted">Load senders from Workspace Sender Accounts.</div></div></div>
-                    <div class="ii-step"><div><strong>Select Test Inboxes</strong><div id="testInboxSelector" class="mt-2 ii-muted">Connect test inboxes first.</div></div></div>
+                    <div class="ii-step"><div><strong>Select Workspace Senders</strong><div id="testSenderSelector" class="mt-2 ii-muted">Search sender accounts from Workspace Sender Accounts.</div></div></div>
+                    <div class="ii-step"><div><strong>Select Receiving IMAP Inboxes</strong><div id="testInboxSelector" class="mt-2 ii-muted">The app sends each test to these connected IMAP inbox email addresses and polls those same inboxes for placement.</div></div></div>
                     <div class="ii-step"><div><strong>Configure</strong><p class="ii-muted mb-0">Subject, From name, Reply-To, HTML, plain text, and dummy variables.</p></div></div>
                     <div class="ii-step"><div><strong>Run Test</strong><p class="ii-muted mb-0">Each message receives a unique X-Test-ID and is polled during the observation window.</p></div></div>
                 </div>
@@ -916,8 +939,8 @@ merge_recipe_id, content_blueprint_id</pre>
             <div class="ii-panel">
                 <h3>Results Matrix</h3>
                 <table class="ii-table ii-matrix" id="resultsMatrixTable">
-                    <tr><th>Workspace Sender</th><th>Gmail</th><th>Outlook</th><th>Yahoo</th><th>Overall</th></tr>
-                    <tr><td colspan="5" class="text-center ii-muted">Results matrix appears after a controlled test finishes polling selected inboxes.</td></tr>
+                    <tr><th>Workspace Sender</th><th>Recipient</th><th>Placement</th><th>Status</th><th>Test ID</th><th>Merge</th></tr>
+                    <tr><td colspan="6" class="text-center ii-muted">Results matrix appears after a controlled test finishes polling selected inboxes.</td></tr>
                 </table>
                 <h4 class="mt-3">Sender Health Score</h4>
                 <div class="ii-card"><div class="ii-card-label">Deliverability Score</div><div class="ii-card-value">-- / 100</div><div class="ii-muted">Internal score appears after observed tests, authentication signals, and provider consistency are available.</div></div>
@@ -936,12 +959,20 @@ merge_recipe_id, content_blueprint_id</pre>
                     </div>
                     <button class="ii-btn ii-btn-primary" type="button" onclick="retrieveWorkspaceUsers()"><i class="fas fa-users-gear"></i> Retrieve Selected Users</button>
                 </div>
-                <div id="serviceAccountSelector" class="mt-3 ii-muted">Loading saved Workspace accounts...</div>
+                <div class="ii-row mt-3">
+                    <input class="ii-input" id="workspaceAccountSearchInput" style="max-width: 420px;" placeholder="Search saved service account by name, admin email, or client email">
+                    <button class="ii-btn" type="button" onclick="searchWorkspaceAccounts()"><i class="fas fa-search"></i> Search Accounts</button>
+                </div>
+                <div id="serviceAccountSelector" class="mt-3 ii-muted">Search for saved Workspace service accounts to retrieve users.</div>
                 <div id="workspaceRetrieveStatus" class="ii-muted mt-2"></div>
+            </div>
+            <div class="ii-row mb-3">
+                <input class="ii-input" id="workspaceSenderSearchInput" style="max-width: 420px;" placeholder="Search retrieved sender email, domain, or name">
+                <button class="ii-btn" type="button" onclick="searchWorkspaceSenders()"><i class="fas fa-search"></i> Search Senders</button>
             </div>
             <table class="ii-table" id="workspaceSendersTable">
                 <tr><th>Sender</th><th>Status</th><th>Tests</th><th>Inbox Rate</th><th>Spam Rate</th><th>Selection</th></tr>
-                <tr><td colspan="6" class="text-center ii-muted">Authorized Workspace sender accounts will appear here after they are loaded from the production account system.</td></tr>
+                <tr><td colspan="6" class="text-center ii-muted">Search Workspace sender users manually. The page does not load all accounts automatically.</td></tr>
             </table>
         </div>
     </section>
@@ -1187,10 +1218,11 @@ merge_recipe_id, content_blueprint_id</pre>
     async function loadMessageDetail(id) {
         const data = await iiFetch(`/api/inbox-intelligence/messages/${id}`);
         const m = data.message;
+        const bodyText = (m.plain_text || m.preview || 'No plain-text content synchronized.').slice(0, 12000);
         document.getElementById('messageDetail').innerHTML = `<div class="ii-muted">From ${escapeHtml(m.sender || '')}</div>
             <div class="ii-muted">To ${escapeHtml(m.recipient || '')}</div>
             <h4>${escapeHtml(m.subject || '(no subject)')}</h4>
-            <div class="ii-preview-frame mt-2">${escapeHtml(m.plain_text || m.preview || 'No plain-text content synchronized.').replace(/\n/g, '<br>')}</div>`;
+            <pre class="ii-detail-text ii-preview-frame mt-2">${escapeHtml(bodyText)}${(m.plain_text || '').length > 12000 ? '\n\n[Message body truncated for faster preview.]' : ''}</pre>`;
         const html = m.html_content || '';
         const links = (html.match(/href=/gi) || []).length;
         const images = (html.match(/<img/gi) || []).length;
@@ -1199,13 +1231,34 @@ merge_recipe_id, content_blueprint_id</pre>
         document.getElementById('messageHeaders').textContent = JSON.stringify(m.headers || {}, null, 2);
     }
 
-    async function loadWorkspaceSenders() {
-        const data = await iiFetch('/api/inbox-intelligence/workspace-senders');
+    async function searchWorkspaceSenders() {
+        const input = document.getElementById('workspaceSenderSearchInput');
+        const query = (input?.value || '').trim();
+        const table = document.getElementById('workspaceSendersTable');
+        if (query.length < 2) {
+            table.innerHTML = '<tr><th>Sender</th><th>Status</th><th>Source</th><th>Domain</th><th>App Password</th><th>Selection</th></tr><tr><td colspan="6" class="text-center ii-muted">Type at least 2 characters to search Workspace sender users.</td></tr>';
+            return;
+        }
+        table.innerHTML = '<tr><th>Sender</th><th>Status</th><th>Source</th><th>Domain</th><th>App Password</th><th>Selection</th></tr><tr><td colspan="6" class="text-center ii-muted">Searching sender users...</td></tr>';
+        const data = await iiFetch(`/api/inbox-intelligence/workspace-senders?q=${encodeURIComponent(query)}`);
         iiState.workspaceSenders = data.senders || [];
-        iiState.serviceAccounts = data.service_accounts || [];
         renderWorkspaceSenders();
-        renderServiceAccountSelector();
         renderTestSenderSelector();
+    }
+
+    async function searchWorkspaceAccounts() {
+        const input = document.getElementById('workspaceAccountSearchInput');
+        const query = (input?.value || '').trim();
+        const el = document.getElementById('serviceAccountSelector');
+        if (query.length < 2) {
+            iiState.serviceAccounts = [];
+            renderServiceAccountSelector('Type at least 2 characters to search saved Workspace service accounts.');
+            return;
+        }
+        el.textContent = 'Searching saved Workspace accounts...';
+        const data = await iiFetch(`/api/inbox-intelligence/workspace-accounts/search?q=${encodeURIComponent(query)}`);
+        iiState.serviceAccounts = data.service_accounts || [];
+        renderServiceAccountSelector();
     }
 
     async function loadStaticTemplates() {
@@ -1279,10 +1332,10 @@ merge_recipe_id, content_blueprint_id</pre>
         await loadStaticTemplates();
     }
 
-    function renderServiceAccountSelector() {
+    function renderServiceAccountSelector(emptyMessage) {
         const el = document.getElementById('serviceAccountSelector');
         if (!iiState.serviceAccounts.length) {
-            el.innerHTML = 'No saved Workspace service accounts found. Add service accounts from the dashboard first.';
+            el.innerHTML = emptyMessage || 'No matching saved Workspace service accounts found.';
             return;
         }
         el.innerHTML = iiState.serviceAccounts.map((account) => `
@@ -1321,7 +1374,7 @@ merge_recipe_id, content_blueprint_id</pre>
     function renderWorkspaceSenders() {
         const table = document.getElementById('workspaceSendersTable');
         if (!iiState.workspaceSenders.length) {
-            table.innerHTML = '<tr><th>Sender</th><th>Status</th><th>Source</th><th>Domain</th><th>App Password</th><th>Selection</th></tr><tr><td colspan="6" class="text-center ii-muted">No Workspace sender users found. Retrieve users on the dashboard and make sure app passwords are stored for send tests.</td></tr>';
+            table.innerHTML = '<tr><th>Sender</th><th>Status</th><th>Source</th><th>Domain</th><th>App Password</th><th>Selection</th></tr><tr><td colspan="6" class="text-center ii-muted">No matching Workspace sender users found. Search manually or retrieve users from selected service accounts.</td></tr>';
             return;
         }
         table.innerHTML = '<tr><th>Sender</th><th>Status</th><th>Source</th><th>Domain</th><th>App Password</th><th>Selection</th></tr>' + iiState.workspaceSenders.map((sender) => `
@@ -1344,7 +1397,7 @@ merge_recipe_id, content_blueprint_id</pre>
     function renderTestSenderSelector() {
         const el = document.getElementById('testSenderSelector');
         if (!iiState.workspaceSenders.length) {
-            el.innerHTML = '<span class="ii-muted">No Workspace sender users loaded yet.</span>';
+            el.innerHTML = '<span class="ii-muted">Search Workspace Sender Accounts first, then select the senders for this test.</span>';
             return;
         }
         el.innerHTML = iiState.workspaceSenders.map((sender) => `<label class="d-block mb-1"><input type="checkbox" ${iiState.selectedSenderEmails.has(sender.email) ? 'checked' : ''} onchange="toggleSender('${escapeHtml(sender.email)}', this.checked)"> ${escapeHtml(sender.email)} ${sender.has_app_password ? '' : '<span class="ii-chip red">missing app password</span>'}</label>`).join('');
@@ -1414,8 +1467,34 @@ merge_recipe_id, content_blueprint_id</pre>
     async function loadTestDetail(testId) {
         const data = await iiFetch(`/api/inbox-intelligence/tests/${testId}`);
         const rows = data.test.messages || [];
-        document.getElementById('resultsMatrixTable').innerHTML = '<tr><th>Workspace Sender</th><th>Recipient</th><th>Placement</th><th>Status</th><th>Test ID</th></tr>' + rows.map((row) => `
-            <tr><td>${escapeHtml(row.sender)}</td><td>${escapeHtml(row.recipient)}</td><td><span class="ii-chip ${row.placement === 'INBOX' ? 'green' : row.placement === 'SPAM' ? 'red' : row.placement === 'FAILED' ? 'red' : 'gray'}">${escapeHtml(row.placement)}</span></td><td>${escapeHtml(row.status)}</td><td>${escapeHtml(row.test_identifier)}</td></tr>`).join('');
+        document.getElementById('resultsMatrixTable').innerHTML = '<tr><th>Workspace Sender</th><th>Recipient</th><th>Placement</th><th>Status</th><th>Test ID</th><th>Merge</th></tr>' + rows.map((row) => `
+            <tr>
+                <td>${escapeHtml(row.sender)}</td>
+                <td>${escapeHtml(row.recipient)}</td>
+                <td><span class="ii-chip ${row.placement === 'INBOX' ? 'green' : row.placement === 'SPAM' ? 'red' : row.placement === 'FAILED' ? 'red' : 'gray'}">${escapeHtml(row.placement)}</span></td>
+                <td>${escapeHtml(row.status)}</td>
+                <td>${escapeHtml(row.test_identifier)}</td>
+                <td>${row.placement === 'INBOX' ? `<button class="ii-btn" type="button" onclick="startMergeFromTest('${escapeHtml(testId)}')"><i class="fas fa-code-merge"></i> Start Merge</button>` : '<span class="ii-muted">Waiting</span>'}</td>
+            </tr>`).join('');
+    }
+
+    async function startMergeFromTest(testId) {
+        const templateId = iiState.staticTemplates[0]?.id;
+        if (!templateId) {
+            alert('Save a static template before starting the inbox merge.');
+            return;
+        }
+        try {
+            const data = await iiFetch(`/api/inbox-intelligence/tests/${testId}/start-merge`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({static_template_id: templateId})
+            });
+            await loadStaticTemplates();
+            alert(data.message || 'Merged draft created.');
+        } catch (err) {
+            alert(err.message);
+        }
     }
 
     async function loadOpenRouterConfig() {
@@ -1484,13 +1563,18 @@ merge_recipe_id, content_blueprint_id</pre>
         });
         document.getElementById('imapAccountForm')?.addEventListener('submit', saveImapAccount);
         document.getElementById('staticTemplateForm')?.addEventListener('submit', saveStaticTemplate);
+        document.getElementById('workspaceSenderSearchInput')?.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') searchWorkspaceSenders();
+        });
+        document.getElementById('workspaceAccountSearchInput')?.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') searchWorkspaceAccounts();
+        });
         document.getElementById('imapProviderInput')?.dispatchEvent(new Event('change'));
 
         Promise.allSettled([
             loadImapAccounts(),
             loadInboxMessages(),
             loadStaticTemplates(),
-            loadWorkspaceSenders(),
             loadTests(),
             loadOpenRouterConfig()
         ]).catch((err) => console.error(err));
