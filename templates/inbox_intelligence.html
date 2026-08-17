@@ -610,6 +610,57 @@
         font-size: 15px;
     }
 
+    .ii-analytics-list {
+        display: grid;
+        gap: 10px;
+    }
+
+    .ii-analytics-row {
+        display: grid;
+        grid-template-columns: minmax(220px, 1.25fr) minmax(180px, 1fr) 130px 130px;
+        gap: 12px;
+        align-items: center;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 12px;
+        background: #fff;
+        min-width: 0;
+    }
+
+    .ii-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 1050;
+        display: none;
+        place-items: center;
+        padding: 18px;
+        background: rgba(15, 23, 42, 0.42);
+    }
+
+    .ii-modal-backdrop.active {
+        display: grid;
+    }
+
+    .ii-modal {
+        width: min(920px, 100%);
+        max-height: 88vh;
+        overflow: auto;
+        border-radius: 8px;
+        background: #fff;
+        box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22);
+        border: 1px solid #dbe4ef;
+        padding: 18px;
+    }
+
+    .ii-modal-preview {
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        min-height: 280px;
+        padding: 16px;
+        background: #f8fafc;
+        overflow: auto;
+    }
+
     .ii-studio-shell {
         display: grid;
         grid-template-columns: minmax(0, 1.25fr) minmax(360px, 0.95fr);
@@ -798,6 +849,7 @@
         .ii-source-card .ii-input,
         .ii-source-card .ii-select { width: 100%; max-width: none !important; }
         .ii-template-actions .ii-btn { flex-basis: calc(50% - 4px); }
+        .ii-analytics-row { grid-template-columns: 1fr; }
     }
 </style>
 
@@ -1447,7 +1499,16 @@ merge_recipe_id, content_blueprint_id</pre>
                     </div>
                     <div class="ii-field" style="grid-column: 1 / -1;"><label>Plain-text template</label><textarea class="ii-textarea" id="userInboxTextInput" oninput="updateUserInboxDiagnostics()" placeholder="Plain text version."></textarea><div class="text-end ii-muted mt-1" id="userInboxTextCount">0 characters</div></div>
                     <div class="ii-field" style="grid-column: 1 / -1;"><label>Custom headers</label><textarea class="ii-textarea" id="userInboxHeadersInput" placeholder="Date: [date]&#10;To: [to]&#10;Message-ID: <custom-[test_id]@example.com>&#10;Subject: [subject]&#10;MIME-Version: 1.0&#10;Content-Type: multipart/alternative; boundary=&quot;----=_Part_23316_1895777040.1785860511248&quot;&#10;X-Mailer: Custom Mailer"></textarea><div class="ii-muted mt-1">Supported placeholders: [date], [to], [from], [subject], [test_id], [message_id]. If the body contains MIME parts, the app sends raw MIME and normalizes boundary delimiter lines.</div></div>
-                    <div class="ii-field" style="grid-column: 1 / -1;"><label>Recipient inboxes, one per line</label><textarea class="ii-textarea" id="userInboxRecipientsInput" placeholder="contact@example.com&#10;connected-imap-recipient@gmail.com"></textarea><div class="text-end ii-muted mt-1" id="userInboxRecipientCount">0 recipients</div></div>
+                    <div class="ii-field" style="grid-column: 1 / -1;">
+                        <label>Recipient inbox</label>
+                        <div class="ii-row">
+                            <select class="ii-select" id="userInboxRecipientSelect" style="max-width: 420px;" onchange="updateUserInboxDiagnostics()"><option value="">Load or add a recipient</option></select>
+                            <input class="ii-input" id="userInboxRecipientEmailInput" type="email" style="max-width: 340px;" placeholder="external-or-imap@example.com">
+                            <button class="ii-btn" type="button" onclick="saveUserInboxRecipient()"><i class="fas fa-plus"></i> Add / Update</button>
+                            <button class="ii-btn" type="button" onclick="deleteUserInboxRecipient()"><i class="fas fa-trash"></i> Delete</button>
+                        </div>
+                        <div class="ii-muted mt-1" id="userInboxRecipientCount">Select one connected IMAP recipient for sync, or add one external recipient for send-only tests.</div>
+                    </div>
                 </div>
                 <div class="ii-card mt-3">
                     <h4>Template diagnostics</h4>
@@ -1497,7 +1558,11 @@ merge_recipe_id, content_blueprint_id</pre>
                         <h3>User Inbox Analytics</h3>
                         <p class="ii-muted mb-0">Live placement, user health, and domain decisions from the latest synced user inbox test.</p>
                     </div>
-                    <div class="ii-row"><span class="ii-muted" id="userInboxLastSync">No sync yet</span><button class="ii-btn" id="userInboxSyncButton" type="button" onclick="syncUserInboxAnalytics()"><i class="fas fa-arrows-rotate"></i> Sync fresh data</button></div>
+                    <div class="ii-row">
+                        <input class="ii-input" id="userInboxManualTestIdInput" style="max-width: 220px;" placeholder="DLV-82436339 or full X-Test-ID">
+                        <span class="ii-muted" id="userInboxLastSync">No sync yet</span>
+                        <button class="ii-btn" id="userInboxSyncButton" type="button" onclick="syncUserInboxAnalytics()"><i class="fas fa-arrows-rotate"></i> Sync fresh data</button>
+                    </div>
                 </div>
                 <div class="ii-result-summary" id="userInboxAnalyticsSummary">
                     <div class="ii-result-pill"><span class="ii-muted">Users</span><strong>0</strong></div>
@@ -1665,6 +1730,30 @@ merge_recipe_id, content_blueprint_id</pre>
     </section>
 </div>
 
+<div class="ii-modal-backdrop" id="userInboxTemplateModal" onclick="closeUserInboxTemplateModal(event)">
+    <div class="ii-modal" role="dialog" aria-modal="true" aria-labelledby="userInboxTemplateModalTitle" onclick="event.stopPropagation()">
+        <div class="ii-row justify-content-between mb-3">
+            <div>
+                <h3 id="userInboxTemplateModalTitle">Template Preview</h3>
+                <p class="ii-muted mb-0" id="userInboxTemplateModalSubject"></p>
+            </div>
+            <button class="ii-btn" type="button" onclick="closeUserInboxTemplateModal()"><i class="fas fa-xmark"></i> Close</button>
+        </div>
+        <div class="ii-grid ii-layout-2">
+            <div>
+                <h4>HTML Preview</h4>
+                <div class="ii-modal-preview" id="userInboxTemplateModalHtml"></div>
+            </div>
+            <div>
+                <h4>Plain Text</h4>
+                <pre class="ii-modal-preview" id="userInboxTemplateModalText"></pre>
+            </div>
+        </div>
+        <h4 class="mt-3">Custom Headers</h4>
+        <pre class="ii-modal-preview" id="userInboxTemplateModalHeaders"></pre>
+    </div>
+</div>
+
 <script>
     const iiState = {
         imapAccounts: [],
@@ -1674,6 +1763,8 @@ merge_recipe_id, content_blueprint_id</pre>
         workspaceLists: [],
         aiSuggestions: [],
         userInboxTemplates: [],
+        userInboxRecipients: [],
+        userInboxHiddenImapRecipients: new Set(),
         userInboxTemplatePage: 0,
         userInboxSenderPage: 0,
         userInboxCopyBuckets: {inboxDomains: [], spamDomains: [], inboxUsers: [], spamUsers: []},
@@ -1822,9 +1913,15 @@ merge_recipe_id, content_blueprint_id</pre>
         const data = await iiFetch('/api/inbox-intelligence/imap-accounts');
         iiState.imapAccounts = data.accounts || [];
         iiState.imapAccounts.forEach((account) => iiState.selectedInboxIds.add(account.id));
+        iiState.userInboxRecipients = iiState.userInboxRecipients.filter((recipient) => recipient.source !== 'imap');
+        iiState.imapAccounts.forEach((account) => {
+            if (iiState.userInboxHiddenImapRecipients.has(account.email.toLowerCase())) return;
+            iiState.userInboxRecipients.push({email: account.email.toLowerCase(), source: 'imap', imap_account_id: account.id});
+        });
         renderImapAccounts();
         renderInboxSourceSelector();
         renderMessageAccountFilter();
+        renderUserInboxRecipientSelect();
         renderTestInboxSelector();
         syncRecipientInputFromSelectedInboxes();
     }
@@ -2215,6 +2312,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 <div class="ii-template-actions">
                     <button class="ii-btn ii-btn-primary" type="button" onclick="selectUserInboxSavedTemplate(${template.id})"><i class="fas fa-check"></i> Use</button>
                     <button class="ii-btn" type="button" onclick="previewUserInboxSavedTemplate(${template.id})"><i class="fas fa-eye"></i> Preview</button>
+                    <button class="ii-btn" type="button" onclick="renameUserInboxSavedTemplate(${template.id})"><i class="fas fa-i-cursor"></i> Rename</button>
                     <button class="ii-btn" type="button" onclick="editUserInboxSavedTemplate(${template.id})"><i class="fas fa-pen"></i> Edit</button>
                     <button class="ii-btn" type="button" onclick="deleteUserInboxSavedTemplate(${template.id})"><i class="fas fa-trash"></i> Delete</button>
                 </div>
@@ -2256,11 +2354,30 @@ merge_recipe_id, content_blueprint_id</pre>
     function previewUserInboxSavedTemplate(id) {
         const template = iiState.userInboxTemplates.find((item) => item.id === id);
         if (!template) return;
-        document.getElementById('studioSubjectInput').value = template.subject || template.name || 'User Inbox Preview';
-        document.getElementById('studioHtmlInput').value = template.html_content || `<pre>${escapeHtml(template.plain_text || '')}</pre>`;
-        document.getElementById('studioTextInput').value = template.plain_text || '';
-        syncStudioPreview();
-        activateInboxTab('templates');
+        document.getElementById('userInboxTemplateModalTitle').textContent = template.name || 'Template Preview';
+        document.getElementById('userInboxTemplateModalSubject').textContent = template.subject || 'No subject saved';
+        document.getElementById('userInboxTemplateModalHtml').innerHTML = template.html_content || `<pre>${escapeHtml(template.plain_text || 'No HTML content saved.')}</pre>`;
+        document.getElementById('userInboxTemplateModalText').textContent = template.plain_text || 'No plain-text content saved.';
+        document.getElementById('userInboxTemplateModalHeaders').textContent = template.custom_headers || 'No custom headers saved.';
+        document.getElementById('userInboxTemplateModal').classList.add('active');
+    }
+
+    function closeUserInboxTemplateModal(event) {
+        if (event && event.target?.id !== 'userInboxTemplateModal') return;
+        document.getElementById('userInboxTemplateModal')?.classList.remove('active');
+    }
+
+    async function renameUserInboxSavedTemplate(id) {
+        const template = iiState.userInboxTemplates.find((item) => item.id === id);
+        if (!template) return;
+        const name = prompt('Rename saved User Inbox template', template.name || '');
+        if (!name || !name.trim() || name.trim() === template.name) return;
+        await iiFetch(`/api/inbox-intelligence/user-inbox-templates/${id}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name: name.trim()})
+        });
+        await loadUserInboxTemplates();
     }
 
     async function editUserInboxSavedTemplate(id) {
@@ -2728,10 +2845,16 @@ merge_recipe_id, content_blueprint_id</pre>
         const html = document.getElementById('userInboxHtmlInput')?.value || '';
         const text = document.getElementById('userInboxTextInput')?.value || '';
         const headers = document.getElementById('userInboxHeadersInput')?.value || '';
-        const recipients = (document.getElementById('userInboxRecipientsInput')?.value || '').split(/\n|,/).map((item) => item.trim()).filter(Boolean);
+        const recipient = selectedUserInboxRecipient();
         document.getElementById('userInboxHtmlCount').textContent = `${html.length.toLocaleString()} characters`;
         document.getElementById('userInboxTextCount').textContent = `${text.length.toLocaleString()} characters`;
-        document.getElementById('userInboxRecipientCount').textContent = `${recipients.length} recipient${recipients.length === 1 ? '' : 's'}`;
+        if (recipient) {
+            document.getElementById('userInboxRecipientCount').textContent = recipient.source === 'imap'
+                ? `${recipient.email} · connected IMAP recipient, sync enabled.`
+                : `${recipient.email} · external recipient, send-only tracking.`;
+        } else {
+            document.getElementById('userInboxRecipientCount').textContent = 'Select or add one recipient.';
+        }
         const hasHtml = html.trim().length > 0;
         const hasVars = /\[[a-z_]+\]|\{\{[^}]+\}\}/i.test(`${html}\n${text}\n${headers}`);
         const hasTrackingHeader = /X-Test-ID|Message-ID|Content-Type/i.test(headers);
@@ -2824,14 +2947,89 @@ merge_recipe_id, content_blueprint_id</pre>
         el.innerHTML = iiState.imapAccounts.map((account) => `<label class="d-block mb-1"><input type="checkbox" ${iiState.selectedInboxIds.has(account.id) ? 'checked' : ''} onchange="toggleInboxSource(${account.id}, this.checked)"> ${escapeHtml(account.email)}</label>`).join('');
     }
 
+    function selectedUserInboxRecipient() {
+        const selectedEmail = (document.getElementById('userInboxRecipientSelect')?.value || '').trim().toLowerCase();
+        if (!selectedEmail) return null;
+        return iiState.userInboxRecipients.find((recipient) => recipient.email === selectedEmail) || {email: selectedEmail, source: 'external'};
+    }
+
+    function loadUserInboxRecipientState() {
+        try {
+            const saved = JSON.parse(localStorage.getItem('ii_user_inbox_recipients') || '[]');
+            iiState.userInboxRecipients = saved.filter((recipient) => recipient?.email).map((recipient) => ({
+                email: String(recipient.email).toLowerCase(),
+                source: recipient.source === 'imap' ? 'imap' : 'external',
+                imap_account_id: recipient.imap_account_id || null
+            }));
+            iiState.userInboxHiddenImapRecipients = new Set(JSON.parse(localStorage.getItem('ii_user_inbox_hidden_imap') || '[]'));
+        } catch (err) {
+            iiState.userInboxRecipients = [];
+            iiState.userInboxHiddenImapRecipients = new Set();
+        }
+    }
+
+    function saveUserInboxRecipientState() {
+        const externalRecipients = iiState.userInboxRecipients.filter((recipient) => recipient.source !== 'imap');
+        localStorage.setItem('ii_user_inbox_recipients', JSON.stringify(externalRecipients));
+        localStorage.setItem('ii_user_inbox_hidden_imap', JSON.stringify([...iiState.userInboxHiddenImapRecipients]));
+    }
+
+    function renderUserInboxRecipientSelect() {
+        const select = document.getElementById('userInboxRecipientSelect');
+        if (!select) return;
+        const current = select.value;
+        const unique = {};
+        iiState.userInboxRecipients.forEach((recipient) => {
+            if (recipient.email) unique[recipient.email] = recipient;
+        });
+        iiState.userInboxRecipients = Object.values(unique).sort((a, b) => a.email.localeCompare(b.email));
+        select.innerHTML = '<option value="">Select one recipient</option>' + iiState.userInboxRecipients.map((recipient) => {
+            const label = recipient.source === 'imap' ? 'Connected IMAP' : 'External send-only';
+            return `<option value="${escapeHtml(recipient.email)}">${escapeHtml(recipient.email)} · ${label}</option>`;
+        }).join('');
+        if (current && iiState.userInboxRecipients.some((recipient) => recipient.email === current)) {
+            select.value = current;
+        } else if (!select.value && iiState.userInboxRecipients.length) {
+            select.value = iiState.userInboxRecipients[0].email;
+        }
+        updateUserInboxDiagnostics();
+    }
+
+    function saveUserInboxRecipient() {
+        const input = document.getElementById('userInboxRecipientEmailInput');
+        const email = (input?.value || '').trim().toLowerCase();
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            document.getElementById('userInboxRecipientCount').textContent = 'Type a valid recipient email first.';
+            return;
+        }
+        const imap = iiState.imapAccounts.find((account) => account.email.toLowerCase() === email);
+        iiState.userInboxHiddenImapRecipients.delete(email);
+        const recipient = imap ? {email, source: 'imap', imap_account_id: imap.id} : {email, source: 'external'};
+        iiState.userInboxRecipients = iiState.userInboxRecipients.filter((item) => item.email !== email);
+        iiState.userInboxRecipients.push(recipient);
+        saveUserInboxRecipientState();
+        renderUserInboxRecipientSelect();
+        document.getElementById('userInboxRecipientSelect').value = email;
+        input.value = '';
+        updateUserInboxDiagnostics();
+    }
+
+    function deleteUserInboxRecipient() {
+        const recipient = selectedUserInboxRecipient();
+        if (!recipient) return;
+        if (recipient.source === 'imap') iiState.userInboxHiddenImapRecipients.add(recipient.email);
+        iiState.userInboxRecipients = iiState.userInboxRecipients.filter((item) => item.email !== recipient.email);
+        saveUserInboxRecipientState();
+        renderUserInboxRecipientSelect();
+    }
+
     function syncRecipientInputFromSelectedInboxes() {
         const input = document.getElementById('testRecipientInput');
         const emails = iiState.imapAccounts
             .filter((account) => iiState.selectedInboxIds.has(account.id))
             .map((account) => account.email);
         if (input && input.dataset.manualEdit !== 'true') input.value = emails.join('\n');
-        const userInboxInput = document.getElementById('userInboxRecipientsInput');
-        if (userInboxInput && userInboxInput.dataset.manualEdit !== 'true') userInboxInput.value = emails.join('\n');
+        renderUserInboxRecipientSelect();
     }
 
     function parseRecipientInput() {
@@ -2885,13 +3083,13 @@ merge_recipe_id, content_blueprint_id</pre>
             const subject = document.getElementById('userInboxSubjectInput').value.trim() || (headerSubjectMatch ? headerSubjectMatch[1].trim() : '');
             const html = document.getElementById('userInboxHtmlInput').value;
             const text = document.getElementById('userInboxTextInput').value;
-            const recipients = (document.getElementById('userInboxRecipientsInput').value || '')
-                .split(/\n|,/).map((item) => item.trim().toLowerCase()).filter(Boolean);
-            const selectedInboxIds = [...iiState.selectedInboxIds];
+            const recipient = selectedUserInboxRecipient();
+            const recipients = recipient ? [recipient.email] : [];
+            const selectedInboxIds = recipient?.source === 'imap' && recipient.imap_account_id ? [recipient.imap_account_id] : [];
             if (!selectedSenders.length) throw new Error('Select Workspace API users first.');
             if (!subject) throw new Error('Subject is required in the Subject field or custom headers.');
             if (!html.trim() && !text.trim()) throw new Error('Static HTML or plain-text template is required.');
-            if (!recipients.length && !selectedInboxIds.length) throw new Error('Type at least one recipient or select connected IMAP inboxes.');
+            if (!recipients.length && !selectedInboxIds.length) throw new Error('Select or add one recipient.');
             status.textContent = 'Sending user inbox test...';
             const testData = await iiFetch('/api/inbox-intelligence/tests', {
                 method: 'POST',
@@ -2909,6 +3107,8 @@ merge_recipe_id, content_blueprint_id</pre>
                 })
             });
             iiState.userInboxTestId = testData.test_id;
+            const manualInput = document.getElementById('userInboxManualTestIdInput');
+            if (manualInput) manualInput.value = testData.test_id;
             status.textContent = `Test ${testData.test_id} queued with ${testData.queued || 0} message(s). Sending in background; sync will update as messages arrive.`;
             await pollUserInboxTest(testData.test_id);
         } catch (err) {
@@ -2957,14 +3157,25 @@ merge_recipe_id, content_blueprint_id</pre>
         if (isSyncing && syncLabel) syncLabel.textContent = label;
     }
 
+    function normalizeUserInboxTestId(value) {
+        const text = String(value || '').trim().toUpperCase();
+        const match = text.match(/^(DLV-[A-Z0-9]+)(?:-[A-Z0-9]+)?/);
+        return match ? match[1] : text;
+    }
+
     async function syncUserInboxAnalytics() {
         const status = document.getElementById('userInboxTestStatus');
-        if (!iiState.userInboxTestId) {
-            status.textContent = 'Run a User Inbox Test first, then sync fresh data.';
+        const manualInput = document.getElementById('userInboxManualTestIdInput');
+        const manualTestId = normalizeUserInboxTestId(manualInput?.value || '');
+        const testId = manualTestId || iiState.userInboxTestId;
+        if (!testId) {
+            status.textContent = 'Run a User Inbox Test first, or type an X-Test-ID/Test ID, then sync fresh data.';
             return;
         }
+        iiState.userInboxTestId = testId;
+        if (manualInput) manualInput.value = testId;
         status.textContent = 'Syncing fresh recipient data from connected IMAP inboxes...';
-        await pollUserInboxTest(iiState.userInboxTestId);
+        await pollUserInboxTest(testId);
     }
 
     async function pollDeliverabilityTest(testId) {
@@ -3170,6 +3381,7 @@ merge_recipe_id, content_blueprint_id</pre>
             el.innerHTML = '<div class="ii-analytics-card ii-muted">No message rows found for this test yet. Sync again after delivery has had time to complete.</div>';
             return;
         }
+        el.className = 'ii-analytics-list';
         el.innerHTML = rows.map((row) => {
             const sender = senderLookup(row.sender);
             const displayName = sender.name || (row.sender || '').split('@')[0] || 'Workspace user';
@@ -3177,20 +3389,24 @@ merge_recipe_id, content_blueprint_id</pre>
             const status = row.status || 'PENDING';
             const placementChip = placement === 'INBOX' ? 'green' : placement === 'SPAM' ? 'red' : placement === 'UNOBSERVED' ? 'gray' : 'yellow';
             const statusChip = status === 'COMPLETED' ? 'green' : status === 'FAILED' ? 'red' : 'blue';
-            return `<div class="ii-analytics-card">
-                <div class="ii-analytics-title">
-                    <div>
-                        <strong>${escapeHtml(displayName)}</strong>
-                        <div class="ii-muted ii-email-text">${escapeHtml(row.sender || '')}</div>
-                    </div>
+            return `<div class="ii-analytics-row">
+                <div>
+                    <strong>${escapeHtml(displayName)}</strong>
+                    <div class="ii-muted ii-email-text">${escapeHtml(row.sender || '')}</div>
+                </div>
+                <div>
+                    <span class="ii-muted">Recipient</span>
+                    <strong class="ii-email-text d-block">${escapeHtml(row.recipient || '')}</strong>
+                </div>
+                <div class="ii-grid" style="gap: 6px;">
                     <span class="ii-chip ${placementChip}">${escapeHtml(placement)}</span>
+                    <span class="ii-chip ${statusChip}">${escapeHtml(status)}</span>
                 </div>
-                <div class="ii-rate-row">
-                    <div><span class="ii-muted">Recipient</span><strong class="ii-email-text">${escapeHtml(row.recipient || '')}</strong></div>
-                    <div><span class="ii-muted">Status</span><strong><span class="ii-chip ${statusChip}">${escapeHtml(status)}</span></strong></div>
-                    <div><span class="ii-muted">Test</span><strong class="ii-email-text">${escapeHtml(row.test_identifier || testId || '')}</strong></div>
+                <div>
+                    <span class="ii-muted">Test</span>
+                    <strong class="ii-email-text d-block">${escapeHtml(row.test_identifier || testId || '')}</strong>
+                    <div class="ii-muted">${escapeHtml(placementSignal(row))}</div>
                 </div>
-                <div class="ii-muted">${escapeHtml(row.signal || row.error_message || 'Waiting for latest inbox observation.')}</div>
             </div>`;
         }).join('');
     }
@@ -3733,14 +3949,15 @@ merge_recipe_id, content_blueprint_id</pre>
         document.getElementById('testRecipientInput')?.addEventListener('input', (event) => {
             event.target.dataset.manualEdit = 'true';
         });
-        document.getElementById('userInboxRecipientsInput')?.addEventListener('input', (event) => {
-            event.target.dataset.manualEdit = 'true';
-            updateUserInboxDiagnostics();
+        document.getElementById('userInboxRecipientEmailInput')?.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') saveUserInboxRecipient();
         });
+        document.getElementById('userInboxRecipientSelect')?.addEventListener('change', updateUserInboxDiagnostics);
         document.getElementById('userInboxHeadersInput')?.addEventListener('input', () => {
             updateUserInboxDiagnostics();
         });
         document.getElementById('imapProviderInput')?.dispatchEvent(new Event('change'));
+        loadUserInboxRecipientState();
         updateUserInboxDiagnostics();
 
         Promise.allSettled([
