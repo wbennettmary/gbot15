@@ -2933,7 +2933,7 @@ merge_recipe_id, content_blueprint_id</pre>
             const summary = matrixSummary(rows);
             if (syncLabel) syncLabel.textContent = `Last sync: ${new Date().toLocaleTimeString()}`;
             const syncWarning = pollData.sync_errors?.length ? ` IMAP warnings: ${pollData.sync_errors.slice(0, 2).join(' | ')}` : '';
-            if (status) status.textContent = `Analytics updated for ${testId}. Inbox ${summary.inbox}, spam ${summary.spam}, missing ${summary.pending + summary.failed}, external ${summary.unobserved}.${syncWarning}`;
+            if (status) status.textContent = userInboxStatusText(data.test, summary, syncWarning);
             await loadTests();
         } catch (err) {
             if (status) status.textContent = `Could not sync analytics: ${err.message}`;
@@ -2995,7 +2995,7 @@ merge_recipe_id, content_blueprint_id</pre>
         if (status === 'COMPLETED') return 'green';
         if (status === 'FAILED') return 'red';
         if (status === 'PARTIAL') return 'yellow';
-        if (status === 'CHECKING_INBOX' || status === 'RUNNING') return 'blue';
+        if (status === 'CHECKING_INBOX' || status === 'RUNNING' || status === 'SENDING' || status === 'QUEUED') return 'blue';
         return 'gray';
     }
 
@@ -3080,6 +3080,8 @@ merge_recipe_id, content_blueprint_id</pre>
         if (row.placement === 'SPAM') return `Spam${row.folder ? ` · ${row.folder}` : ''}`;
         if (row.placement === 'FAILED') return row.error_message || 'Failed';
         if (row.placement === 'UNOBSERVED') return 'Sent to external recipient; connect IMAP to observe placement';
+        if (row.status === 'QUEUED') return 'Queued for background Gmail API sending';
+        if (row.status === 'WAITING_FOR_DELIVERY') return 'Sent; waiting for fresh IMAP placement';
         if (row.placement === 'PENDING') return 'Waiting for IMAP detection';
         return row.status || 'Unknown';
     }
@@ -3092,7 +3094,22 @@ merge_recipe_id, content_blueprint_id</pre>
             pending: rows.filter((row) => row.placement === 'PENDING').length,
             failed: rows.filter((row) => row.placement === 'FAILED' || row.status === 'FAILED').length,
             unobserved: rows.filter((row) => row.placement === 'UNOBSERVED').length,
+            queued: rows.filter((row) => row.status === 'QUEUED').length,
+            waiting: rows.filter((row) => row.status === 'WAITING_FOR_DELIVERY').length,
         };
+    }
+
+    function userInboxStatusText(test, summary, syncWarning = '') {
+        const total = test?.total_messages || summary.total;
+        const sent = test?.sent_count ?? Math.max(0, summary.total - summary.queued);
+        const testStatus = test?.status || '';
+        if (summary.queued || testStatus === 'SENDING' || testStatus === 'QUEUED') {
+            return `Test ${test.test_id} is still sending. Sent ${sent}/${total}; queued ${summary.queued}; waiting for IMAP ${summary.waiting}.${syncWarning}`;
+        }
+        if (summary.pending || testStatus === 'CHECKING_INBOX') {
+            return `Test ${test.test_id} is checking recipient inboxes. Inbox ${summary.inbox}, spam ${summary.spam}, waiting ${summary.pending}.${syncWarning}`;
+        }
+        return `Analytics updated for ${test.test_id}. Inbox ${summary.inbox}, spam ${summary.spam}, failed ${summary.failed}, external ${summary.unobserved}.${syncWarning}`;
     }
 
     function renderAnalyticsSummary(containerId, rows, userLabel = 'Tests') {

@@ -2028,7 +2028,7 @@ def _detect_message_placement(inbox, identifier):
         except Exception:
             pass
 
-def _detect_message_placements(inbox, identifiers):
+def _detect_message_placements(inbox, identifiers, max_direct_searches=8):
     folders = ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk', 'Bulk Mail']
     results = {identifier: ('PENDING', None) for identifier in identifiers}
     pending = set(identifier for identifier in identifiers if identifier)
@@ -2063,7 +2063,7 @@ def _detect_message_placements(inbox, identifiers):
                             break
                     if not pending:
                         break
-            for identifier in list(pending):
+            for identifier in list(pending)[:max_direct_searches]:
                 search_terms = [
                     f'HEADER X-Test-ID "{identifier}"',
                     f'TEXT "{identifier}"',
@@ -2092,8 +2092,8 @@ def _placement_from_folder(folder):
 def _sync_test_inbox_folders(inbox):
     synced_total = 0
     errors = []
-    for index, folder in enumerate(['INBOX', '[Gmail]/Spam', 'Spam', 'Junk', 'Bulk Mail']):
-        synced, error = _sync_imap_account(inbox, folder=folder, limit=120, mark_errors=(index == 0))
+    for index, folder in enumerate(['INBOX', '[Gmail]/Spam', 'Spam', 'Junk']):
+        synced, error = _sync_imap_account(inbox, folder=folder, limit=80, mark_errors=(index == 0))
         if error:
             if folder == 'INBOX':
                 errors.append(f'{folder}: {error}')
@@ -2108,7 +2108,7 @@ def _detect_message_placements_from_synced(inbox_id, rows):
     earliest_sent = min((row.sent_at for row in rows if row.sent_at), default=None)
     q = InboxEmailMessage.query.filter_by(imap_account_id=inbox_id)
     if earliest_sent:
-        q = q.filter(or_(InboxEmailMessage.received_at == None, InboxEmailMessage.received_at >= earliest_sent - timedelta(minutes=15)))
+        q = q.filter(or_(InboxEmailMessage.received_at == None, InboxEmailMessage.received_at >= earliest_sent - timedelta(hours=6)))
     messages = q.order_by(InboxEmailMessage.received_at.desc().nullslast(), InboxEmailMessage.id.desc()).limit(500).all()
     for row in rows:
         row_sender = (row.workspace_sender or '').lower()
@@ -2172,10 +2172,11 @@ def api_inbox_poll_test(test_id):
         try:
             _, errors = _sync_test_inbox_folders(inbox)
             sync_errors.extend([f'{inbox.email}: {error}' for error in errors])
-            placements = _detect_message_placements(inbox, [row.test_identifier for row in rows])
+            placements = _detect_message_placements_from_synced(inbox.id, rows)
             remaining_rows = [row for row in rows if placements.get(row.test_identifier, ('PENDING', None))[0] == 'PENDING']
-            fallback_placements = _detect_message_placements_from_synced(inbox.id, remaining_rows)
-            placements.update(fallback_placements)
+            if remaining_rows:
+                live_placements = _detect_message_placements(inbox, [row.test_identifier for row in remaining_rows], max_direct_searches=8)
+                placements.update(live_placements)
             for row in rows:
                 placement, folder = placements.get(row.test_identifier, ('PENDING', None))
                 row.placement = placement
