@@ -1522,6 +1522,7 @@ def _resolve_workspace_list_service_accounts(workspace_list):
     ambiguous = []
     for key in _parse_workspace_list_keys(workspace_list.raw_accounts):
         matches = []
+        candidate_domain = key.split('@', 1)[1] if '@' in key else (key if '.' in key else '')
         if key.isdigit():
             account = ServiceAccount.query.get(int(key))
             if account:
@@ -1532,11 +1533,14 @@ def _resolve_workspace_list_service_accounts(workspace_list):
             func.lower(ServiceAccount.client_email) == key
         )).all()
         matches.extend(exact_matches)
-        if '@' in key and not matches:
-            domain = key.split('@', 1)[1]
+        if candidate_domain and not matches:
+            domain = candidate_domain
             domain_matches = ServiceAccount.query.filter(or_(
                 func.lower(ServiceAccount.admin_email).like(f'%@{domain}'),
-                func.lower(ServiceAccount.client_email).like(f'%@{domain}')
+                func.lower(ServiceAccount.client_email).like(f'%@{domain}'),
+                func.lower(ServiceAccount.name).like(f'%{domain}%'),
+                func.lower(ServiceAccount.admin_email).like(f'%{domain}%'),
+                func.lower(ServiceAccount.client_email).like(f'%{domain}%')
             )).all()
             matches.extend(domain_matches)
         unique = {account.id: account for account in matches}
