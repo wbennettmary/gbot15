@@ -1243,7 +1243,12 @@ def _upsert_imap_message(account, folder, uid, raw_msg):
     existing.headers_json = json.dumps(headers)
     existing.has_attachments = has_attachments
     existing.received_at = received_at
+    existing.synced_at = datetime.utcnow()
     return existing
+
+def _cleanup_old_inbox_email_messages(hours=4):
+    cutoff = datetime.utcnow() - timedelta(hours=hours)
+    return InboxEmailMessage.query.filter(InboxEmailMessage.synced_at < cutoff).delete(synchronize_session=False)
 
 def _sync_imap_account(account, folder='INBOX', limit=50, mark_errors=True):
     conn = None
@@ -1275,6 +1280,7 @@ def _sync_imap_account(account, folder='INBOX', limit=50, mark_errors=True):
                 continue
             _upsert_imap_message(account, folder, uid, raw_msg)
             synced += 1
+        deleted_old = _cleanup_old_inbox_email_messages()
         account.last_synced_at = datetime.utcnow()
         account.connection_status = 'connected'
         account.message_count = InboxEmailMessage.query.filter_by(imap_account_id=account.id).count()
@@ -1284,6 +1290,8 @@ def _sync_imap_account(account, folder='INBOX', limit=50, mark_errors=True):
             InboxEmailMessage.folder.ilike('%spam%')
         ).count()
         db.session.commit()
+        if deleted_old:
+            app.logger.info(f"Deleted {deleted_old} synced inbox email(s) older than 4 hours")
         return synced, None
     except Exception as e:
         db.session.rollback()
@@ -2174,15 +2182,17 @@ def _sync_test_inbox_folders(inbox):
         synced_total += synced
     return synced_total, errors
 
-def _sync_imap_messages_for_test_id(inbox, test_id):
+def _sync_imap_messages_for_test_id(inbox, test_id, identifiers=None):
     folders = ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk', 'Bulk Mail']
     synced = 0
     searched = 0
     errors = []
     conn = None
+    deleted_old = 0
     token = (test_id or '').strip()
+    exact_identifiers = sorted({identifier for identifier in (identifiers or []) if identifier})
     if not token:
-        return {'synced_messages': 0, 'searched_folders': 0, 'errors': []}
+        return {'synced_messages': 0, 'searched_folders': 0, 'deleted_old_messages': 0, 'errors': []}
     try:
         conn = _imap_connect(inbox)
         for folder in folders:
@@ -2191,7 +2201,10 @@ def _sync_imap_messages_for_test_id(inbox, test_id):
                 continue
             searched += 1
             found_uids = set()
-            for search_term in (f'HEADER X-Test-ID "{token}"', f'TEXT "{token}"'):
+            search_terms = [f'HEADER X-Test-ID "{token}"', f'TEXT "{token}"']
+            for identifier in exact_identifiers:
+                search_terms.extend([f'HEADER X-Test-ID "{identifier}"', f'TEXT "{identifier}"'])
+            for search_term in search_terms:
                 status, data = conn.uid('search', None, search_term)
                 if status == 'OK' and data and data[0]:
                     found_uids.update(data[0].split())
@@ -2208,6 +2221,7 @@ def _sync_imap_messages_for_test_id(inbox, test_id):
                     continue
                 _upsert_imap_message(inbox, folder, uid, raw_msg)
                 synced += 1
+        deleted_old = _cleanup_old_inbox_email_messages()
         inbox.last_synced_at = datetime.utcnow()
         inbox.connection_status = 'connected'
         inbox.message_count = InboxEmailMessage.query.filter_by(imap_account_id=inbox.id).count()
@@ -2218,6 +2232,8 @@ def _sync_imap_messages_for_test_id(inbox, test_id):
         ).count()
         db.session.add(inbox)
         db.session.flush()
+        if deleted_old:
+            app.logger.info(f"Deleted {deleted_old} synced inbox email(s) older than 4 hours")
     except Exception as e:
         errors.append(str(e))
     finally:
@@ -2227,7 +2243,7 @@ def _sync_imap_messages_for_test_id(inbox, test_id):
                 conn.logout()
         except Exception:
             pass
-    return {'synced_messages': synced, 'searched_folders': searched, 'errors': errors}
+    return {'synced_messages': synced, 'searched_folders': searched, 'deleted_old_messages': deleted_old, 'errors': errors}
 
 def _message_database_searchable(message):
     try:
@@ -2291,29 +2307,11 @@ def _detect_message_placements_from_synced(inbox_id, rows, test_id=None):
             'subject': (message.subject or '').strip().lower(),
         })
     for row in rows:
-        row_sender = (row.workspace_sender or '').lower()
-        row_recipient = (row.recipient or '').lower()
-        row_subject = (row.subject or '').strip().lower()
         for record in indexed_messages:
             message = record['message']
             if row.test_identifier and row.test_identifier.lower() in record['searchable_lower']:
                 results[row.test_identifier] = (_placement_from_folder(message.folder), message.folder)
                 info['match_modes']['exact'] += 1
-                break
-            if any(token and token.lower() in record['searchable_lower'] for token in broad_tokens):
-                recipient_matches = not row_recipient or row_recipient in record['recipient']
-                sender_matches = row_sender and record['sender'] == row_sender
-                if sender_matches and recipient_matches:
-                    results[row.test_identifier] = (_placement_from_folder(message.folder), message.folder)
-                    info['match_modes']['broad_sender'] += 1
-                    break
-            subject_matches = row_subject and record['subject'] == row_subject
-            sender_matches = row_sender and record['sender'] == row_sender
-            recipient_matches = not row_recipient or row_recipient in record['recipient']
-            recent_enough = not row.sent_at or not message.received_at or message.received_at >= row.sent_at - timedelta(hours=6)
-            if subject_matches and sender_matches and recipient_matches and recent_enough:
-                results[row.test_identifier] = (_placement_from_folder(message.folder), message.folder)
-                info['match_modes']['sender_subject'] += 1
                 break
     return results, info
 
@@ -2432,10 +2430,11 @@ def api_inbox_poll_test(test_id):
     test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
     if not test:
         return jsonify({'success': False, 'error': 'Test not found'}), 404
+    deleted_old = _cleanup_old_inbox_email_messages()
     messages = InboxDeliverabilityMessage.query.filter_by(test_id=test_id).all()
     pending_by_inbox = {}
     sync_errors = []
-    diagnostic = {'checked_rows': 0, 'matched_rows': 0, 'queued_checked': 0, 'scanned_messages': 0, 'synced_messages': 0, 'searched_folders': 0, 'match_modes': {'exact': 0, 'broad_sender': 0, 'sender_subject': 0}}
+    diagnostic = {'checked_rows': 0, 'matched_rows': 0, 'queued_checked': 0, 'scanned_messages': 0, 'synced_messages': 0, 'searched_folders': 0, 'deleted_old_messages': deleted_old, 'match_modes': {'exact': 0, 'broad_sender': 0, 'sender_subject': 0}}
     for row in messages:
         if row.status in ('FAILED', 'COMPLETED', 'SENT_EXTERNAL'):
             continue
@@ -2457,9 +2456,10 @@ def api_inbox_poll_test(test_id):
                 row.error_message = 'Receiving inbox no longer exists.'
             continue
         try:
-            sync_info = _sync_imap_messages_for_test_id(inbox, test.test_id)
+            sync_info = _sync_imap_messages_for_test_id(inbox, test.test_id, identifiers=[row.test_identifier for row in rows])
             diagnostic['synced_messages'] += sync_info.get('synced_messages', 0)
             diagnostic['searched_folders'] += sync_info.get('searched_folders', 0)
+            diagnostic['deleted_old_messages'] += sync_info.get('deleted_old_messages', 0)
             sync_errors.extend([f'{inbox.email}: {error}' for error in sync_info.get('errors', [])])
             placements, scan_info = _detect_message_placements_from_synced(inbox.id, rows, test_id=test.test_id)
             diagnostic['scanned_messages'] += scan_info.get('scanned_messages', 0)
