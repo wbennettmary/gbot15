@@ -1,0 +1,743 @@
+{% extends "base.html" %}
+
+{% block title %}Inbox Intelligence - GBot Web{% endblock %}
+
+{% block content %}
+<style>
+    .ii-shell {
+        color: #102033;
+        max-width: 1680px;
+        margin: 0 auto;
+        padding: 8px 4px 32px;
+    }
+
+    .ii-hero,
+    .ii-panel,
+    .ii-card {
+        background: rgba(255, 255, 255, 0.92);
+        border: 1px solid rgba(148, 163, 184, 0.22);
+        border-radius: 8px;
+        box-shadow: 0 16px 38px rgba(15, 23, 42, 0.06);
+    }
+
+    .ii-hero {
+        padding: 24px;
+        display: flex;
+        justify-content: space-between;
+        gap: 18px;
+        align-items: center;
+        border-left: 4px solid #2563eb;
+    }
+
+    .ii-title {
+        margin: 0;
+        font-size: 28px;
+        font-weight: 760;
+        letter-spacing: 0;
+    }
+
+    .ii-muted {
+        color: #64748b;
+        font-size: 13px;
+    }
+
+    .ii-actions,
+    .ii-row,
+    .ii-tabs {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+    .ii-btn {
+        border: 1px solid #dbe4ef;
+        background: #fff;
+        color: #1e293b;
+        border-radius: 8px;
+        padding: 9px 13px;
+        font-size: 13px;
+        font-weight: 650;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .ii-btn-primary {
+        background: #2563eb;
+        border-color: #2563eb;
+        color: #fff;
+    }
+
+    .ii-tabs {
+        margin: 18px 0;
+        padding: 8px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        overflow-x: auto;
+        flex-wrap: nowrap;
+    }
+
+    .ii-tab {
+        border: 0;
+        background: transparent;
+        color: #64748b;
+        padding: 9px 12px;
+        border-radius: 8px;
+        white-space: nowrap;
+        font-size: 13px;
+        font-weight: 650;
+    }
+
+    .ii-tab.active {
+        background: #fff;
+        color: #1d4ed8;
+        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+    }
+
+    .ii-grid {
+        display: grid;
+        gap: 14px;
+    }
+
+    .ii-kpis {
+        grid-template-columns: repeat(5, minmax(150px, 1fr));
+    }
+
+    .ii-card {
+        padding: 16px;
+    }
+
+    .ii-card-label {
+        color: #64748b;
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+
+    .ii-card-value {
+        font-size: 26px;
+        font-weight: 780;
+        margin: 6px 0 2px;
+        color: #0f172a;
+    }
+
+    .ii-layout-2 {
+        grid-template-columns: 1.45fr 1fr;
+    }
+
+    .ii-layout-3 {
+        grid-template-columns: 280px minmax(360px, 1fr) 360px;
+    }
+
+    .ii-panel {
+        padding: 18px;
+    }
+
+    .ii-panel h3,
+    .ii-panel h4 {
+        margin: 0 0 12px;
+        font-size: 17px;
+        font-weight: 760;
+    }
+
+    .ii-chart {
+        height: 280px;
+        display: grid;
+        grid-template-columns: repeat(12, 1fr);
+        align-items: end;
+        gap: 10px;
+        padding: 16px 8px 6px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background: linear-gradient(#f8fafc 1px, transparent 1px) 0 0 / 100% 25%;
+    }
+
+    .ii-bar {
+        border-radius: 6px 6px 2px 2px;
+        min-height: 28px;
+        background: linear-gradient(180deg, #2563eb, #10b981);
+    }
+
+    .ii-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 999px;
+        padding: 4px 9px;
+        font-size: 12px;
+        font-weight: 700;
+        border: 1px solid transparent;
+    }
+
+    .ii-chip.green { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+    .ii-chip.yellow { background: #fef9c3; color: #854d0e; border-color: #fde68a; }
+    .ii-chip.red { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+    .ii-chip.gray { background: #f1f5f9; color: #475569; border-color: #e2e8f0; }
+    .ii-chip.blue { background: #dbeafe; color: #1d4ed8; border-color: #bfdbfe; }
+
+    .ii-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+    }
+
+    .ii-table th,
+    .ii-table td {
+        padding: 11px 10px;
+        border-bottom: 1px solid #e2e8f0;
+        vertical-align: middle;
+    }
+
+    .ii-table th {
+        color: #64748b;
+        font-size: 12px;
+        font-weight: 760;
+        background: #f8fafc;
+    }
+
+    .ii-form-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+    }
+
+    .ii-field label {
+        display: block;
+        font-size: 12px;
+        font-weight: 720;
+        color: #475569;
+        margin-bottom: 6px;
+    }
+
+    .ii-input,
+    .ii-select,
+    .ii-textarea {
+        width: 100%;
+        border: 1px solid #dbe4ef;
+        border-radius: 8px;
+        padding: 10px 11px;
+        background: #fff;
+        color: #0f172a;
+        font-size: 13px;
+    }
+
+    .ii-textarea {
+        min-height: 120px;
+        resize: vertical;
+    }
+
+    .ii-tabpane {
+        display: none;
+    }
+
+    .ii-tabpane.active {
+        display: block;
+    }
+
+    .ii-inbox-card {
+        display: grid;
+        grid-template-columns: 44px 1fr auto;
+        gap: 12px;
+        align-items: center;
+        padding: 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background: #fff;
+    }
+
+    .ii-provider {
+        width: 44px;
+        height: 44px;
+        display: grid;
+        place-items: center;
+        border-radius: 8px;
+        background: #eff6ff;
+        color: #2563eb;
+        font-size: 18px;
+    }
+
+    .ii-mailbox {
+        min-height: 640px;
+    }
+
+    .ii-folder {
+        display: flex;
+        justify-content: space-between;
+        padding: 9px 10px;
+        border-radius: 8px;
+        color: #475569;
+        font-size: 13px;
+    }
+
+    .ii-folder.active {
+        background: #eff6ff;
+        color: #1d4ed8;
+        font-weight: 720;
+    }
+
+    .ii-message {
+        padding: 12px;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .ii-message.active {
+        background: #f8fafc;
+        border-left: 3px solid #2563eb;
+    }
+
+    .ii-preview-frame {
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 18px;
+        background: #fff;
+        min-height: 220px;
+    }
+
+    .ii-template-preview.dark {
+        background: #111827;
+        color: #e5e7eb;
+    }
+
+    .ii-steps {
+        counter-reset: step;
+        display: grid;
+        gap: 12px;
+    }
+
+    .ii-step {
+        display: grid;
+        grid-template-columns: 34px 1fr;
+        gap: 12px;
+        padding: 13px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background: #fff;
+    }
+
+    .ii-step::before {
+        counter-increment: step;
+        content: counter(step);
+        width: 28px;
+        height: 28px;
+        border-radius: 999px;
+        display: grid;
+        place-items: center;
+        background: #2563eb;
+        color: #fff;
+        font-weight: 760;
+        font-size: 12px;
+    }
+
+    .ii-matrix td:not(:first-child),
+    .ii-matrix th:not(:first-child) {
+        text-align: center;
+    }
+
+    @media (max-width: 1200px) {
+        .ii-kpis { grid-template-columns: repeat(3, minmax(150px, 1fr)); }
+        .ii-layout-2,
+        .ii-layout-3 { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 720px) {
+        .ii-hero { align-items: flex-start; flex-direction: column; }
+        .ii-kpis,
+        .ii-form-grid { grid-template-columns: 1fr; }
+        .ii-title { font-size: 24px; }
+    }
+</style>
+
+<div class="ii-shell">
+    <section class="ii-hero">
+        <div>
+            <h1 class="ii-title"><i class="fas fa-magnifying-glass-chart me-2 text-primary"></i>Inbox Intelligence</h1>
+            <p class="ii-muted mb-0 mt-2">Connect inboxes, analyze email patterns, create smarter templates, and test Workspace email deliverability.</p>
+        </div>
+        <div class="ii-actions">
+            <select class="ii-select" style="width: 150px;">
+                <option>7 days</option>
+                <option>Last 24 hours</option>
+                <option>30 days</option>
+                <option>90 days</option>
+                <option>Custom</option>
+            </select>
+            <button class="ii-btn"><i class="fas fa-search"></i> Search</button>
+            <button class="ii-btn ii-btn-primary"><i class="fas fa-plus"></i> Connect Inbox</button>
+        </div>
+    </section>
+
+    <nav class="ii-tabs" aria-label="Inbox Intelligence sections">
+        <button class="ii-tab active" data-tab="overview">Overview</button>
+        <button class="ii-tab" data-tab="connected">Connected Inboxes</button>
+        <button class="ii-tab" data-tab="explorer">Inbox Explorer</button>
+        <button class="ii-tab" data-tab="content">Content Intelligence</button>
+        <button class="ii-tab" data-tab="templates">Template Studio</button>
+        <button class="ii-tab" data-tab="ai">AI Generator</button>
+        <button class="ii-tab" data-tab="tests">Deliverability Tests</button>
+        <button class="ii-tab" data-tab="senders">Workspace Senders</button>
+        <button class="ii-tab" data-tab="history">Test History</button>
+        <button class="ii-tab" data-tab="settings">Settings</button>
+    </nav>
+
+    <section id="overview" class="ii-tabpane active">
+        <div class="ii-grid ii-kpis mb-3">
+            <div class="ii-card"><div class="ii-card-label">Connected inboxes</div><div class="ii-card-value">18</div><div class="ii-muted">15 active IMAP accounts</div></div>
+            <div class="ii-card"><div class="ii-card-label">Workspace senders</div><div class="ii-card-value">42</div><div class="ii-muted">37 available for tests</div></div>
+            <div class="ii-card"><div class="ii-card-label">Emails analyzed</div><div class="ii-card-value">12.8k</div><div class="ii-muted">Metadata-first analysis</div></div>
+            <div class="ii-card"><div class="ii-card-label">Templates created</div><div class="ii-card-value">64</div><div class="ii-muted">11 active variants</div></div>
+            <div class="ii-card"><div class="ii-card-label">Tests running</div><div class="ii-card-value">3</div><div class="ii-muted">Waiting for delivery windows</div></div>
+            <div class="ii-card"><div class="ii-card-label">Inbox placement</div><div class="ii-card-value">92.4%</div><div class="ii-muted">231 of 250 reached inbox</div></div>
+            <div class="ii-card"><div class="ii-card-label">Spam placement</div><div class="ii-card-value">4.8%</div><div class="ii-muted">12 observed in spam/junk</div></div>
+            <div class="ii-card"><div class="ii-card-label">Not received</div><div class="ii-card-value">2.8%</div><div class="ii-muted">Pending or not found</div></div>
+            <div class="ii-card"><div class="ii-card-label">Tests executed</div><div class="ii-card-value">250</div><div class="ii-muted">Across 4 providers</div></div>
+            <div class="ii-card"><div class="ii-card-label">Failed tests</div><div class="ii-card-value">7</div><div class="ii-muted">Mostly auth expiration</div></div>
+        </div>
+
+        <div class="ii-grid ii-layout-2">
+            <div class="ii-panel">
+                <div class="ii-row justify-content-between mb-2">
+                    <h3>Deliverability Trend</h3>
+                    <div class="ii-row">
+                        <span class="ii-chip green">Inbox %</span>
+                        <span class="ii-chip red">Spam %</span>
+                        <span class="ii-chip yellow">Promotions %</span>
+                        <span class="ii-chip gray">Missing %</span>
+                    </div>
+                </div>
+                <div class="ii-chart">
+                    <div class="ii-bar" style="height: 76%;"></div>
+                    <div class="ii-bar" style="height: 81%;"></div>
+                    <div class="ii-bar" style="height: 73%;"></div>
+                    <div class="ii-bar" style="height: 88%;"></div>
+                    <div class="ii-bar" style="height: 84%;"></div>
+                    <div class="ii-bar" style="height: 91%;"></div>
+                    <div class="ii-bar" style="height: 86%;"></div>
+                    <div class="ii-bar" style="height: 92%;"></div>
+                    <div class="ii-bar" style="height: 90%;"></div>
+                    <div class="ii-bar" style="height: 94%;"></div>
+                    <div class="ii-bar" style="height: 89%;"></div>
+                    <div class="ii-bar" style="height: 93%;"></div>
+                </div>
+            </div>
+            <div class="ii-grid">
+                <div class="ii-panel">
+                    <h3>Provider Breakdown</h3>
+                    <table class="ii-table">
+                        <tr><th>Provider</th><th>Inbox</th><th>Spam/Junk</th><th>Missing</th></tr>
+                        <tr><td>Gmail</td><td>94%</td><td>3%</td><td>3%</td></tr>
+                        <tr><td>Outlook</td><td>81%</td><td>16%</td><td>3%</td></tr>
+                        <tr><td>Yahoo</td><td>88%</td><td>9%</td><td>3%</td></tr>
+                    </table>
+                </div>
+                <div class="ii-panel">
+                    <h3>Recent Tests</h3>
+                    <div class="ii-row justify-content-between"><span>#DLV-82923 Product update</span><span class="ii-chip green">96% Inbox</span></div>
+                    <div class="ii-row justify-content-between mt-2"><span>#DLV-82911 Trial reminder</span><span class="ii-chip yellow">91% Inbox</span></div>
+                    <div class="ii-row justify-content-between mt-2"><span>#DLV-82890 Account notice</span><span class="ii-chip green">100% Inbox</span></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="connected" class="ii-tabpane">
+        <div class="ii-grid ii-layout-2">
+            <div class="ii-panel">
+                <div class="ii-row justify-content-between mb-3">
+                    <h3>Connected IMAP Accounts</h3>
+                    <button class="ii-btn ii-btn-primary"><i class="fas fa-plus"></i> Connect Inbox</button>
+                </div>
+                <div class="ii-grid">
+                    {% set inboxes = [
+                        ('Gmail', 'qa.seed@gmail.com', 'Connected', 'green', '2 min ago', '3,421', '11', '3,108', '27'),
+                        ('Outlook', 'placement@outlook.com', 'Syncing', 'blue', 'Running', '1,882', '8', '1,601', '89'),
+                        ('Yahoo', 'panel.seed@yahoo.com', 'Authentication required', 'yellow', '3 days ago', '902', '6', '734', '44'),
+                        ('Generic IMAP', 'alerts@company.com', 'Paused', 'gray', 'Yesterday', '5,210', '18', '4,980', '12')
+                    ] %}
+                    {% for provider, email, status, color, sync, messages, folders, inbox_count, spam_count in inboxes %}
+                    <div class="ii-inbox-card">
+                        <div class="ii-provider"><i class="fas fa-inbox"></i></div>
+                        <div>
+                            <strong>{{ email }}</strong>
+                            <div class="ii-muted">{{ provider }} · Last sync {{ sync }} · {{ messages }} messages · {{ folders }} folders</div>
+                            <div class="ii-row mt-2">
+                                <span class="ii-chip {{ color }}">{{ status }}</span>
+                                <span class="ii-chip gray">Inbox {{ inbox_count }}</span>
+                                <span class="ii-chip gray">Spam/Junk {{ spam_count }}</span>
+                                <span class="ii-chip green">Auto-sync on</span>
+                            </div>
+                        </div>
+                        <div class="ii-actions">
+                            <button class="ii-btn"><i class="fas fa-folder-open"></i></button>
+                            <button class="ii-btn"><i class="fas fa-rotate"></i></button>
+                            <button class="ii-btn"><i class="fas fa-gear"></i></button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="ii-panel">
+                <h3>Analyze Inbox Sources</h3>
+                <input class="ii-input mb-2" placeholder="Search accounts">
+                <div class="ii-row mb-3">
+                    <button class="ii-btn">Select all</button>
+                    <button class="ii-btn">Deselect all</button>
+                    <select class="ii-select" style="width: 180px;"><option>Select by provider</option><option>Gmail</option><option>Outlook</option><option>Yahoo</option></select>
+                </div>
+                <label class="d-block mb-2"><input type="checkbox" checked> qa.seed@gmail.com</label>
+                <label class="d-block mb-2"><input type="checkbox" checked> placement@outlook.com</label>
+                <label class="d-block mb-2"><input type="checkbox"> panel.seed@yahoo.com</label>
+                <label class="d-block mb-4"><input type="checkbox" checked> alerts@company.com</label>
+                <h4>Generic IMAP Connection</h4>
+                <div class="ii-form-grid">
+                    <div class="ii-field"><label>IMAP hostname</label><input class="ii-input" placeholder="imap.example.com"></div>
+                    <div class="ii-field"><label>Port</label><input class="ii-input" value="993"></div>
+                    <div class="ii-field"><label>TLS/SSL</label><select class="ii-select"><option>Enabled</option><option>Disabled</option></select></div>
+                    <div class="ii-field"><label>Username</label><input class="ii-input" placeholder="name@example.com"></div>
+                    <div class="ii-field" style="grid-column: 1 / -1;"><label>Password or app password</label><input class="ii-input" type="password" placeholder="Stored encrypted; never returned to the browser"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="explorer" class="ii-tabpane">
+        <div class="ii-grid ii-layout-3 ii-mailbox">
+            <aside class="ii-panel">
+                <h3>Folders</h3>
+                {% for folder, count in [('Inbox', 3108), ('Primary', 1840), ('Promotions', 441), ('Updates', 617), ('Social', 78), ('Sent', 230), ('Spam', 27), ('Trash', 18)] %}
+                <div class="ii-folder {{ 'active' if loop.first else '' }}"><span>{{ folder }}</span><span>{{ count }}</span></div>
+                {% endfor %}
+                <hr>
+                <h4>Filters</h4>
+                <input class="ii-input mb-2" placeholder="Sender, domain, subject">
+                <select class="ii-select mb-2"><option>All providers</option><option>Gmail</option><option>Outlook</option></select>
+                <select class="ii-select"><option>Any date</option><option>Last 24 hours</option><option>7 days</option></select>
+            </aside>
+            <main class="ii-panel">
+                <h3>Messages</h3>
+                {% for sender, domain, subject, folder in [
+                    ('Stripe', 'stripe.com', 'Your payout is on the way', 'Primary'),
+                    ('Linear', 'linear.app', 'Weekly workspace summary', 'Updates'),
+                    ('Figma', 'figma.com', 'Team file activity digest', 'Promotions'),
+                    ('GitHub', 'github.com', 'Security alert resolved', 'Primary')
+                ] %}
+                <div class="ii-message {{ 'active' if loop.first else '' }}">
+                    <div class="ii-row justify-content-between"><strong>{{ sender }}</strong><span class="ii-muted">Today</span></div>
+                    <div>{{ subject }}</div>
+                    <div class="ii-muted">{{ domain }} · {{ folder }} · SPF/DKIM available · <i class="fas fa-paperclip"></i></div>
+                </div>
+                {% endfor %}
+            </main>
+            <aside class="ii-panel">
+                <h3>Email Detail</h3>
+                <div class="ii-preview-frame">
+                    <div class="ii-muted">From Stripe &lt;updates@stripe.com&gt;</div>
+                    <h4>Your payout is on the way</h4>
+                    <p>Plain-text and sanitized HTML previews appear here with remote scripts blocked.</p>
+                    <button class="ii-btn ii-btn-primary">View CTA</button>
+                </div>
+                <h4 class="mt-3">Structure Analysis</h4>
+                <div class="ii-row"><span class="ii-chip blue">1 CTA</span><span class="ii-chip gray">3 links</span><span class="ii-chip gray">2 images</span></div>
+                <details class="mt-3"><summary>Headers</summary><pre class="ii-muted mt-2">Authentication-Results: spf=pass dkim=pass dmarc=pass</pre></details>
+            </aside>
+        </div>
+    </section>
+
+    <section id="content" class="ii-tabpane">
+        <div class="ii-grid ii-layout-2">
+            <div class="ii-panel">
+                <h3>Observed Inbox Patterns</h3>
+                <p>Most successfully received account notifications use concise subjects between 30-55 characters, one main CTA, limited imagery, and short transactional-style body copy.</p>
+                <div class="ii-grid ii-kpis">
+                    <div class="ii-card"><div class="ii-card-label">Subject length</div><div class="ii-card-value">42</div><div class="ii-muted">Median characters</div></div>
+                    <div class="ii-card"><div class="ii-card-label">CTA count</div><div class="ii-card-value">1.3</div><div class="ii-muted">Average per email</div></div>
+                    <div class="ii-card"><div class="ii-card-label">HTML size</div><div class="ii-card-value">38 KB</div><div class="ii-muted">Median</div></div>
+                </div>
+            </div>
+            <div class="ii-panel">
+                <h3>Content Signals</h3>
+                <table class="ii-table">
+                    <tr><th>Signal</th><th>Observed pattern</th></tr>
+                    <tr><td>Greeting style</td><td>Direct account-context intro</td></tr>
+                    <tr><td>Preview text</td><td>Mirrors the primary action</td></tr>
+                    <tr><td>Footer</td><td>Company, preference link, mailing address</td></tr>
+                    <tr><td>Personalization</td><td>First name and workspace name</td></tr>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <section id="templates" class="ii-tabpane">
+        <div class="ii-grid ii-layout-2">
+            <div class="ii-panel">
+                <div class="ii-row justify-content-between"><h3>Template Studio</h3><select class="ii-select" style="width: 180px;"><option>Insert variable</option><option>{{ '{{first_name}}' }}</option><option>{{ '{{company}}' }}</option><option>{{ '{{unsubscribe_url}}' }}</option></select></div>
+                <div class="ii-form-grid">
+                    <div class="ii-field"><label>Subject</label><input class="ii-input" value="Your analytics dashboard is ready"></div>
+                    <div class="ii-field"><label>Preview text</label><input class="ii-input" value="A quick update from {{ '{{company}}' }}"></div>
+                    <div class="ii-field"><label>Editor mode</label><select class="ii-select"><option>Rich text</option><option>Raw HTML</option><option>Plain text</option></select></div>
+                    <div class="ii-field"><label>Preview size</label><select class="ii-select" id="previewSize"><option>Desktop</option><option>Tablet</option><option>Mobile</option></select></div>
+                    <div class="ii-field" style="grid-column: 1 / -1;"><label>HTML body</label><textarea class="ii-textarea">&lt;h1&gt;New dashboard&lt;/h1&gt;&lt;p&gt;Hi {{ '{{first_name}}' }}, your dashboard is ready.&lt;/p&gt;&lt;a href="#"&gt;View dashboard&lt;/a&gt;</textarea></div>
+                </div>
+                <div class="ii-row mt-3">
+                    <button class="ii-btn"><i class="fas fa-heading"></i> Heading</button>
+                    <button class="ii-btn"><i class="fas fa-align-left"></i> Text</button>
+                    <button class="ii-btn"><i class="fas fa-image"></i> Image</button>
+                    <button class="ii-btn"><i class="fas fa-square"></i> Button</button>
+                    <button class="ii-btn"><i class="fas fa-minus"></i> Divider</button>
+                </div>
+            </div>
+            <div class="ii-panel">
+                <div class="ii-row justify-content-between"><h3>Live Preview</h3><button class="ii-btn" id="togglePreviewMode"><i class="fas fa-moon"></i> Dark mode</button></div>
+                <div class="ii-preview-frame ii-template-preview" id="templatePreview">
+                    <h2 style="margin-top:0;">Your analytics dashboard is ready</h2>
+                    <p>Hi Ava, your dashboard has new engagement reporting and workspace-level trends.</p>
+                    <p><a class="ii-btn ii-btn-primary" href="#">View dashboard</a></p>
+                    <hr><p class="ii-muted">Manage preferences · Unsubscribe</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="ai" class="ii-tabpane">
+        <div class="ii-grid ii-layout-2">
+            <div class="ii-panel">
+                <h3>AI Email Generator</h3>
+                <div class="ii-form-grid">
+                    <div class="ii-field"><label>Campaign purpose</label><select class="ii-select"><option>Product announcement</option><option>Account notification</option><option>Follow-up</option><option>Newsletter</option><option>Custom</option></select></div>
+                    <div class="ii-field"><label>Audience</label><input class="ii-input" placeholder="Workspace administrators"></div>
+                    <div class="ii-field"><label>Tone</label><select class="ii-select"><option>Professional</option><option>Friendly</option><option>Warm</option><option>Concise</option><option>Premium</option></select></div>
+                    <div class="ii-field"><label>Length</label><select class="ii-select"><option>Short</option><option>Medium</option><option>Long</option></select></div>
+                    <div class="ii-field" style="grid-column: 1 / -1;"><label>Instructions</label><textarea class="ii-textarea" placeholder="Create a short product update introducing our new analytics dashboard."></textarea></div>
+                </div>
+                <button class="ii-btn ii-btn-primary mt-3"><i class="fas fa-wand-magic-sparkles"></i> Generate Email</button>
+            </div>
+            <div class="ii-panel">
+                <h3>Generated Output</h3>
+                <p><strong>Subject suggestions</strong></p>
+                <ol><li>Your new analytics dashboard is ready</li><li>A clearer view of workspace performance</li><li>New reporting tools for your team</li></ol>
+                <p><strong>Preview text</strong><br><span class="ii-muted">See engagement trends, export reports, and compare activity in one place.</span></p>
+                <div class="ii-row">
+                    <button class="ii-btn">Regenerate</button>
+                    <button class="ii-btn">Make shorter</button>
+                    <button class="ii-btn">More professional</button>
+                    <button class="ii-btn">Rewrite CTA</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="tests" class="ii-tabpane">
+        <div class="ii-grid ii-layout-2">
+            <div class="ii-panel">
+                <h3>Deliverability Test Builder</h3>
+                <div class="ii-steps">
+                    <div class="ii-step"><div><strong>Select Template</strong><p class="ii-muted mb-0">Existing template, AI-generated draft, or custom content.</p></div></div>
+                    <div class="ii-step"><div><strong>Select Workspace Senders</strong><p class="ii-muted mb-0">Only authorized Workspace senders managed in this SaaS.</p></div></div>
+                    <div class="ii-step"><div><strong>Select Test Inboxes</strong><p class="ii-muted mb-0">Choose owned or explicitly authorized Gmail, Outlook, Yahoo, and IMAP inboxes.</p></div></div>
+                    <div class="ii-step"><div><strong>Configure</strong><p class="ii-muted mb-0">Subject, From name, Reply-To, HTML, plain text, and dummy variables.</p></div></div>
+                    <div class="ii-step"><div><strong>Run Test</strong><p class="ii-muted mb-0">Each message receives a unique X-Test-ID and is polled during the observation window.</p></div></div>
+                </div>
+                <button class="ii-btn ii-btn-primary mt-3"><i class="fas fa-play"></i> Run Deliverability Test</button>
+            </div>
+            <div class="ii-panel">
+                <h3>Results Matrix</h3>
+                <table class="ii-table ii-matrix">
+                    <tr><th>Workspace Sender</th><th>Gmail</th><th>Outlook</th><th>Yahoo</th><th>Overall</th></tr>
+                    <tr><td>user1@company.com</td><td><span class="ii-chip green">Inbox</span></td><td><span class="ii-chip green">Inbox</span></td><td><span class="ii-chip red">Spam</span></td><td>67%</td></tr>
+                    <tr><td>user2@company.com</td><td><span class="ii-chip green">Inbox</span></td><td><span class="ii-chip green">Inbox</span></td><td><span class="ii-chip green">Inbox</span></td><td>100%</td></tr>
+                    <tr><td>user3@company.com</td><td><span class="ii-chip gray">Pending</span></td><td><span class="ii-chip yellow">Other</span></td><td><span class="ii-chip red">Junk</span></td><td>33%</td></tr>
+                </table>
+                <h4 class="mt-3">Sender Health Score</h4>
+                <div class="ii-card"><div class="ii-card-label">Deliverability Score</div><div class="ii-card-value">86 / 100</div><div class="ii-muted">Internal score based on observed tests, authentication signals, and provider consistency.</div></div>
+            </div>
+        </div>
+    </section>
+
+    <section id="senders" class="ii-tabpane">
+        <div class="ii-panel">
+            <div class="ii-row justify-content-between mb-3"><h3>Workspace Sender Accounts</h3><div class="ii-row"><select class="ii-select" style="width: 160px;"><option>All domains</option></select><select class="ii-select" style="width: 160px;"><option>All statuses</option></select></div></div>
+            <table class="ii-table">
+                <tr><th>Sender</th><th>Status</th><th>Tests</th><th>Inbox Rate</th><th>Spam Rate</th><th>Selection</th></tr>
+                <tr><td>user1@company.com</td><td><span class="ii-chip green">Active</span></td><td>54</td><td>96%</td><td>2%</td><td><input type="checkbox" checked></td></tr>
+                <tr><td>user2@company.com</td><td><span class="ii-chip green">Active</span></td><td>49</td><td>84%</td><td>12%</td><td><input type="checkbox" checked></td></tr>
+                <tr><td>user3@company.com</td><td><span class="ii-chip yellow">Warning</span></td><td>31</td><td>61%</td><td>34%</td><td><input type="checkbox"></td></tr>
+            </table>
+        </div>
+    </section>
+
+    <section id="history" class="ii-tabpane">
+        <div class="ii-panel">
+            <div class="ii-row justify-content-between mb-3"><h3>Test History</h3><input class="ii-input" style="max-width: 340px;" placeholder="Search sender, recipient, domain, subject, test ID"></div>
+            <table class="ii-table">
+                <tr><th>Test name</th><th>Date</th><th>Template</th><th>Senders</th><th>Inboxes</th><th>Sent</th><th>Inbox %</th><th>Spam %</th><th>Pending %</th><th>Created by</th></tr>
+                <tr><td>#DLV-82923 Product update</td><td>Today</td><td>Analytics v2</td><td>4</td><td>9</td><td>36</td><td>96%</td><td>2%</td><td>2%</td><td>{{ user or 'admin' }}</td></tr>
+                <tr><td>#DLV-82911 Trial reminder</td><td>Yesterday</td><td>Trial v5</td><td>3</td><td>8</td><td>24</td><td>91%</td><td>6%</td><td>3%</td><td>{{ user or 'admin' }}</td></tr>
+            </table>
+            <details class="mt-3">
+                <summary><strong>Deliverability Test #DLV-82923 Detail</strong></summary>
+                <div class="ii-grid ii-kpis mt-3">
+                    <div class="ii-card"><div class="ii-card-label">Sent</div><div class="ii-card-value">30</div></div>
+                    <div class="ii-card"><div class="ii-card-label">Inbox</div><div class="ii-card-value">25</div></div>
+                    <div class="ii-card"><div class="ii-card-label">Promotions</div><div class="ii-card-value">2</div></div>
+                    <div class="ii-card"><div class="ii-card-label">Spam</div><div class="ii-card-value">2</div></div>
+                    <div class="ii-card"><div class="ii-card-label">Pending</div><div class="ii-card-value">1</div></div>
+                </div>
+            </details>
+        </div>
+    </section>
+
+    <section id="settings" class="ii-tabpane">
+        <div class="ii-grid ii-layout-2">
+            <div class="ii-panel">
+                <h3>OpenRouter Configuration</h3>
+                <div class="ii-form-grid">
+                    <div class="ii-field" style="grid-column: 1 / -1;"><label>API key</label><input class="ii-input" type="password" placeholder="Encrypted at rest; never exposed after storage"></div>
+                    <div class="ii-field"><label>Default model</label><select class="ii-select"><option>Claude / GPT / Gemini / Llama / Other</option></select></div>
+                    <div class="ii-field"><label>Fallback model</label><select class="ii-select"><option>OpenRouter fallback model</option></select></div>
+                    <div class="ii-field"><label>Temperature</label><input class="ii-input" value="0.7"></div>
+                    <div class="ii-field"><label>Maximum output tokens</label><input class="ii-input" value="1800"></div>
+                </div>
+            </div>
+            <div class="ii-panel">
+                <h3>Security, Privacy & Jobs</h3>
+                <label class="d-block mb-2"><input type="radio" name="ai_access" checked> Analyze metadata only</label>
+                <label class="d-block mb-2"><input type="radio" name="ai_access"> Analyze selected messages</label>
+                <label class="d-block mb-3"><input type="radio" name="ai_access"> Analyze selected message content</label>
+                <table class="ii-table">
+                    <tr><th>Background job</th><th>Status</th></tr>
+                    <tr><td>IMAP synchronization</td><td><span class="ii-chip blue">QUEUED</span></td></tr>
+                    <tr><td>Test-result polling</td><td><span class="ii-chip yellow">WAITING_FOR_DELIVERY</span></td></tr>
+                    <tr><td>Header analysis</td><td><span class="ii-chip gray">PENDING</span></td></tr>
+                </table>
+                <p class="ii-muted mt-3 mb-0">Credential values, OAuth refresh tokens, rendered email HTML, and audit events require backend enforcement before production use.</p>
+            </div>
+        </div>
+    </section>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('.ii-tab').forEach((tab) => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.ii-tab').forEach((item) => item.classList.remove('active'));
+                document.querySelectorAll('.ii-tabpane').forEach((pane) => pane.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById(tab.dataset.tab).classList.add('active');
+            });
+        });
+
+        const previewToggle = document.getElementById('togglePreviewMode');
+        const preview = document.getElementById('templatePreview');
+        if (previewToggle && preview) {
+            previewToggle.addEventListener('click', () => {
+                preview.classList.toggle('dark');
+                previewToggle.innerHTML = preview.classList.contains('dark')
+                    ? '<i class="fas fa-sun"></i> Light mode'
+                    : '<i class="fas fa-moon"></i> Dark mode';
+            });
+        }
+    });
+</script>
+{% endblock %}

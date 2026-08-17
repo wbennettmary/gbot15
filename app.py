@@ -449,8 +449,8 @@ def login_required(f):
 
 # Role-based permissions configuration
 ROLE_PERMISSIONS = {
-    'admin': ['dashboard', 'aws_management', 'digitalocean_management', 'settings', 'users', 'whitelist', 'list_management'],
-    'mailer': ['dashboard', 'aws_management', 'digitalocean_management', 'settings', 'list_management'],
+    'admin': ['dashboard', 'aws_management', 'digitalocean_management', 'settings', 'users', 'whitelist', 'list_management', 'inbox_intelligence'],
+    'mailer': ['dashboard', 'aws_management', 'digitalocean_management', 'settings', 'list_management', 'inbox_intelligence'],
     'support': ['dashboard', 'digitalocean_management', 'list_management']
 }
 
@@ -1049,6 +1049,13 @@ def list_management():
                 return redirect(url_for('dashboard'))
     
     return render_template('list_management.html', user=session.get('user'), role=session.get('role'))
+
+@app.route('/inbox-intelligence')
+@login_required
+@permission_required('inbox_intelligence')
+def inbox_intelligence():
+    """Inbox Intelligence workspace for mailbox analysis and controlled deliverability testing."""
+    return render_template('inbox_intelligence.html', user=session.get('user'), role=session.get('role'))
 
 @app.route('/api/lists', methods=['GET'])
 @login_required
