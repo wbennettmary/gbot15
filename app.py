@@ -2149,6 +2149,114 @@ def _detect_message_placements_from_synced(inbox_id, rows):
                 break
     return results
 
+def _message_record_from_raw(raw_msg, folder):
+    msg = message_from_bytes(raw_msg)
+    sender_raw = _decode_header_value(msg.get('From'))
+    sender_email = parseaddr(sender_raw)[1].lower()
+    recipient_raw = _decode_header_value(msg.get('To'))
+    subject = _decode_header_value(msg.get('Subject'))
+    x_test_id = _decode_header_value(msg.get('X-Test-ID'))
+    message_id = _decode_header_value(msg.get('Message-ID'))
+    date_header = msg.get('Date')
+    received_at = None
+    if date_header:
+        try:
+            received_at = parsedate_to_datetime(date_header)
+            if received_at and received_at.tzinfo:
+                received_at = received_at.replace(tzinfo=None)
+        except Exception:
+            received_at = None
+    plain_text, html_content, _ = _message_text_parts(msg)
+    raw_text = raw_msg.decode('utf-8', errors='ignore')
+    searchable = '\n'.join([
+        x_test_id or '',
+        message_id or '',
+        subject or '',
+        sender_raw or '',
+        recipient_raw or '',
+        plain_text or '',
+        html_content or '',
+        raw_text,
+    ])
+    return {
+        'folder': folder,
+        'placement': _placement_from_folder(folder),
+        'sender': sender_email,
+        'recipient': recipient_raw.lower(),
+        'subject': (subject or '').strip().lower(),
+        'x_test_id': x_test_id,
+        'message_id': message_id,
+        'received_at': received_at,
+        'searchable': searchable,
+    }
+
+def _scan_imap_for_test_rows(inbox, rows, per_folder_limit=500):
+    folders = ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk', 'Bulk Mail']
+    identifiers = {row.test_identifier for row in rows if row.test_identifier}
+    broad_tokens = sorted({identifier.rsplit('-', 1)[0] for identifier in identifiers if '-' in identifier}, key=len, reverse=True)
+    records = []
+    errors = []
+    conn = None
+    try:
+        conn = _imap_connect(inbox)
+        for folder in folders:
+            status, _ = conn.select(folder, readonly=True)
+            if status != 'OK':
+                continue
+            status, data = conn.uid('search', None, 'ALL')
+            if status != 'OK':
+                continue
+            uids = (data[0] or b'').split()[-int(per_folder_limit):]
+            for uid in reversed(uids):
+                fetch_status, fetch_data = conn.uid('fetch', uid, '(RFC822)')
+                if fetch_status != 'OK' or not fetch_data:
+                    continue
+                raw_msg = None
+                for item in fetch_data:
+                    if isinstance(item, tuple) and item[1]:
+                        raw_msg = item[1]
+                        break
+                if not raw_msg:
+                    continue
+                raw_text = raw_msg.decode('utf-8', errors='ignore')
+                if not any(identifier in raw_text for identifier in identifiers) and not any(token in raw_text for token in broad_tokens):
+                    continue
+                records.append(_message_record_from_raw(raw_msg, folder))
+    except Exception as e:
+        errors.append(str(e))
+    finally:
+        try:
+            if conn:
+                conn.close()
+                conn.logout()
+        except Exception:
+            pass
+
+    placements = {}
+    match_modes = {'exact': 0, 'broad_sender': 0, 'sender_subject': 0}
+    for row in rows:
+        row_sender = (row.workspace_sender or '').lower()
+        row_recipient = (row.recipient or '').lower()
+        row_subject = (row.subject or '').strip().lower()
+        for record in records:
+            if row.test_identifier and row.test_identifier in record['searchable']:
+                placements[row.test_identifier] = (record['placement'], record['folder'])
+                match_modes['exact'] += 1
+                break
+            broad_match = any(token and token in record['searchable'] for token in broad_tokens)
+            sender_match = row_sender and record['sender'] == row_sender
+            recipient_match = not row_recipient or row_recipient in record['recipient']
+            if broad_match and sender_match and recipient_match:
+                placements[row.test_identifier] = (record['placement'], record['folder'])
+                match_modes['broad_sender'] += 1
+                break
+            subject_match = row_subject and record['subject'] == row_subject
+            if sender_match and subject_match and recipient_match:
+                placements[row.test_identifier] = (record['placement'], record['folder'])
+                match_modes['sender_subject'] += 1
+                break
+    return placements, {'scanned_messages': len(records), 'match_modes': match_modes, 'errors': errors}
+
 @app.route('/api/inbox-intelligence/tests/<test_id>/poll', methods=['POST'])
 @login_required
 @permission_required('inbox_intelligence')
@@ -2159,7 +2267,7 @@ def api_inbox_poll_test(test_id):
     messages = InboxDeliverabilityMessage.query.filter_by(test_id=test_id).all()
     pending_by_inbox = {}
     sync_errors = []
-    diagnostic = {'checked_rows': 0, 'matched_rows': 0, 'queued_checked': 0}
+    diagnostic = {'checked_rows': 0, 'matched_rows': 0, 'queued_checked': 0, 'scanned_messages': 0, 'match_modes': {'exact': 0, 'broad_sender': 0, 'sender_subject': 0}}
     for row in messages:
         if row.status in ('FAILED', 'COMPLETED', 'SENT_EXTERNAL'):
             continue
@@ -2181,13 +2289,11 @@ def api_inbox_poll_test(test_id):
                 row.error_message = 'Receiving inbox no longer exists.'
             continue
         try:
-            _, errors = _sync_test_inbox_folders(inbox)
-            sync_errors.extend([f'{inbox.email}: {error}' for error in errors])
-            placements = _detect_message_placements_from_synced(inbox.id, rows)
-            remaining_rows = [row for row in rows if placements.get(row.test_identifier, ('PENDING', None))[0] == 'PENDING']
-            if remaining_rows:
-                live_placements = _detect_message_placements(inbox, [row.test_identifier for row in remaining_rows], max_direct_searches=8)
-                placements.update(live_placements)
+            placements, scan_info = _scan_imap_for_test_rows(inbox, rows)
+            diagnostic['scanned_messages'] += scan_info.get('scanned_messages', 0)
+            for mode, count in (scan_info.get('match_modes') or {}).items():
+                diagnostic['match_modes'][mode] = diagnostic['match_modes'].get(mode, 0) + count
+            sync_errors.extend([f'{inbox.email}: {error}' for error in scan_info.get('errors', [])])
             for row in rows:
                 placement, folder = placements.get(row.test_identifier, ('PENDING', None))
                 row.placement = placement
