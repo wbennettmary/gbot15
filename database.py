@@ -452,6 +452,22 @@ class InboxStaticTemplate(db.Model):
     created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
     updated_at = db.Column(db.DateTime, default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
 
+class InboxUserTemplate(db.Model):
+    """Reusable templates owned by the User Inbox Test workflow."""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(255), nullable=False)
+    subject = db.Column(db.Text, nullable=True)
+    html_content = db.Column(db.Text, nullable=True)
+    plain_text = db.Column(db.Text, nullable=True)
+    custom_headers = db.Column(db.Text, nullable=True)
+    status = db.Column(db.String(50), default='active')
+    is_liked = db.Column(db.Boolean, default=False)
+    use_count = db.Column(db.Integer, default=0)
+    last_used_at = db.Column(db.DateTime, nullable=True)
+    created_by = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+    updated_at = db.Column(db.DateTime, default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
+
 class InboxOpenRouterConfig(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     encrypted_api_key = db.Column(db.Text, nullable=True)

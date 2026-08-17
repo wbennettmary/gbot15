@@ -39,7 +39,7 @@ from email.mime.multipart import MIMEMultipart
 import re
 
 from core_logic import google_api, unique_random_alias, get_random_name_pools
-from database import db, User, WhitelistedIP, UsedDomain, GoogleAccount, GoogleToken, Scope, ServerConfig, UserAppPassword, AutomationAccount, RetrievedUser, NamecheapConfig, DomainOperation, AwsConfig, ServiceAccount, CloudflareConfig, Notification, WorkspaceList, AwsGeneratedPassword, InboxImapAccount, InboxEmailMessage, InboxStaticTemplate, InboxOpenRouterConfig, InboxDeliverabilityTest, InboxDeliverabilityMessage
+from database import db, User, WhitelistedIP, UsedDomain, GoogleAccount, GoogleToken, Scope, ServerConfig, UserAppPassword, AutomationAccount, RetrievedUser, NamecheapConfig, DomainOperation, AwsConfig, ServiceAccount, CloudflareConfig, Notification, WorkspaceList, AwsGeneratedPassword, InboxImapAccount, InboxEmailMessage, InboxStaticTemplate, InboxUserTemplate, InboxOpenRouterConfig, InboxDeliverabilityTest, InboxDeliverabilityMessage
 from routes.dns_manager import dns_manager
 from routes.aws_manager import aws_manager
 from routes.digitalocean_manager import digitalocean_manager
@@ -1838,8 +1838,6 @@ def api_inbox_tests():
         return jsonify({'success': False, 'error': 'Every sender must come from a selected Workspace account so Gmail API delegation can send it.'}), 400
     if not inbox_ids and not recipient_emails:
         return jsonify({'success': False, 'error': 'Type or select at least one recipient email'}), 400
-    if not template:
-        return jsonify({'success': False, 'error': 'Select an inbox email template in Run Test or Template Studio before triggering the test'}), 400
     if not subject:
         return jsonify({'success': False, 'error': 'Subject is required'}), 400
     if not text_body and not html_body:
@@ -1860,7 +1858,7 @@ def api_inbox_tests():
     test = InboxDeliverabilityTest(
         test_id=test_id,
         name=name,
-        template_id=template.id,
+        template_id=template.id if template else None,
         subject=subject,
         html_body=html_body,
         text_body=text_body,
@@ -2431,6 +2429,78 @@ def api_inbox_static_template_detail(template_id):
     data = _serialize_static_template(template)
     data.update({'html_content': template.html_content, 'plain_text': template.plain_text})
     return jsonify({'success': True, 'template': data})
+
+def _serialize_user_inbox_template(template):
+    return {
+        'id': template.id,
+        'name': template.name,
+        'subject': template.subject or '',
+        'html_content': template.html_content or '',
+        'plain_text': template.plain_text or '',
+        'custom_headers': template.custom_headers or '',
+        'status': template.status,
+        'is_liked': bool(template.is_liked),
+        'use_count': template.use_count or 0,
+        'last_used_at': template.last_used_at.isoformat() + 'Z' if template.last_used_at else None,
+        'created_by': template.created_by,
+        'created_at': template.created_at.isoformat() + 'Z' if template.created_at else None,
+        'updated_at': template.updated_at.isoformat() + 'Z' if template.updated_at else None,
+    }
+
+@app.route('/api/inbox-intelligence/user-inbox-templates', methods=['GET', 'POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_user_templates():
+    if request.method == 'GET':
+        templates = InboxUserTemplate.query.filter(InboxUserTemplate.status != 'archived').order_by(InboxUserTemplate.updated_at.desc()).all()
+        return jsonify({'success': True, 'templates': [_serialize_user_inbox_template(t) for t in templates]})
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or data.get('subject') or 'User Inbox Template').strip()
+    subject = (data.get('subject') or '').strip()
+    html_content = data.get('html_content') or ''
+    plain_text = data.get('plain_text') or ''
+    custom_headers = data.get('custom_headers') or ''
+    if not html_content.strip() and not plain_text.strip():
+        return jsonify({'success': False, 'error': 'HTML or plain-text template is required'}), 400
+    template = InboxUserTemplate(
+        name=name[:255],
+        subject=subject,
+        html_content=html_content,
+        plain_text=plain_text,
+        custom_headers=custom_headers,
+        created_by=session.get('user')
+    )
+    db.session.add(template)
+    db.session.commit()
+    return jsonify({'success': True, 'template': _serialize_user_inbox_template(template), 'message': 'User inbox template saved'})
+
+@app.route('/api/inbox-intelligence/user-inbox-templates/<int:template_id>', methods=['GET', 'PUT', 'DELETE'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_user_template_detail(template_id):
+    template = InboxUserTemplate.query.get(template_id)
+    if not template:
+        return jsonify({'success': False, 'error': 'User inbox template not found'}), 404
+    if request.method == 'DELETE':
+        template.status = 'archived'
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'User inbox template deleted'})
+    if request.method == 'PUT':
+        data = request.get_json(silent=True) or {}
+        action = (data.get('action') or '').strip().lower()
+        if action == 'like':
+            template.is_liked = bool(data.get('is_liked'))
+        elif action == 'use':
+            template.use_count = (template.use_count or 0) + 1
+            template.last_used_at = datetime.utcnow()
+        else:
+            template.name = (data.get('name') or template.name)[:255]
+            template.subject = data.get('subject') if data.get('subject') is not None else template.subject
+            template.html_content = data.get('html_content') if data.get('html_content') is not None else template.html_content
+            template.plain_text = data.get('plain_text') if data.get('plain_text') is not None else template.plain_text
+            template.custom_headers = data.get('custom_headers') if data.get('custom_headers') is not None else template.custom_headers
+        db.session.commit()
+    return jsonify({'success': True, 'template': _serialize_user_inbox_template(template)})
 
 @app.route('/api/lists', methods=['GET'])
 @login_required

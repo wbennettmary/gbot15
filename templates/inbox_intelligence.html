@@ -1199,6 +1199,23 @@ merge_recipe_id, content_blueprint_id</pre>
             <div class="ii-panel" style="grid-column: 1 / -1;">
                 <div class="ii-row justify-content-between mb-3">
                     <div>
+                        <h3>Saved User Inbox Templates</h3>
+                        <p class="ii-muted mb-0">Dedicated User Inbox Test templates. These do not appear in Template Library or Template Studio.</p>
+                    </div>
+                    <div class="ii-row">
+                        <button class="ii-btn" type="button" onclick="loadUserInboxTemplates()"><i class="fas fa-arrows-rotate"></i> Refresh</button>
+                        <button class="ii-btn ii-btn-primary" type="button" onclick="saveUserInboxDraft()"><i class="fas fa-save"></i> Save Current Template</button>
+                    </div>
+                </div>
+                <div id="userInboxSavedTemplateList" class="ii-grid" style="grid-template-columns: repeat(4, minmax(0, 1fr));"></div>
+                <div class="ii-row justify-content-between mt-3">
+                    <span class="ii-muted" id="userInboxTemplatePageStatus">No saved templates yet.</span>
+                    <div class="ii-row"><button class="ii-btn" type="button" onclick="changeUserInboxTemplatePage(-1)"><i class="fas fa-chevron-left"></i></button><button class="ii-btn" type="button" onclick="changeUserInboxTemplatePage(1)"><i class="fas fa-chevron-right"></i></button></div>
+                </div>
+            </div>
+            <div class="ii-panel" style="grid-column: 1 / -1;">
+                <div class="ii-row justify-content-between mb-3">
+                    <div>
                         <h3>User Inbox Test Builder</h3>
                         <p class="ii-muted mb-0">Create a static template, select Workspace API users, and send inbox placement tests to any recipients.</p>
                     </div>
@@ -1230,41 +1247,30 @@ merge_recipe_id, content_blueprint_id</pre>
             <div class="ii-panel" style="grid-column: 1 / -1;">
                 <div class="ii-row justify-content-between mb-3">
                     <div>
-                        <h3>Saved User Inbox Templates</h3>
-                        <p class="ii-muted mb-0">Templates saved or tested here stay available for future user inbox tests.</p>
-                    </div>
-                    <button class="ii-btn" type="button" onclick="loadStaticTemplates()"><i class="fas fa-arrows-rotate"></i> Refresh Templates</button>
-                </div>
-                <div class="ii-form-grid">
-                    <div class="ii-field" style="grid-column: 1 / -1;"><label>Saved template</label><select class="ii-select" id="userInboxTemplateSelect" onchange="selectUserInboxSavedTemplate(this.value)"><option value="">No saved templates loaded</option></select></div>
-                </div>
-                <div id="userInboxSavedTemplateList" class="ii-grid mt-3"></div>
-            </div>
-            <div class="ii-panel" style="grid-column: 1 / -1;">
-                <div class="ii-row justify-content-between mb-3">
-                    <div>
                         <h3>Workspace API Users</h3>
                         <p class="ii-muted mb-0">Search accounts manually, retrieve users, or pull the entire selected List Management source for testing.</p>
                     </div>
                     <div class="ii-row"><button class="ii-btn" type="button" onclick="selectAllWorkspaceSenders(true)"><i class="fas fa-check-double"></i> Select all users</button><button class="ii-btn" type="button" onclick="selectAllWorkspaceSenders(false)"><i class="fas fa-xmark"></i> Clear users</button></div>
                 </div>
-                <div class="ii-card mb-3">
-                    <h4>Manual account lookup</h4>
-                    <div class="ii-row mt-2">
-                        <input class="ii-input" id="userInboxWorkspaceAccountSearchInput" style="max-width: 420px;" placeholder="Search saved service account by name, admin email, or client email">
-                        <button class="ii-btn" type="button" onclick="searchUserInboxWorkspaceAccounts()"><i class="fas fa-search"></i> Search Accounts</button>
-                        <button class="ii-btn ii-btn-primary" type="button" onclick="retrieveWorkspaceUsers()"><i class="fas fa-users-gear"></i> Retrieve Selected Users</button>
+                <div class="ii-grid ii-layout-2">
+                    <div class="ii-card">
+                        <h4>Manual Account Lookup</h4>
+                        <div class="ii-row mt-2">
+                            <input class="ii-input" id="userInboxWorkspaceAccountSearchInput" style="max-width: 420px;" placeholder="Search service account name, admin email, or client email">
+                            <button class="ii-btn" type="button" onclick="searchUserInboxWorkspaceAccounts()"><i class="fas fa-search"></i> Search</button>
+                            <button class="ii-btn ii-btn-primary" type="button" onclick="retrieveWorkspaceUsers()"><i class="fas fa-users-gear"></i> Retrieve Users</button>
+                        </div>
+                        <div id="userInboxServiceAccountSelector" class="mt-3 ii-muted">Search saved Workspace service accounts.</div>
                     </div>
-                    <div id="userInboxServiceAccountSelector" class="mt-3 ii-muted">Search saved Workspace service accounts or use List Management below.</div>
-                </div>
-                <div class="ii-card mb-3">
-                    <h4>List Management source</h4>
-                    <div class="ii-row mt-2">
-                        <select class="ii-select" id="userInboxWorkspaceListSelect" style="max-width: 420px;" onchange="mirrorUserInboxListSelection()"><option value="">Loading lists...</option></select>
-                        <button class="ii-btn" type="button" onclick="loadWorkspaceLists()"><i class="fas fa-arrows-rotate"></i> Refresh Lists</button>
-                        <button class="ii-btn ii-btn-primary" type="button" onclick="retrieveUserInboxWorkspaceListUsers()"><i class="fas fa-list-check"></i> Retrieve Entire List</button>
+                    <div class="ii-card">
+                        <h4>List Management Source</h4>
+                        <div class="ii-row mt-2">
+                            <select class="ii-select" id="userInboxWorkspaceListSelect" style="max-width: 420px;" onchange="mirrorUserInboxListSelection()"><option value="">Loading lists...</option></select>
+                            <button class="ii-btn" type="button" onclick="loadWorkspaceLists()"><i class="fas fa-arrows-rotate"></i> Refresh</button>
+                            <button class="ii-btn ii-btn-primary" type="button" onclick="retrieveUserInboxWorkspaceListUsers()"><i class="fas fa-list-check"></i> Retrieve Entire List</button>
+                        </div>
+                        <div id="userInboxWorkspaceListStatus" class="ii-muted mt-2"></div>
                     </div>
-                    <div id="userInboxWorkspaceListStatus" class="ii-muted mt-2"></div>
                 </div>
                 <div class="ii-row justify-content-between"><h4>Selected Workspace API Users</h4><span class="ii-muted" id="userInboxSelectedUserCount">0 selected</span></div>
                 <div id="userInboxSenderSelector" class="ii-card ii-muted">Retrieve/select Workspace API users first.</div>
@@ -1438,12 +1444,15 @@ merge_recipe_id, content_blueprint_id</pre>
         workspaceSenders: [],
         workspaceLists: [],
         aiSuggestions: [],
+        userInboxTemplates: [],
+        userInboxTemplatePage: 0,
         serviceAccounts: [],
         activeMessageId: null,
         selectedMessageIds: new Set(),
         selectedTemplateId: null,
         selectedTemplateIds: new Set(),
         userInboxTestId: null,
+        editingUserInboxTemplateId: null,
         selectedServiceAccountIds: new Set(),
         selectedSenderEmails: new Set(),
         selectedInboxIds: new Set(),
@@ -1877,7 +1886,6 @@ merge_recipe_id, content_blueprint_id</pre>
         const list = document.getElementById('staticTemplateList');
         const parser = document.getElementById('staticTemplateParserOutput');
         renderStudioTemplateSelector();
-        renderUserInboxTemplateSelector();
         if (!iiState.staticTemplates.length) {
             list.className = 'ii-card text-center py-5';
             list.innerHTML = `<i class="fas fa-file-code fa-3x text-muted mb-3"></i>
@@ -1908,49 +1916,110 @@ merge_recipe_id, content_blueprint_id</pre>
         }, null, 2);
     }
 
-    function renderUserInboxTemplateSelector() {
-        const select = document.getElementById('userInboxTemplateSelect');
-        const list = document.getElementById('userInboxSavedTemplateList');
-        if (!select && !list) return;
-        const userTemplates = iiState.staticTemplates.filter((template) => /user inbox|inbox test|draft/i.test(template.name || ''));
-        const templates = userTemplates.length ? userTemplates : iiState.staticTemplates;
-        if (select) {
-            if (!templates.length) {
-                select.innerHTML = '<option value="">No saved templates yet</option>';
-            } else {
-                select.innerHTML = '<option value="">Select a saved template</option>' + templates.map((template) => `<option value="${template.id}">${escapeHtml(template.name)} · v${template.version || 1}</option>`).join('');
-            }
+    async function loadUserInboxTemplates() {
+        const data = await iiFetch('/api/inbox-intelligence/user-inbox-templates');
+        iiState.userInboxTemplates = data.templates || [];
+        if (iiState.userInboxTemplatePage * 4 >= iiState.userInboxTemplates.length) {
+            iiState.userInboxTemplatePage = 0;
         }
+        renderUserInboxTemplateCards();
+    }
+
+    function renderUserInboxTemplateCards() {
+        const list = document.getElementById('userInboxSavedTemplateList');
+        const status = document.getElementById('userInboxTemplatePageStatus');
         if (!list) return;
-        if (!templates.length) {
-            list.innerHTML = '<div class="ii-card ii-muted">Save a draft or run a test to store a reusable User Inbox Test template.</div>';
+        const pageSize = 4;
+        const total = iiState.userInboxTemplates.length;
+        if (!total) {
+            list.innerHTML = '<div class="ii-card ii-muted" style="grid-column: 1 / -1;">No saved User Inbox templates yet. Build one below and save it here.</div>';
+            if (status) status.textContent = 'No saved templates yet.';
             return;
         }
-        list.innerHTML = templates.slice(0, 6).map((template) => `
-            <div class="ii-card">
+        const start = iiState.userInboxTemplatePage * pageSize;
+        const page = iiState.userInboxTemplates.slice(start, start + pageSize);
+        list.innerHTML = page.map((template) => {
+            const preview = (template.plain_text || template.html_content || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 150);
+            return `<div class="ii-card">
                 <div class="ii-row justify-content-between">
                     <strong>${escapeHtml(template.name)}</strong>
-                    <span class="ii-chip ${template.status === 'draft' ? 'yellow' : 'green'}">${escapeHtml(template.status)}</span>
+                    <button class="ii-btn" type="button" onclick="toggleUserInboxTemplateLike(${template.id}, ${template.is_liked ? 'false' : 'true'})"><i class="fas fa-heart${template.is_liked ? '' : '-crack'}"></i></button>
                 </div>
-                <div class="ii-muted mt-1">Editable Regions: ${template.editable_region_count || 0} · Locked: ${template.locked_region_count || 0} · Version: ${template.version || 1}</div>
+                <div class="ii-muted mt-1">${escapeHtml(template.subject || 'No subject saved')}</div>
+                <div class="mt-3" style="min-height: 90px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; background: #f8fafc;">${escapeHtml(preview || 'No preview content saved.')}</div>
+                <div class="ii-muted mt-2">Used ${template.use_count || 0} time(s)${template.last_used_at ? ` · Last used ${new Date(template.last_used_at).toLocaleString()}` : ''}</div>
                 <div class="ii-row mt-3">
-                    <button class="ii-btn ii-btn-primary" type="button" onclick="selectUserInboxSavedTemplate(${template.id})"><i class="fas fa-check"></i> Use Template</button>
-                    <button class="ii-btn" type="button" onclick="loadStaticTemplateDetail(${template.id})"><i class="fas fa-eye"></i> Preview</button>
+                    <button class="ii-btn ii-btn-primary" type="button" onclick="selectUserInboxSavedTemplate(${template.id})"><i class="fas fa-check"></i> Use</button>
+                    <button class="ii-btn" type="button" onclick="previewUserInboxSavedTemplate(${template.id})"><i class="fas fa-eye"></i> Preview</button>
+                    <button class="ii-btn" type="button" onclick="editUserInboxSavedTemplate(${template.id})"><i class="fas fa-pen"></i> Edit</button>
+                    <button class="ii-btn" type="button" onclick="deleteUserInboxSavedTemplate(${template.id})"><i class="fas fa-trash"></i> Delete</button>
                 </div>
-            </div>`).join('');
+            </div>`;
+        }).join('');
+        const pageCount = Math.max(1, Math.ceil(total / pageSize));
+        if (status) status.textContent = `Showing ${start + 1}-${Math.min(start + pageSize, total)} of ${total} templates · Page ${iiState.userInboxTemplatePage + 1}/${pageCount}`;
+    }
+
+    function changeUserInboxTemplatePage(direction) {
+        const pageCount = Math.max(1, Math.ceil(iiState.userInboxTemplates.length / 4));
+        iiState.userInboxTemplatePage = Math.min(pageCount - 1, Math.max(0, iiState.userInboxTemplatePage + direction));
+        renderUserInboxTemplateCards();
     }
 
     async function selectUserInboxSavedTemplate(id) {
         const templateId = parseInt(id, 10);
         if (!templateId) return;
-        const data = await iiFetch(`/api/inbox-intelligence/static-templates/${templateId}`);
+        const data = await iiFetch(`/api/inbox-intelligence/user-inbox-templates/${templateId}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({action: 'use'})
+        });
         const template = data.template || {};
-        document.getElementById('userInboxTemplateSelect').value = String(templateId);
-        document.getElementById('userInboxSubjectInput').value = template.name || '';
+        fillUserInboxTemplateFields(template);
+        iiState.editingUserInboxTemplateId = null;
+        await loadUserInboxTemplates();
+        updateUserInboxDiagnostics();
+    }
+
+    function fillUserInboxTemplateFields(template) {
+        document.getElementById('userInboxSubjectInput').value = template.subject || template.name || '';
         document.getElementById('userInboxHtmlInput').value = template.html_content || '';
         document.getElementById('userInboxTextInput').value = template.plain_text || '';
-        document.getElementById('userInboxHtmlStatus').textContent = 'Saved template loaded for this test.';
+        document.getElementById('userInboxHeadersInput').value = template.custom_headers || '';
+        document.getElementById('userInboxHtmlStatus').textContent = 'Saved User Inbox template loaded, including custom headers.';
+    }
+
+    function previewUserInboxSavedTemplate(id) {
+        const template = iiState.userInboxTemplates.find((item) => item.id === id);
+        if (!template) return;
+        document.getElementById('studioSubjectInput').value = template.subject || template.name || 'User Inbox Preview';
+        document.getElementById('studioHtmlInput').value = template.html_content || `<pre>${escapeHtml(template.plain_text || '')}</pre>`;
+        document.getElementById('studioTextInput').value = template.plain_text || '';
+        syncStudioPreview();
+        activateInboxTab('templates');
+    }
+
+    async function editUserInboxSavedTemplate(id) {
+        const data = await iiFetch(`/api/inbox-intelligence/user-inbox-templates/${id}`);
+        fillUserInboxTemplateFields(data.template || {});
+        iiState.editingUserInboxTemplateId = id;
+        document.getElementById('userInboxTestStatus').textContent = 'Template loaded for editing. Save Current Template when finished.';
         updateUserInboxDiagnostics();
+    }
+
+    async function toggleUserInboxTemplateLike(id, liked) {
+        await iiFetch(`/api/inbox-intelligence/user-inbox-templates/${id}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({action: 'like', is_liked: liked})
+        });
+        await loadUserInboxTemplates();
+    }
+
+    async function deleteUserInboxSavedTemplate(id) {
+        if (!confirm('Delete this saved User Inbox template?')) return;
+        await iiFetch(`/api/inbox-intelligence/user-inbox-templates/${id}`, {method: 'DELETE'});
+        await loadUserInboxTemplates();
     }
 
     function renderSelectedStaticTemplateStatus() {
@@ -2426,24 +2495,27 @@ merge_recipe_id, content_blueprint_id</pre>
         const subject = document.getElementById('userInboxSubjectInput').value.trim() || 'User Inbox Draft';
         const html = document.getElementById('userInboxHtmlInput').value;
         const text = document.getElementById('userInboxTextInput').value;
+        const customHeaders = document.getElementById('userInboxHeadersInput').value;
         if (!html.trim() && !text.trim()) {
             status.textContent = 'Template body is required before saving.';
             return;
         }
-            const data = await iiFetch('/api/inbox-intelligence/static-templates', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    name: `User Inbox Draft - ${subject}`,
+        const editingId = iiState.editingUserInboxTemplateId;
+        const data = await iiFetch(editingId ? `/api/inbox-intelligence/user-inbox-templates/${editingId}` : '/api/inbox-intelligence/user-inbox-templates', {
+            method: editingId ? 'PUT' : 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                name: `User Inbox Template - ${subject}`,
+                subject,
                 html_content: html || `<html><body>${escapeHtml(text).replace(/\n/g, '<br>')}</body></html>`,
-                plain_text: text
-                })
-            });
-            await loadStaticTemplates();
-            const templateSelect = document.getElementById('userInboxTemplateSelect');
-            if (templateSelect && data.template?.id) templateSelect.value = String(data.template.id);
-            status.textContent = data.message || 'Draft saved.';
-        }
+                plain_text: text,
+                custom_headers: customHeaders
+            })
+        });
+        iiState.editingUserInboxTemplateId = null;
+        await loadUserInboxTemplates();
+        status.textContent = data.message || (editingId ? 'User Inbox template updated.' : 'User Inbox template saved.');
+    }
 
     function renderTestInboxSelector() {
         const el = document.getElementById('testInboxSelector');
@@ -2505,7 +2577,7 @@ merge_recipe_id, content_blueprint_id</pre>
 
     async function runUserInboxTest() {
         const status = document.getElementById('userInboxTestStatus');
-        status.textContent = 'Preparing static template...';
+        status.textContent = 'Saving User Inbox template...';
         try {
             const selectedSenders = iiState.workspaceSenders
                 .filter((sender) => iiState.selectedSenderEmails.has(sender.email))
@@ -2522,25 +2594,24 @@ merge_recipe_id, content_blueprint_id</pre>
             if (!html.trim() && !text.trim()) throw new Error('Static HTML or plain-text template is required.');
             if (!recipients.length) throw new Error('Type at least one recipient.');
 
-            const templateData = await iiFetch('/api/inbox-intelligence/static-templates', {
+            await iiFetch('/api/inbox-intelligence/user-inbox-templates', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
                     name: `User Inbox Test Template - ${subject || 'custom headers'}`,
+                    subject,
                     html_content: html || `<html><body>${escapeHtml(text).replace(/\n/g, '<br>')}</body></html>`,
-                    plain_text: text
+                    plain_text: text,
+                    custom_headers: customHeaders
                 })
             });
-            await loadStaticTemplates();
-            const templateSelect = document.getElementById('userInboxTemplateSelect');
-            if (templateSelect && templateData.template?.id) templateSelect.value = String(templateData.template.id);
+            await loadUserInboxTemplates();
             status.textContent = 'Sending user inbox test...';
             const testData = await iiFetch('/api/inbox-intelligence/tests', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
                     name: document.getElementById('userInboxTestNameInput').value || `User Inbox Test ${new Date().toLocaleString()}`,
-                    template_id: templateData.template.id,
                     subject,
                     html_body: html,
                     text_body: text,
@@ -3158,6 +3229,7 @@ merge_recipe_id, content_blueprint_id</pre>
             loadImapAccounts(),
             loadInboxMessages(),
             loadStaticTemplates(),
+            loadUserInboxTemplates(),
             loadTemplateAiPrompt(),
             loadTests(),
             loadWorkspaceLists(),
