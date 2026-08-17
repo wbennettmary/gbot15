@@ -1542,11 +1542,11 @@ merge_recipe_id, content_blueprint_id</pre>
                         <h4>List Management Source</h4>
                         <div class="ii-row mt-2">
                             <select class="ii-select" id="userInboxWorkspaceListSelect" style="max-width: 420px;" onchange="mirrorUserInboxListSelection()"><option value="">Loading lists...</option></select>
-                            <input class="ii-input" id="userInboxUsersPerAccountInput" type="number" min="1" max="500" value="1" style="max-width: 170px;" title="Users per account" placeholder="Users per account">
+                            <input class="ii-input" id="userInboxUsersPerAccountInput" type="number" min="1" max="500" style="max-width: 190px;" title="Users per account" placeholder="Blank = all users">
                             <button class="ii-btn" type="button" onclick="loadWorkspaceLists()"><i class="fas fa-arrows-rotate"></i> Refresh</button>
-                            <button class="ii-btn ii-btn-primary" type="button" onclick="retrieveUserInboxWorkspaceListUsers()"><i class="fas fa-list-check"></i> Retrieve List Sample</button>
+                            <button class="ii-btn ii-btn-primary" type="button" onclick="retrieveUserInboxWorkspaceListUsers()"><i class="fas fa-list-check"></i> Retrieve List Users</button>
                         </div>
-                        <div id="userInboxWorkspaceListStatus" class="ii-muted mt-2">Default: 1 API user per account. Increase the number to test more users from each account.</div>
+                        <div id="userInboxWorkspaceListStatus" class="ii-muted mt-2">Leave users-per-account blank to retrieve all users. Set a number to sample that many users per account.</div>
                     </div>
                 </div>
                 <div class="ii-row justify-content-between"><h4>Selected Workspace API Users</h4><span class="ii-muted" id="userInboxSelectedUserCount">0 selected</span></div>
@@ -2181,18 +2181,20 @@ merge_recipe_id, content_blueprint_id</pre>
     async function retrieveUserInboxWorkspaceListUsers() {
         const userStatus = document.getElementById('userInboxWorkspaceListStatus');
         const listId = document.getElementById('userInboxWorkspaceListSelect')?.value;
-        const maxPerAccount = Math.min(500, Math.max(1, parseInt(document.getElementById('userInboxUsersPerAccountInput')?.value || '1', 10) || 1));
+        const rawLimit = (document.getElementById('userInboxUsersPerAccountInput')?.value || '').trim();
+        const maxPerAccount = rawLimit ? Math.min(500, Math.max(1, parseInt(rawLimit, 10) || 1)) : null;
         if (!listId) {
             if (userStatus) userStatus.textContent = 'Select a List Management source first.';
             return;
         }
         mirrorUserInboxListSelection();
-        if (userStatus) userStatus.textContent = `Retrieving ${maxPerAccount} API user(s) per account from the selected list...`;
+        const scopeLabel = maxPerAccount ? `${maxPerAccount} API user(s) per account` : 'all API users from each account';
+        if (userStatus) userStatus.textContent = `Retrieving ${scopeLabel} from the selected list...`;
         try {
             const data = await iiFetch('/api/inbox-intelligence/workspace-senders/retrieve-list', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({list_id: listId, max_per_account: maxPerAccount})
+                body: JSON.stringify({list_id: listId, max_per_account: maxPerAccount || 0})
             });
             const byEmail = {};
             iiState.workspaceSenders.forEach((sender) => { byEmail[sender.email] = sender; });
@@ -2208,7 +2210,7 @@ merge_recipe_id, content_blueprint_id</pre>
             if (data.unmatched?.length) notes.push(`${data.unmatched.length} unmatched list line(s)`);
             if (data.ambiguous?.length) notes.push(`${data.ambiguous.length} ambiguous line(s)`);
             if (data.errors?.length) notes.push(`${data.errors.length} retrieval error(s)`);
-            if (userStatus) userStatus.textContent = `Retrieved and selected ${returnedEmails.length} user(s), ${maxPerAccount} per account from ${data.service_account_count || 0} account(s).${notes.length ? ' ' + notes.join(', ') + '.' : ''}`;
+            if (userStatus) userStatus.textContent = `Retrieved and selected ${returnedEmails.length} user(s), ${maxPerAccount ? `${maxPerAccount} per account` : 'all users per account'} from ${data.service_account_count || 0} account(s).${notes.length ? ' ' + notes.join(', ') + '.' : ''}`;
             renderWorkspaceSenders();
             renderTestSenderSelector();
             renderUserInboxSenderSelector();
