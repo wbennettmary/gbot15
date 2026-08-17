@@ -61,6 +61,8 @@
         display: inline-flex;
         align-items: center;
         gap: 8px;
+        justify-content: center;
+        white-space: nowrap;
     }
 
     .ii-btn-primary {
@@ -411,6 +413,134 @@
         color: #0f172a;
     }
 
+    .ii-template-card-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+    }
+
+    .ii-user-template-card {
+        display: flex;
+        min-height: 260px;
+        flex-direction: column;
+        gap: 10px;
+        border-color: #dbeafe;
+        box-shadow: 0 12px 30px rgba(37, 99, 235, 0.06);
+    }
+
+    .ii-user-template-title {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .ii-user-template-preview {
+        min-height: 96px;
+        max-height: 126px;
+        overflow: hidden;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 10px;
+        background: #f8fafc;
+        color: #334155;
+        line-height: 1.45;
+        overflow-wrap: anywhere;
+    }
+
+    .ii-template-actions,
+    .ii-action-buttons {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+    .ii-template-actions {
+        margin-top: auto;
+    }
+
+    .ii-template-actions .ii-btn {
+        flex: 1 1 94px;
+    }
+
+    .ii-source-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+    }
+
+    .ii-source-card {
+        min-width: 0;
+    }
+
+    .ii-source-card .ii-row {
+        align-items: stretch;
+    }
+
+    .ii-source-card .ii-input,
+    .ii-source-card .ii-select {
+        min-width: 240px;
+        flex: 1 1 280px;
+    }
+
+    .ii-user-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 12px;
+    }
+
+    .ii-user-select-card {
+        display: block;
+        cursor: pointer;
+        border-color: #e2e8f0;
+        box-shadow: none;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+    }
+
+    .ii-user-select-card:hover {
+        border-color: #93c5fd;
+        box-shadow: 0 10px 24px rgba(37, 99, 235, 0.08);
+        transform: translateY(-1px);
+    }
+
+    .ii-user-line {
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .ii-user-line strong,
+    .ii-email-text,
+    .ii-domain-text {
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    .ii-action-card {
+        min-width: 0;
+        box-shadow: 0 12px 30px rgba(15, 23, 42, 0.05);
+    }
+
+    .ii-action-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-start;
+        flex-wrap: wrap;
+        margin-bottom: 10px;
+    }
+
+    .ii-responsive-table {
+        width: 100%;
+        overflow-x: auto;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+    }
+
+    .ii-responsive-table .ii-table {
+        min-width: 680px;
+    }
+
     .ii-studio-shell {
         display: grid;
         grid-template-columns: minmax(0, 1.25fr) minmax(360px, 0.95fr);
@@ -572,8 +702,10 @@
         .ii-kpis { grid-template-columns: repeat(3, minmax(150px, 1fr)); }
         .ii-layout-2,
         .ii-layout-3,
-        .ii-studio-shell { grid-template-columns: 1fr; }
+        .ii-studio-shell,
+        .ii-source-grid { grid-template-columns: 1fr; }
         .ii-compare { grid-template-columns: 1fr; }
+        .ii-template-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
 
     @media (max-width: 720px) {
@@ -581,8 +713,22 @@
         .ii-kpis,
         .ii-form-grid,
         .ii-suggestion-grid,
-        .ii-integrity-grid { grid-template-columns: 1fr; }
+        .ii-integrity-grid,
+        .ii-result-summary,
+        .ii-template-card-grid,
+        .ii-user-grid { grid-template-columns: 1fr; }
         .ii-title { font-size: 24px; }
+        .ii-panel { padding: 14px; }
+        .ii-actions,
+        .ii-action-buttons,
+        .ii-source-card .ii-row { width: 100%; }
+        .ii-actions .ii-btn,
+        .ii-actions .ii-select,
+        .ii-action-buttons .ii-btn,
+        .ii-source-card .ii-btn,
+        .ii-source-card .ii-input,
+        .ii-source-card .ii-select { width: 100%; max-width: none !important; }
+        .ii-template-actions .ii-btn { flex-basis: calc(50% - 4px); }
     }
 </style>
 
@@ -1207,7 +1353,7 @@ merge_recipe_id, content_blueprint_id</pre>
                         <button class="ii-btn ii-btn-primary" type="button" onclick="saveUserInboxDraft()"><i class="fas fa-save"></i> Save Current Template</button>
                     </div>
                 </div>
-                <div id="userInboxSavedTemplateList" class="ii-grid" style="grid-template-columns: repeat(4, minmax(0, 1fr));"></div>
+                <div id="userInboxSavedTemplateList" class="ii-template-card-grid"></div>
                 <div class="ii-row justify-content-between mt-3">
                     <span class="ii-muted" id="userInboxTemplatePageStatus">No saved templates yet.</span>
                     <div class="ii-row"><button class="ii-btn" type="button" onclick="changeUserInboxTemplatePage(-1)"><i class="fas fa-chevron-left"></i></button><button class="ii-btn" type="button" onclick="changeUserInboxTemplatePage(1)"><i class="fas fa-chevron-right"></i></button></div>
@@ -1252,8 +1398,8 @@ merge_recipe_id, content_blueprint_id</pre>
                     </div>
                     <div class="ii-row"><button class="ii-btn" type="button" onclick="selectAllWorkspaceSenders(true)"><i class="fas fa-check-double"></i> Select all users</button><button class="ii-btn" type="button" onclick="selectAllWorkspaceSenders(false)"><i class="fas fa-xmark"></i> Clear users</button></div>
                 </div>
-                <div class="ii-grid ii-layout-2">
-                    <div class="ii-card">
+                <div class="ii-source-grid">
+                    <div class="ii-card ii-source-card">
                         <h4>Manual Account Lookup</h4>
                         <div class="ii-row mt-2">
                             <input class="ii-input" id="userInboxWorkspaceAccountSearchInput" style="max-width: 420px;" placeholder="Search service account name, admin email, or client email">
@@ -1262,7 +1408,7 @@ merge_recipe_id, content_blueprint_id</pre>
                         </div>
                         <div id="userInboxServiceAccountSelector" class="mt-3 ii-muted">Search saved Workspace service accounts.</div>
                     </div>
-                    <div class="ii-card">
+                    <div class="ii-card ii-source-card">
                         <h4>List Management Source</h4>
                         <div class="ii-row mt-2">
                             <select class="ii-select" id="userInboxWorkspaceListSelect" style="max-width: 420px;" onchange="mirrorUserInboxListSelection()"><option value="">Loading lists...</option></select>
@@ -1298,12 +1444,12 @@ merge_recipe_id, content_blueprint_id</pre>
                 <h4 class="mt-3">Provider Summary</h4>
                 <div class="ii-card" id="userInboxProviderSummary">Provider analytics appear after a test has results.</div>
                 <div class="ii-grid ii-layout-2 mt-3">
-                    <div class="ii-card">
-                        <div class="ii-row justify-content-between mb-2"><h4>Domain Results & Actions</h4><div class="ii-row"><button class="ii-btn" type="button" onclick="copyUserInboxBucket('inboxDomains')"><i class="fas fa-copy"></i> Copy inbox domains</button><button class="ii-btn" type="button" onclick="copyUserInboxBucket('spamDomains')"><i class="fas fa-copy"></i> Copy spam domains</button></div></div>
+                    <div class="ii-card ii-action-card">
+                        <div class="ii-action-head"><h4>Domain Results & Actions</h4><div class="ii-action-buttons"><button class="ii-btn" type="button" onclick="copyUserInboxBucket('inboxDomains')"><i class="fas fa-copy"></i> Copy inbox domains</button><button class="ii-btn" type="button" onclick="copyUserInboxBucket('spamDomains')"><i class="fas fa-copy"></i> Copy spam domains</button></div></div>
                         <div id="userInboxDomainActions" class="ii-muted">Sync a test to classify sender domains.</div>
                     </div>
-                    <div class="ii-card">
-                        <div class="ii-row justify-content-between mb-2"><h4>User Results & Actions</h4><div class="ii-row"><button class="ii-btn" type="button" onclick="copyUserInboxBucket('inboxUsers')"><i class="fas fa-copy"></i> Copy inbox users</button><button class="ii-btn" type="button" onclick="copyUserInboxBucket('spamUsers')"><i class="fas fa-copy"></i> Copy spam users</button></div></div>
+                    <div class="ii-card ii-action-card">
+                        <div class="ii-action-head"><h4>User Results & Actions</h4><div class="ii-action-buttons"><button class="ii-btn" type="button" onclick="copyUserInboxBucket('inboxUsers')"><i class="fas fa-copy"></i> Copy inbox users</button><button class="ii-btn" type="button" onclick="copyUserInboxBucket('spamUsers')"><i class="fas fa-copy"></i> Copy spam users</button></div></div>
                         <div id="userInboxUserActions" class="ii-muted">Sync a test to classify Workspace users.</div>
                     </div>
                 </div>
@@ -1957,15 +2103,15 @@ merge_recipe_id, content_blueprint_id</pre>
         const page = iiState.userInboxTemplates.slice(start, start + pageSize);
         list.innerHTML = page.map((template) => {
             const preview = (template.plain_text || template.html_content || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 150);
-            return `<div class="ii-card">
+            return `<div class="ii-card ii-user-template-card">
                 <div class="ii-row justify-content-between">
-                    <strong>${escapeHtml(template.name)}</strong>
-                    <button class="ii-btn" type="button" onclick="toggleUserInboxTemplateLike(${template.id}, ${template.is_liked ? 'false' : 'true'})"><i class="fas fa-heart${template.is_liked ? '' : '-crack'}"></i></button>
+                    <strong class="ii-user-template-title">${escapeHtml(template.name)}</strong>
+                    <button class="ii-btn" type="button" title="${template.is_liked ? 'Unlike template' : 'Like template'}" onclick="toggleUserInboxTemplateLike(${template.id}, ${template.is_liked ? 'false' : 'true'})"><i class="${template.is_liked ? 'fas' : 'far'} fa-heart"></i></button>
                 </div>
                 <div class="ii-muted mt-1">${escapeHtml(template.subject || 'No subject saved')}</div>
-                <div class="mt-3" style="min-height: 90px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; background: #f8fafc;">${escapeHtml(preview || 'No preview content saved.')}</div>
+                <div class="ii-user-template-preview">${escapeHtml(preview || 'No preview content saved.')}</div>
                 <div class="ii-muted mt-2">Used ${template.use_count || 0} time(s)${template.last_used_at ? ` · Last used ${new Date(template.last_used_at).toLocaleString()}` : ''}</div>
-                <div class="ii-row mt-3">
+                <div class="ii-template-actions">
                     <button class="ii-btn ii-btn-primary" type="button" onclick="selectUserInboxSavedTemplate(${template.id})"><i class="fas fa-check"></i> Use</button>
                     <button class="ii-btn" type="button" onclick="previewUserInboxSavedTemplate(${template.id})"><i class="fas fa-eye"></i> Preview</button>
                     <button class="ii-btn" type="button" onclick="editUserInboxSavedTemplate(${template.id})"><i class="fas fa-pen"></i> Edit</button>
@@ -2444,15 +2590,15 @@ merge_recipe_id, content_blueprint_id</pre>
                 <strong>Retrieved Workspace API Users</strong>
                 <span class="ii-muted">${apiReady.length} API-ready user(s)</span>
             </div>
-            <div class="ii-grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
+            <div class="ii-user-grid">
                 ${iiState.workspaceSenders.map((sender) => `
-                    <label class="ii-card" style="display: block;">
+                    <label class="ii-card ii-user-select-card">
                         <div class="ii-row justify-content-between">
-                            <span><input type="checkbox" ${iiState.selectedSenderEmails.has(sender.email) ? 'checked' : ''} ${sender.service_account_id ? '' : 'disabled'} onchange="toggleSender('${escapeHtml(sender.email)}', this.checked)"> <strong>${escapeHtml(sender.name || sender.email.split('@')[0])}</strong></span>
+                            <span class="ii-user-line"><input type="checkbox" ${iiState.selectedSenderEmails.has(sender.email) ? 'checked' : ''} ${sender.service_account_id ? '' : 'disabled'} onchange="toggleSender('${escapeHtml(sender.email)}', this.checked)"> <strong>${escapeHtml(sender.name || sender.email.split('@')[0])}</strong></span>
                             <span class="ii-chip ${sender.service_account_id ? 'green' : 'yellow'}">${sender.service_account_id ? 'Gmail API' : 'No API account'}</span>
                         </div>
-                        <div class="ii-muted mt-1">${escapeHtml(sender.email)}</div>
-                        <div class="ii-muted mt-1">${escapeHtml(sender.service_account_name || sender.source || '')} · ${escapeHtml(sender.domain || '')}</div>
+                        <div class="ii-muted ii-email-text mt-1">${escapeHtml(sender.email)}</div>
+                        <div class="ii-muted ii-domain-text mt-1">${escapeHtml(sender.service_account_name || sender.source || '')} · ${escapeHtml(sender.domain || '')}</div>
                     </label>`).join('')}
             </div>`;
     }
@@ -2926,7 +3072,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 <div class="ii-result-pill"><span class="ii-muted">Inbox domains</span><strong>${inboxDomains.length}</strong><div class="ii-muted">>= 90% inbox</div></div>
                 <div class="ii-result-pill"><span class="ii-muted">Spam domains</span><strong>${spamDomains.length}</strong><div class="ii-muted">&lt; 70% inbox</div></div>
             </div>
-            <table class="ii-table">
+            <div class="ii-responsive-table"><table class="ii-table">
                 <tr><th>Domain</th><th>Health</th><th>Inbox</th><th>Spam</th><th>Users</th><th>Score</th></tr>
                 ${domains.map((item) => {
                     const health = healthLabel(item);
@@ -2940,7 +3086,7 @@ merge_recipe_id, content_blueprint_id</pre>
                         <td>${item.inbox}/${item.observed || item.total}</td>
                     </tr>`;
                 }).join('')}
-            </table>`;
+            </table></div>`;
     }
 
     function renderUserInboxUserActions(rows) {
@@ -2963,7 +3109,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 <div class="ii-result-pill"><span class="ii-muted">Inbox users</span><strong>${inboxUsers.length}</strong><div class="ii-muted">>= 90% inbox</div></div>
                 <div class="ii-result-pill"><span class="ii-muted">Spam users</span><strong>${spamUsers.length}</strong><div class="ii-muted">&lt; 70% inbox</div></div>
             </div>
-            <table class="ii-table">
+            <div class="ii-responsive-table"><table class="ii-table">
                 <tr><th>User</th><th>Domain</th><th>Health</th><th>Inbox</th><th>Spam</th><th>Action Focus</th></tr>
                 ${users.map((item) => {
                     const health = healthLabel(item);
@@ -2976,18 +3122,38 @@ merge_recipe_id, content_blueprint_id</pre>
                         <td>${item.inboxRate !== null && item.inboxRate < 70 ? 'Review display name and domain' : item.inboxRate >= 90 ? 'Keep as inbox-safe sender' : 'Monitor next test'}</td>
                     </tr>`;
                 }).join('')}
-            </table>`;
+            </table></div>`;
+    }
+
+    function copyTextToClipboard(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            return navigator.clipboard.writeText(text);
+        }
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        textarea.style.top = '0';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        return Promise.resolve();
     }
 
     async function copyUserInboxBucket(bucketName) {
-        const values = iiState.userInboxCopyBuckets[bucketName] || [];
+        const values = (iiState.userInboxCopyBuckets[bucketName] || [])
+            .map((value) => String(value || '').trim())
+            .filter(Boolean);
         const status = document.getElementById('userInboxTestStatus');
         if (!values.length) {
             if (status) status.textContent = 'Nothing to copy for this bucket yet. Sync a test first.';
             return;
         }
-        await navigator.clipboard.writeText(values.join('\n'));
-        if (status) status.textContent = `Copied ${values.length} item(s).`;
+        await copyTextToClipboard(`${values.join('\r\n')}\r\n`);
+        if (status) status.textContent = `Copied ${values.length} item(s), one per line.`;
     }
 
     function renderUserInboxSpamInsights(rows) {
