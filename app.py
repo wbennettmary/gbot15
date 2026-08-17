@@ -1803,6 +1803,72 @@ def _send_test_email_gmail_api(service_account_id, sender, recipient, subject, h
     result = gmail.users().messages().send(userId='me', body={'raw': raw}).execute()
     return result.get('id') or fallback_message_id
 
+def _refresh_deliverability_counts(test):
+    test.sent_count = InboxDeliverabilityMessage.query.filter(
+        InboxDeliverabilityMessage.test_id == test.test_id,
+        InboxDeliverabilityMessage.status.in_(['WAITING_FOR_DELIVERY', 'COMPLETED', 'SENT_EXTERNAL'])
+    ).count()
+    test.inbox_count = InboxDeliverabilityMessage.query.filter_by(test_id=test.test_id, placement='INBOX').count()
+    test.spam_count = InboxDeliverabilityMessage.query.filter_by(test_id=test.test_id, placement='SPAM').count()
+    test.pending_count = InboxDeliverabilityMessage.query.filter_by(test_id=test.test_id, placement='PENDING').count()
+    test.failed_count = InboxDeliverabilityMessage.query.filter_by(test_id=test.test_id, status='FAILED').count()
+    completed = InboxDeliverabilityMessage.query.filter_by(test_id=test.test_id, status='COMPLETED').count()
+    external = InboxDeliverabilityMessage.query.filter_by(test_id=test.test_id, status='SENT_EXTERNAL').count()
+    queued = InboxDeliverabilityMessage.query.filter_by(test_id=test.test_id, status='QUEUED').count()
+    if queued:
+        test.status = 'SENDING'
+    elif completed + external + test.failed_count >= test.total_messages:
+        test.status = 'COMPLETED' if test.failed_count == 0 else 'PARTIAL'
+        if not test.completed_at:
+            test.completed_at = datetime.utcnow()
+    else:
+        test.status = 'CHECKING_INBOX'
+    return queued
+
+def _send_deliverability_test_messages_async(test_id, senders, subject, html_body, text_body, custom_headers):
+    with app.app_context():
+        sender_lookup = {sender['email']: sender for sender in senders}
+        rows = InboxDeliverabilityMessage.query.filter_by(test_id=test_id, status='QUEUED').order_by(InboxDeliverabilityMessage.id.asc()).all()
+        for row in rows:
+            sender_info = sender_lookup.get(row.workspace_sender)
+            if not sender_info:
+                row.status = 'FAILED'
+                row.placement = 'FAILED'
+                row.error_message = 'Sender payload was not available for this queued message.'
+            else:
+                try:
+                    row.provider_message_id = _send_test_email_gmail_api(
+                        sender_info['service_account_id'],
+                        row.workspace_sender,
+                        row.recipient,
+                        subject,
+                        html_body,
+                        text_body,
+                        row.test_identifier,
+                        custom_headers,
+                        sender_info.get('name')
+                    )
+                    row.sent_at = datetime.utcnow()
+                    if row.imap_account_id:
+                        row.status = 'WAITING_FOR_DELIVERY'
+                        row.placement = 'PENDING'
+                    else:
+                        row.status = 'SENT_EXTERNAL'
+                        row.placement = 'UNOBSERVED'
+                except Exception as e:
+                    row.status = 'FAILED'
+                    row.placement = 'FAILED'
+                    row.error_message = str(e)
+            test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
+            if test:
+                _refresh_deliverability_counts(test)
+            db.session.commit()
+        test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
+        if test:
+            _refresh_deliverability_counts(test)
+            db.session.commit()
+        db.session.remove()
+
 @app.route('/api/inbox-intelligence/tests', methods=['GET', 'POST'])
 @login_required
 @permission_required('inbox_intelligence')
@@ -1844,6 +1910,7 @@ def api_inbox_tests():
     template_id = int(data.get('template_id') or 0)
     template = InboxStaticTemplate.query.get(template_id) if template_id else None
     custom_headers = data.get('custom_headers') or ''
+    async_send = bool(data.get('async_send'))
     subject = (data.get('subject') or _custom_header_value(custom_headers, 'Subject') or (template.name if template else '')).strip()
     html_body = data.get('html_body') if data.get('html_body') is not None else (template.html_content if template else '')
     text_body = data.get('text_body') if data.get('text_body') is not None else (template.plain_text if template else '')
@@ -1878,7 +1945,7 @@ def api_inbox_tests():
         subject=subject,
         html_body=html_body,
         text_body=text_body,
-        status='RUNNING',
+        status='QUEUED' if async_send else 'RUNNING',
         total_messages=len(senders) * len(recipient_targets),
         sent_count=0,
         inbox_count=0,
@@ -1900,6 +1967,8 @@ def api_inbox_tests():
             row = InboxDeliverabilityMessage(test_id=test_id, workspace_sender=sender, imap_account_id=stored_imap_id, recipient=recipient_info['email'], test_identifier=identifier, subject=subject, status='QUEUED', placement='PENDING')
             db.session.add(row)
             db.session.flush()
+            if async_send:
+                continue
             try:
                 row.provider_message_id = _send_test_email_gmail_api(sender_info['service_account_id'], sender, recipient_info['email'], subject, html_body, text_body, identifier, custom_headers, sender_info.get('name'))
                 row.sent_at = datetime.utcnow()
@@ -1920,6 +1989,13 @@ def api_inbox_tests():
         test.status = 'FAILED'
         test.completed_at = datetime.utcnow()
     db.session.commit()
+    if async_send:
+        threading.Thread(
+            target=_send_deliverability_test_messages_async,
+            args=(test_id, senders, subject, html_body, text_body, custom_headers),
+            daemon=True
+        ).start()
+        return jsonify({'success': True, 'test_id': test_id, 'message': 'Deliverability test queued. Sending continues in the background.', 'sent': 0, 'failed': 0, 'queued': test.total_messages})
     return jsonify({'success': True, 'test_id': test_id, 'message': 'Deliverability test created.', 'sent': test.sent_count, 'failed': test.failed_count})
 
 def _detect_message_placement(inbox, identifier):
@@ -1955,6 +2031,7 @@ def _detect_message_placements(inbox, identifiers):
     folders = ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk', 'Bulk Mail']
     results = {identifier: ('PENDING', None) for identifier in identifiers}
     pending = set(identifier for identifier in identifiers if identifier)
+    broad_token = next(iter(pending)).rsplit('-', 1)[0] if pending else ''
     conn = None
     try:
         conn = _imap_connect(inbox)
@@ -1964,6 +2041,27 @@ def _detect_message_placements(inbox, identifiers):
             status, _ = conn.select(folder, readonly=True)
             if status != 'OK':
                 continue
+            if broad_token:
+                status, data = conn.uid('search', None, f'TEXT "{broad_token}"')
+                if status == 'OK' and data and data[0]:
+                    placement = 'SPAM' if any(x in folder.lower() for x in ['spam', 'junk', 'bulk']) else 'INBOX'
+                    for uid in data[0].split():
+                        fetch_status, fetch_data = conn.uid('fetch', uid, '(RFC822)')
+                        if fetch_status != 'OK' or not fetch_data:
+                            continue
+                        raw_chunks = []
+                        for item in fetch_data:
+                            if isinstance(item, tuple) and item[1]:
+                                raw_chunks.append(item[1])
+                        raw_text = b'\n'.join(raw_chunks).decode('utf-8', errors='ignore')
+                        for identifier in list(pending):
+                            if identifier in raw_text:
+                                results[identifier] = (placement, folder)
+                                pending.discard(identifier)
+                        if not pending:
+                            break
+                    if not pending:
+                        break
             for identifier in list(pending):
                 search_terms = [
                     f'HEADER X-Test-ID "{identifier}"',
@@ -1999,6 +2097,8 @@ def api_inbox_poll_test(test_id):
     for row in messages:
         if row.status in ('FAILED', 'COMPLETED', 'SENT_EXTERNAL'):
             continue
+        if row.status == 'QUEUED':
+            continue
         if not row.imap_account_id:
             row.status = 'SENT_EXTERNAL'
             row.placement = 'UNOBSERVED'
@@ -2025,23 +2125,9 @@ def api_inbox_poll_test(test_id):
         except Exception as e:
             for row in rows:
                 row.error_message = str(e)
-    completed = InboxDeliverabilityMessage.query.filter_by(test_id=test_id, status='COMPLETED').count()
-    external = InboxDeliverabilityMessage.query.filter_by(test_id=test_id, status='SENT_EXTERNAL').count()
-    failed = InboxDeliverabilityMessage.query.filter_by(test_id=test_id, status='FAILED').count()
-    inbox_count = InboxDeliverabilityMessage.query.filter_by(test_id=test_id, placement='INBOX').count()
-    spam_count = InboxDeliverabilityMessage.query.filter_by(test_id=test_id, placement='SPAM').count()
-    pending = InboxDeliverabilityMessage.query.filter_by(test_id=test_id, placement='PENDING').count()
-    test.inbox_count = inbox_count
-    test.spam_count = spam_count
-    test.pending_count = pending
-    test.failed_count = failed
-    if completed + failed + external >= test.total_messages:
-        test.status = 'COMPLETED' if failed == 0 else 'PARTIAL'
-        test.completed_at = datetime.utcnow()
-    else:
-        test.status = 'CHECKING_INBOX'
+    _refresh_deliverability_counts(test)
     db.session.commit()
-    return jsonify({'success': True, 'test': {'test_id': test.test_id, 'status': test.status, 'inbox_count': inbox_count, 'spam_count': spam_count, 'pending_count': pending, 'failed_count': failed}})
+    return jsonify({'success': True, 'test': {'test_id': test.test_id, 'status': test.status, 'inbox_count': test.inbox_count, 'spam_count': test.spam_count, 'pending_count': test.pending_count, 'failed_count': test.failed_count, 'sent_count': test.sent_count}})
 
 @app.route('/api/inbox-intelligence/tests/<test_id>', methods=['GET'])
 @login_required

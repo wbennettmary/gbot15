@@ -2891,11 +2891,12 @@ merge_recipe_id, content_blueprint_id</pre>
                     custom_headers: customHeaders,
                     senders: selectedSenders,
                     recipient_emails: recipients,
-                    inbox_account_ids: selectedInboxIds
+                    inbox_account_ids: selectedInboxIds,
+                    async_send: true
                 })
             });
             iiState.userInboxTestId = testData.test_id;
-            status.textContent = `Test ${testData.test_id} sent. Polling recipient inboxes...`;
+            status.textContent = `Test ${testData.test_id} queued with ${testData.queued || 0} message(s). Sending in background; sync will update as messages arrive.`;
             await pollUserInboxTest(testData.test_id);
         } catch (err) {
             status.textContent = err.message;
