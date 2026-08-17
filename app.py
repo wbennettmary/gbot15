@@ -2105,6 +2105,7 @@ def _detect_message_placements_from_synced(inbox_id, rows):
     results = {}
     if not rows:
         return results
+    broad_tokens = sorted({row.test_identifier.rsplit('-', 1)[0] for row in rows if row.test_identifier and '-' in row.test_identifier}, key=len, reverse=True)
     earliest_sent = min((row.sent_at for row in rows if row.sent_at), default=None)
     q = InboxEmailMessage.query.filter_by(imap_account_id=inbox_id)
     if earliest_sent:
@@ -2131,10 +2132,18 @@ def _detect_message_placements_from_synced(inbox_id, rows):
             if row.test_identifier and row.test_identifier in searchable:
                 results[row.test_identifier] = (_placement_from_folder(message.folder), message.folder)
                 break
+            if any(token and token in searchable for token in broad_tokens):
+                message_sender = parseaddr(message.sender or '')[1].lower()
+                row_recipient = (row.recipient or '').lower()
+                recipient_matches = not row_recipient or row_recipient in (message.recipient or '').lower()
+                sender_matches = row_sender and message_sender == row_sender
+                if sender_matches and recipient_matches:
+                    results[row.test_identifier] = (_placement_from_folder(message.folder), message.folder)
+                    break
             message_sender = parseaddr(message.sender or '')[1].lower()
             subject_matches = row_subject and (message.subject or '').strip().lower() == row_subject
             sender_matches = row_sender and message_sender == row_sender
-            recent_enough = not row.sent_at or not message.received_at or message.received_at >= row.sent_at - timedelta(minutes=15)
+            recent_enough = not row.sent_at or not message.received_at or message.received_at >= row.sent_at - timedelta(hours=6)
             if subject_matches and sender_matches and recent_enough:
                 results[row.test_identifier] = (_placement_from_folder(message.folder), message.folder)
                 break
@@ -2150,11 +2159,13 @@ def api_inbox_poll_test(test_id):
     messages = InboxDeliverabilityMessage.query.filter_by(test_id=test_id).all()
     pending_by_inbox = {}
     sync_errors = []
+    diagnostic = {'checked_rows': 0, 'matched_rows': 0, 'queued_checked': 0}
     for row in messages:
         if row.status in ('FAILED', 'COMPLETED', 'SENT_EXTERNAL'):
             continue
+        diagnostic['checked_rows'] += 1
         if row.status == 'QUEUED':
-            continue
+            diagnostic['queued_checked'] += 1
         if not row.imap_account_id:
             row.status = 'SENT_EXTERNAL'
             row.placement = 'UNOBSERVED'
@@ -2182,14 +2193,17 @@ def api_inbox_poll_test(test_id):
                 row.placement = placement
                 row.folder = folder
                 if placement != 'PENDING':
+                    if not row.sent_at:
+                        row.sent_at = datetime.utcnow()
                     row.detected_at = datetime.utcnow()
                     row.status = 'COMPLETED'
+                    diagnostic['matched_rows'] += 1
         except Exception as e:
             for row in rows:
                 row.error_message = str(e)
     _refresh_deliverability_counts(test)
     db.session.commit()
-    return jsonify({'success': True, 'sync_errors': sync_errors, 'test': {'test_id': test.test_id, 'status': test.status, 'inbox_count': test.inbox_count, 'spam_count': test.spam_count, 'pending_count': test.pending_count, 'failed_count': test.failed_count, 'sent_count': test.sent_count}})
+    return jsonify({'success': True, 'sync_errors': sync_errors, 'diagnostic': diagnostic, 'test': {'test_id': test.test_id, 'status': test.status, 'inbox_count': test.inbox_count, 'spam_count': test.spam_count, 'pending_count': test.pending_count, 'failed_count': test.failed_count, 'sent_count': test.sent_count}})
 
 @app.route('/api/inbox-intelligence/tests/<test_id>', methods=['GET'])
 @login_required
