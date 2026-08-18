@@ -2791,7 +2791,7 @@ def _message_record_from_raw(raw_msg, folder):
         'searchable': searchable,
     }
 
-def _scan_imap_for_test_rows(inbox, rows, per_folder_limit=500):
+def _scan_imap_for_test_rows(inbox, rows, per_folder_limit=500, persist_matches=True):
     folders = ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk', 'Bulk Mail']
     identifiers = {row.test_identifier for row in rows if row.test_identifier}
     broad_tokens = sorted({identifier.rsplit('-', 1)[0] for identifier in identifiers if '-' in identifier}, key=len, reverse=True)
@@ -2822,6 +2822,11 @@ def _scan_imap_for_test_rows(inbox, rows, per_folder_limit=500):
                 raw_text = raw_msg.decode('utf-8', errors='ignore')
                 if not any(identifier in raw_text for identifier in identifiers) and not any(token in raw_text for token in broad_tokens):
                     continue
+                if persist_matches:
+                    try:
+                        _upsert_imap_message(inbox, folder, uid, raw_msg)
+                    except Exception as save_err:
+                        errors.append(f'Could not save matched IMAP message: {save_err}')
                 records.append(_message_record_from_raw(raw_msg, folder))
     except Exception as e:
         errors.append(str(e))
@@ -2897,8 +2902,9 @@ def api_inbox_poll_test(test_id):
             diagnostic['deleted_old_messages'] += sync_info.get('deleted_old_messages', 0)
             sync_errors.extend([f'{inbox.email}: {error}' for error in sync_info.get('errors', [])])
             placements, scan_info = _detect_message_placements_from_synced(inbox.id, rows, test_id=test.test_id)
-            if not placements:
-                direct_placements, direct_scan_info = _scan_imap_for_test_rows(inbox, rows, per_folder_limit=1200)
+            missing_rows = [row for row in rows if row.test_identifier not in placements]
+            if missing_rows:
+                direct_placements, direct_scan_info = _scan_imap_for_test_rows(inbox, missing_rows, per_folder_limit=5000)
                 placements.update(direct_placements)
                 scan_info['scanned_messages'] = scan_info.get('scanned_messages', 0) + direct_scan_info.get('scanned_messages', 0)
                 for mode, count in (direct_scan_info.get('match_modes') or {}).items():
