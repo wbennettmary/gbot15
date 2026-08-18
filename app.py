@@ -1218,9 +1218,9 @@ def _message_text_parts(msg):
 def _imap_connect(account):
     password = _unprotect_secret(account.encrypted_password)
     if account.tls_enabled:
-        conn = imaplib.IMAP4_SSL(account.imap_host, int(account.imap_port or 993), ssl_context=ssl.create_default_context())
+        conn = imaplib.IMAP4_SSL(account.imap_host, int(account.imap_port or 993), ssl_context=ssl.create_default_context(), timeout=30)
     else:
-        conn = imaplib.IMAP4(account.imap_host, int(account.imap_port or 143))
+        conn = imaplib.IMAP4(account.imap_host, int(account.imap_port or 143), timeout=30)
     conn.login(account.username, password)
     return conn
 
@@ -1470,12 +1470,7 @@ def api_inbox_test_connection(account_id):
         return jsonify({'success': False, 'error': 'IMAP account not found'}), 404
     conn = None
     try:
-        password = _unprotect_secret(account.encrypted_password)
-        if account.tls_enabled:
-            conn = imaplib.IMAP4_SSL(account.imap_host, int(account.imap_port or 993), ssl_context=ssl.create_default_context())
-        else:
-            conn = imaplib.IMAP4(account.imap_host, int(account.imap_port or 143))
-        conn.login(account.username, password)
+        conn = _imap_connect(account)
         status, folder_data = conn.list()
         folders = []
         if status == 'OK' and folder_data:
@@ -1547,6 +1542,14 @@ def api_inbox_delete_account(account_id):
     account = InboxImapAccount.query.get(account_id)
     if not account:
         return jsonify({'success': False, 'error': 'IMAP account not found'}), 404
+    try:
+        InboxDeliverabilityMessage.query.filter_by(imap_account_id=account.id).update({'imap_account_id': None})
+    except Exception:
+        pass
+    try:
+        TestEmailSource.query.filter_by(source_imap_account_id=account.id).update({'source_imap_account_id': None})
+    except Exception:
+        pass
     InboxEmailMessage.query.filter_by(imap_account_id=account.id).delete()
     db.session.delete(account)
     db.session.commit()
@@ -3120,6 +3123,10 @@ def _poll_inbox_test_payload(test_id, data=None):
 @permission_required('inbox_intelligence')
 def api_inbox_poll_test_async(test_id):
     payload = request.get_json(silent=True) or {}
+    running_jobs = InboxPollJob.query.filter_by(test_id=test_id, status='running').all()
+    if running_jobs:
+        existing = running_jobs[0]
+        return jsonify({'success': True, 'job_id': existing.job_id, 'message': 'A sync is already running for this test.'})
     job_id = uuid.uuid4().hex
     job = InboxPollJob(job_id=job_id, test_id=test_id, status='running', message=f'Syncing {test_id} in background...')
     db.session.add(job)
@@ -16844,8 +16851,11 @@ def _inbox_auto_sync_loop():
                 if not accounts:
                     continue
                 app.logger.info(f"[AUTO-SYNC] Syncing {len(accounts)} account(s)")
+                now = datetime.utcnow()
                 for account in accounts:
                     try:
+                        if account.last_synced_at and (now - account.last_synced_at).total_seconds() < 600:
+                            continue
                         for folder in ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk']:
                             _sync_imap_account(account, folder=folder, limit=50, mark_errors=(folder == 'INBOX'))
                         app.logger.info(f"[AUTO-SYNC] {account.email}: synced OK")

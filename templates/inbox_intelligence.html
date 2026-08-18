@@ -2750,9 +2750,13 @@ merge_recipe_id, content_blueprint_id</pre>
 
     async function deleteImapAccount(id) {
         if (!confirm('Remove this inbox and its synchronized messages?')) return;
-        await iiFetch(`/api/inbox-intelligence/imap-accounts/${id}`, {method: 'DELETE'});
-        iiState.selectedInboxIds.delete(id);
-        await loadImapAccounts();
+        try {
+            await iiFetch(`/api/inbox-intelligence/imap-accounts/${id}`, {method: 'DELETE'});
+            iiState.selectedInboxIds.delete(id);
+            await loadImapAccounts();
+        } catch (err) {
+            alert('Delete failed: ' + err.message);
+        }
     }
 
     async function loadExplorerMessages() {
@@ -4657,11 +4661,8 @@ merge_recipe_id, content_blueprint_id</pre>
         try {
             setUserInboxSyncing(true, 'Syncing recent IMAP messages...');
             const dateRange = document.getElementById('userInboxDateFilter')?.value || '2d';
-            const pollData = await iiFetch(`/api/inbox-intelligence/tests/${testId}/poll`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({sync_mode: 'recent', recent_limit: 200, date_range: dateRange})
-            });
+            const pollPayload = {sync_mode: 'recent', recent_limit: 200, date_range: dateRange};
+            const pollData = await runAutomatedSyncJob(testId, pollPayload);
             const data = await iiFetch(`/api/inbox-intelligence/tests/${testId}`);
             const rows = data.test.messages || [];
             renderAnalyticsSummary('userInboxAnalyticsSummary', rows, 'Users');
@@ -4721,11 +4722,7 @@ merge_recipe_id, content_blueprint_id</pre>
 
     async function pollDeliverabilityTest(testId) {
         const dateRange = document.getElementById('automatedDateFilter')?.value || '2d';
-        await iiFetch(`/api/inbox-intelligence/tests/${testId}/poll`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({sync_mode: 'recent', recent_limit: 200, date_range: dateRange})
-        });
+        await runAutomatedSyncJob(testId, {sync_mode: 'recent', recent_limit: 200, date_range: dateRange});
         await loadTests();
         await loadTestDetail(testId);
     }
