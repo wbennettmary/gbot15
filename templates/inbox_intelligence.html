@@ -3180,7 +3180,7 @@ merge_recipe_id, content_blueprint_id</pre>
             const rows = test.source_results || [];
             const observed = rows.reduce((sum, row) => sum + ((row.inbox_count || 0) + (row.spam_count || 0)), 0);
             const diag = pollData.diagnostic || {};
-            const diagText = `synced ${diag.synced_messages || 0}, scanned ${diag.scanned_messages || 0}, matched ${diag.matched_rows || 0}`;
+            const diagText = `fetched ${diag.headers_fetched || 0} headers, matched ${diag.matched_rows || 0}, checked ${diag.checked_rows || 0}`;
             if (runStatus) runStatus.textContent = test.status || 'Updated';
             if (status) status.textContent = `${test.test_id || testId}: ${test.status || 'updated'} · ${observed} observed placement(s) across ${rows.length} source email(s). IMAP/database ${diagText}.`;
             const syncLabel = document.getElementById('automatedLastSync');
@@ -4674,7 +4674,7 @@ merge_recipe_id, content_blueprint_id</pre>
             const summary = matrixSummary(rows);
             if (syncLabel) syncLabel.textContent = `Last sync: ${new Date().toLocaleTimeString()}`;
             const syncWarning = pollData.sync_errors?.length ? ` IMAP warnings: ${pollData.sync_errors.slice(0, 2).join(' | ')}` : '';
-            const diagnostic = pollData.diagnostic ? ` Sync checked ${pollData.diagnostic.checked_rows || 0}, imported ${pollData.diagnostic.synced_messages || 0} fresh test message(s), searched ${pollData.diagnostic.scanned_messages || 0} database message(s), matched ${pollData.diagnostic.matched_rows || 0} by exact X-Test-ID, pruned ${pollData.diagnostic.deleted_old_messages || 0} old synced message(s).` : '';
+            const diagnostic = pollData.diagnostic ? ` Sync fetched ${pollData.diagnostic.headers_fetched || 0} IMAP message(s), matched ${pollData.diagnostic.matched_rows || 0} of ${pollData.diagnostic.checked_rows || 0} observations, pruned ${pollData.diagnostic.deleted_old_messages || 0} old synced message(s).` : '';
             if (status) status.textContent = userInboxStatusText(data.test, summary, `${diagnostic}${syncWarning}`);
             await loadTests();
         } catch (err) {
