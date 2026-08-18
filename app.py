@@ -2897,6 +2897,14 @@ def api_inbox_poll_test(test_id):
             diagnostic['deleted_old_messages'] += sync_info.get('deleted_old_messages', 0)
             sync_errors.extend([f'{inbox.email}: {error}' for error in sync_info.get('errors', [])])
             placements, scan_info = _detect_message_placements_from_synced(inbox.id, rows, test_id=test.test_id)
+            if not placements:
+                direct_placements, direct_scan_info = _scan_imap_for_test_rows(inbox, rows, per_folder_limit=1200)
+                placements.update(direct_placements)
+                scan_info['scanned_messages'] = scan_info.get('scanned_messages', 0) + direct_scan_info.get('scanned_messages', 0)
+                for mode, count in (direct_scan_info.get('match_modes') or {}).items():
+                    scan_info.setdefault('match_modes', {})
+                    scan_info['match_modes'][mode] = scan_info['match_modes'].get(mode, 0) + count
+                sync_errors.extend([f'{inbox.email}: {error}' for error in direct_scan_info.get('errors', [])])
             diagnostic['scanned_messages'] += scan_info.get('scanned_messages', 0)
             for mode, count in (scan_info.get('match_modes') or {}).items():
                 diagnostic['match_modes'][mode] = diagnostic['match_modes'].get(mode, 0) + count

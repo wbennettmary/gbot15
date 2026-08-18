@@ -601,6 +601,58 @@
         word-break: break-word;
     }
 
+    .ii-explorer-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+        flex-wrap: wrap;
+        padding-bottom: 12px;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .ii-message-grid {
+        display: grid;
+        gap: 10px;
+        max-height: 640px;
+        overflow-y: auto;
+        padding-right: 4px;
+    }
+
+    .ii-message-card {
+        display: grid;
+        gap: 8px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 12px;
+        background: #fff;
+        cursor: pointer;
+        min-width: 0;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .ii-message-card:hover,
+    .ii-message-card.active {
+        border-color: #2563eb;
+        box-shadow: 0 12px 28px rgba(37, 99, 235, 0.08);
+    }
+
+    .ii-message-preview {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        color: #475569;
+        line-height: 1.45;
+    }
+
+    .ii-message-meta {
+        display: flex;
+        gap: 7px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
     .ii-action-card {
         min-width: 0;
         box-shadow: 0 12px 30px rgba(15, 23, 42, 0.05);
@@ -818,6 +870,34 @@
         border-radius: 999px;
         background: #e2e8f0;
         margin-top: 6px;
+    }
+
+    .ii-queue-card-list {
+        display: grid;
+        gap: 10px;
+        max-height: 420px;
+        overflow-y: auto;
+        padding-right: 2px;
+    }
+
+    .ii-queue-card {
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 11px;
+        background: #fff;
+        min-width: 0;
+    }
+
+    .ii-queue-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
+    }
+
+    .ii-auto-source-shell {
+        display: grid;
+        gap: 12px;
     }
 
     .ii-modal-backdrop {
@@ -1046,6 +1126,11 @@
         .ii-source-card .ii-btn,
         .ii-source-card .ii-input,
         .ii-source-card .ii-select { width: 100%; max-width: none !important; }
+        .ii-explorer-toolbar .ii-row,
+        .ii-explorer-toolbar .ii-btn,
+        #automatedTests .ii-row .ii-btn,
+        #automatedTests .ii-row .ii-input,
+        #automatedTests .ii-row .ii-select { width: 100%; max-width: none !important; }
         .ii-template-actions .ii-btn { flex-basis: calc(50% - 4px); }
         .ii-analytics-row { grid-template-columns: 1fr; }
         .ii-account-tab { max-width: none; width: 100%; }
@@ -1189,12 +1274,16 @@
                 <div class="ii-muted mt-2" id="explorerSyncStatus">Uses selected accounts from Connected Inboxes.</div>
             </aside>
             <main class="ii-panel">
-                <div class="ii-row justify-content-between mb-3">
+                <div class="ii-explorer-toolbar mb-3">
                     <div>
                         <h3>Messages</h3>
                         <div class="ii-muted">Select real received emails here, then push them to Automated Email Tests.</div>
                     </div>
-                    <button class="ii-btn ii-btn-primary" type="button" onclick="pushSelectedMessagesToAutomatedQueue()"><i class="fas fa-layer-group"></i> Push to Test Queue</button>
+                    <div class="ii-row">
+                        <button class="ii-btn" type="button" onclick="selectInboxMessagePage(true)"><i class="fas fa-check-double"></i> Select page</button>
+                        <button class="ii-btn" type="button" onclick="selectInboxMessagePage(false)"><i class="fas fa-xmark"></i> Clear page</button>
+                        <button class="ii-btn ii-btn-primary" type="button" onclick="pushSelectedMessagesToAutomatedQueue()"><i class="fas fa-layer-group"></i> Push to Test Queue</button>
+                    </div>
                 </div>
                 <div class="ii-muted mb-2" id="selectedMessageStatus">No inbox emails selected.</div>
                 <div id="messageList" class="ii-card text-center py-5">
@@ -1275,7 +1364,26 @@
                 <div class="ii-card">
                     <div class="ii-action-head">
                         <h4>2. Workspace Sources</h4>
-                        <span class="ii-muted">Reuse selected Workspace users or account tabs.</span>
+                        <button class="ii-btn ii-btn-primary" type="button" onclick="retrieveAutomatedWorkspaceUsers()"><i class="fas fa-users-gear"></i> Retrieve Users</button>
+                    </div>
+                    <div class="ii-auto-source-shell">
+                        <div class="ii-grid ii-layout-2">
+                            <div>
+                                <h4>Manual Account Lookup</h4>
+                                <div class="ii-row">
+                                    <input class="ii-input" id="automatedWorkspaceAccountSearchInput" placeholder="Search account name, admin email, or client email">
+                                    <button class="ii-btn" type="button" onclick="searchAutomatedWorkspaceAccounts()"><i class="fas fa-search"></i> Search</button>
+                                </div>
+                            </div>
+                            <div>
+                                <h4>List Management Source</h4>
+                                <div class="ii-row">
+                                    <select class="ii-select" id="automatedWorkspaceListSelect" onchange="mirrorAutomatedListSelection()"><option value="">Loading lists...</option></select>
+                                    <button class="ii-btn" type="button" onclick="retrieveAutomatedWorkspaceListUsers()"><i class="fas fa-list-check"></i> Retrieve List</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="automatedServiceAccountSelector" class="ii-card ii-muted">Search saved Workspace service accounts or choose a List Management source.</div>
                     </div>
                     <div class="ii-form-grid">
                         <div class="ii-field"><label>Strategy</label><select class="ii-select" id="automatedStrategyInput" onchange="updateAutomatedSummary()"><option value="distributed">Distributed</option><option value="full_matrix">Full Matrix</option></select></div>
@@ -1284,7 +1392,7 @@
                         <div class="ii-field"><label>Spam verdict below</label><input class="ii-input" id="automatedSpamThresholdInput" type="number" min="0" max="99" value="40"></div>
                         <div class="ii-field"><label>Minimum observations</label><input class="ii-input" id="automatedMinimumObservationsInput" type="number" min="1" max="500" value="10"></div>
                     </div>
-                    <div class="ii-muted mt-2">Select Workspace accounts/users in the Workspace Accounts area or the User Inbox Test account tabs. Automated tests can expand selected account tabs at run time.</div>
+                    <div class="ii-muted mt-2" id="automatedWorkspaceStatus">Select specific accounts or a saved list. Blank users-per-account sends all non-admin users from selected accounts.</div>
                 </div>
                 <div class="ii-card">
                     <div class="ii-action-head">
@@ -2071,6 +2179,7 @@ merge_recipe_id, content_blueprint_id</pre>
         automatedSelectedSourceIds: new Set(),
         automatedTests: [],
         automatedSelectedTestId: null,
+        automatedPollTimers: {},
         automatedResultFilter: 'ALL',
         selectedResultsTest: null,
         tests: []
@@ -2179,6 +2288,14 @@ merge_recipe_id, content_blueprint_id</pre>
         if (checked) iiState.selectedMessageIds.add(id);
         else iiState.selectedMessageIds.delete(id);
         renderSelectedMessageStatus();
+    }
+
+    function selectInboxMessagePage(checked) {
+        iiState.messages.forEach((message) => {
+            if (checked) iiState.selectedMessageIds.add(message.id);
+            else iiState.selectedMessageIds.delete(message.id);
+        });
+        renderInboxMessagesList();
     }
 
     function toggleCurrentMessageTemplateSource() {
@@ -2322,13 +2439,25 @@ merge_recipe_id, content_blueprint_id</pre>
                 <p class="ii-muted mb-0">Messages will appear after an authorized inbox is connected and synchronized.</p>`;
             return;
         }
-        list.className = '';
-        list.innerHTML = iiState.messages.map((m) => `<div class="ii-message ${iiState.activeMessageId === m.id ? 'active' : ''}" onclick="loadMessageDetail(${m.id})">
-            <div class="ii-row justify-content-between"><label onclick="event.stopPropagation()"><input type="checkbox" ${iiState.selectedMessageIds.has(m.id) ? 'checked' : ''} onchange="toggleMessageSelection(${m.id}, this.checked)"> <strong>${escapeHtml(m.sender || 'Unknown sender')}</strong></label><span class="ii-muted">${m.received_at ? new Date(m.received_at).toLocaleString() : ''}</span></div>
-            <div>${escapeHtml(m.subject || '(no subject)')}</div>
-            <div class="ii-muted">${escapeHtml(m.sender_domain || '')} · ${escapeHtml(m.folder || '')} ${m.has_attachments ? '· attachment' : ''}</div>
-            <div class="ii-muted">${escapeHtml(m.preview || '')}</div>
-        </div>`).join('');
+        list.className = 'ii-message-grid';
+        list.innerHTML = iiState.messages.map((m) => `
+            <article class="ii-message-card ${iiState.activeMessageId === m.id ? 'active' : ''}" onclick="loadMessageDetail(${m.id})">
+                <div class="ii-row justify-content-between">
+                    <label class="ii-user-line" onclick="event.stopPropagation()">
+                        <input type="checkbox" ${iiState.selectedMessageIds.has(m.id) ? 'checked' : ''} onchange="toggleMessageSelection(${m.id}, this.checked)">
+                        <strong>${escapeHtml(m.subject || '(no subject)')}</strong>
+                    </label>
+                    <span class="ii-muted">${m.received_at ? new Date(m.received_at).toLocaleString() : ''}</span>
+                </div>
+                <div class="ii-message-meta">
+                    <span class="ii-chip blue">${escapeHtml(m.provider || 'IMAP')}</span>
+                    <span class="ii-chip gray">${escapeHtml(m.sender_domain || 'unknown domain')}</span>
+                    <span class="ii-chip gray">${escapeHtml(m.folder || 'folder')}</span>
+                    ${m.has_attachments ? '<span class="ii-chip yellow">attachment</span>' : ''}
+                </div>
+                <div class="ii-muted ii-email-text">${escapeHtml(m.sender || 'Unknown sender')}</div>
+                <div class="ii-message-preview">${escapeHtml(m.preview || '')}</div>
+            </article>`).join('');
         renderSelectedMessageStatus();
     }
 
@@ -2431,20 +2560,30 @@ merge_recipe_id, content_blueprint_id</pre>
             el.innerHTML = '<div class="ii-muted">No pushed emails found. Select messages in Inbox Explorer and push them to the test queue.</div>';
             return;
         }
+        const pageCount = Math.max(1, Math.ceil(iiState.automatedQueueTotal / 20));
         el.innerHTML = `
-            <div class="ii-responsive-table">
-                <table class="ii-table">
-                    <tr><th></th><th>Email</th><th>Source</th><th>Sender Domain</th><th>Last Result</th><th>Status</th></tr>
-                    ${iiState.automatedQueue.map((source) => `
-                        <tr>
-                            <td><input type="checkbox" ${iiState.automatedSelectedSourceIds.has(source.id) ? 'checked' : ''} onchange="toggleAutomatedSource(${source.id}, this.checked)"></td>
-                            <td><strong>${escapeHtml(source.original_subject || '(no subject)')}</strong><div class="ii-muted ii-email-text">${escapeHtml(source.source_sender || '')}</div></td>
-                            <td>${escapeHtml(source.source_provider || 'IMAP')}<div class="ii-muted">${source.original_received_at ? new Date(source.original_received_at).toLocaleDateString() : ''}</div></td>
-                            <td><span class="ii-chip blue">${escapeHtml(source.source_sender_domain || 'unknown')}</span></td>
-                            <td><span class="ii-chip ${verdictChip(source.verdict || source.last_verdict)}">${escapeHtml(source.verdict || source.last_verdict || 'New')}</span><div class="ii-muted">${source.inbox_percentage ?? source.last_inbox_percentage ?? '--'}% inbox</div></td>
-                            <td>${escapeHtml(source.status || 'AVAILABLE')}</td>
-                        </tr>`).join('')}
-                </table>
+            <div class="ii-queue-card-list">
+                ${iiState.automatedQueue.map((source) => `
+                    <label class="ii-queue-card">
+                        <div class="ii-row justify-content-between">
+                            <span class="ii-user-line"><input type="checkbox" ${iiState.automatedSelectedSourceIds.has(source.id) ? 'checked' : ''} onchange="toggleAutomatedSource(${source.id}, this.checked)"> <strong>${escapeHtml(source.original_subject || '(no subject)')}</strong></span>
+                            <span class="ii-chip ${verdictChip(source.verdict || source.last_verdict)}">${escapeHtml(source.verdict || source.last_verdict || 'New')}</span>
+                        </div>
+                        <div class="ii-muted ii-email-text mt-1">${escapeHtml(source.source_sender || '')}</div>
+                        <div class="ii-queue-meta">
+                            <span class="ii-chip blue">${escapeHtml(source.source_provider || 'IMAP')}</span>
+                            <span class="ii-chip gray">${escapeHtml(source.source_sender_domain || 'unknown')}</span>
+                            <span class="ii-chip gray">${escapeHtml(source.status || 'AVAILABLE')}</span>
+                            <span class="ii-muted">${source.original_received_at ? new Date(source.original_received_at).toLocaleDateString() : ''}</span>
+                        </div>
+                    </label>`).join('')}
+            </div>
+            <div class="ii-user-pager">
+                <span class="ii-muted">Page ${iiState.automatedQueuePage}/${pageCount} · ${iiState.automatedSelectedSourceIds.size} selected</span>
+                <div class="ii-row">
+                    <button class="ii-btn" type="button" ${iiState.automatedQueuePage <= 1 ? 'disabled' : ''} onclick="loadAutomatedQueue(${iiState.automatedQueuePage - 1})"><i class="fas fa-chevron-left"></i></button>
+                    <button class="ii-btn" type="button" ${iiState.automatedQueuePage >= pageCount ? 'disabled' : ''} onclick="loadAutomatedQueue(${iiState.automatedQueuePage + 1})"><i class="fas fa-chevron-right"></i></button>
+                </div>
             </div>`;
     }
 
@@ -2550,17 +2689,51 @@ merge_recipe_id, content_blueprint_id</pre>
             iiState.automatedSelectedTestId = data.test_id;
             if (status) status.textContent = data.message;
             await loadAutomatedTests();
-            await pollAutomatedEmailTest(data.test_id);
+            await pollAutomatedEmailTest(data.test_id, true);
         } catch (err) {
             if (status) status.textContent = err.message;
         }
     }
 
-    async function pollAutomatedEmailTest(testId) {
-        await iiFetch(`/api/inbox-intelligence/tests/${testId}/poll`, {method: 'POST'});
-        const data = await iiFetch(`/api/inbox-intelligence/automated-tests/${testId}/results`);
-        renderAutomatedEmailResults(data.test);
-        await loadAutomatedTests();
+    function automatedTestIsActive(status) {
+        return ['QUEUED', 'SENDING', 'WAITING_FOR_DELIVERY', 'CHECKING_INBOX'].includes(String(status || '').toUpperCase());
+    }
+
+    function scheduleAutomatedPoll(testId) {
+        if (!testId || iiState.automatedPollTimers[testId]) return;
+        iiState.automatedPollTimers[testId] = window.setTimeout(() => {
+            delete iiState.automatedPollTimers[testId];
+            pollAutomatedEmailTest(testId, true);
+        }, 20000);
+    }
+
+    async function pollAutomatedEmailTest(testId, keepWatching = false) {
+        const status = document.getElementById('automatedStatusText');
+        const runStatus = document.getElementById('automatedRunStatus');
+        if (status) status.textContent = `Syncing automated test ${testId} with IMAP/database messages...`;
+        if (runStatus) runStatus.textContent = 'Syncing';
+        try {
+            const pollData = await iiFetch(`/api/inbox-intelligence/tests/${testId}/poll`, {method: 'POST'});
+            const data = await iiFetch(`/api/inbox-intelligence/automated-tests/${testId}/results`);
+            const test = data.test || {};
+            iiState.automatedSelectedTestId = test.test_id || testId;
+            const existing = iiState.automatedTests.findIndex((item) => item.test_id === iiState.automatedSelectedTestId);
+            if (existing >= 0) iiState.automatedTests[existing] = {...iiState.automatedTests[existing], ...test};
+            else iiState.automatedTests.unshift(test);
+            renderAutomatedTests();
+            renderAutomatedEmailResults(test);
+            const rows = test.source_results || [];
+            const observed = rows.reduce((sum, row) => sum + ((row.inbox_count || 0) + (row.spam_count || 0)), 0);
+            const diag = pollData.diagnostic || {};
+            const diagText = `synced ${diag.synced_messages || 0}, scanned ${diag.scanned_messages || 0}, matched ${diag.matched_rows || 0}`;
+            if (runStatus) runStatus.textContent = test.status || 'Updated';
+            if (status) status.textContent = `${test.test_id || testId}: ${test.status || 'updated'} · ${observed} observed placement(s) across ${rows.length} source email(s). IMAP/database ${diagText}.`;
+            await loadAutomatedTests();
+            if (keepWatching && automatedTestIsActive(test.status)) scheduleAutomatedPoll(test.test_id || testId);
+        } catch (err) {
+            if (status) status.textContent = `Automated test sync failed: ${err.message}`;
+            if (runStatus) runStatus.textContent = 'Sync failed';
+        }
     }
 
     async function loadAutomatedTests() {
@@ -2570,6 +2743,9 @@ merge_recipe_id, content_blueprint_id</pre>
         if (!iiState.automatedSelectedTestId && iiState.automatedTests[0]) {
             iiState.automatedSelectedTestId = iiState.automatedTests[0].test_id;
             renderAutomatedEmailResults(iiState.automatedTests[0]);
+        } else if (iiState.automatedSelectedTestId) {
+            const selected = iiState.automatedTests.find((test) => test.test_id === iiState.automatedSelectedTestId);
+            if (selected) renderAutomatedEmailResults(selected);
         }
     }
 
@@ -2583,7 +2759,11 @@ merge_recipe_id, content_blueprint_id</pre>
         el.innerHTML = iiState.automatedTests.slice(0, 5).map((test) => `
             <div class="ii-row justify-content-between mb-2">
                 <div><strong>${escapeHtml(test.name)}</strong><div class="ii-muted">${escapeHtml(test.test_id)} · ${test.created_at ? new Date(test.created_at).toLocaleString() : ''}</div></div>
-                <div class="ii-row"><span class="ii-chip blue">${escapeHtml(test.status)}</span><button class="ii-btn" type="button" onclick="pollAutomatedEmailTest('${escapeHtml(test.test_id)}')">View Live Results</button></div>
+                <div class="ii-row">
+                    <span class="ii-chip blue">${escapeHtml(test.status)}</span>
+                    <button class="ii-btn" type="button" onclick="pollAutomatedEmailTest('${escapeHtml(test.test_id)}', true)"><i class="fas fa-arrows-rotate"></i> Sync Now</button>
+                    <button class="ii-btn" type="button" onclick="pollAutomatedEmailTest('${escapeHtml(test.test_id)}')"><i class="fas fa-chart-simple"></i> View</button>
+                </div>
             </div>`).join('');
     }
 
@@ -2668,15 +2848,18 @@ merge_recipe_id, content_blueprint_id</pre>
     async function loadWorkspaceLists() {
         const select = document.getElementById('workspaceListSelect');
         const userInboxSelect = document.getElementById('userInboxWorkspaceListSelect');
+        const automatedSelect = document.getElementById('automatedWorkspaceListSelect');
         const status = document.getElementById('workspaceListStatus');
         if (select) select.innerHTML = '<option value="">Loading saved lists...</option>';
         if (userInboxSelect) userInboxSelect.innerHTML = '<option value="">Loading saved lists...</option>';
+        if (automatedSelect) automatedSelect.innerHTML = '<option value="">Loading saved lists...</option>';
         try {
             const data = await iiFetch('/api/inbox-intelligence/workspace-lists');
             iiState.workspaceLists = data.lists || [];
             if (!iiState.workspaceLists.length) {
                 if (select) select.innerHTML = '<option value="">No saved lists found</option>';
                 if (userInboxSelect) userInboxSelect.innerHTML = '<option value="">No saved lists found</option>';
+                if (automatedSelect) automatedSelect.innerHTML = '<option value="">No saved lists found</option>';
                 if (status) status.textContent = 'Create a list in List Management first.';
                 const userStatus = document.getElementById('userInboxWorkspaceListStatus');
                 if (userStatus) userStatus.textContent = 'Create a list in List Management first.';
@@ -2685,12 +2868,14 @@ merge_recipe_id, content_blueprint_id</pre>
             const options = '<option value="">Select List Management source</option>' + iiState.workspaceLists.map((list) => `<option value="${list.id}">${escapeHtml(list.name)} · ${list.account_count} account(s) · ${escapeHtml(list.status)}</option>`).join('');
             if (select) select.innerHTML = options;
             if (userInboxSelect) userInboxSelect.innerHTML = options;
+            if (automatedSelect) automatedSelect.innerHTML = options;
             if (status) status.textContent = `${iiState.workspaceLists.length} saved list(s) available.`;
             const userStatus = document.getElementById('userInboxWorkspaceListStatus');
             if (userStatus) userStatus.textContent = `${iiState.workspaceLists.length} saved list(s) available.`;
         } catch (err) {
             if (select) select.innerHTML = '<option value="">Could not load lists</option>';
             if (userInboxSelect) userInboxSelect.innerHTML = '<option value="">Could not load lists</option>';
+            if (automatedSelect) automatedSelect.innerHTML = '<option value="">Could not load lists</option>';
             if (status) status.textContent = err.message;
             const userStatus = document.getElementById('userInboxWorkspaceListStatus');
             if (userStatus) userStatus.textContent = err.message;
@@ -2767,6 +2952,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 if (data.ambiguous?.length) notes.push(`${data.ambiguous.length} ambiguous line(s)`);
                 if (userStatus) userStatus.textContent = `Loaded ${iiState.userInboxListAccounts.length} admin/account card(s). Set users-per-account to retrieve test users.${notes.length ? ' ' + notes.join(', ') + '.' : ''}`;
                 renderUserInboxSenderSelector();
+                renderAutomatedServiceAccountSelector();
                 updateAutomatedSummary();
                 return;
             }
@@ -2793,6 +2979,7 @@ merge_recipe_id, content_blueprint_id</pre>
             renderWorkspaceSenders();
             renderTestSenderSelector();
             renderUserInboxSenderSelector();
+            renderAutomatedServiceAccountSelector();
             updateAutomatedSummary();
         } catch (err) {
             if (userStatus) userStatus.textContent = err.message;
@@ -3264,6 +3451,7 @@ merge_recipe_id, content_blueprint_id</pre>
         if (!iiState.serviceAccounts.length) {
             el.innerHTML = emptyMessage || 'No matching saved Workspace service accounts found.';
             renderUserInboxServiceAccountSelector(emptyMessage);
+            renderAutomatedServiceAccountSelector(emptyMessage);
             return;
         }
         el.innerHTML = iiState.serviceAccounts.map((account) => `
@@ -3272,11 +3460,46 @@ merge_recipe_id, content_blueprint_id</pre>
                 ${escapeHtml(account.name)} <span class="ii-muted">${escapeHtml(account.admin_email)} · ${escapeHtml(account.is_active ? 'active' : 'inactive')}</span>
             </label>`).join('');
         renderUserInboxServiceAccountSelector();
+        renderAutomatedServiceAccountSelector();
     }
 
     function renderUserInboxServiceAccountSelector(emptyMessage) {
         const el = document.getElementById('userInboxServiceAccountSelector');
         if (!el) return;
+        if (!iiState.serviceAccounts.length) {
+            el.innerHTML = emptyMessage || 'No matching saved Workspace service accounts found.';
+            return;
+        }
+        el.innerHTML = iiState.serviceAccounts.map((account) => `
+            <label class="d-block mb-2">
+                <input type="checkbox" value="${account.id}" ${iiState.selectedServiceAccountIds.has(account.id) ? 'checked' : ''} onchange="toggleServiceAccount(${account.id}, this.checked)">
+                ${escapeHtml(account.name)} <span class="ii-muted">${escapeHtml(account.admin_email)} · ${escapeHtml(account.is_active ? 'active' : 'inactive')}</span>
+            </label>`).join('');
+    }
+
+    function renderAutomatedServiceAccountSelector(emptyMessage) {
+        const el = document.getElementById('automatedServiceAccountSelector');
+        if (!el) return;
+        if (iiState.userInboxListAccountOnly && iiState.userInboxListAccounts.length) {
+            el.className = 'ii-card';
+            el.innerHTML = `
+                <div class="ii-row justify-content-between mb-2">
+                    <strong>List Account Tabs</strong>
+                    <button class="ii-btn" type="button" onclick="clearUserInboxSelections()"><i class="fas fa-xmark"></i> Unselect all</button>
+                </div>
+                <div class="ii-account-tabs">
+                    ${iiState.userInboxListAccounts.map((account) => `
+                        <div class="ii-account-tab ${iiState.selectedUserInboxListAccountIds.has(account.id) ? 'active' : ''}" onclick="toggleUserInboxListAccount(${account.id}, !iiState.selectedUserInboxListAccountIds.has(${account.id}))">
+                            <div class="ii-account-tab-head">
+                                <strong class="ii-email-text"><input type="checkbox" onclick="event.stopPropagation()" onchange="toggleUserInboxListAccount(${account.id}, this.checked)" ${iiState.selectedUserInboxListAccountIds.has(account.id) ? 'checked' : ''}> ${escapeHtml(account.admin_email || account.name)}</strong>
+                                <span class="ii-chip ${account.is_active ? 'green' : 'yellow'}">${account.is_active ? 'active' : 'inactive'}</span>
+                            </div>
+                            <div class="ii-muted ii-email-text">${escapeHtml(account.name || '')}</div>
+                        </div>`).join('')}
+                </div>`;
+            return;
+        }
+        el.className = 'ii-card';
         if (!iiState.serviceAccounts.length) {
             el.innerHTML = emptyMessage || 'No matching saved Workspace service accounts found.';
             return;
@@ -3300,6 +3523,39 @@ merge_recipe_id, content_blueprint_id</pre>
         const shared = document.getElementById('workspaceAccountSearchInput');
         if (shared && source) shared.value = source.value;
         await searchWorkspaceAccounts();
+    }
+
+    async function searchAutomatedWorkspaceAccounts() {
+        const source = document.getElementById('automatedWorkspaceAccountSearchInput');
+        const shared = document.getElementById('workspaceAccountSearchInput');
+        if (shared && source) shared.value = source.value;
+        await searchWorkspaceAccounts();
+    }
+
+    function mirrorAutomatedListSelection() {
+        const shared = document.getElementById('userInboxWorkspaceListSelect');
+        const autoSelect = document.getElementById('automatedWorkspaceListSelect');
+        if (shared && autoSelect) shared.value = autoSelect.value;
+    }
+
+    async function retrieveAutomatedWorkspaceListUsers() {
+        const autoSelect = document.getElementById('automatedWorkspaceListSelect');
+        const userSelect = document.getElementById('userInboxWorkspaceListSelect');
+        const userLimit = document.getElementById('userInboxUsersPerAccountInput');
+        const autoLimit = document.getElementById('automatedUsersPerAccountInput');
+        if (userSelect && autoSelect) userSelect.value = autoSelect.value;
+        if (userLimit && autoLimit) userLimit.value = autoLimit.value;
+        await retrieveUserInboxWorkspaceListUsers();
+        renderAutomatedServiceAccountSelector();
+        updateAutomatedSummary();
+    }
+
+    async function retrieveAutomatedWorkspaceUsers() {
+        const status = document.getElementById('automatedWorkspaceStatus');
+        if (status) status.textContent = 'Retrieving Workspace users for Automated Email Tests...';
+        await retrieveWorkspaceUsers();
+        renderAutomatedServiceAccountSelector();
+        if (status) status.textContent = `${automatedSenderCount()} Workspace user(s) available for this automated test.`;
     }
 
     async function retrieveWorkspaceUsers() {
@@ -3457,6 +3713,7 @@ merge_recipe_id, content_blueprint_id</pre>
         if (checked) iiState.selectedUserInboxListAccountIds.add(accountId);
         else iiState.selectedUserInboxListAccountIds.delete(accountId);
         renderUserInboxSenderSelector();
+        renderAutomatedServiceAccountSelector();
         updateAutomatedSummary();
     }
 
@@ -3473,6 +3730,7 @@ merge_recipe_id, content_blueprint_id</pre>
         renderWorkspaceSenders();
         renderTestSenderSelector();
         renderUserInboxSenderSelector();
+        renderAutomatedServiceAccountSelector();
         updateAutomatedSummary();
     }
 
@@ -3484,6 +3742,8 @@ merge_recipe_id, content_blueprint_id</pre>
         renderWorkspaceSenders();
         renderTestSenderSelector();
         renderUserInboxSenderSelector();
+        renderAutomatedServiceAccountSelector();
+        updateAutomatedSummary();
     }
 
     function renderUserInboxListAccountCards(el) {
