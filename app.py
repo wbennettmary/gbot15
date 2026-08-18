@@ -1410,6 +1410,53 @@ def api_inbox_sync_account(account_id):
         return jsonify({'success': False, 'error': error, 'account': _serialize_imap_account(account)}), 400
     return jsonify({'success': True, 'synced': synced, 'account': _serialize_imap_account(account)})
 
+@app.route('/api/inbox-intelligence/explorer/sync', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_explorer_bulk_sync():
+    data = request.get_json(silent=True) or {}
+    account_ids = data.get('account_ids') or []
+    limit = min(200, max(10, int(data.get('limit') or 80)))
+    folders = data.get('folders') or ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk']
+    if not account_ids:
+        accounts = InboxImapAccount.query.all()
+    else:
+        accounts = InboxImapAccount.query.filter(InboxImapAccount.id.in_(account_ids)).all()
+    results = []
+    for account in accounts:
+        account_synced = 0
+        account_errors = []
+        for folder in folders:
+            synced, error = _sync_imap_account(account, folder=folder, limit=limit, mark_errors=(folder == 'INBOX'))
+            account_synced += synced
+            if error:
+                account_errors.append(f'{folder}: {error}')
+        results.append({'account_id': account.id, 'email': account.email, 'synced': account_synced, 'errors': account_errors})
+    total_synced = sum(r['synced'] for r in results)
+    all_errors = [err for r in results for err in r['errors']]
+    return jsonify({'success': True, 'synced': total_synced, 'results': results, 'errors': all_errors})
+
+@app.route('/api/inbox-intelligence/explorer/folders', methods=['GET'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_explorer_folders():
+    account_id = request.args.get('account_id')
+    if account_id:
+        accounts = InboxImapAccount.query.filter_by(id=int(account_id)).all()
+    else:
+        accounts = InboxImapAccount.query.all()
+    folder_counts = {}
+    for account in accounts:
+        msgs = InboxEmailMessage.query.filter_by(imap_account_id=account.id).all()
+        for msg in msgs:
+            f = msg.folder or 'Unknown'
+            if f not in folder_counts:
+                folder_counts[f] = {'folder': f, 'count': 0, 'account_ids': set()}
+            folder_counts[f]['count'] += 1
+            folder_counts[f]['account_ids'].add(account.id)
+    folders = sorted([{'folder': v['folder'], 'count': v['count'], 'account_ids': list(v['account_ids'])} for v in folder_counts.values()], key=lambda x: -x['count'])
+    return jsonify({'success': True, 'folders': folders})
+
 @app.route('/api/inbox-intelligence/imap-accounts/<int:account_id>', methods=['DELETE'])
 @login_required
 @permission_required('inbox_intelligence')
@@ -1430,6 +1477,7 @@ def api_inbox_messages():
     account_id = request.args.get('account_id')
     folder = request.args.get('folder')
     search = (request.args.get('search') or '').strip()
+    date_range = (request.args.get('date_range') or '').strip()
     if account_id:
         q = q.filter_by(imap_account_id=int(account_id))
     if folder:
@@ -1437,6 +1485,12 @@ def api_inbox_messages():
     if search:
         like = f"%{search}%"
         q = q.filter(or_(InboxEmailMessage.sender.ilike(like), InboxEmailMessage.subject.ilike(like), InboxEmailMessage.sender_domain.ilike(like), InboxEmailMessage.preview.ilike(like)))
+    if date_range == '24h':
+        q = q.filter(InboxEmailMessage.received_at >= datetime.utcnow() - timedelta(hours=24))
+    elif date_range == '7d':
+        q = q.filter(InboxEmailMessage.received_at >= datetime.utcnow() - timedelta(days=7))
+    elif date_range == '30d':
+        q = q.filter(InboxEmailMessage.received_at >= datetime.utcnow() - timedelta(days=30))
     messages = q.order_by(InboxEmailMessage.received_at.desc().nullslast(), InboxEmailMessage.id.desc()).limit(min(500, int(request.args.get('limit') or 100))).all()
     return jsonify({'success': True, 'messages': [{
         'id': m.id,

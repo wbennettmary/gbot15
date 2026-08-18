@@ -1410,33 +1410,58 @@
     <section id="explorer" class="ii-tabpane">
         <div class="ii-grid ii-layout-3 ii-mailbox">
             <aside class="ii-panel">
-                <h3>Folders</h3>
-                <div id="folderList"><div class="ii-folder active"><span>Inbox</span><span id="folderInboxCount">0</span></div></div>
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h3 class="mb-0">Folders</h3>
+                    <button class="ii-btn ii-btn-sm" type="button" onclick="loadExplorerFolders()" title="Refresh folders"><i class="fas fa-rotate"></i></button>
+                </div>
+                <div id="folderList">
+                    <div class="ii-folder active" onclick="filterByFolder('')" data-folder="">
+                        <span>All Folders</span><span id="folderAllCount">0</span>
+                    </div>
+                </div>
+                <hr>
+                <h4>Sync</h4>
+                <div id="explorerAccountCheckboxes" class="mb-2"></div>
+                <label class="d-block mb-1 ii-muted" style="font-size:0.8em">
+                    <input type="checkbox" id="explorerSyncInbox" checked> INBOX
+                </label>
+                <label class="d-block mb-1 ii-muted" style="font-size:0.8em">
+                    <input type="checkbox" id="explorerSyncSpam" checked> Spam / Junk
+                </label>
+                <button class="ii-btn ii-btn-primary mt-2 w-100" type="button" onclick="syncExplorerAccounts()" id="explorerSyncBtn">
+                    <i class="fas fa-rotate"></i> Sync Emails
+                </button>
+                <div class="ii-muted mt-2" style="font-size:0.8em" id="explorerSyncStatus">Select accounts and sync to browse received emails.</div>
                 <hr>
                 <h4>Filters</h4>
-                <input class="ii-input mb-2" id="messageSearchInput" placeholder="Sender, domain, subject" oninput="loadInboxMessages()">
-                <select class="ii-select mb-2" id="messageAccountFilter" onchange="loadInboxMessages()"><option value="">All inbox accounts</option></select>
-                <select class="ii-select"><option>Any date</option><option>Last 24 hours</option><option>7 days</option></select>
-                <button class="ii-btn ii-btn-primary mt-3 w-100" type="button" onclick="syncSelectedInboxAccounts()"><i class="fas fa-rotate"></i> Sync Selected Accounts</button>
-                <div class="ii-muted mt-2" id="explorerSyncStatus">Uses selected accounts from Connected Inboxes.</div>
+                <input class="ii-input mb-2" id="messageSearchInput" placeholder="Sender, domain, subject..." oninput="loadExplorerMessages()">
+                <select class="ii-select mb-2" id="messageAccountFilter" onchange="loadExplorerMessages()">
+                    <option value="">All accounts</option>
+                </select>
+                <select class="ii-select mb-2" id="messageDateFilter" onchange="loadExplorerMessages()">
+                    <option value="">Any date</option>
+                    <option value="24h">Last 24 hours</option>
+                    <option value="7d">Last 7 days</option>
+                    <option value="30d">Last 30 days</option>
+                </select>
             </aside>
             <main class="ii-panel">
                 <div class="ii-explorer-toolbar mb-3">
                     <div>
                         <h3>Messages</h3>
-                        <div class="ii-muted">Select real received emails here, then push them to Automated Email Tests.</div>
+                        <div class="ii-muted">Browse received emails, then push them to Automated Email Tests.</div>
                     </div>
                     <div class="ii-row">
-                        <button class="ii-btn" type="button" onclick="selectInboxMessagePage(true)"><i class="fas fa-check-double"></i> Select page</button>
-                        <button class="ii-btn" type="button" onclick="selectInboxMessagePage(false)"><i class="fas fa-xmark"></i> Clear page</button>
-                        <button class="ii-btn ii-btn-primary" type="button" onclick="pushSelectedMessagesToAutomatedQueue()"><i class="fas fa-layer-group"></i> Push to Test Queue</button>
+                        <button class="ii-btn" type="button" onclick="selectInboxMessagePage(true)"><i class="fas fa-check-double"></i> Select all</button>
+                        <button class="ii-btn" type="button" onclick="selectInboxMessagePage(false)"><i class="fas fa-xmark"></i> Clear</button>
+                        <button class="ii-btn ii-btn-primary" type="button" onclick="pushSelectedMessagesToAutomatedQueue()"><i class="fas fa-layer-group"></i> Push to Queue</button>
                     </div>
                 </div>
-                <div class="ii-muted mb-2" id="selectedMessageStatus">No inbox emails selected.</div>
+                <div class="ii-muted mb-2" id="selectedMessageStatus">No emails selected.</div>
                 <div id="messageList" class="ii-card text-center py-5">
                     <i class="fas fa-envelope-open-text fa-3x text-muted mb-3"></i>
-                    <h4>No synchronized messages</h4>
-                    <p class="ii-muted mb-0">Messages will appear after an authorized inbox is connected and synchronized by background jobs.</p>
+                    <h4>No messages yet</h4>
+                    <p class="ii-muted mb-0">Connect an inbox in <strong>Connected Inboxes</strong>, then come back and click <strong>Sync Emails</strong>.</p>
                 </div>
             </main>
             <aside class="ii-panel">
@@ -1445,13 +1470,13 @@
                     <div class="text-center py-4">
                         <i class="fas fa-shield-halved fa-2x text-muted mb-3"></i>
                         <h4>Select a message</h4>
-                        <p class="ii-muted mb-0">Sanitized HTML, plain-text content, headers, links, images, and structure analysis will appear here.</p>
+                        <p class="ii-muted mb-0">Content, headers, links, images, and structure analysis appear here.</p>
                     </div>
                 </div>
                 <div class="ii-row mt-3">
                     <button class="ii-btn ii-btn-primary" type="button" id="selectCurrentMessageBtn" onclick="toggleCurrentMessageTemplateSource()" disabled><i class="fas fa-check-square"></i> Select For Queue</button>
                 </div>
-                <h4 class="mt-3">Structure Analysis</h4>
+                <h4 class="mt-3">Structure</h4>
                 <div class="ii-row" id="messageStructure"><span class="ii-chip gray">No message selected</span></div>
                 <details class="mt-3"><summary>Headers</summary><pre class="ii-muted mt-2" id="messageHeaders">No headers loaded.</pre></details>
             </aside>
@@ -2343,6 +2368,7 @@ merge_recipe_id, content_blueprint_id</pre>
         selectedServiceAccountIds: new Set(),
         selectedSenderEmails: new Set(),
         selectedInboxIds: new Set(),
+        activeExplorerFolder: '',
         automatedQueue: [],
         automatedQueueTotal: 0,
         automatedQueuePage: 1,
@@ -2490,8 +2516,50 @@ merge_recipe_id, content_blueprint_id</pre>
 
     function renderMessageAccountFilter() {
         const select = document.getElementById('messageAccountFilter');
-        select.innerHTML = '<option value="">All inbox accounts</option>' + iiState.imapAccounts.map((account) => `<option value="${account.id}">${escapeHtml(account.email)}</option>`).join('');
-        document.getElementById('folderInboxCount').textContent = iiState.imapAccounts.reduce((sum, account) => sum + (account.inbox_count || 0), 0);
+        if (select) select.innerHTML = '<option value="">All accounts</option>' + iiState.imapAccounts.map((account) => `<option value="${account.id}">${escapeHtml(account.email)}</option>`).join('');
+        renderExplorerAccountCheckboxes();
+    }
+
+    function renderExplorerAccountCheckboxes() {
+        const el = document.getElementById('explorerAccountCheckboxes');
+        if (!el) return;
+        if (!iiState.imapAccounts.length) {
+            el.innerHTML = '<p class="ii-muted" style="font-size:0.8em">No accounts connected.</p>';
+            return;
+        }
+        el.innerHTML = iiState.imapAccounts.map((account) => `
+            <label class="d-block mb-1 ii-muted" style="font-size:0.8em">
+                <input type="checkbox" checked class="explorer-account-check" value="${account.id}">
+                ${escapeHtml(account.email)}
+            </label>`).join('');
+    }
+
+    async function loadExplorerFolders(accountId) {
+        try {
+            const params = accountId ? `?account_id=${accountId}` : '';
+            const data = await iiFetch('/api/inbox-intelligence/explorer/folders' + params);
+            const folderList = document.getElementById('folderList');
+            if (!folderList) return;
+            const allCount = (data.folders || []).reduce((sum, f) => sum + f.count, 0);
+            let html = `<div class="ii-folder ${(iiState.activeExplorerFolder || '') === '' ? 'active' : ''}" onclick="filterByFolder('')" data-folder=""><span>All Folders</span><span>${allCount}</span></div>`;
+            (data.folders || []).forEach((folder) => {
+                const isActive = iiState.activeExplorerFolder === folder.folder;
+                const icon = folder.folder.toLowerCase().includes('spam') || folder.folder.toLowerCase().includes('junk') ? 'fa-shield-halved' : folder.folder.toLowerCase().includes('sent') ? 'fa-paper-plane' : 'fa-inbox';
+                html += `<div class="ii-folder ${isActive ? 'active' : ''}" onclick="filterByFolder('${escapeHtml(folder.folder).replace(/'/g, "\\'")}')" data-folder="${escapeHtml(folder.folder)}">
+                    <span><i class="fas ${icon} ii-muted" style="font-size:0.8em;width:16px;text-align:center"></i> ${escapeHtml(folder.folder)}</span>
+                    <span>${folder.count}</span>
+                </div>`;
+            });
+            folderList.innerHTML = html;
+        } catch (err) { console.error('Failed to load folders:', err); }
+    }
+
+    function filterByFolder(folder) {
+        iiState.activeExplorerFolder = folder;
+        document.querySelectorAll('#folderList .ii-folder').forEach((el) => {
+            el.classList.toggle('active', el.dataset.folder === folder);
+        });
+        loadExplorerMessages();
     }
 
     async function loadImapAccounts() {
@@ -2511,6 +2579,8 @@ merge_recipe_id, content_blueprint_id</pre>
         renderAutomatedInboxSelector();
         syncRecipientInputFromSelectedInboxes();
         updateAutomatedSummary();
+        loadExplorerFolders();
+        loadExplorerMessages();
     }
 
     async function saveImapAccount(event) {
@@ -2537,7 +2607,6 @@ merge_recipe_id, content_blueprint_id</pre>
             status.textContent = data.message || 'Inbox saved.';
             document.getElementById('imapPasswordInput').value = '';
             await loadImapAccounts();
-            await loadInboxMessages();
         } catch (err) {
             status.textContent = err.message;
         }
@@ -2547,38 +2616,44 @@ merge_recipe_id, content_blueprint_id</pre>
         await iiFetch(`/api/inbox-intelligence/imap-accounts/${id}/sync`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({limit: 50})
+            body: JSON.stringify({limit: 80})
         });
         await loadImapAccounts();
-        await loadInboxMessages();
     }
 
-    async function syncSelectedInboxAccounts() {
+    async function syncExplorerAccounts() {
         const status = document.getElementById('explorerSyncStatus');
-        const selected = iiState.imapAccounts.filter((account) => iiState.selectedInboxIds.has(account.id));
-        if (!selected.length) {
-            status.textContent = 'Select at least one connected inbox account first.';
+        const btn = document.getElementById('explorerSyncBtn');
+        const checkboxes = document.querySelectorAll('.explorer-account-check:checked');
+        const accountIds = Array.from(checkboxes).map((cb) => parseInt(cb.value));
+        if (!accountIds.length) {
+            status.textContent = 'Select at least one account above.';
             return;
         }
-        status.textContent = `Syncing ${selected.length} selected account(s)...`;
-        let success = 0;
-        let failed = 0;
-        for (const account of selected) {
-            try {
-                await iiFetch(`/api/inbox-intelligence/imap-accounts/${account.id}/sync`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({limit: 50})
-                });
-                success += 1;
-                status.textContent = `Synced ${success}/${selected.length} selected account(s)...`;
-            } catch (err) {
-                failed += 1;
-            }
+        const folders = [];
+        if (document.getElementById('explorerSyncInbox')?.checked) folders.push('INBOX');
+        if (document.getElementById('explorerSyncSpam')?.checked) folders.push('[Gmail]/Spam', 'Spam', 'Junk');
+        if (!folders.length) {
+            status.textContent = 'Select at least one folder type (INBOX or Spam/Junk).';
+            return;
         }
-        await loadImapAccounts();
-        await loadInboxMessages();
-        status.textContent = `Selected-account sync complete. Synced ${success}, failed ${failed}.`;
+        if (btn) { btn.disabled = true; btn.innerHTML = '<span class="ii-spinner" aria-hidden="true"></span> Syncing...'; }
+        status.textContent = `Syncing ${accountIds.length} account(s), ${folders.length} folder(s)...`;
+        try {
+            const data = await iiFetch('/api/inbox-intelligence/explorer/sync', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({account_ids: accountIds, folders, limit: 80})
+            });
+            const totalSynced = data.synced || 0;
+            const errCount = (data.errors || []).length;
+            status.textContent = `Sync complete: ${totalSynced} message(s) synced${errCount ? `, ${errCount} folder(s) had errors` : ''}.`;
+            await loadImapAccounts();
+        } catch (err) {
+            status.textContent = `Sync failed: ${err.message}`;
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-rotate"></i> Sync Emails'; }
+        }
     }
 
     async function deleteImapAccount(id) {
@@ -2586,18 +2661,22 @@ merge_recipe_id, content_blueprint_id</pre>
         await iiFetch(`/api/inbox-intelligence/imap-accounts/${id}`, {method: 'DELETE'});
         iiState.selectedInboxIds.delete(id);
         await loadImapAccounts();
-        await loadInboxMessages();
     }
 
-    async function loadInboxMessages() {
-        const params = new URLSearchParams({limit: 100});
+    async function loadExplorerMessages() {
+        const params = new URLSearchParams({limit: 200});
         const accountId = document.getElementById('messageAccountFilter')?.value;
         const search = document.getElementById('messageSearchInput')?.value;
+        const dateRange = document.getElementById('messageDateFilter')?.value;
+        const folder = iiState.activeExplorerFolder || '';
         if (accountId) params.set('account_id', accountId);
         if (search) params.set('search', search);
+        if (dateRange) params.set('date_range', dateRange);
+        if (folder) params.set('folder', folder);
         const data = await iiFetch('/api/inbox-intelligence/messages?' + params.toString());
         iiState.messages = data.messages || [];
         renderInboxMessagesList();
+        loadExplorerFolders(accountId || undefined);
     }
 
     function renderInboxMessagesList() {
@@ -2605,8 +2684,9 @@ merge_recipe_id, content_blueprint_id</pre>
         if (!iiState.messages.length) {
             list.className = 'ii-card text-center py-5';
             list.innerHTML = `<i class="fas fa-envelope-open-text fa-3x text-muted mb-3"></i>
-                <h4>No synchronized messages</h4>
-                <p class="ii-muted mb-0">Messages will appear after an authorized inbox is connected and synchronized.</p>`;
+                <h4>No messages found</h4>
+                <p class="ii-muted mb-0">Click <strong>Sync Emails</strong> in the sidebar to fetch recent messages from your connected inboxes.</p>`;
+            renderSelectedMessageStatus();
             return;
         }
         list.className = 'ii-message-grid';
@@ -2621,11 +2701,11 @@ merge_recipe_id, content_blueprint_id</pre>
                 </div>
                 <div class="ii-message-meta">
                     <span class="ii-chip blue">${escapeHtml(m.provider || 'IMAP')}</span>
-                    <span class="ii-chip gray">${escapeHtml(m.sender_domain || 'unknown domain')}</span>
-                    <span class="ii-chip gray">${escapeHtml(m.folder || 'folder')}</span>
+                    <span class="ii-chip gray">${escapeHtml(m.sender_domain || 'unknown')}</span>
+                    <span class="ii-chip gray">${escapeHtml(m.folder || '')}</span>
                     ${m.has_attachments ? '<span class="ii-chip yellow">attachment</span>' : ''}
                 </div>
-                <div class="ii-muted ii-email-text">${escapeHtml(m.sender || 'Unknown sender')}</div>
+                <div class="ii-muted ii-email-text">${escapeHtml(m.sender || 'Unknown')}</div>
                 <div class="ii-message-preview">${escapeHtml(m.preview || '')}</div>
             </article>`).join('');
         renderSelectedMessageStatus();
@@ -5439,7 +5519,6 @@ merge_recipe_id, content_blueprint_id</pre>
 
         Promise.allSettled([
             loadImapAccounts(),
-            loadInboxMessages(),
             loadStaticTemplates(),
             loadUserInboxTemplates(),
             loadAutomatedQueue(),
