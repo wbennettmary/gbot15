@@ -2741,6 +2741,7 @@ merge_recipe_id, content_blueprint_id</pre>
             const errCount = (data.errors || []).length;
             status.textContent = `Sync complete: ${totalSynced} message(s) synced${errCount ? `, ${errCount} folder(s) had errors` : ''}.`;
             await loadImapAccounts();
+            try { await loadExplorerMessages(); } catch(e) { console.error('Failed to reload messages:', e); }
         } catch (err) {
             status.textContent = `Sync failed: ${err.message}`;
         } finally {

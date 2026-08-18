@@ -1217,9 +1217,9 @@ def _decode_header_value(value):
     if not value:
         return ''
     try:
-        return str(make_header(decode_header(value)))
+        return str(make_header(decode_header(value))).strip()
     except Exception:
-        return str(value)
+        return str(value).strip()
 
 def _message_text_parts(msg):
     plain_parts = []
@@ -1266,11 +1266,9 @@ def _imap_connect(account):
 
 def _upsert_imap_message_from_header(account, folder, hdr):
     """Store a lightweight InboxEmailMessage from a parsed header dict.
-    Only stores messages that have x_test_id (for test result matching)."""
+    Stores ALL messages (not just X-Test-ID) so fallback matching by subject/sender works."""
     uid_value = str(hdr.get('uid', ''))
     x_test_id = hdr.get('x_test_id')
-    if not x_test_id:
-        return None
     existing = InboxEmailMessage.query.filter_by(
         imap_account_id=account.id, folder=folder, uid=uid_value
     ).first()
@@ -2841,11 +2839,11 @@ def _placement_from_folder(folder):
 def _sync_test_inbox_folders(inbox, limit=80, since=None):
     """Sync folders for an account using ONE IMAP connection with header-only fetch (fast).
     Uses SINCE date filter + BODY.PEEK[HEADER] fetch (10-50x faster than RFC822).
-    Only stores messages that have X-Test-ID headers (for test matching).
-    Falls back to full RFC822 only if no X-Test-ID messages found in a folder.
+    Stores ALL messages so both x_test_id fast-match and subject/sender fallback matching work.
     Per-account lock prevents concurrent syncs."""
     conn = None
     synced_total = 0
+    x_test_id_count = 0
     errors = []
     folders_to_check = ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk']
     if not since and inbox.last_synced_at:
@@ -2871,7 +2869,6 @@ def _sync_test_inbox_folders(inbox, limit=80, since=None):
                 uids = (data[0] or b'').split()[-int(limit):]
                 if not uids:
                     continue
-                folder_matched = 0
                 for uid in reversed(uids):
                     fetch_status, fetch_data = conn.uid('fetch', uid, IMAP_HEADER_FETCH)
                     if fetch_status != 'OK' or not fetch_data:
@@ -2886,8 +2883,6 @@ def _sync_test_inbox_folders(inbox, limit=80, since=None):
                     try:
                         msg = message_from_bytes(raw_header)
                         x_test_id = _decode_header_value(msg.get('X-Test-ID'))
-                        if not x_test_id:
-                            continue
                         hdr = {
                             'uid': int(uid),
                             'x_test_id': x_test_id,
@@ -2900,8 +2895,9 @@ def _sync_test_inbox_folders(inbox, limit=80, since=None):
                             'x_test_source_id': _decode_header_value(msg.get('X-Test-Source-ID')),
                         }
                         _upsert_imap_message_from_header(inbox, folder, hdr)
-                        folder_matched += 1
                         synced_total += 1
+                        if x_test_id:
+                            x_test_id_count += 1
                     except Exception:
                         continue
             except Exception as e:
@@ -2918,7 +2914,7 @@ def _sync_test_inbox_folders(inbox, limit=80, since=None):
             InboxEmailMessage.folder.ilike('%spam%')
         ).count()
         db.session.commit()
-        app.logger.info(f"[POLL] {inbox.email}: synced {synced_total} X-Test-ID message(s) across {len(folders_to_check)} folders (since {since})")
+        app.logger.info(f"[POLL] {inbox.email}: synced {synced_total} message(s) ({x_test_id_count} with X-Test-ID) across {len(folders_to_check)} folders (since {since})")
     except Exception as e:
         errors.append(str(e))
     finally:
@@ -2983,7 +2979,7 @@ def _detect_message_placements_from_synced(inbox_id, rows, test_id=None):
             matched_identifiers.add(identifier)
             info['match_modes']['x_test_id'] += 1
 
-    # SLOW PATH: only for unmatched identifiers — ILIKE fallback on smaller columns
+    # SLOW PATH: only for unmatched identifiers — ILIKE fallback on subject, sender, recipient
     unmatched = identifiers - matched_identifiers
     if unmatched:
         id_filters = []
@@ -2991,6 +2987,8 @@ def _detect_message_placements_from_synced(inbox_id, rows, test_id=None):
             like_token = f'%{token}%'
             id_filters.extend([
                 InboxEmailMessage.subject.ilike(like_token),
+                InboxEmailMessage.sender.ilike(like_token),
+                InboxEmailMessage.recipient.ilike(like_token),
                 InboxEmailMessage.preview.ilike(like_token),
             ])
         if id_filters:
