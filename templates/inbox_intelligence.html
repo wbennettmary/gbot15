@@ -924,6 +924,38 @@
         padding-right: 2px;
     }
 
+    .ii-auto-test-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+    }
+
+    .ii-auto-test-table th,
+    .ii-auto-test-table td {
+        padding: 8px;
+        border-bottom: 1px solid #e2e8f0;
+        vertical-align: middle;
+    }
+
+    .ii-auto-result-tabs {
+        display: flex;
+        gap: 4px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 3px;
+        background: #f8fafc;
+    }
+
+    .ii-auto-result-tabs .ii-btn {
+        border: 0;
+        background: transparent;
+    }
+
+    .ii-auto-result-tabs .ii-btn.active {
+        background: #dbeafe;
+        color: #1d4ed8;
+    }
+
     .ii-modal-backdrop {
         position: fixed;
         inset: 0;
@@ -1364,7 +1396,11 @@
                     <h2>Automated Email Tests <span class="ii-chip blue">New</span></h2>
                     <p class="ii-muted mb-0">Test inbox-sourced emails across selected Workspace users and measure their observed placement automatically.</p>
                 </div>
-                <button class="ii-btn ii-btn-primary" type="button" id="automatedRunButton" onclick="runAutomatedEmailTest()"><i class="fas fa-plus"></i> Create Automated Test</button>
+                <div class="ii-row">
+                    <select class="ii-select" style="width: 190px;"><option>Last 7 days</option><option>Last 24 hours</option><option>30 days</option></select>
+                    <input class="ii-input" style="width: 260px;" placeholder="Search tests, emails...">
+                    <button class="ii-btn ii-btn-primary" type="button" id="automatedRunButton" onclick="runAutomatedEmailTest()"><i class="fas fa-plus"></i> Create Automated Test</button>
+                </div>
             </div>
             <div class="ii-stepper mb-3">
                 <div class="ii-step active"><span>1</span><strong>Select Emails</strong><small id="autoStepEmails">0 selected</small></div>
@@ -1450,6 +1486,14 @@
                         <div class="ii-result-pill"><span class="ii-muted">Recipients</span><strong>0</strong></div>
                         <div class="ii-result-pill"><span class="ii-muted">Operations</span><strong>0</strong></div>
                     </div>
+                    <div class="ii-row mt-3">
+                        <div class="ii-field mb-0" style="max-width: 280px;">
+                            <label>Test ID to sync</label>
+                            <input class="ii-input" id="automatedManualTestIdInput" placeholder="AT-6C57D4E9">
+                        </div>
+                        <span class="ii-muted" id="automatedLastSync">No sync yet</span>
+                        <button class="ii-btn" id="automatedSyncButton" type="button" onclick="syncAutomatedEmailTest()"><i class="fas fa-arrows-rotate"></i> Sync fresh data</button>
+                    </div>
                     <div class="ii-muted" id="automatedStatusText">Select queued emails, Workspace sources, and receiving inboxes.</div>
                 </div>
                 <div class="ii-card">
@@ -1463,11 +1507,11 @@
             <div class="ii-card mt-3">
                 <div class="ii-action-head">
                     <h4>Email-Level Results</h4>
-                    <div class="ii-row">
-                        <button class="ii-btn" type="button" onclick="setAutomatedResultFilter('ALL')">All</button>
-                        <button class="ii-btn" type="button" onclick="setAutomatedResultFilter('INBOX')">Inbox</button>
-                        <button class="ii-btn" type="button" onclick="setAutomatedResultFilter('MIXED')">Mixed</button>
-                        <button class="ii-btn" type="button" onclick="setAutomatedResultFilter('SPAM')">Spam</button>
+                    <div class="ii-auto-result-tabs">
+                        <button class="ii-btn" id="autoFilterAll" type="button" onclick="setAutomatedResultFilter('ALL')">All</button>
+                        <button class="ii-btn" id="autoFilterInbox" type="button" onclick="setAutomatedResultFilter('INBOX')">Inbox</button>
+                        <button class="ii-btn" id="autoFilterMixed" type="button" onclick="setAutomatedResultFilter('MIXED')">Mixed</button>
+                        <button class="ii-btn" id="autoFilterSpam" type="button" onclick="setAutomatedResultFilter('SPAM')">Spam</button>
                     </div>
                 </div>
                 <div id="automatedEmailResults" class="ii-muted">Run or select an automated test to see source-email verdicts.</div>
@@ -2775,6 +2819,9 @@ merge_recipe_id, content_blueprint_id</pre>
                 })
             });
             iiState.automatedSelectedTestId = data.test_id;
+            const manualInput = document.getElementById('automatedManualTestIdInput');
+            if (manualInput) manualInput.value = data.test_id;
+            localStorage.setItem('ii_automated_last_test_id', data.test_id);
             if (status) status.textContent = data.message;
             await loadAutomatedTests();
             await pollAutomatedEmailTest(data.test_id, true);
@@ -2792,6 +2839,39 @@ merge_recipe_id, content_blueprint_id</pre>
         return ['QUEUED', 'SENDING', 'WAITING_FOR_DELIVERY', 'CHECKING_INBOX'].includes(String(status || '').toUpperCase());
     }
 
+    function normalizeAutomatedTestId(value) {
+        const text = String(value || '').trim().toUpperCase();
+        const match = text.match(/^(AT-[A-Z0-9]+)(?:-[0-9]+)?(?:-[A-Z0-9]+)?/);
+        return match ? match[1] : text;
+    }
+
+    function setAutomatedSyncing(isSyncing, label = 'Syncing fresh automated test data...') {
+        const button = document.getElementById('automatedSyncButton');
+        const syncLabel = document.getElementById('automatedLastSync');
+        if (button) {
+            button.disabled = isSyncing;
+            button.innerHTML = isSyncing
+                ? '<span class="ii-spinner" aria-hidden="true"></span> Syncing...'
+                : '<i class="fas fa-arrows-rotate"></i> Sync fresh data';
+        }
+        if (isSyncing && syncLabel) syncLabel.textContent = label;
+    }
+
+    async function syncAutomatedEmailTest() {
+        const status = document.getElementById('automatedStatusText');
+        const manualInput = document.getElementById('automatedManualTestIdInput');
+        const manualTestId = normalizeAutomatedTestId(manualInput?.value || '');
+        const testId = manualTestId || iiState.automatedSelectedTestId;
+        if (!testId) {
+            if (status) status.textContent = 'Run an Automated Email Test first, or type an AT test ID, then sync fresh data.';
+            return;
+        }
+        iiState.automatedSelectedTestId = testId;
+        if (manualInput) manualInput.value = testId;
+        localStorage.setItem('ii_automated_last_test_id', testId);
+        await pollAutomatedEmailTest(testId, false, {syncMode: 'recent', skipDeepScan: true});
+    }
+
     function scheduleAutomatedPoll(testId) {
         if (!testId || iiState.automatedPollTimers[testId]) return;
         iiState.automatedPollTimers[testId] = window.setTimeout(() => {
@@ -2800,16 +2880,28 @@ merge_recipe_id, content_blueprint_id</pre>
         }, 20000);
     }
 
-    async function pollAutomatedEmailTest(testId, keepWatching = false) {
+    async function pollAutomatedEmailTest(testId, keepWatching = false, options = {}) {
         const status = document.getElementById('automatedStatusText');
         const runStatus = document.getElementById('automatedRunStatus');
         if (status) status.textContent = `Syncing automated test ${testId} with IMAP/database messages...`;
         if (runStatus) runStatus.textContent = 'Syncing';
         try {
-            const pollData = await iiFetch(`/api/inbox-intelligence/tests/${testId}/poll`, {method: 'POST'});
+            setAutomatedSyncing(true, 'Importing recent IMAP messages...');
+            const pollData = await iiFetch(`/api/inbox-intelligence/tests/${testId}/poll`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    sync_mode: options.syncMode || 'recent',
+                    recent_limit: options.recentLimit || 160,
+                    skip_deep_scan: options.skipDeepScan !== undefined ? options.skipDeepScan : true
+                })
+            });
             const data = await iiFetch(`/api/inbox-intelligence/automated-tests/${testId}/results`);
             const test = data.test || {};
             iiState.automatedSelectedTestId = test.test_id || testId;
+            const manualInput = document.getElementById('automatedManualTestIdInput');
+            if (manualInput) manualInput.value = iiState.automatedSelectedTestId;
+            localStorage.setItem('ii_automated_last_test_id', iiState.automatedSelectedTestId);
             const existing = iiState.automatedTests.findIndex((item) => item.test_id === iiState.automatedSelectedTestId);
             if (existing >= 0) iiState.automatedTests[existing] = {...iiState.automatedTests[existing], ...test};
             else iiState.automatedTests.unshift(test);
@@ -2821,11 +2913,15 @@ merge_recipe_id, content_blueprint_id</pre>
             const diagText = `synced ${diag.synced_messages || 0}, scanned ${diag.scanned_messages || 0}, matched ${diag.matched_rows || 0}`;
             if (runStatus) runStatus.textContent = test.status || 'Updated';
             if (status) status.textContent = `${test.test_id || testId}: ${test.status || 'updated'} · ${observed} observed placement(s) across ${rows.length} source email(s). IMAP/database ${diagText}.`;
+            const syncLabel = document.getElementById('automatedLastSync');
+            if (syncLabel) syncLabel.textContent = `Last sync: ${new Date().toLocaleTimeString()}`;
             await loadAutomatedTests();
             if (keepWatching && automatedTestIsActive(test.status)) scheduleAutomatedPoll(test.test_id || testId);
         } catch (err) {
             if (status) status.textContent = `Automated test sync failed: ${err.message}`;
             if (runStatus) runStatus.textContent = 'Sync failed';
+        } finally {
+            setAutomatedSyncing(false);
         }
     }
 
@@ -2849,19 +2945,30 @@ merge_recipe_id, content_blueprint_id</pre>
             el.innerHTML = '<div class="ii-muted">No automated tests yet.</div>';
             return;
         }
-        el.innerHTML = iiState.automatedTests.slice(0, 5).map((test) => `
-            <div class="ii-row justify-content-between mb-2">
-                <div><strong>${escapeHtml(test.name)}</strong><div class="ii-muted">${escapeHtml(test.test_id)} · ${test.created_at ? new Date(test.created_at).toLocaleString() : ''}</div></div>
-                <div class="ii-row">
-                    <span class="ii-chip blue">${escapeHtml(test.status)}</span>
-                    <button class="ii-btn" type="button" onclick="pollAutomatedEmailTest('${escapeHtml(test.test_id)}', true)"><i class="fas fa-arrows-rotate"></i> Sync Now</button>
-                    <button class="ii-btn" type="button" onclick="pollAutomatedEmailTest('${escapeHtml(test.test_id)}')"><i class="fas fa-chart-simple"></i> View</button>
-                </div>
-            </div>`).join('');
+        el.innerHTML = `
+            <table class="ii-auto-test-table">
+                <thead><tr><th>Test ID</th><th>Started</th><th>Status</th><th>Actions</th></tr></thead>
+                <tbody>
+                    ${iiState.automatedTests.slice(0, 6).map((test) => `
+                        <tr>
+                            <td><strong>${escapeHtml(test.test_id)}</strong></td>
+                            <td>${test.created_at ? new Date(test.created_at).toLocaleString() : ''}</td>
+                            <td><span class="ii-chip ${statusClass(test.status)}">${escapeHtml(test.status)}</span></td>
+                            <td>
+                                <button class="ii-btn" type="button" onclick="pollAutomatedEmailTest('${escapeHtml(test.test_id)}')"><i class="fas fa-eye"></i> View</button>
+                                <button class="ii-btn" type="button" onclick="pollAutomatedEmailTest('${escapeHtml(test.test_id)}', true)"><i class="fas fa-arrows-rotate"></i> Sync</button>
+                            </td>
+                        </tr>`).join('')}
+                </tbody>
+            </table>`;
     }
 
     function setAutomatedResultFilter(filter) {
         iiState.automatedResultFilter = filter || 'ALL';
+        ['All', 'Inbox', 'Mixed', 'Spam'].forEach((name) => {
+            const el = document.getElementById(`autoFilter${name}`);
+            if (el) el.classList.toggle('active', iiState.automatedResultFilter === name.toUpperCase() || (name === 'All' && iiState.automatedResultFilter === 'ALL'));
+        });
         const test = iiState.automatedTests.find((item) => item.test_id === iiState.automatedSelectedTestId);
         if (test) renderAutomatedEmailResults(test);
     }
@@ -5159,6 +5266,9 @@ merge_recipe_id, content_blueprint_id</pre>
         document.getElementById('userInboxWorkspaceAccountSearchInput')?.addEventListener('keydown', (event) => {
             if (event.key === 'Enter') searchUserInboxWorkspaceAccounts();
         });
+        document.getElementById('automatedWorkspaceAccountSearchInput')?.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') searchAutomatedWorkspaceAccounts();
+        });
         document.getElementById('resultSearchInput')?.addEventListener('input', renderTestHistory);
         document.getElementById('resultStatusFilter')?.addEventListener('change', renderTestHistory);
         document.getElementById('resultTypeFilter')?.addEventListener('change', renderTestHistory);
@@ -5179,6 +5289,12 @@ merge_recipe_id, content_blueprint_id</pre>
             iiState.userInboxTestId = savedUserInboxTestId;
             const manualInput = document.getElementById('userInboxManualTestIdInput');
             if (manualInput) manualInput.value = savedUserInboxTestId;
+        }
+        const savedAutomatedTestId = normalizeAutomatedTestId(localStorage.getItem('ii_automated_last_test_id') || '');
+        if (savedAutomatedTestId) {
+            iiState.automatedSelectedTestId = savedAutomatedTestId;
+            const automatedManualInput = document.getElementById('automatedManualTestIdInput');
+            if (automatedManualInput) automatedManualInput.value = savedAutomatedTestId;
         }
         updateUserInboxDiagnostics();
 

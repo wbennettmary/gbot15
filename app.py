@@ -2605,11 +2605,11 @@ def _detect_message_placements(inbox, identifiers, max_direct_searches=8):
 def _placement_from_folder(folder):
     return 'SPAM' if any(x in (folder or '').lower() for x in ['spam', 'junk', 'bulk']) else 'INBOX'
 
-def _sync_test_inbox_folders(inbox):
+def _sync_test_inbox_folders(inbox, limit=80):
     synced_total = 0
     errors = []
     for index, folder in enumerate(['INBOX', '[Gmail]/Spam', 'Spam', 'Junk']):
-        synced, error = _sync_imap_account(inbox, folder=folder, limit=80, mark_errors=(index == 0))
+        synced, error = _sync_imap_account(inbox, folder=folder, limit=limit, mark_errors=(index == 0))
         if error:
             if folder == 'INBOX':
                 errors.append(f'{folder}: {error}')
@@ -2867,6 +2867,13 @@ def _scan_imap_for_test_rows(inbox, rows, per_folder_limit=500, persist_matches=
 @login_required
 @permission_required('inbox_intelligence')
 def api_inbox_poll_test(test_id):
+    data = request.get_json(silent=True) or {}
+    sync_mode = (data.get('sync_mode') or 'targeted').strip().lower()
+    skip_deep_scan = bool(data.get('skip_deep_scan'))
+    try:
+        recent_limit = min(300, max(20, int(data.get('recent_limit') or 120)))
+    except (TypeError, ValueError):
+        recent_limit = 120
     test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
     if not test:
         return jsonify({'success': False, 'error': 'Test not found'}), 404
@@ -2896,15 +2903,24 @@ def api_inbox_poll_test(test_id):
                 row.error_message = 'Receiving inbox no longer exists.'
             continue
         try:
-            sync_info = _sync_imap_messages_for_test_id(inbox, test.test_id, identifiers=[row.test_identifier for row in rows])
+            if sync_mode == 'recent':
+                synced_count, recent_errors = _sync_test_inbox_folders(inbox, limit=recent_limit)
+                sync_info = {
+                    'synced_messages': synced_count,
+                    'searched_folders': 4,
+                    'deleted_old_messages': 0,
+                    'errors': recent_errors,
+                }
+            else:
+                sync_info = _sync_imap_messages_for_test_id(inbox, test.test_id, identifiers=[row.test_identifier for row in rows])
             diagnostic['synced_messages'] += sync_info.get('synced_messages', 0)
             diagnostic['searched_folders'] += sync_info.get('searched_folders', 0)
             diagnostic['deleted_old_messages'] += sync_info.get('deleted_old_messages', 0)
             sync_errors.extend([f'{inbox.email}: {error}' for error in sync_info.get('errors', [])])
             placements, scan_info = _detect_message_placements_from_synced(inbox.id, rows, test_id=test.test_id)
             missing_rows = [row for row in rows if row.test_identifier not in placements]
-            if missing_rows:
-                direct_placements, direct_scan_info = _scan_imap_for_test_rows(inbox, missing_rows, per_folder_limit=5000)
+            if missing_rows and not skip_deep_scan:
+                direct_placements, direct_scan_info = _scan_imap_for_test_rows(inbox, missing_rows, per_folder_limit=900)
                 placements.update(direct_placements)
                 scan_info['scanned_messages'] = scan_info.get('scanned_messages', 0) + direct_scan_info.get('scanned_messages', 0)
                 for mode, count in (direct_scan_info.get('match_modes') or {}).items():
