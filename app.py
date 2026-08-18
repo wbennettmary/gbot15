@@ -1543,16 +1543,23 @@ def api_inbox_delete_account(account_id):
     if not account:
         return jsonify({'success': False, 'error': 'IMAP account not found'}), 404
     try:
-        InboxDeliverabilityMessage.query.filter_by(imap_account_id=account.id).update({'imap_account_id': None})
+        db.session.execute(db.text('UPDATE inbox_deliverability_message SET imap_account_id = NULL WHERE imap_account_id = :aid'), {'aid': account.id})
     except Exception:
-        pass
+        db.session.rollback()
     try:
-        TestEmailSource.query.filter_by(source_imap_account_id=account.id).update({'source_imap_account_id': None})
+        db.session.execute(db.text('UPDATE test_email_source SET source_imap_account_id = NULL WHERE source_imap_account_id = :aid'), {'aid': account.id})
     except Exception:
-        pass
-    InboxEmailMessage.query.filter_by(imap_account_id=account.id).delete()
-    db.session.delete(account)
-    db.session.commit()
+        db.session.rollback()
+    try:
+        db.session.execute(db.text('DELETE FROM inbox_email_message WHERE imap_account_id = :aid'), {'aid': account.id})
+    except Exception:
+        db.session.rollback()
+    try:
+        db.session.execute(db.text('DELETE FROM inbox_imap_account WHERE id = :aid'), {'aid': account.id})
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
     return jsonify({'success': True})
 
 @app.route('/api/inbox-intelligence/messages', methods=['GET'])
@@ -2748,15 +2755,64 @@ def _placement_from_folder(folder):
     return 'SPAM' if any(x in (folder or '').lower() for x in ['spam', 'junk', 'bulk']) else 'INBOX'
 
 def _sync_test_inbox_folders(inbox, limit=80, since=None):
+    """Sync all folders for an account using ONE IMAP connection (fast)."""
+    conn = None
     synced_total = 0
     errors = []
-    for index, folder in enumerate(['INBOX', '[Gmail]/Spam', 'Spam', 'Junk']):
-        synced, error = _sync_imap_account(inbox, folder=folder, limit=limit, mark_errors=(index == 0), since=since)
-        if error:
-            if folder == 'INBOX':
-                errors.append(f'{folder}: {error}')
-            continue
-        synced_total += synced
+    folders_to_check = ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk']
+    try:
+        conn = _imap_connect(inbox)
+    except Exception as e:
+        return 0, [f'Connection failed: {e}']
+    try:
+        for index, folder in enumerate(folders_to_check):
+            try:
+                status, _ = conn.select(folder, readonly=True)
+                if status != 'OK':
+                    continue
+                if since:
+                    s, data = conn.uid('search', None, f'SINCE {since}')
+                else:
+                    s, data = conn.uid('search', None, 'ALL')
+                if s != 'OK':
+                    continue
+                uids = (data[0] or b'').split()[-int(limit):]
+                for uid in reversed(uids):
+                    fetch_status, fetch_data = conn.uid('fetch', uid, '(RFC822)')
+                    if fetch_status != 'OK' or not fetch_data:
+                        continue
+                    raw_msg = None
+                    for item in fetch_data:
+                        if isinstance(item, tuple) and item[1]:
+                            raw_msg = item[1]
+                            break
+                    if not raw_msg:
+                        continue
+                    _upsert_imap_message(inbox, folder, uid, raw_msg)
+                    synced_total += 1
+            except Exception as e:
+                if folder == 'INBOX':
+                    errors.append(f'{folder}: {e}')
+                continue
+        inbox.last_synced_at = datetime.utcnow()
+        inbox.connection_status = 'connected'
+        inbox.last_error = None
+        inbox.message_count = InboxEmailMessage.query.filter_by(imap_account_id=inbox.id).count()
+        inbox.inbox_count = InboxEmailMessage.query.filter_by(imap_account_id=inbox.id, folder='INBOX').count()
+        inbox.spam_count = InboxEmailMessage.query.filter(
+            InboxEmailMessage.imap_account_id == inbox.id,
+            InboxEmailMessage.folder.ilike('%spam%')
+        ).count()
+        db.session.commit()
+    except Exception as e:
+        errors.append(str(e))
+    finally:
+        try:
+            if conn:
+                conn.close()
+                conn.logout()
+        except Exception:
+            pass
     return synced_total, errors
 
 def _date_range_to_imap_since(date_range):
@@ -3030,8 +3086,7 @@ def api_inbox_poll_test(test_id):
 
 def _poll_inbox_test_payload(test_id, data=None):
     data = data or {}
-    sync_mode = (data.get('sync_mode') or 'recent').strip().lower()
-    skip_deep_scan = bool(data.get('skip_deep_scan'))
+    skip_deep_scan = bool(data.get('skip_deep_scan', True))
     date_range = (data.get('date_range') or '').strip().lower()
     try:
         recent_limit = max(50, int(data.get('recent_limit') if data.get('recent_limit') is not None else 200))
@@ -3062,6 +3117,8 @@ def _poll_inbox_test_payload(test_id, data=None):
             row.error_message = 'Recipient is external; connect it as an IMAP inbox to observe inbox/spam placement.'
             continue
         pending_by_inbox.setdefault(row.imap_account_id, []).append(row)
+
+    since = _date_range_to_imap_since(date_range)
     for inbox_id, rows in pending_by_inbox.items():
         inbox = InboxImapAccount.query.get(inbox_id)
         if not inbox:
@@ -3071,31 +3128,14 @@ def _poll_inbox_test_payload(test_id, data=None):
                 row.error_message = 'Receiving inbox no longer exists.'
             continue
         try:
-            synced_count, recent_errors = _sync_test_inbox_folders(inbox, limit=recent_limit, since=_date_range_to_imap_since(date_range))
-            sync_info = {
-                'synced_messages': synced_count,
-                'searched_folders': 4,
-                'deleted_old_messages': 0,
-                'errors': recent_errors,
-            }
-            diagnostic['synced_messages'] += sync_info.get('synced_messages', 0)
-            diagnostic['searched_folders'] += sync_info.get('searched_folders', 0)
-            diagnostic['deleted_old_messages'] += sync_info.get('deleted_old_messages', 0)
-            sync_errors.extend([f'{inbox.email}: {error}' for error in sync_info.get('errors', [])])
+            synced_count, recent_errors = _sync_test_inbox_folders(inbox, limit=recent_limit, since=since)
+            diagnostic['synced_messages'] += synced_count
+            diagnostic['searched_folders'] += 4
+            sync_errors.extend([f'{inbox.email}: {error}' for error in recent_errors])
             placements, scan_info = _detect_message_placements_from_synced(inbox.id, rows, test_id=test.test_id)
-            missing_rows = [row for row in rows if row.test_identifier not in placements]
-            if missing_rows and not skip_deep_scan:
-                direct_placements, direct_scan_info = _scan_imap_for_test_rows(inbox, missing_rows, per_folder_limit=0)
-                placements.update(direct_placements)
-                scan_info['scanned_messages'] = scan_info.get('scanned_messages', 0) + direct_scan_info.get('scanned_messages', 0)
-                for mode, count in (direct_scan_info.get('match_modes') or {}).items():
-                    scan_info.setdefault('match_modes', {})
-                    scan_info['match_modes'][mode] = scan_info['match_modes'].get(mode, 0) + count
-                sync_errors.extend([f'{inbox.email}: {error}' for error in direct_scan_info.get('errors', [])])
             diagnostic['scanned_messages'] += scan_info.get('scanned_messages', 0)
             for mode, count in (scan_info.get('match_modes') or {}).items():
                 diagnostic['match_modes'][mode] = diagnostic['match_modes'].get(mode, 0) + count
-            sync_errors.extend([f'{inbox.email}: {error}' for error in scan_info.get('errors', [])])
             for row in rows:
                 placement, folder = placements.get(row.test_identifier, ('PENDING', None))
                 row.placement = placement
