@@ -1371,38 +1371,52 @@
             <div class="ii-panel">
                 <div class="ii-row justify-content-between mb-3">
                     <h3>Connected IMAP Accounts</h3>
-                    <button class="ii-btn ii-btn-primary" type="button" onclick="document.getElementById('imapEmailInput').focus()"><i class="fas fa-plus"></i> Connect Inbox</button>
+                    <button class="ii-btn ii-btn-primary" type="button" onclick="toggleAddInboxForm()"><i class="fas fa-plus"></i> Connect Inbox</button>
                 </div>
                 <div id="imapAccountsList" class="ii-card text-center py-5">
                     <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
                     <h4>No inboxes connected</h4>
-                    <p class="ii-muted mb-3">Connect Gmail, Outlook, Yahoo, Microsoft 365, or a generic IMAP inbox to start analyzing authorized email placement.</p>
+                    <p class="ii-muted mb-3">Connect Gmail, Outlook, Yahoo, Microsoft 365, or a generic IMAP inbox to start analyzing email placement.</p>
+                    <button class="ii-btn ii-btn-primary" type="button" onclick="toggleAddInboxForm()"><i class="fas fa-plus"></i> Connect your first inbox</button>
+                </div>
+                <div id="addInboxForm" class="d-none mt-3">
+                    <div class="ii-card" style="border: 2px solid #3b82f6;">
+                        <h4><i class="fas fa-plus-circle"></i> Connect IMAP Inbox</h4>
+                        <form id="imapAccountForm">
+                            <div class="ii-form-grid">
+                                <div class="ii-field"><label>Provider</label><select class="ii-select" id="imapProviderInput"><option value="gmail">Gmail</option><option value="google workspace">Google Workspace</option><option value="outlook">Outlook</option><option value="hotmail">Hotmail</option><option value="microsoft 365">Microsoft 365</option><option value="yahoo">Yahoo</option><option value="generic">Generic IMAP</option></select></div>
+                                <div class="ii-field"><label>Email address</label><input class="ii-input" id="imapEmailInput" type="email" placeholder="inbox@example.com" required></div>
+                                <div class="ii-field"><label>IMAP hostname</label><input class="ii-input" id="imapHostInput" placeholder="imap.example.com"></div>
+                                <div class="ii-field"><label>Port</label><input class="ii-input" id="imapPortInput" type="number" value="993"></div>
+                                <div class="ii-field"><label>TLS/SSL</label><select class="ii-select" id="imapTlsInput"><option value="true">Enabled</option><option value="false">Disabled</option></select></div>
+                                <div class="ii-field"><label>Username</label><input class="ii-input" id="imapUsernameInput" placeholder="name@example.com"></div>
+                                <div class="ii-field" style="grid-column: 1 / -1;"><label>Password or app password</label><input class="ii-input" id="imapPasswordInput" type="password" placeholder="Stored protected; never returned to the browser"></div>
+                            </div>
+                            <div class="ii-row mt-3">
+                                <button class="ii-btn ii-btn-primary" type="submit"><i class="fas fa-save"></i> Save & Sync</button>
+                                <button class="ii-btn" type="button" onclick="toggleAddInboxForm()">Cancel</button>
+                                <span class="ii-muted" id="imapSaveStatus"></span>
+                            </div>
+                        </form>
+                    </div>
                 </div>
             </div>
             <div class="ii-panel">
-                <h3>Analyze Inbox Sources</h3>
+                <h3>Inbox Source Selector</h3>
+                <p class="ii-muted mb-2">Select connected inboxes for multi-source analysis and testing.</p>
                 <input class="ii-input mb-2" id="inboxSourceSearch" placeholder="Search accounts" oninput="renderInboxSourceSelector()">
-                <div class="ii-row mb-3">
-                    <button class="ii-btn" type="button" onclick="selectAllInboxSources(true)">Select all</button>
-                    <button class="ii-btn" type="button" onclick="selectAllInboxSources(false)">Deselect all</button>
-                    <select class="ii-select" id="providerSourceFilter" style="width: 180px;" onchange="renderInboxSourceSelector()"><option value="">Select by provider</option><option value="gmail">Gmail</option><option value="outlook">Outlook</option><option value="yahoo">Yahoo</option><option value="generic">Generic IMAP</option></select>
+                <div class="ii-row mb-2">
+                    <button class="ii-btn" type="button" onclick="selectAllInboxSources(true)"><i class="fas fa-check-double"></i> Select all</button>
+                    <button class="ii-btn" type="button" onclick="selectAllInboxSources(false)"><i class="fas fa-xmark"></i> Deselect all</button>
+                    <select class="ii-select" id="providerSourceFilter" style="width: 180px;" onchange="renderInboxSourceSelector()"><option value="">All providers</option><option value="gmail">Gmail</option><option value="outlook">Outlook</option><option value="yahoo">Yahoo</option><option value="generic">Generic IMAP</option></select>
                 </div>
-                <div class="ii-card py-4 mb-4" id="inboxSourceSelector">
-                    <p class="ii-muted mb-0">Connected inboxes will be listed here for multi-source analysis.</p>
+                <div class="ii-card py-4 mb-3" id="inboxSourceSelector">
+                    <p class="ii-muted mb-0">Connect inboxes first, then they appear here.</p>
                 </div>
-                <h4>Connect IMAP Inbox</h4>
-                <form id="imapAccountForm">
-                    <div class="ii-form-grid">
-                        <div class="ii-field"><label>Provider</label><select class="ii-select" id="imapProviderInput"><option value="gmail">Gmail</option><option value="google workspace">Google Workspace</option><option value="outlook">Outlook</option><option value="hotmail">Hotmail</option><option value="microsoft 365">Microsoft 365</option><option value="yahoo">Yahoo</option><option value="generic">Generic IMAP</option></select></div>
-                        <div class="ii-field"><label>Email address</label><input class="ii-input" id="imapEmailInput" type="email" placeholder="inbox@example.com" required></div>
-                        <div class="ii-field"><label>IMAP hostname</label><input class="ii-input" id="imapHostInput" placeholder="imap.example.com"></div>
-                        <div class="ii-field"><label>Port</label><input class="ii-input" id="imapPortInput" type="number" value="993"></div>
-                        <div class="ii-field"><label>TLS/SSL</label><select class="ii-select" id="imapTlsInput"><option value="true">Enabled</option><option value="false">Disabled</option></select></div>
-                        <div class="ii-field"><label>Username</label><input class="ii-input" id="imapUsernameInput" placeholder="name@example.com"></div>
-                        <div class="ii-field" style="grid-column: 1 / -1;"><label>Password or app password</label><input class="ii-input" id="imapPasswordInput" type="password" placeholder="Stored protected; never returned to the browser"></div>
-                    </div>
-                    <div class="ii-row mt-3"><button class="ii-btn ii-btn-primary" type="submit"><i class="fas fa-save"></i> Save & Sync Inbox</button><span class="ii-muted" id="imapSaveStatus"></span></div>
-                </form>
+                <h4>Quick Sync All</h4>
+                <p class="ii-muted mb-2">Sync INBOX, Spam, and Junk folders for all connected accounts at once.</p>
+                <button class="ii-btn ii-btn-primary" type="button" onclick="syncAllInboxes()" id="syncAllInboxesBtn"><i class="fas fa-rotate"></i> Sync All Inboxes</button>
+                <div class="ii-muted mt-2" id="syncAllInboxesStatus">Syncs recent messages across all folders for all connected accounts.</div>
             </div>
         </div>
     </section>
@@ -1512,7 +1526,7 @@
                     <p class="ii-muted mb-0">Test inbox-sourced emails across selected Workspace users and measure their observed placement automatically.</p>
                 </div>
                 <div class="ii-auto-top-actions">
-                    <select class="ii-select" style="width: 190px;"><option>Last 7 days</option><option>Last 24 hours</option><option>30 days</option></select>
+                    <select class="ii-select" id="automatedDateFilter" style="width: 190px;" onchange="loadAutomatedTests()"><option value="24h">Last 24 hours</option><option value="2d" selected>Last 2 days</option><option value="7d">Last 7 days</option><option value="all">All time</option></select>
                     <input class="ii-input" style="width: 260px;" placeholder="Search tests, emails...">
                     <button class="ii-btn ii-btn-primary" type="button" id="automatedRunButton" onclick="runAutomatedEmailTest()"><i class="fas fa-plus"></i> Create Automated Test</button>
                 </div>
@@ -2151,6 +2165,12 @@ merge_recipe_id, content_blueprint_id</pre>
                             <label>Test ID to sync</label>
                             <input class="ii-input" id="userInboxManualTestIdInput" placeholder="DLV-82436339">
                         </div>
+                        <select class="ii-select" id="userInboxDateFilter" style="width:140px">
+                            <option value="24h">Last 24h</option>
+                            <option value="2d" selected>Last 2 days</option>
+                            <option value="7d">Last 7 days</option>
+                            <option value="all">All time</option>
+                        </select>
                         <span class="ii-muted" id="userInboxLastSync">No sync yet</span>
                         <button class="ii-btn" id="userInboxSyncButton" type="button" onclick="syncUserInboxAnalytics()"><i class="fas fa-arrows-rotate"></i> Sync fresh data</button>
                     </div>
@@ -2421,23 +2441,28 @@ merge_recipe_id, content_blueprint_id</pre>
             container.className = 'ii-card text-center py-5';
             container.innerHTML = `<i class="fas fa-inbox fa-3x text-muted mb-3"></i>
                 <h4>No inboxes connected</h4>
-                <p class="ii-muted mb-0">Connect Gmail, Outlook, Yahoo, Microsoft 365, or a generic IMAP inbox to start analyzing authorized email placement.</p>`;
+                <p class="ii-muted mb-3">Connect Gmail, Outlook, Yahoo, Microsoft 365, or a generic IMAP inbox to start analyzing email placement.</p>
+                <button class="ii-btn ii-btn-primary" type="button" onclick="toggleAddInboxForm()"><i class="fas fa-plus"></i> Connect your first inbox</button>`;
             return;
         }
-        container.className = 'ii-grid';
+        container.className = '';
         container.innerHTML = iiState.imapAccounts.map((account) => `
             <div class="ii-inbox-card">
                 <div class="ii-provider"><i class="fas fa-inbox"></i></div>
-                <div>
-                    <strong>${escapeHtml(account.email)}</strong>
-                    <div class="ii-muted">${escapeHtml(account.provider)} · ${escapeHtml(account.imap_host)}:${account.imap_port} · Last sync ${account.last_synced_at ? new Date(account.last_synced_at).toLocaleString() : 'never'}</div>
-                    <div class="ii-row mt-2">
+                <div style="flex:1;min-width:0">
+                    <div class="d-flex align-items-center gap-2">
+                        <strong>${escapeHtml(account.email)}</strong>
                         <span class="ii-chip ${account.connection_status === 'connected' ? 'green' : account.connection_status === 'syncing' ? 'blue' : account.connection_status === 'error' ? 'red' : 'gray'}">${escapeHtml(account.connection_status || 'configured')}</span>
-                        <span class="ii-chip gray">Messages ${account.message_count || 0}</span>
-                        <span class="ii-chip gray">Folders ${account.folder_count || 0}</span>
-                        <span class="ii-chip ${account.auto_sync_enabled ? 'green' : 'gray'}">Auto-sync ${account.auto_sync_enabled ? 'on' : 'off'}</span>
                     </div>
-                    ${account.last_error ? `<div class="ii-muted mt-2 text-danger">${escapeHtml(account.last_error)}</div>` : ''}
+                    <div class="ii-muted" style="font-size:0.85em">${escapeHtml(account.provider)} &middot; ${escapeHtml(account.imap_host)}:${account.imap_port}</div>
+                    <div class="ii-row mt-1" style="flex-wrap:wrap;gap:4px">
+                        <span class="ii-chip gray" style="font-size:0.75em">INBOX: ${account.inbox_count || 0}</span>
+                        <span class="ii-chip gray" style="font-size:0.75em">Spam: ${account.spam_count || 0}</span>
+                        <span class="ii-chip gray" style="font-size:0.75em">Total: ${account.message_count || 0}</span>
+                        <span class="ii-chip gray" style="font-size:0.75em">${account.folder_count || 0} folders</span>
+                        ${account.auto_sync_enabled ? '<span class="ii-chip green" style="font-size:0.75em">auto-sync</span>' : ''}
+                    </div>
+                    <div class="ii-muted" style="font-size:0.8em">${account.last_synced_at ? 'Synced ' + new Date(account.last_synced_at).toLocaleString() : 'Never synced'}${account.last_error ? ' &middot; <span class="text-danger">' + escapeHtml(account.last_error).slice(0,80) + '</span>' : ''}</div>
                 </div>
                 <div class="ii-actions">
                     <button class="ii-btn" type="button" title="Sync now" onclick="syncImapAccount(${account.id})"><i class="fas fa-rotate"></i></button>
@@ -2581,6 +2606,35 @@ merge_recipe_id, content_blueprint_id</pre>
         updateAutomatedSummary();
         loadExplorerFolders();
         loadExplorerMessages();
+    }
+
+    function toggleAddInboxForm() {
+        const form = document.getElementById('addInboxForm');
+        if (form) form.classList.toggle('d-none');
+    }
+
+    async function syncAllInboxes() {
+        const status = document.getElementById('syncAllInboxesStatus');
+        const btn = document.getElementById('syncAllInboxesBtn');
+        if (!iiState.imapAccounts.length) {
+            status.textContent = 'No accounts connected. Add one first.';
+            return;
+        }
+        if (btn) { btn.disabled = true; btn.innerHTML = '<span class="ii-spinner" aria-hidden="true"></span> Syncing...'; }
+        status.textContent = `Syncing ${iiState.imapAccounts.length} account(s)...`;
+        try {
+            const data = await iiFetch('/api/inbox-intelligence/explorer/sync', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({account_ids: iiState.imapAccounts.map(a => a.id), folders: ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk'], limit: 80})
+            });
+            status.textContent = `Sync complete: ${data.synced || 0} message(s) synced.`;
+            await loadImapAccounts();
+        } catch (err) {
+            status.textContent = `Sync failed: ${err.message}`;
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-rotate"></i> Sync All Inboxes'; }
+        }
     }
 
     async function saveImapAccount(event) {
@@ -3056,10 +3110,12 @@ merge_recipe_id, content_blueprint_id</pre>
         if (runStatus) runStatus.textContent = 'Syncing';
         try {
             setAutomatedSyncing(true, 'Importing recent IMAP messages...');
+            const dateFilter = document.getElementById('automatedDateFilter')?.value || '2d';
             const pollPayload = {
                 sync_mode: options.syncMode || 'recent',
                 recent_limit: options.recentLimit ?? 200,
-                skip_deep_scan: options.skipDeepScan !== undefined ? options.skipDeepScan : false
+                skip_deep_scan: options.skipDeepScan !== undefined ? options.skipDeepScan : false,
+                date_range: dateFilter
             };
             const pollData = options.background
                 ? await runAutomatedSyncJob(testId, pollPayload)
@@ -4562,10 +4618,11 @@ merge_recipe_id, content_blueprint_id</pre>
         const syncLabel = document.getElementById('userInboxLastSync');
         try {
             setUserInboxSyncing(true, 'Syncing recent IMAP messages...');
+            const dateRange = document.getElementById('userInboxDateFilter')?.value || '2d';
             const pollData = await iiFetch(`/api/inbox-intelligence/tests/${testId}/poll`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({sync_mode: 'recent', recent_limit: 200})
+                body: JSON.stringify({sync_mode: 'recent', recent_limit: 200, date_range: dateRange})
             });
             const data = await iiFetch(`/api/inbox-intelligence/tests/${testId}`);
             const rows = data.test.messages || [];
@@ -4625,10 +4682,11 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     async function pollDeliverabilityTest(testId) {
+        const dateRange = document.getElementById('automatedDateFilter')?.value || '2d';
         await iiFetch(`/api/inbox-intelligence/tests/${testId}/poll`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({sync_mode: 'recent', recent_limit: 200})
+            body: JSON.stringify({sync_mode: 'recent', recent_limit: 200, date_range: dateRange})
         });
         await loadTests();
         await loadTestDetail(testId);

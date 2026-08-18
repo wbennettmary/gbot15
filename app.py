@@ -1294,7 +1294,7 @@ def _cleanup_old_inbox_email_messages(hours=4):
     cutoff = datetime.utcnow() - timedelta(hours=hours)
     return InboxEmailMessage.query.filter(InboxEmailMessage.synced_at < cutoff).delete(synchronize_session=False)
 
-def _sync_imap_account(account, folder='INBOX', limit=50, mark_errors=True):
+def _sync_imap_account(account, folder='INBOX', limit=50, mark_errors=True, since=None):
     conn = None
     synced = 0
     try:
@@ -1307,7 +1307,10 @@ def _sync_imap_account(account, folder='INBOX', limit=50, mark_errors=True):
         status, _ = conn.select(folder, readonly=True)
         if status != 'OK':
             raise RuntimeError(f"Could not open folder {folder}")
-        status, data = conn.uid('search', None, 'ALL')
+        if since:
+            status, data = conn.uid('search', None, f'SINCE {since}')
+        else:
+            status, data = conn.uid('search', None, 'ALL')
         if status != 'OK':
             raise RuntimeError("Could not search mailbox")
         uids = (data[0] or b'').split()[-int(limit):]
@@ -1418,6 +1421,7 @@ def api_explorer_bulk_sync():
     account_ids = data.get('account_ids') or []
     limit = min(200, max(10, int(data.get('limit') or 80)))
     folders = data.get('folders') or ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk']
+    since = _date_range_to_imap_since(data.get('date_range') or '')
     if not account_ids:
         accounts = InboxImapAccount.query.all()
     else:
@@ -1427,7 +1431,7 @@ def api_explorer_bulk_sync():
         account_synced = 0
         account_errors = []
         for folder in folders:
-            synced, error = _sync_imap_account(account, folder=folder, limit=limit, mark_errors=(folder == 'INBOX'))
+            synced, error = _sync_imap_account(account, folder=folder, limit=limit, mark_errors=(folder == 'INBOX'), since=since)
             account_synced += synced
             if error:
                 account_errors.append(f'{folder}: {error}')
@@ -2661,17 +2665,33 @@ def _detect_message_placements(inbox, identifiers, max_direct_searches=8):
 def _placement_from_folder(folder):
     return 'SPAM' if any(x in (folder or '').lower() for x in ['spam', 'junk', 'bulk']) else 'INBOX'
 
-def _sync_test_inbox_folders(inbox, limit=80):
+def _sync_test_inbox_folders(inbox, limit=80, since=None):
     synced_total = 0
     errors = []
     for index, folder in enumerate(['INBOX', '[Gmail]/Spam', 'Spam', 'Junk']):
-        synced, error = _sync_imap_account(inbox, folder=folder, limit=limit, mark_errors=(index == 0))
+        synced, error = _sync_imap_account(inbox, folder=folder, limit=limit, mark_errors=(index == 0), since=since)
         if error:
             if folder == 'INBOX':
                 errors.append(f'{folder}: {error}')
             continue
         synced_total += synced
     return synced_total, errors
+
+def _date_range_to_imap_since(date_range):
+    if not date_range or date_range == 'all':
+        return None
+    now = datetime.utcnow()
+    if date_range == '24h':
+        dt = now - timedelta(hours=24)
+    elif date_range == '2d':
+        dt = now - timedelta(days=2)
+    elif date_range == '7d':
+        dt = now - timedelta(days=7)
+    elif date_range == '30d':
+        dt = now - timedelta(days=30)
+    else:
+        return None
+    return dt.strftime('%d-%b-%Y')
 
 def _sync_imap_messages_for_test_id(inbox, test_id, identifiers=None):
     folders = ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk', 'Bulk Mail']
@@ -2930,6 +2950,7 @@ def _poll_inbox_test_payload(test_id, data=None):
     data = data or {}
     sync_mode = (data.get('sync_mode') or 'recent').strip().lower()
     skip_deep_scan = bool(data.get('skip_deep_scan'))
+    date_range = (data.get('date_range') or '').strip().lower()
     try:
         recent_limit = max(50, int(data.get('recent_limit') if data.get('recent_limit') is not None else 200))
     except (TypeError, ValueError):
@@ -2938,7 +2959,11 @@ def _poll_inbox_test_payload(test_id, data=None):
     if not test:
         return {'success': False, 'error': 'Test not found'}, 404
     deleted_old = _cleanup_old_inbox_email_messages()
-    InboxPollJob.query.filter(InboxPollJob.created_at < datetime.utcnow() - timedelta(hours=2)).delete(synchronize_session=False)
+    try:
+        InboxPollJob.query.filter(InboxPollJob.created_at < datetime.utcnow() - timedelta(hours=2)).delete(synchronize_session=False)
+        db.session.flush()
+    except Exception:
+        db.session.rollback()
     messages = InboxDeliverabilityMessage.query.filter_by(test_id=test_id).all()
     pending_by_inbox = {}
     sync_errors = []
@@ -2964,7 +2989,7 @@ def _poll_inbox_test_payload(test_id, data=None):
                 row.error_message = 'Receiving inbox no longer exists.'
             continue
         try:
-            synced_count, recent_errors = _sync_test_inbox_folders(inbox, limit=recent_limit)
+            synced_count, recent_errors = _sync_test_inbox_folders(inbox, limit=recent_limit, since=_date_range_to_imap_since(date_range))
             sync_info = {
                 'synced_messages': synced_count,
                 'searched_folders': 4,
