@@ -2978,7 +2978,7 @@ merge_recipe_id, content_blueprint_id</pre>
             setAutomatedSyncing(true, 'Importing recent IMAP messages...');
             const pollPayload = {
                 sync_mode: options.syncMode || 'recent',
-                recent_limit: options.recentLimit ?? 0,
+                recent_limit: options.recentLimit ?? 200,
                 skip_deep_scan: options.skipDeepScan !== undefined ? options.skipDeepScan : false
             };
             const pollData = options.background
@@ -4481,8 +4481,12 @@ merge_recipe_id, content_blueprint_id</pre>
         const status = document.getElementById('userInboxTestStatus');
         const syncLabel = document.getElementById('userInboxLastSync');
         try {
-            setUserInboxSyncing(true, 'Searching saved inbox messages...');
-            const pollData = await iiFetch(`/api/inbox-intelligence/tests/${testId}/poll`, {method: 'POST'});
+            setUserInboxSyncing(true, 'Syncing recent IMAP messages...');
+            const pollData = await iiFetch(`/api/inbox-intelligence/tests/${testId}/poll`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({sync_mode: 'recent', recent_limit: 200})
+            });
             const data = await iiFetch(`/api/inbox-intelligence/tests/${testId}`);
             const rows = data.test.messages || [];
             renderAnalyticsSummary('userInboxAnalyticsSummary', rows, 'Users');
@@ -4541,7 +4545,11 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     async function pollDeliverabilityTest(testId) {
-        await iiFetch(`/api/inbox-intelligence/tests/${testId}/poll`, {method: 'POST'});
+        await iiFetch(`/api/inbox-intelligence/tests/${testId}/poll`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({sync_mode: 'recent', recent_limit: 200})
+        });
         await loadTests();
         await loadTestDetail(testId);
     }

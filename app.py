@@ -2874,12 +2874,12 @@ def api_inbox_poll_test(test_id):
 
 def _poll_inbox_test_payload(test_id, data=None):
     data = data or {}
-    sync_mode = (data.get('sync_mode') or 'targeted').strip().lower()
+    sync_mode = (data.get('sync_mode') or 'recent').strip().lower()
     skip_deep_scan = bool(data.get('skip_deep_scan'))
     try:
-        recent_limit = max(0, int(data.get('recent_limit') if data.get('recent_limit') is not None else 0))
+        recent_limit = max(50, int(data.get('recent_limit') if data.get('recent_limit') is not None else 200))
     except (TypeError, ValueError):
-        recent_limit = 0
+        recent_limit = 200
     test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
     if not test:
         return {'success': False, 'error': 'Test not found'}, 404
@@ -2909,16 +2909,13 @@ def _poll_inbox_test_payload(test_id, data=None):
                 row.error_message = 'Receiving inbox no longer exists.'
             continue
         try:
-            if sync_mode == 'recent':
-                synced_count, recent_errors = _sync_test_inbox_folders(inbox, limit=recent_limit)
-                sync_info = {
-                    'synced_messages': synced_count,
-                    'searched_folders': 4,
-                    'deleted_old_messages': 0,
-                    'errors': recent_errors,
-                }
-            else:
-                sync_info = _sync_imap_messages_for_test_id(inbox, test.test_id, identifiers=[row.test_identifier for row in rows])
+            synced_count, recent_errors = _sync_test_inbox_folders(inbox, limit=recent_limit)
+            sync_info = {
+                'synced_messages': synced_count,
+                'searched_folders': 4,
+                'deleted_old_messages': 0,
+                'errors': recent_errors,
+            }
             diagnostic['synced_messages'] += sync_info.get('synced_messages', 0)
             diagnostic['searched_folders'] += sync_info.get('searched_folders', 0)
             diagnostic['deleted_old_messages'] += sync_info.get('deleted_old_messages', 0)
