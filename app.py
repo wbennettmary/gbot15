@@ -1264,113 +1264,6 @@ def _imap_connect(account):
     conn.login(account.username, password)
     return conn
 
-def _fetch_new_headers_for_folder(conn, account_id, folder, limit=200):
-    """
-    Incrementally fetch new message headers from a single IMAP folder.
-    Uses UID cursors stored in ImapFolderSyncState to avoid re-downloading.
-    On first sync, only scans the last `limit` messages (not the entire mailbox).
-    Returns list of parsed header dicts: {x_test_id, message_id, from, to, subject, date, uid}.
-    """
-    status, data = conn.select(folder, readonly=True)
-    if status != 'OK':
-        return [], f'Cannot select {folder}'
-
-    uid_validity_str = data[0].decode() if data else None
-    if not uid_validity_str:
-        return [], 'No UIDVALIDITY returned'
-    uid_validity = uid_validity_str
-
-    sync_state = ImapFolderSyncState.query.filter_by(
-        imap_account_id=account_id, folder_name=folder
-    ).first()
-    if not sync_state:
-        sync_state = ImapFolderSyncState(
-            imap_account_id=account_id, folder_name=folder
-        )
-        db.session.add(sync_state)
-
-    if sync_state.uid_validity and sync_state.uid_validity != uid_validity:
-        app.logger.warning(
-            f"[IMAP] UIDVALIDITY changed for {folder}: "
-            f"{sync_state.uid_validity} -> {uid_validity}. Resetting cursor."
-        )
-        sync_state.last_seen_uid = 0
-        sync_state.uid_validity = uid_validity
-    elif not sync_state.uid_validity:
-        sync_state.uid_validity = uid_validity
-        sync_state.last_seen_uid = 0
-
-    last_uid = int(sync_state.last_seen_uid or 0)
-    first_sync = (last_uid == 0)
-
-    if first_sync:
-        since = (datetime.utcnow() - timedelta(days=7)).strftime('%d-%b-%Y')
-        status, data = conn.uid('search', None, f'SINCE {since}')
-    else:
-        status, data = conn.uid('search', None, f'UID {last_uid + 1}:*')
-
-    if status != 'OK':
-        return [], f'UID search failed'
-    all_uids = (data[0] or b'').split()
-    new_uids = [u for u in all_uids if int(u) > last_uid]
-    new_uids = new_uids[-int(limit):]
-
-    if not new_uids:
-        if first_sync and all_uids:
-            sync_state.last_seen_uid = max(int(u) for u in all_uids)
-        sync_state.last_sync_completed_at = datetime.utcnow()
-        sync_state.sync_status = 'idle'
-        return [], None
-
-    headers_out = []
-    for uid in new_uids:
-        fetch_status, fetch_data = conn.uid('fetch', uid, IMAP_HEADER_FETCH)
-        if fetch_status != 'OK' or not fetch_data:
-            continue
-        raw_header = None
-        for item in fetch_data:
-            if isinstance(item, tuple) and item[1]:
-                raw_header = item[1]
-                break
-        if not raw_header:
-            continue
-        try:
-            msg = message_from_bytes(raw_header)
-            x_test_id = _decode_header_value(msg.get('X-Test-ID'))
-            headers_out.append({
-                'uid': int(uid),
-                'x_test_id': x_test_id,
-                'message_id': _decode_header_value(msg.get('Message-ID')),
-                'from': _decode_header_value(msg.get('From')),
-                'to': _decode_header_value(msg.get('To')),
-                'subject': _decode_header_value(msg.get('Subject')),
-                'date': _decode_header_value(msg.get('Date')),
-                'x_test_batch_id': _decode_header_value(msg.get('X-Test-Batch-ID')),
-                'x_test_source_id': _decode_header_value(msg.get('X-Test-Source-ID')),
-            })
-        except Exception:
-            continue
-
-    highest_new_uid = max(int(u) for u in new_uids) if new_uids else last_uid
-    sync_state.last_seen_uid = highest_new_uid
-    sync_state.last_sync_completed_at = datetime.utcnow()
-    sync_state.sync_status = 'idle'
-    return headers_out, None
-
-
-def _fetch_full_message_for_uid(conn, folder, uid):
-    """Fetch full RFC822 for a single UID (used only when we need the body)."""
-    status, _ = conn.select(folder, readonly=True)
-    if status != 'OK':
-        return None
-    fetch_status, fetch_data = conn.uid('fetch', uid, '(RFC822)')
-    if fetch_status != 'OK' or not fetch_data:
-        return None
-    for item in fetch_data:
-        if isinstance(item, tuple) and item[1]:
-            return item[1]
-    return None
-
 def _upsert_imap_message_from_header(account, folder, hdr):
     """Store a lightweight InboxEmailMessage from a parsed header dict.
     Only stores messages that have x_test_id (for test result matching)."""
@@ -3025,6 +2918,7 @@ def _sync_test_inbox_folders(inbox, limit=80, since=None):
             InboxEmailMessage.folder.ilike('%spam%')
         ).count()
         db.session.commit()
+        app.logger.info(f"[POLL] {inbox.email}: synced {synced_total} X-Test-ID message(s) across {len(folders_to_check)} folders (since {since})")
     except Exception as e:
         errors.append(str(e))
     finally:
@@ -3052,69 +2946,6 @@ def _date_range_to_imap_since(date_range):
     else:
         return None
     return dt.strftime('%d-%b-%Y')
-
-def _sync_imap_messages_for_test_id(inbox, test_id, identifiers=None):
-    folders = ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk', 'Bulk Mail']
-    synced = 0
-    searched = 0
-    errors = []
-    conn = None
-    deleted_old = 0
-    token = (test_id or '').strip()
-    exact_identifiers = sorted({identifier for identifier in (identifiers or []) if identifier})
-    if not token:
-        return {'synced_messages': 0, 'searched_folders': 0, 'deleted_old_messages': 0, 'errors': []}
-    try:
-        conn = _imap_connect(inbox)
-        for folder in folders:
-            status, _ = conn.select(folder, readonly=True)
-            if status != 'OK':
-                continue
-            searched += 1
-            found_uids = set()
-            search_terms = [f'HEADER X-Test-ID "{token}"', f'TEXT "{token}"']
-            for identifier in exact_identifiers:
-                search_terms.extend([f'HEADER X-Test-ID "{identifier}"', f'TEXT "{identifier}"'])
-            for search_term in search_terms:
-                status, data = conn.uid('search', None, search_term)
-                if status == 'OK' and data and data[0]:
-                    found_uids.update(data[0].split())
-            for uid in found_uids:
-                fetch_status, fetch_data = conn.uid('fetch', uid, '(RFC822)')
-                if fetch_status != 'OK' or not fetch_data:
-                    continue
-                raw_msg = None
-                for item in fetch_data:
-                    if isinstance(item, tuple) and item[1]:
-                        raw_msg = item[1]
-                        break
-                if not raw_msg:
-                    continue
-                _upsert_imap_message(inbox, folder, uid, raw_msg)
-                synced += 1
-        deleted_old = _cleanup_old_inbox_email_messages()
-        inbox.last_synced_at = datetime.utcnow()
-        inbox.connection_status = 'connected'
-        inbox.message_count = InboxEmailMessage.query.filter_by(imap_account_id=inbox.id).count()
-        inbox.inbox_count = InboxEmailMessage.query.filter_by(imap_account_id=inbox.id, folder='INBOX').count()
-        inbox.spam_count = InboxEmailMessage.query.filter(
-            InboxEmailMessage.imap_account_id == inbox.id,
-            InboxEmailMessage.folder.ilike('%spam%')
-        ).count()
-        db.session.add(inbox)
-        db.session.flush()
-        if deleted_old:
-            app.logger.info(f"Deleted {deleted_old} synced inbox email(s) older than 30 days")
-    except Exception as e:
-        errors.append(str(e))
-    finally:
-        try:
-            if conn:
-                conn.close()
-                conn.logout()
-        except Exception:
-            pass
-    return {'synced_messages': synced, 'searched_folders': searched, 'deleted_old_messages': deleted_old, 'errors': errors}
 
 def _message_database_searchable(message):
     try:
@@ -3181,119 +3012,6 @@ def _detect_message_placements_from_synced(inbox_id, rows, test_id=None):
 
     return results, info
 
-def _message_record_from_raw(raw_msg, folder):
-    msg = message_from_bytes(raw_msg)
-    sender_raw = _decode_header_value(msg.get('From'))
-    sender_email = parseaddr(sender_raw)[1].lower()
-    recipient_raw = _decode_header_value(msg.get('To'))
-    subject = _decode_header_value(msg.get('Subject'))
-    x_test_id = _decode_header_value(msg.get('X-Test-ID'))
-    message_id = _decode_header_value(msg.get('Message-ID'))
-    date_header = msg.get('Date')
-    received_at = None
-    if date_header:
-        try:
-            received_at = parsedate_to_datetime(date_header)
-            if received_at and received_at.tzinfo:
-                received_at = received_at.replace(tzinfo=None)
-        except Exception:
-            received_at = None
-    plain_text, html_content, _ = _message_text_parts(msg)
-    raw_text = raw_msg.decode('utf-8', errors='ignore')
-    searchable = '\n'.join([
-        x_test_id or '',
-        message_id or '',
-        subject or '',
-        sender_raw or '',
-        recipient_raw or '',
-        plain_text or '',
-        html_content or '',
-        raw_text,
-    ])
-    return {
-        'folder': folder,
-        'placement': _placement_from_folder(folder),
-        'sender': sender_email,
-        'recipient': recipient_raw.lower(),
-        'subject': (subject or '').strip().lower(),
-        'x_test_id': x_test_id,
-        'message_id': message_id,
-        'received_at': received_at,
-        'searchable': searchable,
-    }
-
-def _scan_imap_for_test_rows(inbox, rows, per_folder_limit=500, persist_matches=True):
-    folders = ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk', 'Bulk Mail']
-    identifiers = {row.test_identifier for row in rows if row.test_identifier}
-    broad_tokens = sorted({identifier.rsplit('-', 1)[0] for identifier in identifiers if '-' in identifier}, key=len, reverse=True)
-    records = []
-    errors = []
-    conn = None
-    try:
-        conn = _imap_connect(inbox)
-        for folder in folders:
-            status, _ = conn.select(folder, readonly=True)
-            if status != 'OK':
-                continue
-            status, data = conn.uid('search', None, 'ALL')
-            if status != 'OK':
-                continue
-            uids = (data[0] or b'').split()[-int(per_folder_limit):]
-            for uid in reversed(uids):
-                fetch_status, fetch_data = conn.uid('fetch', uid, '(RFC822)')
-                if fetch_status != 'OK' or not fetch_data:
-                    continue
-                raw_msg = None
-                for item in fetch_data:
-                    if isinstance(item, tuple) and item[1]:
-                        raw_msg = item[1]
-                        break
-                if not raw_msg:
-                    continue
-                raw_text = raw_msg.decode('utf-8', errors='ignore')
-                if not any(identifier in raw_text for identifier in identifiers) and not any(token in raw_text for token in broad_tokens):
-                    continue
-                if persist_matches:
-                    try:
-                        _upsert_imap_message(inbox, folder, uid, raw_msg)
-                    except Exception as save_err:
-                        errors.append(f'Could not save matched IMAP message: {save_err}')
-                records.append(_message_record_from_raw(raw_msg, folder))
-    except Exception as e:
-        errors.append(str(e))
-    finally:
-        try:
-            if conn:
-                conn.close()
-                conn.logout()
-        except Exception:
-            pass
-
-    placements = {}
-    match_modes = {'exact': 0, 'broad_sender': 0, 'sender_subject': 0}
-    for row in rows:
-        row_sender = (row.workspace_sender or '').lower()
-        row_recipient = (row.recipient or '').lower()
-        row_subject = (row.subject or '').strip().lower()
-        for record in records:
-            if row.test_identifier and row.test_identifier in record['searchable']:
-                placements[row.test_identifier] = (record['placement'], record['folder'])
-                match_modes['exact'] += 1
-                break
-            broad_match = any(token and token in record['searchable'] for token in broad_tokens)
-            sender_match = row_sender and record['sender'] == row_sender
-            recipient_match = not row_recipient or row_recipient in record['recipient']
-            if broad_match and sender_match and recipient_match:
-                placements[row.test_identifier] = (record['placement'], record['folder'])
-                match_modes['broad_sender'] += 1
-                break
-            subject_match = row_subject and record['subject'] == row_subject
-            if sender_match and subject_match and recipient_match:
-                placements[row.test_identifier] = (record['placement'], record['folder'])
-                match_modes['sender_subject'] += 1
-                break
-    return placements, {'scanned_messages': len(records), 'match_modes': match_modes, 'errors': errors}
-
 @app.route('/api/inbox-intelligence/tests/<test_id>/poll', methods=['POST'])
 @login_required
 @permission_required('inbox_intelligence')
@@ -3302,12 +3020,9 @@ def api_inbox_poll_test(test_id):
     return jsonify(result), status_code
 
 def _poll_inbox_test_payload(test_id, data=None):
+    """Master orchestrator for test sync: sync IMAP folders (header-only, fast),
+    then match test messages by X-Test-ID, update placements and counts."""
     data = data or {}
-    date_range = (data.get('date_range') or '').strip().lower()
-    try:
-        recent_limit = max(50, int(data.get('recent_limit') if data.get('recent_limit') is not None else 500))
-    except (TypeError, ValueError):
-        recent_limit = 500
     test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
     if not test:
         return {'success': False, 'error': 'Test not found'}, 404
@@ -3317,20 +3032,19 @@ def _poll_inbox_test_payload(test_id, data=None):
         db.session.flush()
     except Exception:
         db.session.rollback()
-    messages = InboxDeliverabilityMessage.query.filter_by(test_id=test_id).all()
+    all_messages = InboxDeliverabilityMessage.query.filter_by(test_id=test_id).all()
     pending_by_inbox = {}
     sync_errors = []
     diagnostic = {
-        'checked_rows': 0, 'matched_rows': 0, 'queued_checked': 0,
+        'checked_rows': 0, 'matched_rows': 0,
         'headers_fetched': 0, 'deleted_old_messages': deleted_old,
         'match_modes': {'x_test_id': 0, 'exact': 0},
+        'accounts_synced': 0,
     }
-    for row in messages:
+    for row in all_messages:
         if row.status in ('FAILED', 'COMPLETED', 'SENT_EXTERNAL'):
             continue
         diagnostic['checked_rows'] += 1
-        if row.status == 'QUEUED':
-            diagnostic['queued_checked'] += 1
         if not row.imap_account_id:
             row.status = 'SENT_EXTERNAL'
             row.placement = 'UNOBSERVED'
@@ -3347,9 +3061,10 @@ def _poll_inbox_test_payload(test_id, data=None):
                 row.error_message = 'Receiving inbox no longer exists.'
             continue
         try:
-            app.logger.info(f"[POLL] Syncing {inbox.email} for test {test_id} ({len(rows)} observations, limit={recent_limit})")
-            matched_count, recent_errors = _sync_test_inbox_folders(inbox, limit=recent_limit)
+            app.logger.info(f"[POLL] Syncing {inbox.email} for test {test_id} ({len(rows)} pending rows)")
+            matched_count, recent_errors = _sync_test_inbox_folders(inbox, limit=200)
             diagnostic['headers_fetched'] += matched_count
+            diagnostic['accounts_synced'] += 1
             sync_errors.extend([f'{inbox.email}: {error}' for error in recent_errors])
             placements, scan_info = _detect_message_placements_from_synced(inbox.id, rows, test_id=test.test_id)
             for mode, count in (scan_info.get('match_modes') or {}).items():
@@ -3365,7 +3080,7 @@ def _poll_inbox_test_payload(test_id, data=None):
                     row.status = 'COMPLETED'
                     diagnostic['matched_rows'] += 1
         except Exception as e:
-            app.logger.warning(f"[POLL] Error syncing {inbox.email}: {e}")
+            app.logger.warning(f"[POLL] Error syncing {inbox.email}: {e}", exc_info=True)
             for row in rows:
                 row.error_message = str(e)
     _refresh_deliverability_counts(test)
@@ -3375,7 +3090,7 @@ def _poll_inbox_test_payload(test_id, data=None):
     verdict_counts = {'INBOX': 0, 'MIXED': 0, 'SPAM': 0, 'PENDING': 0, 'INSUFFICIENT_DATA': 0}
     for item in source_results:
         verdict_counts[item['verdict']] = verdict_counts.get(item['verdict'], 0) + 1
-    app.logger.info(f"[POLL] Test {test_id} complete: {diagnostic['matched_rows']}/{diagnostic['checked_rows']} matched")
+    app.logger.info(f"[POLL] Test {test_id} complete: {diagnostic['matched_rows']}/{diagnostic['checked_rows']} matched, {diagnostic['headers_fetched']} headers fetched from {diagnostic['accounts_synced']} account(s)")
     return {'success': True, 'sync_errors': sync_errors, 'diagnostic': diagnostic, 'source_results': source_results, 'verdict_counts': verdict_counts, 'test': {'test_id': test.test_id, 'status': test.status, 'inbox_count': test.inbox_count, 'spam_count': test.spam_count, 'pending_count': test.pending_count, 'failed_count': test.failed_count, 'sent_count': test.sent_count}}, 200
 
 @app.route('/api/inbox-intelligence/tests/<test_id>/poll-async', methods=['POST'])
@@ -3402,11 +3117,19 @@ def api_inbox_poll_test_async(test_id):
                 job.finished_at = datetime.utcnow()
                 db.session.commit()
             except Exception as e:
+                app.logger.error(f"[POLL-ASYNC] Job {job_id} failed: {e}", exc_info=True)
+                try:
+                    db.session.rollback()
+                except Exception:
+                    pass
                 job.status = 'error'
-                job.message = str(e)
-                job.error = str(e)
+                job.message = str(e)[:500]
+                job.error = str(e)[:2000]
                 job.finished_at = datetime.utcnow()
-                db.session.commit()
+                try:
+                    db.session.commit()
+                except Exception:
+                    pass
 
     threading.Thread(target=run_job, daemon=True).start()
     return jsonify({'success': True, 'job_id': job_id, 'message': job.message})
