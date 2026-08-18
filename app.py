@@ -1396,19 +1396,11 @@ def _sync_imap_account(account, folder='INBOX', limit=50, mark_errors=True, sinc
         if status != 'OK':
             raise RuntimeError("Could not search mailbox")
         uids = (data[0] or b'').split()[-int(limit):]
-        for uid in reversed(uids):
-            fetch_status, fetch_data = conn.uid('fetch', uid, '(RFC822)')
-            if fetch_status != 'OK' or not fetch_data:
-                continue
-            raw_msg = None
-            for item in fetch_data:
-                if isinstance(item, tuple) and item[1]:
-                    raw_msg = item[1]
-                    break
-            if not raw_msg:
-                continue
-            _upsert_imap_message(account, folder, uid, raw_msg)
-            synced += 1
+        if uids:
+            headers = _imap_fetch_headers_batch(conn, uids, folder)
+            for hdr in headers:
+                _upsert_imap_message_from_header(account, folder, hdr)
+                synced += 1
         deleted_old = _cleanup_old_inbox_email_messages()
         account.last_synced_at = datetime.utcnow()
         account.connection_status = 'connected'
@@ -2836,10 +2828,57 @@ def _detect_message_placements(inbox, identifiers, max_direct_searches=8):
 def _placement_from_folder(folder):
     return 'SPAM' if any(x in (folder or '').lower() for x in ['spam', 'junk', 'bulk']) else 'INBOX'
 
-def _sync_test_inbox_folders(inbox, limit=80, since=None):
-    """Sync folders for an account using ONE IMAP connection with header-only fetch (fast).
-    Uses SINCE date filter + BODY.PEEK[HEADER] fetch (10-50x faster than RFC822).
-    Stores ALL messages so both x_test_id fast-match and subject/sender fallback matching work.
+def _parse_header(raw_header):
+    """Parse raw header bytes into a dict for storage."""
+    msg = message_from_bytes(raw_header)
+    return {
+        'x_test_id': _decode_header_value(msg.get('X-Test-ID')),
+        'message_id': _decode_header_value(msg.get('Message-ID')),
+        'from': _decode_header_value(msg.get('From')),
+        'to': _decode_header_value(msg.get('To')),
+        'subject': _decode_header_value(msg.get('Subject')),
+        'date': _decode_header_value(msg.get('Date')),
+        'x_test_batch_id': _decode_header_value(msg.get('X-Test-Batch-ID')),
+        'x_test_source_id': _decode_header_value(msg.get('X-Test-Source-ID')),
+    }
+
+def _imap_fetch_headers_batch(conn, uids, folder):
+    """Fetch headers for a list of UIDs in one or more batched IMAP FETCH commands.
+    Returns list of parsed header dicts with 'uid' added."""
+    if not uids:
+        return []
+    results = []
+    batch_size = 50
+    for i in range(0, len(uids), batch_size):
+        batch = uids[i:i+batch_size]
+        uid_range = b','.join(batch) if isinstance(batch[0], bytes) else ','.join(batch).encode()
+        try:
+            fetch_status, fetch_data = conn.uid('fetch', uid_range, IMAP_HEADER_FETCH)
+        except Exception:
+            continue
+        if fetch_status != 'OK' or not fetch_data:
+            continue
+        for item in fetch_data:
+            if not isinstance(item, tuple) or len(item) != 2:
+                continue
+            tag_line, raw_header = item
+            if not raw_header:
+                continue
+            uid_match = re.match(rb'^\*?\s*(\d+)\s+FETCH', tag_line) if isinstance(tag_line, bytes) else re.match(r'^\*?\s*(\d+)\s+FETCH', tag_line)
+            uid_val = int(uid_match.group(1)) if uid_match else 0
+            try:
+                hdr = _parse_header(raw_header)
+                hdr['uid'] = uid_val
+                results.append(hdr)
+            except Exception:
+                continue
+    return results
+
+def _sync_test_inbox_folders(inbox, limit=80, since=None, identifiers=None):
+    """Targeted IMAP sync for test emails. Strategy:
+    1. IMAP HEADER SEARCH for each test identifier (server-side, fast)
+    2. Batch-fetch headers only for matching UIDs
+    3. Fallback: SINCE + batch fetch if HEADER SEARCH finds nothing
     Per-account lock prevents concurrent syncs."""
     conn = None
     synced_total = 0
@@ -2863,43 +2902,34 @@ def _sync_test_inbox_folders(inbox, limit=80, since=None):
                 status, _ = conn.select(folder, readonly=True)
                 if status != 'OK':
                     continue
-                s, data = conn.uid('search', None, f'SINCE {since}')
-                if s != 'OK':
+                matched_uids = set()
+                if identifiers:
+                    for ident in identifiers:
+                        try:
+                            s, data = conn.uid('search', None, f'HEADER "X-Test-ID" "{ident}"')
+                            if s == 'OK' and data and data[0]:
+                                uids = data[0].split()
+                                matched_uids.update(uids)
+                                if uids:
+                                    app.logger.info(f"[POLL] {inbox.email}/{folder}: IMAP HEADER SEARCH found {len(uids)} message(s) for X-Test-ID={ident}")
+                        except Exception as search_err:
+                            app.logger.debug(f"[POLL] HEADER SEARCH failed for {ident} in {folder}: {search_err}")
+                if not matched_uids:
+                    if since:
+                        s, data = conn.uid('search', None, f'SINCE {since}')
+                        if s == 'OK' and data and data[0]:
+                            all_uids = data[0].split()
+                            matched_uids.update(all_uids[-int(limit):])
+                if not matched_uids:
                     continue
-                uids = (data[0] or b'').split()[-int(limit):]
-                if not uids:
-                    continue
-                for uid in reversed(uids):
-                    fetch_status, fetch_data = conn.uid('fetch', uid, IMAP_HEADER_FETCH)
-                    if fetch_status != 'OK' or not fetch_data:
-                        continue
-                    raw_header = None
-                    for item in fetch_data:
-                        if isinstance(item, tuple) and item[1]:
-                            raw_header = item[1]
-                            break
-                    if not raw_header:
-                        continue
-                    try:
-                        msg = message_from_bytes(raw_header)
-                        x_test_id = _decode_header_value(msg.get('X-Test-ID'))
-                        hdr = {
-                            'uid': int(uid),
-                            'x_test_id': x_test_id,
-                            'message_id': _decode_header_value(msg.get('Message-ID')),
-                            'from': _decode_header_value(msg.get('From')),
-                            'to': _decode_header_value(msg.get('To')),
-                            'subject': _decode_header_value(msg.get('Subject')),
-                            'date': _decode_header_value(msg.get('Date')),
-                            'x_test_batch_id': _decode_header_value(msg.get('X-Test-Batch-ID')),
-                            'x_test_source_id': _decode_header_value(msg.get('X-Test-Source-ID')),
-                        }
-                        _upsert_imap_message_from_header(inbox, folder, hdr)
-                        synced_total += 1
-                        if x_test_id:
-                            x_test_id_count += 1
-                    except Exception:
-                        continue
+                uid_list = sorted(matched_uids, key=lambda u: int(u) if u.isdigit() else 0)
+                app.logger.info(f"[POLL] {inbox.email}/{folder}: fetching headers for {len(uid_list)} uid(s)")
+                headers = _imap_fetch_headers_batch(conn, uid_list, folder)
+                for hdr in headers:
+                    _upsert_imap_message_from_header(inbox, folder, hdr)
+                    synced_total += 1
+                    if hdr.get('x_test_id'):
+                        x_test_id_count += 1
             except Exception as e:
                 if folder == 'INBOX':
                     errors.append(f'{folder}: {e}')
@@ -3059,8 +3089,9 @@ def _poll_inbox_test_payload(test_id, data=None):
                 row.error_message = 'Receiving inbox no longer exists.'
             continue
         try:
-            app.logger.info(f"[POLL] Syncing {inbox.email} for test {test_id} ({len(rows)} pending rows)")
-            matched_count, recent_errors = _sync_test_inbox_folders(inbox, limit=200)
+            row_identifiers = {row.test_identifier for row in rows if row.test_identifier}
+            app.logger.info(f"[POLL] Syncing {inbox.email} for test {test_id} ({len(rows)} pending rows, {len(row_identifiers)} identifiers: {row_identifiers})")
+            matched_count, recent_errors = _sync_test_inbox_folders(inbox, limit=200, identifiers=row_identifiers)
             diagnostic['headers_fetched'] += matched_count
             diagnostic['accounts_synced'] += 1
             sync_errors.extend([f'{inbox.email}: {error}' for error in recent_errors])
