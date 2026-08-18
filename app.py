@@ -39,7 +39,7 @@ from email.mime.multipart import MIMEMultipart
 import re
 
 from core_logic import google_api, unique_random_alias, get_random_name_pools
-from database import db, User, WhitelistedIP, UsedDomain, GoogleAccount, GoogleToken, Scope, ServerConfig, UserAppPassword, AutomationAccount, RetrievedUser, NamecheapConfig, DomainOperation, AwsConfig, ServiceAccount, CloudflareConfig, Notification, WorkspaceList, AwsGeneratedPassword, InboxImapAccount, InboxEmailMessage, InboxStaticTemplate, InboxUserTemplate, InboxOpenRouterConfig, InboxDeliverabilityTest, InboxDeliverabilityMessage, TestEmailSource, InboxPollJob
+from database import db, User, WhitelistedIP, UsedDomain, GoogleAccount, GoogleToken, Scope, ServerConfig, UserAppPassword, AutomationAccount, RetrievedUser, NamecheapConfig, DomainOperation, AwsConfig, ServiceAccount, CloudflareConfig, Notification, WorkspaceList, AwsGeneratedPassword, InboxImapAccount, InboxEmailMessage, InboxStaticTemplate, InboxUserTemplate, InboxOpenRouterConfig, InboxDeliverabilityTest, InboxDeliverabilityMessage, TestEmailSource, InboxPollJob, ImapFolderSyncState
 from routes.dns_manager import dns_manager
 from routes.aws_manager import aws_manager
 from routes.digitalocean_manager import digitalocean_manager
@@ -1168,6 +1168,25 @@ INBOX_PROVIDER_DEFAULTS = {
 
 INBOX_POLL_JOBS = {}  # kept for backward compat; actual storage uses InboxPollJob table
 
+# --- Sync infrastructure ---
+
+# Per-account lock: only one sync thread per IMAP account at a time
+_inbox_sync_locks = {}  # account_id -> threading.Lock
+_inbox_sync_locks_lock = threading.Lock()  # protects _inbox_sync_locks dict itself
+
+# Header-only fetch: lightweight, no body content
+IMAP_HEADER_FETCH = '(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID X-TEST-ID X-TEST-BATCH-ID X-TEST-SOURCE-ID FROM TO SUBJECT DATE)])'
+
+# Folders to scan for test results
+TEST_RESULT_FOLDERS = ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk', 'Bulk Mail', 'Promotions', 'Updates', 'Social']
+
+def _get_account_sync_lock(account_id):
+    with _inbox_sync_locks_lock:
+        if account_id not in _inbox_sync_locks:
+            _inbox_sync_locks[account_id] = threading.Lock()
+        return _inbox_sync_locks[account_id]
+
+
 def _crypto_key():
     secret = app.config.get('SECRET_KEY') or os.environ.get('SECRET_KEY') or 'gbot-local-secret'
     return hashlib.sha256(str(secret).encode('utf-8')).digest()
@@ -1244,6 +1263,152 @@ def _imap_connect(account):
         conn = imaplib.IMAP4(account.imap_host, int(account.imap_port or 143), timeout=30)
     conn.login(account.username, password)
     return conn
+
+def _fetch_new_headers_for_folder(conn, account_id, folder, limit=500):
+    """
+    Incrementally fetch new message headers from a single IMAP folder.
+    Uses UID cursors stored in ImapFolderSyncState to avoid re-downloading.
+    Handles UIDVALIDITY reset (if server resets, we lose position and re-scan).
+    Returns list of parsed header dicts: {x_test_id, message_id, from, to, subject, date, uid}.
+    """
+    status, data = conn.select(folder, readonly=True)
+    if status != 'OK':
+        return [], f'Cannot select {folder}'
+
+    uid_validity_str = data[0].decode() if data else None
+    if not uid_validity_str:
+        return [], 'No UIDVALIDITY returned'
+    uid_validity = uid_validity_str
+
+    sync_state = ImapFolderSyncState.query.filter_by(
+        imap_account_id=account_id, folder_name=folder
+    ).first()
+    if not sync_state:
+        sync_state = ImapFolderSyncState(
+            imap_account_id=account_id, folder_name=folder
+        )
+        db.session.add(sync_state)
+
+    if sync_state.uid_validity and sync_state.uid_validity != uid_validity:
+        app.logger.warning(
+            f"[IMAP] UIDVALIDITY changed for {folder}: "
+            f"{sync_state.uid_validity} -> {uid_validity}. Resetting cursor."
+        )
+        sync_state.last_seen_uid = 0
+        sync_state.uid_validity = uid_validity
+    elif not sync_state.uid_validity:
+        sync_state.uid_validity = uid_validity
+        sync_state.last_seen_uid = 0
+
+    last_uid = int(sync_state.last_seen_uid or 0)
+
+    if last_uid > 0:
+        uid_range = f'{last_uid + 1}:*'
+    else:
+        uid_range = '1:*'
+
+    status, data = conn.uid('search', None, f'UID {uid_range}')
+    if status != 'OK':
+        return [], f'UID search failed'
+    all_uids = (data[0] or b'').split()
+    new_uids = [u for u in all_uids if int(u) > last_uid]
+    new_uids = new_uids[-int(limit):]
+
+    if not new_uids:
+        sync_state.last_sync_completed_at = datetime.utcnow()
+        sync_state.sync_status = 'idle'
+        return [], None
+
+    headers_out = []
+    for uid in new_uids:
+        fetch_status, fetch_data = conn.uid('fetch', uid, IMAP_HEADER_FETCH)
+        if fetch_status != 'OK' or not fetch_data:
+            continue
+        raw_header = None
+        for item in fetch_data:
+            if isinstance(item, tuple) and item[1]:
+                raw_header = item[1]
+                break
+        if not raw_header:
+            continue
+        try:
+            msg = message_from_bytes(raw_header)
+            x_test_id = _decode_header_value(msg.get('X-Test-ID'))
+            headers_out.append({
+                'uid': int(uid),
+                'x_test_id': x_test_id,
+                'message_id': _decode_header_value(msg.get('Message-ID')),
+                'from': _decode_header_value(msg.get('From')),
+                'to': _decode_header_value(msg.get('To')),
+                'subject': _decode_header_value(msg.get('Subject')),
+                'date': _decode_header_value(msg.get('Date')),
+                'x_test_batch_id': _decode_header_value(msg.get('X-Test-Batch-ID')),
+                'x_test_source_id': _decode_header_value(msg.get('X-Test-Source-ID')),
+            })
+        except Exception:
+            continue
+
+    highest_new_uid = max(int(u) for u in new_uids) if new_uids else last_uid
+    sync_state.last_seen_uid = highest_new_uid
+    sync_state.last_sync_completed_at = datetime.utcnow()
+    sync_state.sync_status = 'idle'
+    return headers_out, None
+
+
+def _fetch_full_message_for_uid(conn, folder, uid):
+    """Fetch full RFC822 for a single UID (used only when we need the body)."""
+    status, _ = conn.select(folder, readonly=True)
+    if status != 'OK':
+        return None
+    fetch_status, fetch_data = conn.uid('fetch', uid, '(RFC822)')
+    if fetch_status != 'OK' or not fetch_data:
+        return None
+    for item in fetch_data:
+        if isinstance(item, tuple) and item[1]:
+            return item[1]
+    return None
+
+def _upsert_imap_message_from_header(account, folder, hdr):
+    """Store a lightweight InboxEmailMessage from a parsed header dict.
+    Only stores messages that have x_test_id (for test result matching)."""
+    uid_value = str(hdr.get('uid', ''))
+    x_test_id = hdr.get('x_test_id')
+    if not x_test_id:
+        return None
+    existing = InboxEmailMessage.query.filter_by(
+        imap_account_id=account.id, folder=folder, uid=uid_value
+    ).first()
+    if not existing:
+        existing = InboxEmailMessage(imap_account_id=account.id, folder=folder, uid=uid_value)
+        db.session.add(existing)
+    existing.provider = account.provider
+    existing.message_id = hdr.get('message_id', '')
+    existing.sender = hdr.get('from', '')
+    existing.sender_domain = (hdr['from'].split('@')[-1].lower() if '@' in (hdr.get('from') or '') else '')
+    existing.recipient = hdr.get('to', '')
+    existing.subject = hdr.get('subject', '')
+    existing.preview = ''
+    existing.plain_text = ''
+    existing.html_content = ''
+    existing.headers_json = json.dumps({
+        'message_id': hdr.get('message_id'),
+        'x_test_id': x_test_id,
+        'x_test_batch_id': hdr.get('x_test_batch_id'),
+        'x_test_source_id': hdr.get('x_test_source_id'),
+    })
+    existing.x_test_id = x_test_id
+    existing.has_attachments = False
+    received_at = None
+    if hdr.get('date'):
+        try:
+            received_at = parsedate_to_datetime(hdr['date'])
+            if received_at and received_at.tzinfo:
+                received_at = received_at.replace(tzinfo=None)
+        except Exception:
+            received_at = None
+    existing.received_at = received_at
+    existing.synced_at = datetime.utcnow()
+    return existing
 
 def _serialize_imap_account(account):
     return {
@@ -1572,6 +1737,7 @@ def api_inbox_delete_account(account_id):
             conn.execute(db.text('UPDATE inbox_deliverability_message SET imap_account_id = NULL WHERE imap_account_id = :aid'), {'aid': aid})
             conn.execute(db.text('UPDATE test_email_source SET source_imap_account_id = NULL WHERE source_imap_account_id = :aid'), {'aid': aid})
             conn.execute(db.text('DELETE FROM inbox_email_message WHERE imap_account_id = :aid'), {'aid': aid})
+            conn.execute(db.text('DELETE FROM imap_folder_sync_state WHERE imap_account_id = :aid'), {'aid': aid})
             conn.execute(db.text('DELETE FROM inbox_imap_account WHERE id = :aid'), {'aid': aid})
             conn.commit()
     except Exception as e:
@@ -2770,43 +2936,32 @@ def _detect_message_placements(inbox, identifiers, max_direct_searches=8):
 def _placement_from_folder(folder):
     return 'SPAM' if any(x in (folder or '').lower() for x in ['spam', 'junk', 'bulk']) else 'INBOX'
 
-def _sync_test_inbox_folders(inbox, limit=80, since=None):
-    """Sync all folders for an account using ONE IMAP connection (fast)."""
+def _sync_test_inbox_folders(inbox, limit=500, since=None):
+    """Sync headers from all folders for an account using ONE IMAP connection + UID cursors.
+    Stores InboxEmailMessage records for messages with x_test_id (for detection matching).
+    Returns (headers_with_test_id_count, errors)."""
     conn = None
-    synced_total = 0
+    matched_total = 0
     errors = []
-    folders_to_check = ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk']
-    if not since and inbox.last_synced_at:
-        since = (inbox.last_synced_at - timedelta(minutes=5)).strftime('%d-%b-%Y')
-    if not since:
-        since = (datetime.utcnow() - timedelta(days=2)).strftime('%d-%b-%Y')
+    lock = _get_account_sync_lock(inbox.id)
+    if not lock.acquire(blocking=False):
+        return 0, ['Sync already in progress for this account']
     try:
-        conn = _imap_connect(inbox)
-    except Exception as e:
-        return 0, [f'Connection failed: {e}']
-    try:
-        for index, folder in enumerate(folders_to_check):
+        try:
+            conn = _imap_connect(inbox)
+        except Exception as e:
+            return 0, [f'Connection failed: {e}']
+        for folder in TEST_RESULT_FOLDERS:
             try:
-                status, _ = conn.select(folder, readonly=True)
-                if status != 'OK':
+                headers_list, err = _fetch_new_headers_for_folder(conn, inbox.id, folder, limit=limit)
+                if err:
+                    if folder == 'INBOX':
+                        errors.append(f'{folder}: {err}')
                     continue
-                s, data = conn.uid('search', None, f'SINCE {since}')
-                if s != 'OK':
-                    continue
-                uids = (data[0] or b'').split()[-int(limit):]
-                for uid in reversed(uids):
-                    fetch_status, fetch_data = conn.uid('fetch', uid, '(RFC822)')
-                    if fetch_status != 'OK' or not fetch_data:
-                        continue
-                    raw_msg = None
-                    for item in fetch_data:
-                        if isinstance(item, tuple) and item[1]:
-                            raw_msg = item[1]
-                            break
-                    if not raw_msg:
-                        continue
-                    _upsert_imap_message(inbox, folder, uid, raw_msg)
-                    synced_total += 1
+                for hdr in headers_list:
+                    if hdr.get('x_test_id'):
+                        matched_total += 1
+                        _upsert_imap_message_from_header(inbox, folder, hdr)
             except Exception as e:
                 if folder == 'INBOX':
                     errors.append(f'{folder}: {e}')
@@ -2830,7 +2985,8 @@ def _sync_test_inbox_folders(inbox, limit=80, since=None):
                 conn.logout()
         except Exception:
             pass
-    return synced_total, errors
+        lock.release()
+    return matched_total, errors
 
 def _date_range_to_imap_since(date_range):
     if not date_range or date_range == 'all':
@@ -3098,12 +3254,11 @@ def api_inbox_poll_test(test_id):
 
 def _poll_inbox_test_payload(test_id, data=None):
     data = data or {}
-    skip_deep_scan = bool(data.get('skip_deep_scan', True))
     date_range = (data.get('date_range') or '').strip().lower()
     try:
-        recent_limit = max(50, int(data.get('recent_limit') if data.get('recent_limit') is not None else 200))
+        recent_limit = max(50, int(data.get('recent_limit') if data.get('recent_limit') is not None else 500))
     except (TypeError, ValueError):
-        recent_limit = 200
+        recent_limit = 500
     test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
     if not test:
         return {'success': False, 'error': 'Test not found'}, 404
@@ -3116,7 +3271,11 @@ def _poll_inbox_test_payload(test_id, data=None):
     messages = InboxDeliverabilityMessage.query.filter_by(test_id=test_id).all()
     pending_by_inbox = {}
     sync_errors = []
-    diagnostic = {'checked_rows': 0, 'matched_rows': 0, 'queued_checked': 0, 'scanned_messages': 0, 'synced_messages': 0, 'searched_folders': 0, 'deleted_old_messages': deleted_old, 'match_modes': {'exact': 0, 'broad_sender': 0, 'sender_subject': 0}}
+    diagnostic = {
+        'checked_rows': 0, 'matched_rows': 0, 'queued_checked': 0,
+        'headers_fetched': 0, 'deleted_old_messages': deleted_old,
+        'match_modes': {'x_test_id': 0, 'exact': 0},
+    }
     for row in messages:
         if row.status in ('FAILED', 'COMPLETED', 'SENT_EXTERNAL'):
             continue
@@ -3130,7 +3289,6 @@ def _poll_inbox_test_payload(test_id, data=None):
             continue
         pending_by_inbox.setdefault(row.imap_account_id, []).append(row)
 
-    since = _date_range_to_imap_since(date_range)
     for inbox_id, rows in pending_by_inbox.items():
         inbox = InboxImapAccount.query.get(inbox_id)
         if not inbox:
@@ -3140,12 +3298,11 @@ def _poll_inbox_test_payload(test_id, data=None):
                 row.error_message = 'Receiving inbox no longer exists.'
             continue
         try:
-            synced_count, recent_errors = _sync_test_inbox_folders(inbox, limit=recent_limit, since=since)
-            diagnostic['synced_messages'] += synced_count
-            diagnostic['searched_folders'] += 4
+            app.logger.info(f"[POLL] Syncing {inbox.email} for test {test_id} ({len(rows)} observations)")
+            matched_count, recent_errors = _sync_test_inbox_folders(inbox, limit=recent_limit)
+            diagnostic['headers_fetched'] += matched_count
             sync_errors.extend([f'{inbox.email}: {error}' for error in recent_errors])
             placements, scan_info = _detect_message_placements_from_synced(inbox.id, rows, test_id=test.test_id)
-            diagnostic['scanned_messages'] += scan_info.get('scanned_messages', 0)
             for mode, count in (scan_info.get('match_modes') or {}).items():
                 diagnostic['match_modes'][mode] = diagnostic['match_modes'].get(mode, 0) + count
             for row in rows:
@@ -3159,6 +3316,7 @@ def _poll_inbox_test_payload(test_id, data=None):
                     row.status = 'COMPLETED'
                     diagnostic['matched_rows'] += 1
         except Exception as e:
+            app.logger.warning(f"[POLL] Error syncing {inbox.email}: {e}")
             for row in rows:
                 row.error_message = str(e)
     _refresh_deliverability_counts(test)
@@ -3168,6 +3326,7 @@ def _poll_inbox_test_payload(test_id, data=None):
     verdict_counts = {'INBOX': 0, 'MIXED': 0, 'SPAM': 0, 'PENDING': 0, 'INSUFFICIENT_DATA': 0}
     for item in source_results:
         verdict_counts[item['verdict']] = verdict_counts.get(item['verdict'], 0) + 1
+    app.logger.info(f"[POLL] Test {test_id} complete: {diagnostic['matched_rows']}/{diagnostic['checked_rows']} matched")
     return {'success': True, 'sync_errors': sync_errors, 'diagnostic': diagnostic, 'source_results': source_results, 'verdict_counts': verdict_counts, 'test': {'test_id': test.test_id, 'status': test.status, 'inbox_count': test.inbox_count, 'spam_count': test.spam_count, 'pending_count': test.pending_count, 'failed_count': test.failed_count, 'sent_count': test.sent_count}}, 200
 
 @app.route('/api/inbox-intelligence/tests/<test_id>/poll-async', methods=['POST'])
@@ -16894,7 +17053,8 @@ _inbox_auto_sync_thread = None
 _inbox_auto_sync_lock_fd = None
 
 def _inbox_auto_sync_loop():
-    """Background thread: periodically sync all accounts with auto_sync_enabled=True."""
+    """Background thread: periodically sync all accounts with auto_sync_enabled=True.
+    Uses header-only fetch with UID cursors for fast incremental sync."""
     while True:
         try:
             time.sleep(_INBOX_AUTO_SYNC_INTERVAL)
@@ -16908,9 +17068,15 @@ def _inbox_auto_sync_loop():
                     try:
                         if account.last_synced_at and (now - account.last_synced_at).total_seconds() < 600:
                             continue
-                        for folder in ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk']:
-                            _sync_imap_account(account, folder=folder, limit=50, mark_errors=(folder == 'INBOX'))
-                        app.logger.info(f"[AUTO-SYNC] {account.email}: synced OK")
+                        lock = _get_account_sync_lock(account.id)
+                        if not lock.acquire(blocking=False):
+                            app.logger.info(f"[AUTO-SYNC] {account.email}: sync already in progress, skipping")
+                            continue
+                        try:
+                            matched, errors = _sync_test_inbox_folders(account, limit=500)
+                            app.logger.info(f"[AUTO-SYNC] {account.email}: synced OK ({matched} headers with test IDs)")
+                        finally:
+                            lock.release()
                     except Exception as e:
                         app.logger.warning(f"[AUTO-SYNC] {account.email}: {e}")
         except Exception as e:

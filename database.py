@@ -555,3 +555,19 @@ class InboxPollJob(db.Model):
     error = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
     finished_at = db.Column(db.DateTime, nullable=True)
+
+class ImapFolderSyncState(db.Model):
+    """Tracks IMAP UID cursors per folder for incremental sync."""
+    __tablename__ = 'imap_folder_sync_state'
+    id = db.Column(db.Integer, primary_key=True)
+    imap_account_id = db.Column(db.Integer, db.ForeignKey('inbox_imap_account.id'), nullable=False, index=True)
+    folder_name = db.Column(db.String(255), nullable=False)
+    uid_validity = db.Column(db.String(64), nullable=True)
+    last_seen_uid = db.Column(db.Integer, default=0)
+    last_sync_started_at = db.Column(db.DateTime, nullable=True)
+    last_sync_completed_at = db.Column(db.DateTime, nullable=True)
+    sync_status = db.Column(db.String(30), default='idle')
+    last_error = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+    updated_at = db.Column(db.DateTime, default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
+    __table_args__ = (db.UniqueConstraint('imap_account_id', 'folder_name', name='uq_imap_folder_sync'),)
