@@ -2958,7 +2958,7 @@ merge_recipe_id, content_blueprint_id</pre>
         iiState.automatedSelectedTestId = testId;
         if (manualInput) manualInput.value = testId;
         localStorage.setItem('ii_automated_last_test_id', testId);
-        await pollAutomatedEmailTest(testId, false, {syncMode: 'recent', skipDeepScan: false});
+        await pollAutomatedEmailTest(testId, false, {syncMode: 'recent', skipDeepScan: false, background: true});
     }
 
     function scheduleAutomatedPoll(testId) {

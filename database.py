@@ -543,3 +543,14 @@ class InboxDeliverabilityMessage(db.Model):
     status = db.Column(db.String(50), default='QUEUED')
     error_message = db.Column(db.Text, nullable=True)
     updated_at = db.Column(db.DateTime, default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
+
+class InboxPollJob(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    job_id = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    test_id = db.Column(db.String(80), nullable=False, index=True)
+    status = db.Column(db.String(30), default='running', nullable=False)
+    message = db.Column(db.Text, nullable=True)
+    result_json = db.Column(db.Text, nullable=True)
+    error = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+    finished_at = db.Column(db.DateTime, nullable=True)

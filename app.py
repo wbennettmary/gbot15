@@ -39,7 +39,7 @@ from email.mime.multipart import MIMEMultipart
 import re
 
 from core_logic import google_api, unique_random_alias, get_random_name_pools
-from database import db, User, WhitelistedIP, UsedDomain, GoogleAccount, GoogleToken, Scope, ServerConfig, UserAppPassword, AutomationAccount, RetrievedUser, NamecheapConfig, DomainOperation, AwsConfig, ServiceAccount, CloudflareConfig, Notification, WorkspaceList, AwsGeneratedPassword, InboxImapAccount, InboxEmailMessage, InboxStaticTemplate, InboxUserTemplate, InboxOpenRouterConfig, InboxDeliverabilityTest, InboxDeliverabilityMessage, TestEmailSource
+from database import db, User, WhitelistedIP, UsedDomain, GoogleAccount, GoogleToken, Scope, ServerConfig, UserAppPassword, AutomationAccount, RetrievedUser, NamecheapConfig, DomainOperation, AwsConfig, ServiceAccount, CloudflareConfig, Notification, WorkspaceList, AwsGeneratedPassword, InboxImapAccount, InboxEmailMessage, InboxStaticTemplate, InboxUserTemplate, InboxOpenRouterConfig, InboxDeliverabilityTest, InboxDeliverabilityMessage, TestEmailSource, InboxPollJob
 from routes.dns_manager import dns_manager
 from routes.aws_manager import aws_manager
 from routes.digitalocean_manager import digitalocean_manager
@@ -1145,7 +1145,7 @@ INBOX_PROVIDER_DEFAULTS = {
     'generic': ('', 993),
 }
 
-INBOX_POLL_JOBS = {}
+INBOX_POLL_JOBS = {}  # kept for backward compat; actual storage uses InboxPollJob table
 
 def _crypto_key():
     secret = app.config.get('SECRET_KEY') or os.environ.get('SECRET_KEY') or 'gbot-local-secret'
@@ -2884,6 +2884,7 @@ def _poll_inbox_test_payload(test_id, data=None):
     if not test:
         return {'success': False, 'error': 'Test not found'}, 404
     deleted_old = _cleanup_old_inbox_email_messages()
+    InboxPollJob.query.filter(InboxPollJob.created_at < datetime.utcnow() - timedelta(hours=2)).delete(synchronize_session=False)
     messages = InboxDeliverabilityMessage.query.filter_by(test_id=test_id).all()
     pending_by_inbox = {}
     sync_errors = []
@@ -2962,44 +2963,51 @@ def _poll_inbox_test_payload(test_id, data=None):
 def api_inbox_poll_test_async(test_id):
     payload = request.get_json(silent=True) or {}
     job_id = uuid.uuid4().hex
-    INBOX_POLL_JOBS[job_id] = {
-        'job_id': job_id,
-        'test_id': test_id,
-        'status': 'running',
-        'message': f'Syncing {test_id} in background...',
-        'created_at': datetime.utcnow().isoformat() + 'Z',
-    }
+    job = InboxPollJob(job_id=job_id, test_id=test_id, status='running', message=f'Syncing {test_id} in background...')
+    db.session.add(job)
+    db.session.commit()
 
     def run_job():
         with app.app_context():
             try:
                 result, status_code = _poll_inbox_test_payload(test_id, payload)
-                INBOX_POLL_JOBS[job_id].update({
-                    'status': 'completed' if status_code < 400 and result.get('success') else 'error',
-                    'message': 'Sync completed.' if result.get('success') else result.get('error', 'Sync failed.'),
-                    'result': result,
-                    'status_code': status_code,
-                    'finished_at': datetime.utcnow().isoformat() + 'Z',
-                })
+                job.status = 'completed' if status_code < 400 and result.get('success') else 'error'
+                job.message = 'Sync completed.' if result.get('success') else result.get('error', 'Sync failed.')
+                job.result_json = json.dumps(result)
+                job.finished_at = datetime.utcnow()
+                db.session.commit()
             except Exception as e:
-                INBOX_POLL_JOBS[job_id].update({
-                    'status': 'error',
-                    'message': str(e),
-                    'error': str(e),
-                    'finished_at': datetime.utcnow().isoformat() + 'Z',
-                })
+                job.status = 'error'
+                job.message = str(e)
+                job.error = str(e)
+                job.finished_at = datetime.utcnow()
+                db.session.commit()
 
     threading.Thread(target=run_job, daemon=True).start()
-    return jsonify({'success': True, 'job_id': job_id, 'message': INBOX_POLL_JOBS[job_id]['message']})
+    return jsonify({'success': True, 'job_id': job_id, 'message': job.message})
 
 @app.route('/api/inbox-intelligence/poll-jobs/<job_id>', methods=['GET'])
 @login_required
 @permission_required('inbox_intelligence')
 def api_inbox_poll_job_status(job_id):
-    job = INBOX_POLL_JOBS.get(job_id)
+    job = InboxPollJob.query.filter_by(job_id=job_id).first()
     if not job:
         return jsonify({'success': False, 'error': 'Sync job not found'}), 404
-    return jsonify({'success': True, 'job': job})
+    result = {
+        'job_id': job.job_id,
+        'status': job.status,
+        'message': job.message,
+        'created_at': job.created_at.isoformat() + 'Z' if job.created_at else None,
+        'finished_at': job.finished_at.isoformat() + 'Z' if job.finished_at else None,
+    }
+    if job.result_json:
+        try:
+            result['result'] = json.loads(job.result_json)
+        except Exception:
+            result['result'] = None
+    if job.error:
+        result['error'] = job.error
+    return jsonify({'success': True, 'job': result})
 
 @app.route('/api/inbox-intelligence/tests/<test_id>', methods=['GET'])
 @login_required
