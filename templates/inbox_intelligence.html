@@ -902,13 +902,13 @@
 
     .ii-auto-builder {
         display: grid;
-        grid-template-columns: minmax(360px, 1.05fr) minmax(460px, 1fr);
-        gap: 14px;
+        grid-template-columns: minmax(520px, 1.1fr) minmax(460px, 0.9fr);
+        gap: 18px;
         align-items: start;
     }
 
     .ii-auto-queue-panel .ii-queue-card-list {
-        max-height: 620px;
+        max-height: none;
     }
 
     .ii-multiselect {
@@ -954,6 +954,90 @@
     .ii-auto-result-tabs .ii-btn.active {
         background: #dbeafe;
         color: #1d4ed8;
+    }
+
+    #automatedTests > .ii-panel {
+        background: transparent;
+        border: 0;
+        box-shadow: none;
+        padding: 0;
+    }
+
+    .ii-auto-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 18px;
+        flex-wrap: wrap;
+        margin-bottom: 18px;
+    }
+
+    .ii-auto-header h2 {
+        margin: 0;
+        font-size: 30px;
+        font-weight: 820;
+    }
+
+    .ii-auto-top-actions {
+        display: grid;
+        grid-template-columns: 190px 260px auto;
+        gap: 10px;
+        align-items: center;
+    }
+
+    .ii-auto-card {
+        background: #fff;
+        border: 1px solid #dbe4ef;
+        border-radius: 8px;
+        padding: 18px;
+        box-shadow: 0 10px 26px rgba(15, 23, 42, 0.045);
+    }
+
+    #automatedTests .ii-stepper {
+        background: #fff;
+        border: 1px solid #dbe4ef;
+        border-radius: 8px;
+        padding: 14px;
+        gap: 0;
+    }
+
+    #automatedTests .ii-stepper .ii-step {
+        border: 0;
+        box-shadow: none;
+        border-radius: 0;
+        position: relative;
+        min-height: 64px;
+    }
+
+    #automatedTests .ii-stepper .ii-step:not(:last-child)::after {
+        content: "";
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        width: 18px;
+        height: 18px;
+        border-right: 1px solid #94a3b8;
+        border-top: 1px solid #94a3b8;
+        transform: translateY(-50%) rotate(45deg);
+        opacity: 0.7;
+    }
+
+    .ii-auto-source-active {
+        border: 1px solid #dbe4ef;
+        border-radius: 8px;
+        padding: 12px;
+        background: #f8fafc;
+    }
+
+    .ii-auto-summary-row {
+        display: grid;
+        grid-template-columns: minmax(360px, 1.1fr) minmax(320px, 0.9fr);
+        gap: 18px;
+        margin-top: 18px;
+    }
+
+    .ii-auto-results-card {
+        margin-top: 18px;
     }
 
     .ii-modal-backdrop {
@@ -1154,6 +1238,7 @@
         .ii-studio-shell,
         .ii-source-grid,
         .ii-auto-builder,
+        .ii-auto-summary-row,
         .ii-insight-grid { grid-template-columns: 1fr; }
         .ii-compare { grid-template-columns: 1fr; }
         .ii-template-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1185,9 +1270,14 @@
         .ii-source-card .ii-select { width: 100%; max-width: none !important; }
         .ii-explorer-toolbar .ii-row,
         .ii-explorer-toolbar .ii-btn,
+        .ii-auto-header,
+        .ii-auto-top-actions,
         #automatedTests .ii-row .ii-btn,
         #automatedTests .ii-row .ii-input,
         #automatedTests .ii-row .ii-select { width: 100%; max-width: none !important; }
+        .ii-auto-top-actions { grid-template-columns: 1fr; }
+        #automatedTests .ii-stepper { grid-template-columns: 1fr; }
+        #automatedTests .ii-stepper .ii-step:not(:last-child)::after { display: none; }
         .ii-template-actions .ii-btn { flex-basis: calc(50% - 4px); }
         .ii-analytics-row { grid-template-columns: 1fr; }
         .ii-account-tab { max-width: none; width: 100%; }
@@ -1391,12 +1481,12 @@
 
     <section id="automatedTests" class="ii-tabpane">
         <div class="ii-panel">
-            <div class="ii-row justify-content-between mb-3">
+            <div class="ii-auto-header">
                 <div>
                     <h2>Automated Email Tests <span class="ii-chip blue">New</span></h2>
                     <p class="ii-muted mb-0">Test inbox-sourced emails across selected Workspace users and measure their observed placement automatically.</p>
                 </div>
-                <div class="ii-row">
+                <div class="ii-auto-top-actions">
                     <select class="ii-select" style="width: 190px;"><option>Last 7 days</option><option>Last 24 hours</option><option>30 days</option></select>
                     <input class="ii-input" style="width: 260px;" placeholder="Search tests, emails...">
                     <button class="ii-btn ii-btn-primary" type="button" id="automatedRunButton" onclick="runAutomatedEmailTest()"><i class="fas fa-plus"></i> Create Automated Test</button>
@@ -1410,7 +1500,7 @@
                 <div class="ii-step active"><span>5</span><strong>Review & Run</strong><small id="autoStepOps">0 operations</small></div>
             </div>
             <div class="ii-auto-builder">
-                <div class="ii-card ii-auto-queue-panel">
+                <div class="ii-auto-card ii-auto-queue-panel">
                     <div class="ii-action-head">
                         <h4>1. Test Queue</h4>
                         <span class="ii-muted" id="autoQueueCount">0 queued</span>
@@ -1422,7 +1512,7 @@
                     </div>
                     <div id="automatedQueueList" class="ii-muted">Push emails from Inbox Explorer to start.</div>
                 </div>
-                <div class="ii-card">
+                <div class="ii-auto-card">
                     <div class="ii-action-head">
                         <h4>2. Workspace Sources</h4>
                         <button class="ii-btn ii-btn-primary" type="button" onclick="retrieveAutomatedWorkspaceUsers()"><i class="fas fa-users-gear"></i> Retrieve Users</button>
@@ -1444,7 +1534,7 @@
                                 </div>
                             </div>
                         </div>
-                        <div id="automatedServiceAccountSelector" class="ii-card ii-muted">Search saved Workspace service accounts or choose a List Management source.</div>
+                        <div id="automatedServiceAccountSelector" class="ii-auto-source-active ii-muted">Search saved Workspace service accounts or choose a List Management source.</div>
                         <div>
                             <div class="ii-row justify-content-between mb-2">
                                 <h4>Receiving Inboxes</h4>
@@ -1466,16 +1556,16 @@
                     </div>
                     <div class="ii-form-grid">
                         <div class="ii-field"><label>Strategy</label><select class="ii-select" id="automatedStrategyInput" onchange="updateAutomatedSummary()"><option value="distributed">Distributed</option><option value="full_matrix">Full Matrix</option></select></div>
-                        <div class="ii-field"><label>Users per selected account</label><input class="ii-input" id="automatedUsersPerAccountInput" type="number" min="1" max="500" placeholder="Blank = all users" oninput="updateAutomatedSummary()"></div>
+                        <div class="ii-field"><label>Users per selected account</label><input class="ii-input" id="automatedUsersPerAccountInput" type="number" min="1" placeholder="Blank = all users" oninput="updateAutomatedSummary()"></div>
                         <div class="ii-field"><label>Inbox verdict at</label><input class="ii-input" id="automatedInboxThresholdInput" type="number" min="1" max="100" value="80"></div>
                         <div class="ii-field"><label>Spam verdict below</label><input class="ii-input" id="automatedSpamThresholdInput" type="number" min="0" max="99" value="40"></div>
-                        <div class="ii-field"><label>Minimum observations</label><input class="ii-input" id="automatedMinimumObservationsInput" type="number" min="1" max="500" value="10"></div>
+                        <div class="ii-field"><label>Minimum observations</label><input class="ii-input" id="automatedMinimumObservationsInput" type="number" min="1" value="10"></div>
                     </div>
                     <div class="ii-muted mt-2" id="automatedWorkspaceStatus">Select specific accounts or a saved list. Blank users-per-account sends all non-admin users from selected accounts.</div>
                 </div>
             </div>
-            <div class="ii-grid ii-layout-2 mt-3">
-                <div class="ii-card">
+            <div class="ii-auto-summary-row">
+                <div class="ii-auto-card">
                     <div class="ii-action-head">
                         <h4>Test Summary</h4>
                         <span class="ii-chip blue" id="automatedRunStatus">Draft</span>
@@ -1496,7 +1586,7 @@
                     </div>
                     <div class="ii-muted" id="automatedStatusText">Select queued emails, Workspace sources, and receiving inboxes.</div>
                 </div>
-                <div class="ii-card">
+                <div class="ii-auto-card">
                     <div class="ii-action-head">
                         <h4>Active & Completed Tests</h4>
                         <button class="ii-btn" type="button" onclick="loadAutomatedTests()"><i class="fas fa-arrows-rotate"></i> Refresh</button>
@@ -1504,7 +1594,7 @@
                     <div id="automatedTestsList" class="ii-muted">No automated tests loaded.</div>
                 </div>
             </div>
-            <div class="ii-card mt-3">
+            <div class="ii-auto-card ii-auto-results-card">
                 <div class="ii-action-head">
                     <h4>Email-Level Results</h4>
                     <div class="ii-auto-result-tabs">
@@ -2015,7 +2105,7 @@ merge_recipe_id, content_blueprint_id</pre>
                         <h4>List Management Source</h4>
                         <div class="ii-row mt-2">
                             <select class="ii-select" id="userInboxWorkspaceListSelect" style="max-width: 420px;" onchange="mirrorUserInboxListSelection()"><option value="">Loading lists...</option></select>
-                            <input class="ii-input" id="userInboxUsersPerAccountInput" type="number" min="1" max="500" style="max-width: 190px;" title="Users per account" placeholder="Blank = all users">
+                            <input class="ii-input" id="userInboxUsersPerAccountInput" type="number" min="1" style="max-width: 190px;" title="Users per account" placeholder="Blank = all users">
                             <button class="ii-btn" type="button" onclick="loadWorkspaceLists()"><i class="fas fa-arrows-rotate"></i> Refresh</button>
                             <button class="ii-btn ii-btn-primary" type="button" onclick="retrieveUserInboxWorkspaceListUsers()"><i class="fas fa-list-check"></i> Retrieve List Users</button>
                         </div>
@@ -2769,7 +2859,7 @@ merge_recipe_id, content_blueprint_id</pre>
             return;
         }
         el.className = 'ii-automated-user-grid';
-        el.innerHTML = selectable.slice(0, 80).map((sender) => `
+        el.innerHTML = selectable.map((sender) => `
             <label class="ii-user-select-card ii-card" style="padding:10px;">
                 <span class="ii-user-line">
                     <input type="checkbox" ${iiState.selectedSenderEmails.has(sender.email) ? 'checked' : ''} onchange="toggleSender('${escapeHtml(sender.email)}', this.checked)">
@@ -2777,7 +2867,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 </span>
                 <span class="ii-muted ii-email-text">${escapeHtml(sender.email)}</span>
                 <span class="ii-chip green">Gmail API</span>
-            </label>`).join('') + (selectable.length > 80 ? `<div class="ii-muted">Showing first 80 of ${selectable.length} retrieved user(s). Use account tabs/search to narrow the set.</div>` : '');
+            </label>`).join('');
         const status = document.getElementById('automatedWorkspaceStatus');
         if (status) status.textContent = `${selectedCount} selected from ${selectable.length} retrieved non-admin Workspace API user(s).`;
     }
@@ -2790,7 +2880,6 @@ merge_recipe_id, content_blueprint_id</pre>
             if (!summary.emails) throw new Error('Select queued emails first.');
             if (!summary.users) throw new Error('Select Workspace users or admin/account tabs first.');
             if (!summary.recipients) throw new Error('Select receiving IMAP inboxes first.');
-            if (summary.operations > 2000 && !confirm(`This will queue ${summary.operations.toLocaleString()} test operations. Continue?`)) return;
             if (runButton) {
                 runButton.disabled = true;
                 runButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating Test';
@@ -2824,7 +2913,7 @@ merge_recipe_id, content_blueprint_id</pre>
             localStorage.setItem('ii_automated_last_test_id', data.test_id);
             if (status) status.textContent = data.message;
             await loadAutomatedTests();
-            await pollAutomatedEmailTest(data.test_id, true);
+            pollAutomatedEmailTest(data.test_id, true, {background: true});
         } catch (err) {
             if (status) status.textContent = err.message;
         } finally {
@@ -2869,14 +2958,14 @@ merge_recipe_id, content_blueprint_id</pre>
         iiState.automatedSelectedTestId = testId;
         if (manualInput) manualInput.value = testId;
         localStorage.setItem('ii_automated_last_test_id', testId);
-        await pollAutomatedEmailTest(testId, false, {syncMode: 'recent', skipDeepScan: true});
+        await pollAutomatedEmailTest(testId, false, {syncMode: 'recent', skipDeepScan: false, background: true});
     }
 
     function scheduleAutomatedPoll(testId) {
         if (!testId || iiState.automatedPollTimers[testId]) return;
         iiState.automatedPollTimers[testId] = window.setTimeout(() => {
             delete iiState.automatedPollTimers[testId];
-            pollAutomatedEmailTest(testId, true);
+            pollAutomatedEmailTest(testId, true, {background: true});
         }, 20000);
     }
 
@@ -2887,15 +2976,18 @@ merge_recipe_id, content_blueprint_id</pre>
         if (runStatus) runStatus.textContent = 'Syncing';
         try {
             setAutomatedSyncing(true, 'Importing recent IMAP messages...');
-            const pollData = await iiFetch(`/api/inbox-intelligence/tests/${testId}/poll`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    sync_mode: options.syncMode || 'recent',
-                    recent_limit: options.recentLimit || 160,
-                    skip_deep_scan: options.skipDeepScan !== undefined ? options.skipDeepScan : true
-                })
-            });
+            const pollPayload = {
+                sync_mode: options.syncMode || 'recent',
+                recent_limit: options.recentLimit ?? 0,
+                skip_deep_scan: options.skipDeepScan !== undefined ? options.skipDeepScan : false
+            };
+            const pollData = options.background
+                ? await runAutomatedSyncJob(testId, pollPayload)
+                : await iiFetch(`/api/inbox-intelligence/tests/${testId}/poll`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(pollPayload)
+                });
             const data = await iiFetch(`/api/inbox-intelligence/automated-tests/${testId}/results`);
             const test = data.test || {};
             iiState.automatedSelectedTestId = test.test_id || testId;
@@ -2923,6 +3015,45 @@ merge_recipe_id, content_blueprint_id</pre>
         } finally {
             setAutomatedSyncing(false);
         }
+    }
+
+    async function viewAutomatedEmailTest(testId) {
+        const status = document.getElementById('automatedStatusText');
+        try {
+            const data = await iiFetch(`/api/inbox-intelligence/automated-tests/${testId}/results`);
+            const test = data.test || {};
+            iiState.automatedSelectedTestId = test.test_id || testId;
+            const manualInput = document.getElementById('automatedManualTestIdInput');
+            if (manualInput) manualInput.value = iiState.automatedSelectedTestId;
+            localStorage.setItem('ii_automated_last_test_id', iiState.automatedSelectedTestId);
+            const existing = iiState.automatedTests.findIndex((item) => item.test_id === iiState.automatedSelectedTestId);
+            if (existing >= 0) iiState.automatedTests[existing] = {...iiState.automatedTests[existing], ...test};
+            else iiState.automatedTests.unshift(test);
+            renderAutomatedTests();
+            renderAutomatedEmailResults(test);
+            if (status) status.textContent = `Loaded saved results for ${iiState.automatedSelectedTestId}. Press Sync fresh data to import fresh IMAP messages.`;
+        } catch (err) {
+            if (status) status.textContent = `Could not load automated results: ${err.message}`;
+        }
+    }
+
+    async function runAutomatedSyncJob(testId, payload) {
+        const started = await iiFetch(`/api/inbox-intelligence/tests/${testId}/poll-async`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        const jobId = started.job_id;
+        const syncLabel = document.getElementById('automatedLastSync');
+        for (let attempt = 0; attempt < 240; attempt += 1) {
+            if (syncLabel) syncLabel.textContent = `Background sync running... ${attempt + 1}`;
+            await new Promise((resolve) => setTimeout(resolve, 2500));
+            const data = await iiFetch(`/api/inbox-intelligence/poll-jobs/${jobId}`);
+            const job = data.job || {};
+            if (job.status === 'completed') return job.result || {success: true, diagnostic: {}};
+            if (job.status === 'error') throw new Error(job.message || job.error || 'Background sync failed');
+        }
+        throw new Error('Background sync is still running. Press Sync fresh data again in a moment.');
     }
 
     async function loadAutomatedTests() {
@@ -2955,8 +3086,8 @@ merge_recipe_id, content_blueprint_id</pre>
                             <td>${test.created_at ? new Date(test.created_at).toLocaleString() : ''}</td>
                             <td><span class="ii-chip ${statusClass(test.status)}">${escapeHtml(test.status)}</span></td>
                             <td>
-                                <button class="ii-btn" type="button" onclick="pollAutomatedEmailTest('${escapeHtml(test.test_id)}')"><i class="fas fa-eye"></i> View</button>
-                                <button class="ii-btn" type="button" onclick="pollAutomatedEmailTest('${escapeHtml(test.test_id)}', true)"><i class="fas fa-arrows-rotate"></i> Sync</button>
+                                <button class="ii-btn" type="button" onclick="viewAutomatedEmailTest('${escapeHtml(test.test_id)}')"><i class="fas fa-eye"></i> View</button>
+                                <button class="ii-btn" type="button" onclick="pollAutomatedEmailTest('${escapeHtml(test.test_id)}', true, {background: true})"><i class="fas fa-arrows-rotate"></i> Sync</button>
                             </td>
                         </tr>`).join('')}
                 </tbody>
@@ -3128,7 +3259,7 @@ merge_recipe_id, content_blueprint_id</pre>
         const userStatus = document.getElementById('userInboxWorkspaceListStatus');
         const listId = document.getElementById('userInboxWorkspaceListSelect')?.value;
         const rawLimit = (document.getElementById('userInboxUsersPerAccountInput')?.value || '').trim();
-        const maxPerAccount = rawLimit ? Math.min(500, Math.max(1, parseInt(rawLimit, 10) || 1)) : null;
+        const maxPerAccount = rawLimit ? Math.max(1, parseInt(rawLimit, 10) || 1) : null;
         if (!listId) {
             if (userStatus) userStatus.textContent = 'Select a List Management source first.';
             return;
@@ -3686,7 +3817,7 @@ merge_recipe_id, content_blueprint_id</pre>
         const el = document.getElementById('automatedServiceAccountSelector');
         if (!el) return;
         if (iiState.userInboxListAccountOnly && iiState.userInboxListAccounts.length) {
-            el.className = 'ii-card';
+            el.className = 'ii-auto-source-active';
             el.innerHTML = `
                 <div class="ii-row justify-content-between mb-2">
                     <strong>List Account Tabs</strong>
@@ -3704,7 +3835,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 </div>`;
             return;
         }
-        el.className = 'ii-card';
+        el.className = 'ii-auto-source-active';
         if (!iiState.serviceAccounts.length) {
             el.innerHTML = emptyMessage || 'No matching saved Workspace service accounts found.';
             return;

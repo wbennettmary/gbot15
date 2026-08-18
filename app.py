@@ -1145,6 +1145,8 @@ INBOX_PROVIDER_DEFAULTS = {
     'generic': ('', 993),
 }
 
+INBOX_POLL_JOBS = {}
+
 def _crypto_key():
     secret = app.config.get('SECRET_KEY') or os.environ.get('SECRET_KEY') or 'gbot-local-secret'
     return hashlib.sha256(str(secret).encode('utf-8')).digest()
@@ -1883,7 +1885,7 @@ def api_inbox_retrieve_workspace_senders_from_list():
         max_per_account = int(data.get('max_per_account') or 0)
     except (TypeError, ValueError):
         max_per_account = 0
-    max_per_account = min(max(max_per_account, 0), 500) or None
+    max_per_account = max(max_per_account, 0) or None
     accounts_only = bool(data.get('accounts_only'))
     workspace_list = WorkspaceList.query.get(list_id) if list_id else None
     if not workspace_list:
@@ -2428,7 +2430,7 @@ def api_inbox_automated_tests():
     except (TypeError, ValueError):
         spam_threshold = 40
     try:
-        minimum_observations = min(500, max(1, int(data.get('minimum_observations') or 10)))
+        minimum_observations = max(1, int(data.get('minimum_observations') or 10))
     except (TypeError, ValueError):
         minimum_observations = 10
     test_id = f"AT-{uuid.uuid4().hex[:8].upper()}"
@@ -2867,16 +2869,20 @@ def _scan_imap_for_test_rows(inbox, rows, per_folder_limit=500, persist_matches=
 @login_required
 @permission_required('inbox_intelligence')
 def api_inbox_poll_test(test_id):
-    data = request.get_json(silent=True) or {}
+    result, status_code = _poll_inbox_test_payload(test_id, request.get_json(silent=True) or {})
+    return jsonify(result), status_code
+
+def _poll_inbox_test_payload(test_id, data=None):
+    data = data or {}
     sync_mode = (data.get('sync_mode') or 'targeted').strip().lower()
     skip_deep_scan = bool(data.get('skip_deep_scan'))
     try:
-        recent_limit = min(300, max(20, int(data.get('recent_limit') or 120)))
+        recent_limit = max(0, int(data.get('recent_limit') if data.get('recent_limit') is not None else 0))
     except (TypeError, ValueError):
-        recent_limit = 120
+        recent_limit = 0
     test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
     if not test:
-        return jsonify({'success': False, 'error': 'Test not found'}), 404
+        return {'success': False, 'error': 'Test not found'}, 404
     deleted_old = _cleanup_old_inbox_email_messages()
     messages = InboxDeliverabilityMessage.query.filter_by(test_id=test_id).all()
     pending_by_inbox = {}
@@ -2920,7 +2926,7 @@ def api_inbox_poll_test(test_id):
             placements, scan_info = _detect_message_placements_from_synced(inbox.id, rows, test_id=test.test_id)
             missing_rows = [row for row in rows if row.test_identifier not in placements]
             if missing_rows and not skip_deep_scan:
-                direct_placements, direct_scan_info = _scan_imap_for_test_rows(inbox, missing_rows, per_folder_limit=900)
+                direct_placements, direct_scan_info = _scan_imap_for_test_rows(inbox, missing_rows, per_folder_limit=0)
                 placements.update(direct_placements)
                 scan_info['scanned_messages'] = scan_info.get('scanned_messages', 0) + direct_scan_info.get('scanned_messages', 0)
                 for mode, count in (direct_scan_info.get('match_modes') or {}).items():
@@ -2951,7 +2957,52 @@ def api_inbox_poll_test(test_id):
     verdict_counts = {'INBOX': 0, 'MIXED': 0, 'SPAM': 0, 'PENDING': 0, 'INSUFFICIENT_DATA': 0}
     for item in source_results:
         verdict_counts[item['verdict']] = verdict_counts.get(item['verdict'], 0) + 1
-    return jsonify({'success': True, 'sync_errors': sync_errors, 'diagnostic': diagnostic, 'source_results': source_results, 'verdict_counts': verdict_counts, 'test': {'test_id': test.test_id, 'status': test.status, 'inbox_count': test.inbox_count, 'spam_count': test.spam_count, 'pending_count': test.pending_count, 'failed_count': test.failed_count, 'sent_count': test.sent_count}})
+    return {'success': True, 'sync_errors': sync_errors, 'diagnostic': diagnostic, 'source_results': source_results, 'verdict_counts': verdict_counts, 'test': {'test_id': test.test_id, 'status': test.status, 'inbox_count': test.inbox_count, 'spam_count': test.spam_count, 'pending_count': test.pending_count, 'failed_count': test.failed_count, 'sent_count': test.sent_count}}, 200
+
+@app.route('/api/inbox-intelligence/tests/<test_id>/poll-async', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_poll_test_async(test_id):
+    payload = request.get_json(silent=True) or {}
+    job_id = uuid.uuid4().hex
+    INBOX_POLL_JOBS[job_id] = {
+        'job_id': job_id,
+        'test_id': test_id,
+        'status': 'running',
+        'message': f'Syncing {test_id} in background...',
+        'created_at': datetime.utcnow().isoformat() + 'Z',
+    }
+
+    def run_job():
+        with app.app_context():
+            try:
+                result, status_code = _poll_inbox_test_payload(test_id, payload)
+                INBOX_POLL_JOBS[job_id].update({
+                    'status': 'completed' if status_code < 400 and result.get('success') else 'error',
+                    'message': 'Sync completed.' if result.get('success') else result.get('error', 'Sync failed.'),
+                    'result': result,
+                    'status_code': status_code,
+                    'finished_at': datetime.utcnow().isoformat() + 'Z',
+                })
+            except Exception as e:
+                INBOX_POLL_JOBS[job_id].update({
+                    'status': 'error',
+                    'message': str(e),
+                    'error': str(e),
+                    'finished_at': datetime.utcnow().isoformat() + 'Z',
+                })
+
+    threading.Thread(target=run_job, daemon=True).start()
+    return jsonify({'success': True, 'job_id': job_id, 'message': INBOX_POLL_JOBS[job_id]['message']})
+
+@app.route('/api/inbox-intelligence/poll-jobs/<job_id>', methods=['GET'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_poll_job_status(job_id):
+    job = INBOX_POLL_JOBS.get(job_id)
+    if not job:
+        return jsonify({'success': False, 'error': 'Sync job not found'}), 404
+    return jsonify({'success': True, 'job': job})
 
 @app.route('/api/inbox-intelligence/tests/<test_id>', methods=['GET'])
 @login_required
