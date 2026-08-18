@@ -1565,14 +1565,16 @@ def api_inbox_delete_account(account_id):
     account = InboxImapAccount.query.get(account_id)
     if not account:
         return jsonify({'success': False, 'error': 'IMAP account not found'}), 404
+    aid = account.id
     try:
-        db.session.execute(db.text('UPDATE inbox_deliverability_message SET imap_account_id = NULL WHERE imap_account_id = :aid'), {'aid': account.id})
-        db.session.execute(db.text('UPDATE test_email_source SET source_imap_account_id = NULL WHERE source_imap_account_id = :aid'), {'aid': account.id})
-        db.session.execute(db.text('DELETE FROM inbox_email_message WHERE imap_account_id = :aid'), {'aid': account.id})
-        db.session.execute(db.text('DELETE FROM inbox_imap_account WHERE id = :aid'), {'aid': account.id})
-        db.session.commit()
+        db.session.close()
+        with db.engine.connect() as conn:
+            conn.execute(db.text('UPDATE inbox_deliverability_message SET imap_account_id = NULL WHERE imap_account_id = :aid'), {'aid': aid})
+            conn.execute(db.text('UPDATE test_email_source SET source_imap_account_id = NULL WHERE source_imap_account_id = :aid'), {'aid': aid})
+            conn.execute(db.text('DELETE FROM inbox_email_message WHERE imap_account_id = :aid'), {'aid': aid})
+            conn.execute(db.text('DELETE FROM inbox_imap_account WHERE id = :aid'), {'aid': aid})
+            conn.commit()
     except Exception as e:
-        db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
     return jsonify({'success': True})
 
