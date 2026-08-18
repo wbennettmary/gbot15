@@ -4716,7 +4716,7 @@ merge_recipe_id, content_blueprint_id</pre>
         iiState.userInboxTestId = testId;
         if (manualInput) manualInput.value = testId;
         localStorage.setItem('ii_user_inbox_last_test_id', testId);
-        status.textContent = 'Syncing analytics from saved inbox messages...';
+        status.textContent = 'Syncing fresh emails from IMAP servers...';
         await pollUserInboxTest(testId);
     }
 

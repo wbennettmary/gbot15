@@ -415,9 +415,30 @@ with app.app_context():
                 logging.info("✅ Enabled SQLite Write-Ahead Logging (WAL) mode")
             except Exception as e:
                 logging.warning(f"⚠️ Could not enable SQLite WAL mode: {e}")
-                
     except Exception as e:
         logging.warning(f"Could not auto-migrate ever_used column: {e}")
+        try:
+            db.session.rollback()
+        except:
+            pass
+
+    # Auto-migration: Add x_test_id column to inbox_email_message for fast matching
+    try:
+        from sqlalchemy import inspect
+        inspector = inspect(db.engine)
+        if 'inbox_email_message' in inspector.get_table_names():
+            columns = [col['name'] for col in inspector.get_columns('inbox_email_message')]
+            if 'x_test_id' not in columns:
+                logging.info("Adding x_test_id column to inbox_email_message...")
+                with db.engine.connect() as conn:
+                    if 'postgresql' in str(db.engine.url):
+                        conn.execute(text('ALTER TABLE "inbox_email_message" ADD COLUMN x_test_id VARCHAR(255)'))
+                    else:
+                        conn.execute(text("ALTER TABLE inbox_email_message ADD COLUMN x_test_id VARCHAR(255)"))
+                    conn.commit()
+                logging.info("✅ Added x_test_id column!")
+    except Exception as e:
+        logging.warning(f"Could not add x_test_id column: {e}")
         try:
             db.session.rollback()
         except:
@@ -1285,18 +1306,23 @@ def _upsert_imap_message(account, folder, uid, raw_msg):
     existing.plain_text = plain_text[:100000] if plain_text else ''
     existing.html_content = html_content[:200000] if html_content else ''
     existing.headers_json = json.dumps(headers)
+    existing.x_test_id = headers['x_test_id'] or None
     existing.has_attachments = has_attachments
     existing.received_at = received_at
     existing.synced_at = datetime.utcnow()
     return existing
 
-def _cleanup_old_inbox_email_messages(hours=4):
-    cutoff = datetime.utcnow() - timedelta(hours=hours)
+def _cleanup_old_inbox_email_messages(days=30):
+    cutoff = datetime.utcnow() - timedelta(days=days)
     return InboxEmailMessage.query.filter(InboxEmailMessage.synced_at < cutoff).delete(synchronize_session=False)
 
 def _sync_imap_account(account, folder='INBOX', limit=50, mark_errors=True, since=None):
     conn = None
     synced = 0
+    if not since and account.last_synced_at:
+        since = (account.last_synced_at - timedelta(minutes=5)).strftime('%d-%b-%Y')
+    if not since:
+        since = (datetime.utcnow() - timedelta(days=2)).strftime('%d-%b-%Y')
     try:
         account.connection_status = 'syncing'
         account.last_error = None
@@ -1307,10 +1333,7 @@ def _sync_imap_account(account, folder='INBOX', limit=50, mark_errors=True, sinc
         status, _ = conn.select(folder, readonly=True)
         if status != 'OK':
             raise RuntimeError(f"Could not open folder {folder}")
-        if since:
-            status, data = conn.uid('search', None, f'SINCE {since}')
-        else:
-            status, data = conn.uid('search', None, 'ALL')
+        status, data = conn.uid('search', None, f'SINCE {since}')
         if status != 'OK':
             raise RuntimeError("Could not search mailbox")
         uids = (data[0] or b'').split()[-int(limit):]
@@ -1338,7 +1361,7 @@ def _sync_imap_account(account, folder='INBOX', limit=50, mark_errors=True, sinc
         ).count()
         db.session.commit()
         if deleted_old:
-            app.logger.info(f"Deleted {deleted_old} synced inbox email(s) older than 4 hours")
+            app.logger.info(f"Deleted {deleted_old} synced inbox email(s) older than 30 days")
         return synced, None
     except Exception as e:
         db.session.rollback()
@@ -1544,17 +1567,8 @@ def api_inbox_delete_account(account_id):
         return jsonify({'success': False, 'error': 'IMAP account not found'}), 404
     try:
         db.session.execute(db.text('UPDATE inbox_deliverability_message SET imap_account_id = NULL WHERE imap_account_id = :aid'), {'aid': account.id})
-    except Exception:
-        db.session.rollback()
-    try:
         db.session.execute(db.text('UPDATE test_email_source SET source_imap_account_id = NULL WHERE source_imap_account_id = :aid'), {'aid': account.id})
-    except Exception:
-        db.session.rollback()
-    try:
         db.session.execute(db.text('DELETE FROM inbox_email_message WHERE imap_account_id = :aid'), {'aid': account.id})
-    except Exception:
-        db.session.rollback()
-    try:
         db.session.execute(db.text('DELETE FROM inbox_imap_account WHERE id = :aid'), {'aid': account.id})
         db.session.commit()
     except Exception as e:
@@ -2760,6 +2774,10 @@ def _sync_test_inbox_folders(inbox, limit=80, since=None):
     synced_total = 0
     errors = []
     folders_to_check = ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk']
+    if not since and inbox.last_synced_at:
+        since = (inbox.last_synced_at - timedelta(minutes=5)).strftime('%d-%b-%Y')
+    if not since:
+        since = (datetime.utcnow() - timedelta(days=2)).strftime('%d-%b-%Y')
     try:
         conn = _imap_connect(inbox)
     except Exception as e:
@@ -2770,10 +2788,7 @@ def _sync_test_inbox_folders(inbox, limit=80, since=None):
                 status, _ = conn.select(folder, readonly=True)
                 if status != 'OK':
                     continue
-                if since:
-                    s, data = conn.uid('search', None, f'SINCE {since}')
-                else:
-                    s, data = conn.uid('search', None, 'ALL')
+                s, data = conn.uid('search', None, f'SINCE {since}')
                 if s != 'OK':
                     continue
                 uids = (data[0] or b'').split()[-int(limit):]
@@ -2882,7 +2897,7 @@ def _sync_imap_messages_for_test_id(inbox, test_id, identifiers=None):
         db.session.add(inbox)
         db.session.flush()
         if deleted_old:
-            app.logger.info(f"Deleted {deleted_old} synced inbox email(s) older than 4 hours")
+            app.logger.info(f"Deleted {deleted_old} synced inbox email(s) older than 30 days")
     except Exception as e:
         errors.append(str(e))
     finally:
@@ -2913,55 +2928,50 @@ def _message_database_searchable(message):
 
 def _detect_message_placements_from_synced(inbox_id, rows, test_id=None):
     results = {}
-    info = {'scanned_messages': 0, 'match_modes': {'exact': 0, 'broad_sender': 0, 'sender_subject': 0}, 'errors': []}
+    info = {'scanned_messages': 0, 'match_modes': {'exact': 0, 'x_test_id': 0, 'broad_sender': 0}, 'errors': []}
     if not rows:
         return results, info
     identifiers = {row.test_identifier for row in rows if row.test_identifier}
-    broad_tokens = set()
-    if test_id:
-        broad_tokens.add(test_id)
-    broad_tokens.update(identifier.rsplit('-', 1)[0] for identifier in identifiers if '-' in identifier)
-    broad_tokens = sorted((token for token in broad_tokens if token), key=len, reverse=True)
-    earliest_sent = min((row.sent_at for row in rows if row.sent_at), default=None)
-    id_filters = []
-    for token in sorted(identifiers.union(broad_tokens), key=len, reverse=True):
-        like_token = f'%{token}%'
-        id_filters.extend([
-            InboxEmailMessage.headers_json.ilike(like_token),
-            InboxEmailMessage.message_id.ilike(like_token),
-            InboxEmailMessage.subject.ilike(like_token),
-            InboxEmailMessage.preview.ilike(like_token),
-            InboxEmailMessage.plain_text.ilike(like_token),
-            InboxEmailMessage.html_content.ilike(like_token),
-        ])
-    q = InboxEmailMessage.query.filter_by(imap_account_id=inbox_id)
-    if id_filters:
-        q = q.filter(or_(*id_filters))
-    messages = q.order_by(InboxEmailMessage.received_at.desc().nullslast(), InboxEmailMessage.id.desc()).limit(5000).all()
-    if not messages:
-        fallback = InboxEmailMessage.query.filter_by(imap_account_id=inbox_id)
-        if earliest_sent:
-            fallback = fallback.filter(or_(InboxEmailMessage.received_at == None, InboxEmailMessage.received_at >= earliest_sent - timedelta(hours=12)))
-        messages = fallback.order_by(InboxEmailMessage.received_at.desc().nullslast(), InboxEmailMessage.id.desc()).limit(1000).all()
-    info['scanned_messages'] = len(messages)
-    indexed_messages = []
-    for message in messages:
-        searchable = _message_database_searchable(message)
-        indexed_messages.append({
-            'message': message,
-            'searchable': searchable,
-            'searchable_lower': searchable.lower(),
-            'sender': parseaddr(message.sender or '')[1].lower(),
-            'recipient': (message.recipient or '').lower(),
-            'subject': (message.subject or '').strip().lower(),
-        })
-    for row in rows:
-        for record in indexed_messages:
-            message = record['message']
-            if row.test_identifier and row.test_identifier.lower() in record['searchable_lower']:
-                results[row.test_identifier] = (_placement_from_folder(message.folder), message.folder)
-                info['match_modes']['exact'] += 1
-                break
+    if not identifiers:
+        return results, info
+
+    matched_identifiers = set()
+
+    # FAST PATH: exact match on indexed x_test_id column (milliseconds)
+    for identifier in identifiers:
+        msg = InboxEmailMessage.query.filter_by(imap_account_id=inbox_id, x_test_id=identifier).first()
+        if msg:
+            results[identifier] = (_placement_from_folder(msg.folder), msg.folder)
+            matched_identifiers.add(identifier)
+            info['match_modes']['x_test_id'] += 1
+
+    # SLOW PATH: only for unmatched identifiers — ILIKE fallback on smaller columns
+    unmatched = identifiers - matched_identifiers
+    if unmatched:
+        id_filters = []
+        for token in unmatched:
+            like_token = f'%{token}%'
+            id_filters.extend([
+                InboxEmailMessage.subject.ilike(like_token),
+                InboxEmailMessage.preview.ilike(like_token),
+            ])
+        if id_filters:
+            messages = InboxEmailMessage.query.filter(
+                InboxEmailMessage.imap_account_id == inbox_id,
+                or_(*id_filters)
+            ).order_by(InboxEmailMessage.received_at.desc().nullslast(), InboxEmailMessage.id.desc()).limit(2000).all()
+            info['scanned_messages'] = len(messages)
+            for row in rows:
+                if row.test_identifier in matched_identifiers:
+                    continue
+                for message in messages:
+                    searchable = _message_database_searchable(message)
+                    if row.test_identifier and row.test_identifier.lower() in searchable.lower():
+                        results[row.test_identifier] = (_placement_from_folder(message.folder), message.folder)
+                        matched_identifiers.add(row.test_identifier)
+                        info['match_modes']['exact'] += 1
+                        break
+
     return results, info
 
 def _message_record_from_raw(raw_msg, folder):
