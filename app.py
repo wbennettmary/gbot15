@@ -2875,10 +2875,9 @@ def _imap_fetch_headers_batch(conn, uids, folder):
     return results
 
 def _sync_test_inbox_folders(inbox, limit=80, since=None, identifiers=None):
-    """Targeted IMAP sync for test emails. Strategy:
-    1. IMAP HEADER SEARCH for each test identifier (server-side, fast)
-    2. Batch-fetch headers only for matching UIDs
-    3. Fallback: SINCE + batch fetch if HEADER SEARCH finds nothing
+    """Sync test emails for an account: SINCE-based batch header fetch (one connection, batched IMAP).
+    Fetches ONLY UIDs in the last N days, batch-fetches headers (no per-UID round trips).
+    Stores ALL messages so both x_test_id fast-match and subject/sender fallback matching work.
     Per-account lock prevents concurrent syncs."""
     conn = None
     synced_total = 0
@@ -2888,7 +2887,7 @@ def _sync_test_inbox_folders(inbox, limit=80, since=None, identifiers=None):
     if not since and inbox.last_synced_at:
         since = (inbox.last_synced_at - timedelta(minutes=5)).strftime('%d-%b-%Y')
     if not since:
-        since = (datetime.utcnow() - timedelta(days=2)).strftime('%d-%b-%Y')
+        since = (datetime.utcnow() - timedelta(days=30)).strftime('%d-%b-%Y')
     lock = _get_account_sync_lock(inbox.id)
     if not lock.acquire(blocking=False):
         return 0, ['Sync already in progress for this account']
@@ -2897,33 +2896,20 @@ def _sync_test_inbox_folders(inbox, limit=80, since=None, identifiers=None):
             conn = _imap_connect(inbox)
         except Exception as e:
             return 0, [f'Connection failed: {e}']
+        conn.sock.settimeout(15) if getattr(conn, 'sock', None) else None
         for folder in folders_to_check:
             try:
                 status, _ = conn.select(folder, readonly=True)
                 if status != 'OK':
                     continue
-                matched_uids = set()
-                if identifiers:
-                    for ident in identifiers:
-                        try:
-                            s, data = conn.uid('search', None, f'HEADER "X-Test-ID" "{ident}"')
-                            if s == 'OK' and data and data[0]:
-                                uids = data[0].split()
-                                matched_uids.update(uids)
-                                if uids:
-                                    app.logger.info(f"[POLL] {inbox.email}/{folder}: IMAP HEADER SEARCH found {len(uids)} message(s) for X-Test-ID={ident}")
-                        except Exception as search_err:
-                            app.logger.debug(f"[POLL] HEADER SEARCH failed for {ident} in {folder}: {search_err}")
-                if not matched_uids:
-                    if since:
-                        s, data = conn.uid('search', None, f'SINCE {since}')
-                        if s == 'OK' and data and data[0]:
-                            all_uids = data[0].split()
-                            matched_uids.update(all_uids[-int(limit):])
-                if not matched_uids:
+                s, data = conn.uid('search', None, f'SINCE {since}')
+                if s != 'OK' or not data or not data[0]:
                     continue
-                uid_list = sorted(matched_uids, key=lambda u: int(u) if u.isdigit() else 0)
-                app.logger.info(f"[POLL] {inbox.email}/{folder}: fetching headers for {len(uid_list)} uid(s)")
+                all_uids = data[0].split()
+                uid_list = all_uids[-int(limit):]
+                if not uid_list:
+                    continue
+                app.logger.info(f"[POLL] {inbox.email}/{folder}: fetching headers for last {len(uid_list)} of {len(all_uids)} message(s) since {since}")
                 headers = _imap_fetch_headers_batch(conn, uid_list, folder)
                 for hdr in headers:
                     _upsert_imap_message_from_header(inbox, folder, hdr)
@@ -3070,14 +3056,12 @@ def _poll_inbox_test_payload(test_id, data=None):
         'accounts_synced': 0,
     }
     for row in all_messages:
-        if row.status in ('FAILED', 'COMPLETED', 'SENT_EXTERNAL'):
-            continue
-        diagnostic['checked_rows'] += 1
         if not row.imap_account_id:
             row.status = 'SENT_EXTERNAL'
             row.placement = 'UNOBSERVED'
             row.error_message = 'Recipient is external; connect it as an IMAP inbox to observe inbox/spam placement.'
             continue
+        diagnostic['checked_rows'] += 1
         pending_by_inbox.setdefault(row.imap_account_id, []).append(row)
 
     for inbox_id, rows in pending_by_inbox.items():
@@ -3128,9 +3112,17 @@ def _poll_inbox_test_payload(test_id, data=None):
 def api_inbox_poll_test_async(test_id):
     payload = request.get_json(silent=True) or {}
     running_jobs = InboxPollJob.query.filter_by(test_id=test_id, status='running').all()
-    if running_jobs:
+    stale_cutoff = datetime.utcnow() - timedelta(minutes=5)
+    for rj in running_jobs:
+        rj_created = rj.created_at or datetime.utcnow()
+        if rj_created < stale_cutoff:
+            rj.status = 'error'
+            rj.message = 'Previous sync timed out. A new sync was started.'
+            rj.finished_at = datetime.utcnow()
+    if running_jobs and all(rj.status == 'running' for rj in running_jobs):
         existing = running_jobs[0]
         return jsonify({'success': True, 'job_id': existing.job_id, 'message': 'A sync is already running for this test.'})
+    db.session.commit()
     job_id = uuid.uuid4().hex
     job = InboxPollJob(job_id=job_id, test_id=test_id, status='running', message=f'Syncing {test_id} in background...')
     db.session.add(job)
@@ -3140,10 +3132,17 @@ def api_inbox_poll_test_async(test_id):
         with app.app_context():
             try:
                 result, status_code = _poll_inbox_test_payload(test_id, payload)
-                job.status = 'completed' if status_code < 400 and result.get('success') else 'error'
-                job.message = 'Sync completed.' if result.get('success') else result.get('error', 'Sync failed.')
-                job.result_json = json.dumps(result)
-                job.finished_at = datetime.utcnow()
+                j = InboxPollJob.query.filter_by(job_id=job_id).first()
+                if not j:
+                    j = InboxPollJob(job_id=job_id, test_id=test_id, status='running')
+                    db.session.add(j)
+                j.status = 'completed' if status_code < 400 and result.get('success') else 'error'
+                j.message = 'Sync completed.' if result.get('success') else result.get('error', 'Sync failed.')
+                try:
+                    j.result_json = json.dumps(result)
+                except Exception:
+                    j.result_json = None
+                j.finished_at = datetime.utcnow()
                 db.session.commit()
             except Exception as e:
                 app.logger.error(f"[POLL-ASYNC] Job {job_id} failed: {e}", exc_info=True)
@@ -3151,10 +3150,14 @@ def api_inbox_poll_test_async(test_id):
                     db.session.rollback()
                 except Exception:
                     pass
-                job.status = 'error'
-                job.message = str(e)[:500]
-                job.error = str(e)[:2000]
-                job.finished_at = datetime.utcnow()
+                j = InboxPollJob.query.filter_by(job_id=job_id).first()
+                if not j:
+                    j = InboxPollJob(job_id=job_id, test_id=test_id, status='running')
+                    db.session.add(j)
+                j.status = 'error'
+                j.message = str(e)[:500]
+                j.error = str(e)[:2000]
+                j.finished_at = datetime.utcnow()
                 try:
                     db.session.commit()
                 except Exception:
