@@ -659,6 +659,81 @@
         min-width: 0;
     }
 
+    .ii-analytics-dashboard {
+        display: grid;
+        grid-template-columns: minmax(220px, 0.85fr) minmax(280px, 1.35fr);
+        gap: 14px;
+        align-items: stretch;
+    }
+
+    .ii-score-card {
+        display: grid;
+        gap: 12px;
+        align-content: start;
+    }
+
+    .ii-score-value {
+        font-size: clamp(34px, 7vw, 56px);
+        line-height: 1;
+        font-weight: 800;
+        color: #0f172a;
+    }
+
+    .ii-placement-graph {
+        display: grid;
+        gap: 10px;
+    }
+
+    .ii-bar-track {
+        display: flex;
+        height: 14px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: #e2e8f0;
+    }
+
+    .ii-bar-segment {
+        min-width: 0;
+    }
+
+    .ii-bar-segment.inbox { background: #16a34a; }
+    .ii-bar-segment.spam { background: #dc2626; }
+    .ii-bar-segment.pending { background: #f59e0b; }
+    .ii-bar-segment.missing { background: #64748b; }
+
+    .ii-compact-stat-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .ii-compact-stat {
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 10px;
+        background: #f8fafc;
+        min-width: 0;
+    }
+
+    .ii-compact-stat strong {
+        display: block;
+        color: #0f172a;
+        font-size: 18px;
+    }
+
+    .ii-analytics-copy-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .ii-copy-stat-button {
+        display: grid;
+        gap: 4px;
+        text-align: left;
+        min-height: 76px;
+    }
+
     .ii-modal-backdrop {
         position: fixed;
         inset: 0;
@@ -858,6 +933,8 @@
         .ii-source-grid { grid-template-columns: 1fr; }
         .ii-compare { grid-template-columns: 1fr; }
         .ii-template-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .ii-analytics-dashboard { grid-template-columns: 1fr; }
+        .ii-analytics-copy-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
 
     @media (max-width: 720px) {
@@ -867,6 +944,8 @@
         .ii-suggestion-grid,
         .ii-integrity-grid,
         .ii-result-summary,
+        .ii-compact-stat-grid,
+        .ii-analytics-copy-grid,
         .ii-template-card-grid,
         .ii-user-grid { grid-template-columns: 1fr; }
         .ii-title { font-size: 24px; }
@@ -1606,23 +1685,13 @@ merge_recipe_id, content_blueprint_id</pre>
                     <div class="ii-result-pill"><span class="ii-muted">Spam</span><strong>0</strong></div>
                     <div class="ii-result-pill"><span class="ii-muted">Missing</span><strong>0</strong></div>
                 </div>
-                <div id="userInboxAnalyticsCards" class="ii-analytics-grid">
+                <div id="userInboxAnalyticsCards" class="ii-analytics-dashboard">
                     <div class="ii-analytics-card ii-muted">Analytics appear after the user inbox test is triggered and polled.</div>
                 </div>
-                <h4 class="mt-3">Provider Summary</h4>
-                <div class="ii-card" id="userInboxProviderSummary">Provider analytics appear after a test has results.</div>
-                <div class="ii-grid ii-layout-2 mt-3">
-                    <div class="ii-card ii-action-card">
-                        <div class="ii-action-head"><h4>Domain Results & Actions</h4><div class="ii-action-buttons"><button class="ii-btn" type="button" onclick="copyUserInboxBucket('inboxDomains')"><i class="fas fa-copy"></i> Copy inbox domains</button><button class="ii-btn" type="button" onclick="copyUserInboxBucket('spamDomains')"><i class="fas fa-copy"></i> Copy spam domains</button></div></div>
-                        <div id="userInboxDomainActions" class="ii-muted">Sync a test to classify sender domains.</div>
-                    </div>
-                    <div class="ii-card ii-action-card">
-                        <div class="ii-action-head"><h4>User Results & Actions</h4><div class="ii-action-buttons"><button class="ii-btn" type="button" onclick="copyUserInboxBucket('inboxUsers')"><i class="fas fa-copy"></i> Copy inbox users</button><button class="ii-btn" type="button" onclick="copyUserInboxBucket('spamUsers')"><i class="fas fa-copy"></i> Copy spam users</button></div></div>
-                        <div id="userInboxUserActions" class="ii-muted">Sync a test to classify Workspace users.</div>
-                    </div>
-                </div>
-                <h4 class="mt-3">Spam Improvement Targets</h4>
-                <div class="ii-card" id="userInboxSpamInsights">Sync a test to see which domains and users need name/domain changes.</div>
+                <div class="d-none" id="userInboxProviderSummary"></div>
+                <div class="d-none" id="userInboxDomainActions"></div>
+                <div class="d-none" id="userInboxUserActions"></div>
+                <div class="d-none" id="userInboxSpamInsights"></div>
             </div>
         </div>
     </section>
@@ -3580,6 +3649,7 @@ merge_recipe_id, content_blueprint_id</pre>
     function renderUserInboxProviderSummary(rows) {
         const el = document.getElementById('userInboxProviderSummary');
         if (!el) return;
+        if (el.classList.contains('d-none')) return;
         if (!rows.length) {
             el.textContent = 'Provider analytics appear after a test has results.';
             return;
@@ -3612,37 +3682,91 @@ merge_recipe_id, content_blueprint_id</pre>
         const el = document.getElementById('userInboxAnalyticsCards');
         if (!el) return;
         if (!rows.length) {
+            el.className = 'ii-analytics-dashboard';
             el.innerHTML = '<div class="ii-analytics-card ii-muted">No message rows found for this test yet. Sync again after delivery has had time to complete.</div>';
             return;
         }
-        el.className = 'ii-analytics-list';
-        el.innerHTML = rows.map((row) => {
-            const sender = senderLookup(row.sender);
-            const displayName = sender.name || (row.sender || '').split('@')[0] || 'Workspace user';
-            const placement = row.placement || 'PENDING';
-            const status = row.status || 'PENDING';
-            const placementChip = placement === 'INBOX' ? 'green' : placement === 'SPAM' ? 'red' : placement === 'UNOBSERVED' ? 'gray' : 'yellow';
-            const statusChip = status === 'COMPLETED' ? 'green' : status === 'FAILED' ? 'red' : 'blue';
-            return `<div class="ii-analytics-row">
-                <div>
-                    <strong>${escapeHtml(displayName)}</strong>
-                    <div class="ii-muted ii-email-text">${escapeHtml(row.sender || '')}</div>
+        const summary = matrixSummary(rows);
+        const missing = summary.pending + summary.failed;
+        const inboxPct = summary.total ? Math.round((summary.inbox / summary.total) * 100) : 0;
+        const spamPct = summary.total ? Math.round((summary.spam / summary.total) * 100) : 0;
+        const pendingPct = summary.total ? Math.round((summary.pending / summary.total) * 100) : 0;
+        const missingPct = Math.max(0, 100 - inboxPct - spamPct - pendingPct);
+        const score = deliveryScore({sent_count: summary.total}, rows);
+        const domains = userInboxObservationStats(rows, (row) => (row.sender || '').split('@').pop().toLowerCase());
+        const users = userInboxObservationStats(rows, (row) => row.sender || '').map((item) => {
+            const sender = senderLookup(item.key);
+            return {...item, displayName: sender.name || item.key.split('@')[0], domain: item.key.split('@').pop() || ''};
+        });
+        const inboxDomains = domains.filter((item) => item.inboxRate !== null && item.inboxRate >= 90).map((item) => item.key);
+        const spamDomains = domains.filter((item) => item.inboxRate !== null && item.inboxRate < 70).map((item) => item.key);
+        const inboxUsers = users.filter((item) => item.inboxRate !== null && item.inboxRate >= 90).map((item) => item.key);
+        const spamUsers = users.filter((item) => item.inboxRate !== null && item.inboxRate < 70).map((item) => item.key);
+        iiState.userInboxCopyBuckets.inboxDomains = inboxDomains;
+        iiState.userInboxCopyBuckets.spamDomains = spamDomains;
+        iiState.userInboxCopyBuckets.inboxUsers = inboxUsers;
+        iiState.userInboxCopyBuckets.spamUsers = spamUsers;
+        const providers = Object.entries(providerStatsFromRows(rows)).sort((a, b) => b[1].total - a[1].total);
+        const worstDomains = domains.filter((item) => item.inboxRate !== null).sort((a, b) => a.inboxRate - b.inboxRate).slice(0, 3);
+        const worstUsers = users.filter((item) => item.inboxRate !== null).sort((a, b) => a.inboxRate - b.inboxRate).slice(0, 3);
+        el.className = 'ii-analytics-dashboard';
+        el.innerHTML = `
+            <div class="ii-analytics-card ii-score-card">
+                <div class="ii-row justify-content-between">
+                    <span class="ii-muted">Delivery score</span>
+                    <span class="ii-chip ${score >= 80 ? 'green' : score >= 60 ? 'yellow' : 'red'}">${escapeHtml(scoreLabel(score))}</span>
                 </div>
-                <div>
-                    <span class="ii-muted">Recipient</span>
-                    <strong class="ii-email-text d-block">${escapeHtml(row.recipient || '')}</strong>
+                <div class="ii-score-value">${score ?? '--'}<span style="font-size: 18px;">/100</span></div>
+                <div class="ii-placement-graph">
+                    <div class="ii-bar-track" aria-label="Placement graph">
+                        <div class="ii-bar-segment inbox" style="width:${inboxPct}%"></div>
+                        <div class="ii-bar-segment spam" style="width:${spamPct}%"></div>
+                        <div class="ii-bar-segment pending" style="width:${pendingPct}%"></div>
+                        <div class="ii-bar-segment missing" style="width:${missingPct}%"></div>
+                    </div>
+                    <div class="ii-compact-stat-grid">
+                        <div class="ii-compact-stat"><span class="ii-muted">Inbox</span><strong>${summary.inbox}</strong><span class="ii-chip green">${inboxPct}%</span></div>
+                        <div class="ii-compact-stat"><span class="ii-muted">Spam</span><strong>${summary.spam}</strong><span class="ii-chip red">${spamPct}%</span></div>
+                        <div class="ii-compact-stat"><span class="ii-muted">Waiting</span><strong>${summary.pending}</strong><span class="ii-chip yellow">${pendingPct}%</span></div>
+                        <div class="ii-compact-stat"><span class="ii-muted">Missing</span><strong>${missing}</strong><span class="ii-chip gray">${missingPct}%</span></div>
+                    </div>
                 </div>
-                <div class="ii-grid" style="gap: 6px;">
-                    <span class="ii-chip ${placementChip}">${escapeHtml(placement)}</span>
-                    <span class="ii-chip ${statusChip}">${escapeHtml(status)}</span>
+                <div class="ii-muted">Exact-id sync: ${escapeHtml(testId || '')}</div>
+            </div>
+            <div class="ii-analytics-card">
+                <div class="ii-action-head">
+                    <h4>Copy Classified Results</h4>
+                    <span class="ii-muted">${domains.length} domain(s), ${users.length} user(s)</span>
                 </div>
-                <div>
-                    <span class="ii-muted">Test</span>
-                    <strong class="ii-email-text d-block">${escapeHtml(row.test_identifier || testId || '')}</strong>
-                    <div class="ii-muted">${escapeHtml(placementSignal(row))}</div>
+                <div class="ii-analytics-copy-grid">
+                    <button class="ii-btn ii-copy-stat-button" type="button" onclick="copyUserInboxBucket('inboxDomains')"><strong>${inboxDomains.length}</strong><span>Copy inbox domains</span></button>
+                    <button class="ii-btn ii-copy-stat-button" type="button" onclick="copyUserInboxBucket('spamDomains')"><strong>${spamDomains.length}</strong><span>Copy spam domains</span></button>
+                    <button class="ii-btn ii-copy-stat-button" type="button" onclick="copyUserInboxBucket('inboxUsers')"><strong>${inboxUsers.length}</strong><span>Copy inbox users</span></button>
+                    <button class="ii-btn ii-copy-stat-button" type="button" onclick="copyUserInboxBucket('spamUsers')"><strong>${spamUsers.length}</strong><span>Copy spam users</span></button>
+                </div>
+                <div class="ii-compact-stat-grid mt-2">
+                    <div class="ii-compact-stat"><span class="ii-muted">Inbox domains</span><strong>${inboxDomains.length}</strong><span class="ii-muted">>= 90%</span></div>
+                    <div class="ii-compact-stat"><span class="ii-muted">Spam domains</span><strong>${spamDomains.length}</strong><span class="ii-muted">&lt; 70%</span></div>
+                    <div class="ii-compact-stat"><span class="ii-muted">Inbox users</span><strong>${inboxUsers.length}</strong><span class="ii-muted">>= 90%</span></div>
+                    <div class="ii-compact-stat"><span class="ii-muted">Spam users</span><strong>${spamUsers.length}</strong><span class="ii-muted">&lt; 70%</span></div>
+                </div>
+                <div class="ii-grid ii-layout-2 mt-2">
+                    <div>
+                        <h4>Provider Mix</h4>
+                        ${providers.map(([provider, stats]) => {
+                            const rate = stats.total ? Math.round((stats.inbox / stats.total) * 100) : 0;
+                            return `<div class="ii-row justify-content-between mb-2"><strong>${escapeHtml(provider)}</strong><span class="ii-chip green">${stats.inbox}</span><span class="ii-chip red">${stats.spam}</span><span class="ii-muted">${rate}% inbox</span></div>`;
+                        }).join('') || '<div class="ii-muted">No provider stats yet.</div>'}
+                    </div>
+                    <div>
+                        <h4>Needs Attention</h4>
+                        ${(worstDomains.length || worstUsers.length) ? `
+                            ${worstDomains.map((item) => `<div class="ii-row justify-content-between mb-2"><strong class="ii-domain-text">${escapeHtml(item.key)}</strong><span class="ii-chip ${item.inboxRate < 70 ? 'red' : 'yellow'}">${item.inboxRate}% inbox</span></div>`).join('')}
+                            ${worstUsers.map((item) => `<div class="ii-row justify-content-between mb-2"><span class="ii-email-text">${escapeHtml(item.key)}</span><span class="ii-chip ${item.inboxRate < 70 ? 'red' : 'yellow'}">${item.inboxRate}% inbox</span></div>`).join('')}
+                        ` : '<div class="ii-muted">No spam-targeted domains or users detected.</div>'}
+                    </div>
                 </div>
             </div>`;
-        }).join('');
     }
 
     function senderLookup(email) {
@@ -3697,6 +3821,7 @@ merge_recipe_id, content_blueprint_id</pre>
         const spamDomains = domains.filter((item) => item.inboxRate !== null && item.inboxRate < 70).map((item) => item.key);
         iiState.userInboxCopyBuckets.inboxDomains = inboxDomains;
         iiState.userInboxCopyBuckets.spamDomains = spamDomains;
+        if (el.classList.contains('d-none')) return;
         if (!domains.length) {
             el.textContent = 'No domain analytics are available yet.';
             return;
@@ -3738,6 +3863,7 @@ merge_recipe_id, content_blueprint_id</pre>
         const spamUsers = users.filter((item) => item.inboxRate !== null && item.inboxRate < 70).map((item) => item.key);
         iiState.userInboxCopyBuckets.inboxUsers = inboxUsers;
         iiState.userInboxCopyBuckets.spamUsers = spamUsers;
+        if (el.classList.contains('d-none')) return;
         if (!users.length) {
             el.textContent = 'No user analytics are available yet.';
             return;
@@ -3805,6 +3931,7 @@ merge_recipe_id, content_blueprint_id</pre>
     function renderUserInboxSpamInsights(rows) {
         const el = document.getElementById('userInboxSpamInsights');
         if (!el) return;
+        if (el.classList.contains('d-none')) return;
         if (!rows.length) {
             el.textContent = 'Sync a test to see spam percentage by sender, domain, and user display name.';
             return;
