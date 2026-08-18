@@ -39,7 +39,7 @@ from email.mime.multipart import MIMEMultipart
 import re
 
 from core_logic import google_api, unique_random_alias, get_random_name_pools
-from database import db, User, WhitelistedIP, UsedDomain, GoogleAccount, GoogleToken, Scope, ServerConfig, UserAppPassword, AutomationAccount, RetrievedUser, NamecheapConfig, DomainOperation, AwsConfig, ServiceAccount, CloudflareConfig, Notification, WorkspaceList, AwsGeneratedPassword, InboxImapAccount, InboxEmailMessage, InboxStaticTemplate, InboxUserTemplate, InboxOpenRouterConfig, InboxDeliverabilityTest, InboxDeliverabilityMessage
+from database import db, User, WhitelistedIP, UsedDomain, GoogleAccount, GoogleToken, Scope, ServerConfig, UserAppPassword, AutomationAccount, RetrievedUser, NamecheapConfig, DomainOperation, AwsConfig, ServiceAccount, CloudflareConfig, Notification, WorkspaceList, AwsGeneratedPassword, InboxImapAccount, InboxEmailMessage, InboxStaticTemplate, InboxUserTemplate, InboxOpenRouterConfig, InboxDeliverabilityTest, InboxDeliverabilityMessage, TestEmailSource
 from routes.dns_manager import dns_manager
 from routes.aws_manager import aws_manager
 from routes.digitalocean_manager import digitalocean_manager
@@ -333,6 +333,48 @@ with app.app_context():
                     logging.warning("SQLite cannot alter inbox_deliverability_message.imap_account_id nullability in place; new databases will use nullable recipients.")
     except Exception as e:
         logging.warning(f"Could not auto-migrate inbox deliverability external recipients: {e}")
+        try:
+            db.session.rollback()
+        except:
+            pass
+
+    # Auto-migration: Link deliverability observations to pushed automated email sources.
+    try:
+        from sqlalchemy import inspect
+        inspector = inspect(db.engine)
+        table_names = inspector.get_table_names()
+        if 'inbox_deliverability_message' in table_names:
+            columns = [col['name'] for col in inspector.get_columns('inbox_deliverability_message')]
+            if 'source_email_id' not in columns:
+                logging.info("Adding missing 'source_email_id' column to inbox_deliverability_message table...")
+                with db.engine.connect() as conn:
+                    if 'postgresql' in str(db.engine.url):
+                        conn.execute(text('ALTER TABLE "inbox_deliverability_message" ADD COLUMN source_email_id INTEGER'))
+                    else:
+                        conn.execute(text("ALTER TABLE inbox_deliverability_message ADD COLUMN source_email_id INTEGER"))
+                    conn.commit()
+        if 'inbox_deliverability_test' in table_names:
+            columns = [col['name'] for col in inspector.get_columns('inbox_deliverability_test')]
+            new_columns = {
+                'test_type': "VARCHAR(50) DEFAULT 'user_inbox'",
+                'strategy': 'VARCHAR(50)',
+                'total_email_sources': 'INTEGER DEFAULT 0',
+                'total_users': 'INTEGER DEFAULT 0',
+                'total_recipients': 'INTEGER DEFAULT 0',
+                'inbox_threshold': 'INTEGER DEFAULT 80',
+                'spam_threshold': 'INTEGER DEFAULT 40',
+                'minimum_observations': 'INTEGER DEFAULT 10',
+            }
+            with db.engine.connect() as conn:
+                for column_name, column_type in new_columns.items():
+                    if column_name not in columns:
+                        if 'postgresql' in str(db.engine.url):
+                            conn.execute(text(f'ALTER TABLE "inbox_deliverability_test" ADD COLUMN {column_name} {column_type}'))
+                        else:
+                            conn.execute(text(f"ALTER TABLE inbox_deliverability_test ADD COLUMN {column_name} {column_type}"))
+                conn.commit()
+    except Exception as e:
+        logging.warning(f"Could not auto-migrate automated source link: {e}")
         try:
             db.session.rollback()
         except:
@@ -1429,6 +1471,217 @@ def api_inbox_message_detail(message_id):
         'received_at': m.received_at.isoformat() + 'Z' if m.received_at else None,
     }})
 
+def _serialize_test_email_source(source):
+    return {
+        'id': source.id,
+        'source_imap_account_id': source.source_imap_account_id,
+        'source_message_id': source.source_message_id,
+        'source_sender': source.source_sender,
+        'source_sender_domain': source.source_sender_domain,
+        'original_subject': source.original_subject,
+        'preview_snapshot': source.preview_snapshot,
+        'source_folder': source.source_folder,
+        'source_provider': source.source_provider,
+        'original_received_at': source.original_received_at.isoformat() + 'Z' if source.original_received_at else None,
+        'status': source.status,
+        'last_test_id': source.last_test_id,
+        'last_verdict': source.last_verdict,
+        'last_inbox_percentage': source.last_inbox_percentage,
+        'last_spam_percentage': source.last_spam_percentage,
+        'pushed_by': source.pushed_by,
+        'pushed_at': source.pushed_at.isoformat() + 'Z' if source.pushed_at else None,
+    }
+
+def _email_verdict(inbox_pct, observed, minimum_observations=10, inbox_threshold=80, spam_threshold=40):
+    if observed < minimum_observations:
+        return 'INSUFFICIENT_DATA'
+    if inbox_pct >= inbox_threshold:
+        return 'INBOX'
+    if inbox_pct < spam_threshold:
+        return 'SPAM'
+    return 'MIXED'
+
+def _automated_source_rollups(test_id=None):
+    test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first() if test_id else None
+    minimum_observations = int(getattr(test, 'minimum_observations', None) or 10)
+    inbox_threshold = int(getattr(test, 'inbox_threshold', None) or 80)
+    spam_threshold = int(getattr(test, 'spam_threshold', None) or 40)
+    query = db.session.query(TestEmailSource, InboxDeliverabilityMessage).join(
+        InboxDeliverabilityMessage,
+        InboxDeliverabilityMessage.source_email_id == TestEmailSource.id
+    )
+    if test_id:
+        query = query.filter(InboxDeliverabilityMessage.test_id == test_id)
+    buckets = {}
+    for source, row in query.all():
+        bucket = buckets.setdefault(source.id, {'source': source, 'total': 0, 'inbox': 0, 'spam': 0, 'other': 0, 'missing': 0, 'pending': 0})
+        bucket['total'] += 1
+        if row.placement == 'INBOX':
+            bucket['inbox'] += 1
+        elif row.placement == 'SPAM':
+            bucket['spam'] += 1
+        elif row.placement in ('PENDING', None):
+            bucket['pending'] += 1
+        elif row.placement in ('FAILED', 'UNOBSERVED'):
+            bucket['missing'] += 1
+        else:
+            bucket['other'] += 1
+    results = []
+    for bucket in buckets.values():
+        observed = max(0, bucket['total'] - bucket['pending'])
+        inbox_pct = round((bucket['inbox'] / bucket['total']) * 100) if bucket['total'] else 0
+        spam_pct = round((bucket['spam'] / bucket['total']) * 100) if bucket['total'] else 0
+        other_pct = round((bucket['other'] / bucket['total']) * 100) if bucket['total'] else 0
+        missing_pct = round(((bucket['missing'] + bucket['pending']) / bucket['total']) * 100) if bucket['total'] else 0
+        verdict = _email_verdict(inbox_pct, observed, minimum_observations=minimum_observations, inbox_threshold=inbox_threshold, spam_threshold=spam_threshold)
+        source = bucket['source']
+        results.append({
+            **_serialize_test_email_source(source),
+            'tests': bucket['total'],
+            'observed': observed,
+            'inbox_count': bucket['inbox'],
+            'spam_count': bucket['spam'],
+            'other_count': bucket['other'],
+            'missing_count': bucket['missing'] + bucket['pending'],
+            'inbox_percentage': inbox_pct,
+            'spam_percentage': spam_pct,
+            'other_percentage': other_pct,
+            'missing_percentage': missing_pct,
+            'verdict': verdict,
+        })
+    return sorted(results, key=lambda item: (item.get('last_test_id') or '', item['pushed_at'] or ''), reverse=True)
+
+def _update_automated_source_statuses(test_id):
+    for result in _automated_source_rollups(test_id):
+        source = TestEmailSource.query.get(result['id'])
+        if not source:
+            continue
+        source.last_test_id = test_id
+        source.last_verdict = result['verdict']
+        source.last_inbox_percentage = result['inbox_percentage']
+        source.last_spam_percentage = result['spam_percentage']
+        if result['pending']:
+            source.status = 'IN_TEST'
+        elif result['tests']:
+            source.status = 'TESTED'
+
+@app.route('/api/inbox-intelligence/test-email-sources', methods=['GET', 'POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_test_email_sources():
+    if request.method == 'POST':
+        data = request.get_json(silent=True) or {}
+        message_ids = []
+        for value in data.get('message_ids', []):
+            try:
+                message_id = int(value)
+            except (TypeError, ValueError):
+                continue
+            if message_id and message_id not in message_ids:
+                message_ids.append(message_id)
+        if not message_ids:
+            return jsonify({'success': False, 'error': 'Select at least one inbox email to push to the test queue'}), 400
+        messages = InboxEmailMessage.query.filter(InboxEmailMessage.id.in_(message_ids)).all()
+        created = 0
+        for message in messages:
+            source = TestEmailSource.query.filter_by(source_message_id=message.id).first()
+            if not source:
+                source = TestEmailSource(source_message_id=message.id)
+                db.session.add(source)
+                created += 1
+            source.source_imap_account_id = message.imap_account_id
+            source.source_sender = message.sender
+            source.source_sender_domain = message.sender_domain
+            source.original_subject = message.subject
+            source.html_snapshot = message.html_content
+            source.text_snapshot = message.plain_text
+            source.preview_snapshot = message.preview
+            source.source_folder = message.folder
+            source.source_provider = message.provider
+            source.original_received_at = message.received_at
+            source.status = 'AVAILABLE'
+            source.pushed_by = session.get('user')
+            source.pushed_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify({'success': True, 'created': created, 'count': len(messages), 'message': f'Added {len(messages)} email(s) to Automated Email Tests queue.'})
+
+    q = TestEmailSource.query
+    search = (request.args.get('search') or '').strip()
+    status_filter = (request.args.get('status') or '').strip()
+    try:
+        page = max(1, int(request.args.get('page') or 1))
+    except ValueError:
+        page = 1
+    try:
+        per_page = min(100, max(20, int(request.args.get('per_page') or 20)))
+    except ValueError:
+        per_page = 20
+    if search:
+        like = f'%{search}%'
+        q = q.filter(or_(
+            TestEmailSource.original_subject.ilike(like),
+            TestEmailSource.source_sender.ilike(like),
+            TestEmailSource.source_sender_domain.ilike(like),
+            TestEmailSource.preview_snapshot.ilike(like)
+        ))
+    if status_filter:
+        q = q.filter(TestEmailSource.status == status_filter)
+    total = q.count()
+    sources = q.order_by(TestEmailSource.pushed_at.desc().nullslast(), TestEmailSource.id.desc()).offset((page - 1) * per_page).limit(per_page).all()
+    source_payload = [_serialize_test_email_source(source) for source in sources]
+    rollups = {item['id']: item for item in _automated_source_rollups()}
+    for item in source_payload:
+        if item['id'] in rollups:
+            item.update(rollups[item['id']])
+    return jsonify({'success': True, 'sources': source_payload, 'total': total, 'page': page, 'per_page': per_page})
+
+def _send_automated_test_messages_async(test_id, senders, custom_headers=''):
+    with app.app_context():
+        sender_lookup = {sender['email']: sender for sender in senders}
+        rows = InboxDeliverabilityMessage.query.filter_by(test_id=test_id, status='QUEUED').order_by(InboxDeliverabilityMessage.id.asc()).all()
+        sources = {source.id: source for source in TestEmailSource.query.filter(TestEmailSource.id.in_([row.source_email_id for row in rows if row.source_email_id])).all()}
+        for row in rows:
+            sender_info = sender_lookup.get(row.workspace_sender)
+            source = sources.get(row.source_email_id)
+            if not sender_info or not source:
+                row.status = 'FAILED'
+                row.placement = 'FAILED'
+                row.error_message = 'Automated source or sender payload was not available.'
+            else:
+                try:
+                    headers = '\n'.join([
+                        custom_headers or '',
+                        f'X-Test-Batch-ID: {test_id}',
+                        f'X-Test-Source-ID: {source.id}',
+                    ]).strip()
+                    row.provider_message_id = _send_test_email_gmail_api(
+                        sender_info['service_account_id'],
+                        row.workspace_sender,
+                        row.recipient,
+                        source.original_subject or row.subject or 'Automated Email Test',
+                        source.html_snapshot or '',
+                        source.text_snapshot or source.preview_snapshot or '',
+                        row.test_identifier,
+                        headers,
+                        sender_info.get('name')
+                    )
+                    row.sent_at = datetime.utcnow()
+                    row.status = 'WAITING_FOR_DELIVERY'
+                    row.placement = 'PENDING'
+                except Exception as e:
+                    row.status = 'FAILED'
+                    row.placement = 'FAILED'
+                    row.error_message = str(e)
+            test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
+            if test:
+                _refresh_deliverability_counts(test)
+            db.session.commit()
+        test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
+        if test:
+            _refresh_deliverability_counts(test)
+            db.session.commit()
+        db.session.remove()
+
 @app.route('/api/inbox-intelligence/workspace-senders', methods=['GET'])
 @login_required
 @permission_required('inbox_intelligence')
@@ -1834,9 +2087,9 @@ def _build_test_mime_message(sender, recipient, subject, html_body, text_body, t
     msg['Date'] = formatdate(localtime=True)
     msg['Message-ID'] = make_msgid(idstring=test_identifier)
     msg['X-Test-ID'] = test_identifier
-    msg.attach(MIMEText((text_body or '') + f"\n\nTest ID: {test_identifier}", 'plain', 'utf-8'))
+    msg.attach(MIMEText(text_body or '', 'plain', 'utf-8'))
     if html_body:
-        msg.attach(MIMEText(html_body + f"<p style=\"font-size:11px;color:#64748b\">Test ID: {test_identifier}</p>", 'html', 'utf-8'))
+        msg.attach(MIMEText(html_body, 'html', 'utf-8'))
     _apply_custom_headers(msg, custom_headers, sender, recipient, subject, test_identifier, sender_name)
     return msg
 
@@ -1948,6 +2201,7 @@ def api_inbox_tests():
             'failed_count': t.failed_count,
             'created_at': t.created_at.isoformat() + 'Z' if t.created_at else None,
             'created_by': t.created_by,
+            'test_type': getattr(t, 'test_type', None) or ('automated' if t.test_id.startswith('AT-') else 'user_inbox'),
         } for t in tests]})
     data = request.get_json(silent=True) or {}
     sender_payload = data.get('senders', [])
@@ -2079,6 +2333,187 @@ def api_inbox_tests():
         ).start()
         return jsonify({'success': True, 'test_id': test_id, 'message': 'Deliverability test queued. Sending continues in the background.', 'sent': 0, 'failed': 0, 'queued': test.total_messages})
     return jsonify({'success': True, 'test_id': test_id, 'message': 'Deliverability test created.', 'sent': test.sent_count, 'failed': test.failed_count})
+
+@app.route('/api/inbox-intelligence/automated-tests', methods=['GET', 'POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_automated_tests():
+    if request.method == 'GET':
+        tests = InboxDeliverabilityTest.query.filter(or_(InboxDeliverabilityTest.test_type == 'automated', InboxDeliverabilityTest.name.ilike('Automated:%'), InboxDeliverabilityTest.test_id.ilike('AT-%'))).order_by(InboxDeliverabilityTest.created_at.desc()).limit(50).all()
+        return jsonify({'success': True, 'tests': [{
+            'test_id': test.test_id,
+            'name': test.name,
+            'status': test.status,
+            'strategy': getattr(test, 'strategy', None),
+            'total_email_sources': getattr(test, 'total_email_sources', 0) or 0,
+            'total_users': getattr(test, 'total_users', 0) or 0,
+            'total_recipients': getattr(test, 'total_recipients', 0) or 0,
+            'total_messages': test.total_messages,
+            'sent_count': test.sent_count,
+            'inbox_count': test.inbox_count,
+            'spam_count': test.spam_count,
+            'pending_count': test.pending_count,
+            'failed_count': test.failed_count,
+            'created_at': test.created_at.isoformat() + 'Z' if test.created_at else None,
+            'source_results': _automated_source_rollups(test.test_id),
+        } for test in tests]})
+
+    data = request.get_json(silent=True) or {}
+    source_ids = []
+    for value in data.get('source_ids', []):
+        try:
+            source_id = int(value)
+        except (TypeError, ValueError):
+            continue
+        if source_id and source_id not in source_ids:
+            source_ids.append(source_id)
+    if not source_ids:
+        return jsonify({'success': False, 'error': 'Select at least one queued email source'}), 400
+    sources = TestEmailSource.query.filter(TestEmailSource.id.in_(source_ids), TestEmailSource.status != 'ARCHIVED').all()
+    if not sources:
+        return jsonify({'success': False, 'error': 'No queued email sources are available'}), 400
+
+    senders = []
+    for item in data.get('senders', []):
+        if not isinstance(item, dict):
+            continue
+        email_addr = (item.get('email') or '').strip().lower()
+        service_account_id = item.get('service_account_id')
+        if email_addr and service_account_id:
+            senders.append({'email': email_addr, 'name': (item.get('name') or '').strip(), 'service_account_id': int(service_account_id)})
+    service_account_ids = []
+    for value in data.get('service_account_ids', []):
+        try:
+            account_id = int(value)
+        except (TypeError, ValueError):
+            continue
+        if account_id and account_id not in service_account_ids:
+            service_account_ids.append(account_id)
+    max_per_account = data.get('max_per_account')
+    try:
+        max_per_account = int(max_per_account) if str(max_per_account or '').strip() else None
+    except (TypeError, ValueError):
+        max_per_account = None
+    if service_account_ids:
+        accounts = ServiceAccount.query.filter(ServiceAccount.id.in_(service_account_ids)).all()
+        expanded_senders, expansion_errors = _retrieve_workspace_senders_from_service_accounts(accounts, max_per_account=max_per_account)
+        existing = {sender['email'] for sender in senders}
+        for sender in expanded_senders:
+            if sender['email'] not in existing:
+                senders.append({'email': sender['email'], 'name': sender.get('name') or '', 'service_account_id': sender['service_account_id']})
+                existing.add(sender['email'])
+        if expansion_errors and not expanded_senders:
+            return jsonify({'success': False, 'error': f"Could not retrieve users from selected Workspace sources: {expansion_errors[0].get('error', 'Unknown error')}"}), 400
+    if not senders:
+        return jsonify({'success': False, 'error': 'Select Workspace users or account sources first'}), 400
+
+    inbox_ids = []
+    for value in data.get('inbox_account_ids', []):
+        try:
+            inbox_ids.append(int(value))
+        except (TypeError, ValueError):
+            continue
+    inboxes = InboxImapAccount.query.filter(InboxImapAccount.id.in_(inbox_ids)).all()
+    if not inboxes:
+        return jsonify({'success': False, 'error': 'Select at least one connected receiving inbox'}), 400
+    strategy = (data.get('strategy') or 'distributed').strip().lower()
+    if strategy not in {'distributed', 'full_matrix'}:
+        strategy = 'distributed'
+    try:
+        inbox_threshold = min(100, max(1, int(data.get('inbox_threshold') or 80)))
+    except (TypeError, ValueError):
+        inbox_threshold = 80
+    try:
+        spam_threshold = min(99, max(0, int(data.get('spam_threshold') or 40)))
+    except (TypeError, ValueError):
+        spam_threshold = 40
+    try:
+        minimum_observations = min(500, max(1, int(data.get('minimum_observations') or 10)))
+    except (TypeError, ValueError):
+        minimum_observations = 10
+    test_id = f"AT-{uuid.uuid4().hex[:8].upper()}"
+    name = (data.get('name') or f"Automated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}").strip()
+    if not name.lower().startswith('automated:'):
+        name = f'Automated: {name}'
+    total_operations = len(sources) * len(senders) * len(inboxes) if strategy == 'full_matrix' else len(sources) * len(senders)
+    test = InboxDeliverabilityTest(
+        test_id=test_id,
+        name=name,
+        subject='Automated Email Test',
+        status='QUEUED',
+        total_messages=total_operations,
+        sent_count=0,
+        inbox_count=0,
+        spam_count=0,
+        pending_count=0,
+        failed_count=0,
+        test_type='automated',
+        strategy=strategy,
+        total_email_sources=len(sources),
+        total_users=len(senders),
+        total_recipients=len(inboxes),
+        inbox_threshold=inbox_threshold,
+        spam_threshold=spam_threshold,
+        minimum_observations=minimum_observations,
+        created_by=session.get('user')
+    )
+    db.session.add(test)
+    db.session.flush()
+    rows_created = 0
+    for source in sources:
+        recipient_pool = inboxes if strategy == 'full_matrix' else [inboxes[rows_created % len(inboxes)]]
+        for sender_info in senders:
+            for inbox in recipient_pool:
+                identifier = f"{test_id}-{source.id}-{uuid.uuid4().hex[:6].upper()}"
+                row = InboxDeliverabilityMessage(
+                    test_id=test_id,
+                    source_email_id=source.id,
+                    workspace_sender=sender_info['email'],
+                    imap_account_id=inbox.id,
+                    recipient=inbox.email.lower(),
+                    test_identifier=identifier,
+                    subject=source.original_subject,
+                    status='QUEUED',
+                    placement='PENDING'
+                )
+                db.session.add(row)
+                rows_created += 1
+        source.status = 'IN_TEST'
+        source.last_test_id = test_id
+    test.total_messages = rows_created
+    db.session.commit()
+    threading.Thread(target=_send_automated_test_messages_async, args=(test_id, senders, data.get('custom_headers') or ''), daemon=True).start()
+    return jsonify({'success': True, 'test_id': test_id, 'queued': rows_created, 'message': f'Automated test queued with {rows_created} operation(s).'})
+
+@app.route('/api/inbox-intelligence/automated-tests/<test_id>/results', methods=['GET'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_automated_test_results(test_id):
+    test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
+    if not test:
+        return jsonify({'success': False, 'error': 'Automated test not found'}), 404
+    source_results = _automated_source_rollups(test_id)
+    verdict_counts = {'INBOX': 0, 'MIXED': 0, 'SPAM': 0, 'PENDING': 0, 'INSUFFICIENT_DATA': 0}
+    for item in source_results:
+        verdict_counts[item['verdict']] = verdict_counts.get(item['verdict'], 0) + 1
+    return jsonify({'success': True, 'test': {
+        'test_id': test.test_id,
+        'name': test.name,
+        'status': test.status,
+        'strategy': getattr(test, 'strategy', None),
+        'total_email_sources': getattr(test, 'total_email_sources', 0) or 0,
+        'total_users': getattr(test, 'total_users', 0) or 0,
+        'total_recipients': getattr(test, 'total_recipients', 0) or 0,
+        'total_messages': test.total_messages,
+        'sent_count': test.sent_count,
+        'inbox_count': test.inbox_count,
+        'spam_count': test.spam_count,
+        'pending_count': test.pending_count,
+        'failed_count': test.failed_count,
+        'created_at': test.created_at.isoformat() + 'Z' if test.created_at else None,
+        'source_results': source_results,
+        'verdict_counts': verdict_counts,
+    }})
 
 def _detect_message_placement(inbox, identifier):
     folders = ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk', 'Bulk Mail']
@@ -2480,8 +2915,13 @@ def api_inbox_poll_test(test_id):
             for row in rows:
                 row.error_message = str(e)
     _refresh_deliverability_counts(test)
+    _update_automated_source_statuses(test.test_id)
     db.session.commit()
-    return jsonify({'success': True, 'sync_errors': sync_errors, 'diagnostic': diagnostic, 'test': {'test_id': test.test_id, 'status': test.status, 'inbox_count': test.inbox_count, 'spam_count': test.spam_count, 'pending_count': test.pending_count, 'failed_count': test.failed_count, 'sent_count': test.sent_count}})
+    source_results = _automated_source_rollups(test.test_id)
+    verdict_counts = {'INBOX': 0, 'MIXED': 0, 'SPAM': 0, 'PENDING': 0, 'INSUFFICIENT_DATA': 0}
+    for item in source_results:
+        verdict_counts[item['verdict']] = verdict_counts.get(item['verdict'], 0) + 1
+    return jsonify({'success': True, 'sync_errors': sync_errors, 'diagnostic': diagnostic, 'source_results': source_results, 'verdict_counts': verdict_counts, 'test': {'test_id': test.test_id, 'status': test.status, 'inbox_count': test.inbox_count, 'spam_count': test.spam_count, 'pending_count': test.pending_count, 'failed_count': test.failed_count, 'sent_count': test.sent_count}})
 
 @app.route('/api/inbox-intelligence/tests/<test_id>', methods=['GET'])
 @login_required
@@ -2507,10 +2947,13 @@ def api_inbox_test_detail(test_id):
         'created_at': test.created_at.isoformat() + 'Z' if test.created_at else None,
         'completed_at': test.completed_at.isoformat() + 'Z' if test.completed_at else None,
         'created_by': test.created_by,
+        'test_type': getattr(test, 'test_type', None) or ('automated' if test.test_id.startswith('AT-') else 'user_inbox'),
+        'source_results': _automated_source_rollups(test.test_id),
         'messages': [{
             'sender': m.workspace_sender,
             'recipient': m.recipient,
             'imap_account_id': m.imap_account_id,
+            'source_email_id': m.source_email_id,
             'test_identifier': m.test_identifier,
             'placement': m.placement,
             'folder': m.folder,
