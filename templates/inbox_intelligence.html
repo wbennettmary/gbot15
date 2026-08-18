@@ -2446,13 +2446,20 @@ merge_recipe_id, content_blueprint_id</pre>
             return;
         }
         container.className = '';
-        container.innerHTML = iiState.imapAccounts.map((account) => `
+        container.innerHTML = iiState.imapAccounts.map((account) => {
+            const statusClass = account.connection_status === 'connected' ? 'green' : account.connection_status === 'syncing' ? 'blue' : account.connection_status === 'error' ? 'red' : 'gray';
+            const errorHtml = account.last_error ? `<div class="ii-inbox-error" id="inboxError${account.id}" style="display:none;cursor:pointer" onclick="document.getElementById('inboxErrorDetail${account.id}').classList.toggle('d-none')"><div class="text-danger" style="word-break:break-all">${escapeHtml(account.last_error)}</div></div><button class="ii-btn" type="button" style="font-size:0.75em;color:#f87171" title="${escapeHtml(account.last_error).replace(/"/g, '&quot;')}" onclick="document.getElementById('inboxError${account.id}').style.display = document.getElementById('inboxError${account.id}').style.display === 'none' ? 'block' : 'none'"><i class="fas fa-triangle-exclamation"></i> Error</button>` : '';
+            const timeAgo = account.last_synced_at ? _timeAgo(new Date(account.last_synced_at)) : 'Never';
+            return `
             <div class="ii-inbox-card">
                 <div class="ii-provider"><i class="fas fa-inbox"></i></div>
                 <div style="flex:1;min-width:0">
                     <div class="d-flex align-items-center gap-2">
                         <strong>${escapeHtml(account.email)}</strong>
-                        <span class="ii-chip ${account.connection_status === 'connected' ? 'green' : account.connection_status === 'syncing' ? 'blue' : account.connection_status === 'error' ? 'red' : 'gray'}">${escapeHtml(account.connection_status || 'configured')}</span>
+                        <span class="ii-chip ${statusClass}">${escapeHtml(account.connection_status || 'configured')}</span>
+                        <label class="ii-toggle-label" style="font-size:0.8em;margin-left:auto;cursor:pointer" title="Auto-sync every 15 minutes">
+                            <input type="checkbox" ${account.auto_sync_enabled ? 'checked' : ''} onchange="toggleAccountAutoSync(${account.id}, this.checked)" style="margin-right:4px"> auto-sync
+                        </label>
                     </div>
                     <div class="ii-muted" style="font-size:0.85em">${escapeHtml(account.provider)} &middot; ${escapeHtml(account.imap_host)}:${account.imap_port}</div>
                     <div class="ii-row mt-1" style="flex-wrap:wrap;gap:4px">
@@ -2460,15 +2467,24 @@ merge_recipe_id, content_blueprint_id</pre>
                         <span class="ii-chip gray" style="font-size:0.75em">Spam: ${account.spam_count || 0}</span>
                         <span class="ii-chip gray" style="font-size:0.75em">Total: ${account.message_count || 0}</span>
                         <span class="ii-chip gray" style="font-size:0.75em">${account.folder_count || 0} folders</span>
-                        ${account.auto_sync_enabled ? '<span class="ii-chip green" style="font-size:0.75em">auto-sync</span>' : ''}
                     </div>
-                    <div class="ii-muted" style="font-size:0.8em">${account.last_synced_at ? 'Synced ' + new Date(account.last_synced_at).toLocaleString() : 'Never synced'}${account.last_error ? ' &middot; <span class="text-danger">' + escapeHtml(account.last_error).slice(0,80) + '</span>' : ''}</div>
+                    <div class="ii-muted" style="font-size:0.8em">Synced ${timeAgo}${errorHtml}</div>
                 </div>
                 <div class="ii-actions">
+                    <button class="ii-btn" type="button" title="Test connection" onclick="testImapConnection(${account.id})"><i class="fas fa-plug"></i></button>
                     <button class="ii-btn" type="button" title="Sync now" onclick="syncImapAccount(${account.id})"><i class="fas fa-rotate"></i></button>
                     <button class="ii-btn" type="button" title="Remove" onclick="deleteImapAccount(${account.id})"><i class="fas fa-trash"></i></button>
                 </div>
-            </div>`).join('');
+            </div>`;
+        }).join('');
+    }
+
+    function _timeAgo(date) {
+        const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+        if (seconds < 60) return 'just now';
+        if (seconds < 3600) return Math.floor(seconds / 60) + 'm ago';
+        if (seconds < 86400) return Math.floor(seconds / 3600) + 'h ago';
+        return Math.floor(seconds / 86400) + 'd ago';
     }
 
     function renderInboxSourceSelector() {
@@ -2623,10 +2639,10 @@ merge_recipe_id, content_blueprint_id</pre>
         if (btn) { btn.disabled = true; btn.innerHTML = '<span class="ii-spinner" aria-hidden="true"></span> Syncing...'; }
         status.textContent = `Syncing ${iiState.imapAccounts.length} account(s)...`;
         try {
-            const data = await iiFetch('/api/inbox-intelligence/explorer/sync', {
+            const data = await iiFetch('/api/inbox-intelligence/imap-accounts/sync-all', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({account_ids: iiState.imapAccounts.map(a => a.id), folders: ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk'], limit: 80})
+                body: JSON.stringify({account_ids: iiState.imapAccounts.map(a => a.id)})
             });
             status.textContent = `Sync complete: ${data.synced || 0} message(s) synced.`;
             await loadImapAccounts();
@@ -2673,6 +2689,28 @@ merge_recipe_id, content_blueprint_id</pre>
             body: JSON.stringify({limit: 80})
         });
         await loadImapAccounts();
+    }
+
+    async function testImapConnection(id) {
+        const card = document.querySelector(`[onclick="testImapConnection(${id})"]`);
+        if (card) { card.disabled = true; card.innerHTML = '<span class="ii-spinner" aria-hidden="true"></span>'; }
+        try {
+            const data = await iiFetch(`/api/inbox-intelligence/imap-accounts/${id}/test`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'});
+            alert(data.message || 'Connection OK');
+        } catch (err) {
+            alert('Connection failed: ' + err.message);
+        } finally {
+            if (card) { card.disabled = false; card.innerHTML = '<i class="fas fa-plug"></i>'; }
+            await loadImapAccounts();
+        }
+    }
+
+    async function toggleAccountAutoSync(id, enabled) {
+        await iiFetch(`/api/inbox-intelligence/imap-accounts/${id}/auto-sync`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({enabled})
+        });
     }
 
     async function syncExplorerAccounts() {

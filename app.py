@@ -1461,6 +1461,85 @@ def api_explorer_folders():
     folders = sorted([{'folder': v['folder'], 'count': v['count'], 'account_ids': list(v['account_ids'])} for v in folder_counts.values()], key=lambda x: -x['count'])
     return jsonify({'success': True, 'folders': folders})
 
+@app.route('/api/inbox-intelligence/imap-accounts/<int:account_id>/test', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_test_connection(account_id):
+    account = InboxImapAccount.query.get(account_id)
+    if not account:
+        return jsonify({'success': False, 'error': 'IMAP account not found'}), 404
+    conn = None
+    try:
+        password = _unprotect_secret(account.encrypted_password)
+        if account.tls_enabled:
+            conn = imaplib.IMAP4_SSL(account.imap_host, int(account.imap_port or 993), ssl_context=ssl.create_default_context())
+        else:
+            conn = imaplib.IMAP4(account.imap_host, int(account.imap_port or 143))
+        conn.login(account.username, password)
+        status, folder_data = conn.list()
+        folders = []
+        if status == 'OK' and folder_data:
+            for f in folder_data:
+                if isinstance(f, bytes):
+                    parts = f.decode(errors='replace').split(' "/" ')
+                    if len(parts) > 1:
+                        folders.append(parts[1].strip('"'))
+        account.connection_status = 'connected'
+        account.last_error = None
+        db.session.commit()
+        return jsonify({'success': True, 'message': f'Connected successfully. {len(folders)} folder(s) found.', 'folders': folders})
+    except Exception as e:
+        account.connection_status = 'error'
+        account.last_error = f'Connection test failed: {e}'
+        db.session.commit()
+        return jsonify({'success': False, 'error': str(e)}), 400
+    finally:
+        try:
+            if conn:
+                conn.close()
+                conn.logout()
+        except Exception:
+            pass
+
+@app.route('/api/inbox-intelligence/imap-accounts/<int:account_id>/auto-sync', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_toggle_auto_sync(account_id):
+    account = InboxImapAccount.query.get(account_id)
+    if not account:
+        return jsonify({'success': False, 'error': 'IMAP account not found'}), 404
+    data = request.get_json(silent=True) or {}
+    account.auto_sync_enabled = bool(data.get('enabled', True))
+    db.session.commit()
+    return jsonify({'success': True, 'account': _serialize_imap_account(account)})
+
+@app.route('/api/inbox-intelligence/imap-accounts/sync-all', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_sync_all():
+    data = request.get_json(silent=True) or {}
+    account_ids = data.get('account_ids')
+    if account_ids:
+        accounts = InboxImapAccount.query.filter(InboxImapAccount.id.in_(account_ids)).all()
+    else:
+        accounts = InboxImapAccount.query.filter_by(auto_sync_enabled=True).all()
+    if not accounts:
+        return jsonify({'success': True, 'synced': 0, 'message': 'No accounts to sync.'})
+    since = _date_range_to_imap_since(data.get('date_range') or '2d')
+    results = []
+    for account in accounts:
+        account_synced = 0
+        account_errors = []
+        for folder in ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk']:
+            synced, error = _sync_imap_account(account, folder=folder, limit=80, mark_errors=(folder == 'INBOX'), since=since)
+            account_synced += synced
+            if error:
+                account_errors.append(f'{folder}: {error}')
+        results.append({'account_id': account.id, 'email': account.email, 'synced': account_synced, 'errors': account_errors})
+    total_synced = sum(r['synced'] for r in results)
+    all_errors = [err for r in results for err in r['errors']]
+    return jsonify({'success': True, 'synced': total_synced, 'results': results, 'errors': all_errors})
+
 @app.route('/api/inbox-intelligence/imap-accounts/<int:account_id>', methods=['DELETE'])
 @login_required
 @permission_required('inbox_intelligence')
@@ -16750,7 +16829,61 @@ def api_debug_used_domains():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
+
+_INBOX_AUTO_SYNC_INTERVAL = 900  # 15 minutes
+_inbox_auto_sync_thread = None
+_inbox_auto_sync_lock_fd = None
+
+def _inbox_auto_sync_loop():
+    """Background thread: periodically sync all accounts with auto_sync_enabled=True."""
+    while True:
+        try:
+            time.sleep(_INBOX_AUTO_SYNC_INTERVAL)
+            with app.app_context():
+                accounts = InboxImapAccount.query.filter_by(auto_sync_enabled=True).all()
+                if not accounts:
+                    continue
+                app.logger.info(f"[AUTO-SYNC] Syncing {len(accounts)} account(s)")
+                for account in accounts:
+                    try:
+                        for folder in ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk']:
+                            _sync_imap_account(account, folder=folder, limit=50, mark_errors=(folder == 'INBOX'))
+                        app.logger.info(f"[AUTO-SYNC] {account.email}: synced OK")
+                    except Exception as e:
+                        app.logger.warning(f"[AUTO-SYNC] {account.email}: {e}")
+        except Exception as e:
+            try:
+                app.logger.error(f"[AUTO-SYNC] thread error: {e}")
+            except Exception:
+                pass
+
+@app.before_request
+def _maybe_start_inbox_auto_sync():
+    """Start the auto-sync background thread once, in only one worker process."""
+    global _inbox_auto_sync_thread, _inbox_auto_sync_lock_fd
+    if _inbox_auto_sync_thread and _inbox_auto_sync_thread.is_alive():
+        return
+    if _inbox_auto_sync_lock_fd is not None:
+        return
+    lock_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.inbox_auto_sync.lock')
+    try:
+        import fcntl
+        fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o644)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            os.close(fd)
+            return
+        _inbox_auto_sync_lock_fd = fd
+        _inbox_auto_sync_thread = threading.Thread(target=_inbox_auto_sync_loop, daemon=True, name='InboxAutoSync')
+        _inbox_auto_sync_thread.start()
+    except Exception:
+        pass
+
+
 if __name__ == '__main__':
+    _inbox_auto_sync_thread = threading.Thread(target=_inbox_auto_sync_loop, daemon=True, name='InboxAutoSync')
+    _inbox_auto_sync_thread.start()
     app.run(debug=True)
 
 # Force Reload: v2.5.1
