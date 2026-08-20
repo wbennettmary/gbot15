@@ -2620,8 +2620,7 @@ merge_recipe_id, content_blueprint_id</pre>
         renderAutomatedInboxSelector();
         syncRecipientInputFromSelectedInboxes();
         updateAutomatedSummary();
-        loadExplorerFolders();
-        loadExplorerMessages();
+        await Promise.allSettled([loadExplorerFolders(), loadExplorerMessages()]);
     }
 
     function toggleAddInboxForm() {
@@ -2646,6 +2645,8 @@ merge_recipe_id, content_blueprint_id</pre>
             });
             status.textContent = `Sync complete: ${data.synced || 0} message(s) synced.`;
             await loadImapAccounts();
+            await loadExplorerFolders();
+            await loadExplorerMessages();
         } catch (err) {
             status.textContent = `Sync failed: ${err.message}`;
         } finally {
@@ -2689,6 +2690,8 @@ merge_recipe_id, content_blueprint_id</pre>
             body: JSON.stringify({limit: 80})
         });
         await loadImapAccounts();
+        await loadExplorerFolders();
+        await loadExplorerMessages();
     }
 
     async function testImapConnection(id) {
@@ -2741,7 +2744,8 @@ merge_recipe_id, content_blueprint_id</pre>
             const errCount = (data.errors || []).length;
             status.textContent = `Sync complete: ${totalSynced} message(s) synced${errCount ? `, ${errCount} folder(s) had errors` : ''}.`;
             await loadImapAccounts();
-            try { await loadExplorerMessages(); } catch(e) { console.error('Failed to reload messages:', e); }
+            await loadExplorerFolders();
+            await loadExplorerMessages();
         } catch (err) {
             status.textContent = `Sync failed: ${err.message}`;
         } finally {

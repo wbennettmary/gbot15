@@ -1375,6 +1375,88 @@ def _cleanup_old_inbox_email_messages(days=30):
     cutoff = datetime.utcnow() - timedelta(days=days)
     return InboxEmailMessage.query.filter(InboxEmailMessage.synced_at < cutoff).delete(synchronize_session=False)
 
+def _account_sync_since(account, since=None, default_days=2):
+    """Compute the IMAP SINCE date string ONCE per account (must not be re-derived
+    from last_synced_at per-folder or later folders would only get a tiny window).
+    'since' may be an explicit IMAP date string; otherwise falls back to the last
+    sync minus a margin, or a default window when never synced."""
+    if since:
+        return since
+    if account.last_synced_at:
+        return (account.last_synced_at - timedelta(minutes=5)).strftime('%d-%b-%Y')
+    return (datetime.utcnow() - timedelta(days=default_days)).strftime('%d-%b-%Y')
+
+def _sync_imap_account_folders(account, folders, limit=80, since=None):
+    """Sync MULTIPLE folders for an account using ONE IMAP connection and ONE shared
+    SINCE window. Batch header-only fetch (fast). Updates last_synced_at once at the
+    end so every folder keeps the full since window. Returns (total_synced, errors)."""
+    conn = None
+    total_synced = 0
+    errors = []
+    shared_since = _account_sync_since(account, since)
+    lock = _get_account_sync_lock(account.id)
+    if not lock.acquire(blocking=False):
+        return 0, [f'Sync already in progress for this account']
+    try:
+        account.connection_status = 'syncing'
+        account.last_error = None
+        db.session.commit()
+        conn = _imap_connect(account)
+        conn.sock.settimeout(15) if getattr(conn, 'sock', None) else None
+        try:
+            folders_status, folders_data = conn.list()
+            account.folder_count = len(folders_data or []) if folders_status == 'OK' else account.folder_count
+        except Exception:
+            pass
+        for folder in folders:
+            try:
+                status, data = conn.select(folder, readonly=True)
+                if status != 'OK':
+                    errors.append(f'{folder}: folder not found')
+                    continue
+                s, data = conn.uid('search', None, f'SINCE {shared_since}')
+                if s != 'OK' or not data or not data[0]:
+                    continue
+                uids = (data[0] or b'').split()[-int(limit):]
+                if not uids:
+                    continue
+                headers = _imap_fetch_headers_batch(conn, uids, folder)
+                for hdr in headers:
+                    _upsert_imap_message_from_header(account, folder, hdr)
+                    total_synced += 1
+            except Exception as e:
+                errors.append(f'{folder}: {e}')
+        account.last_synced_at = datetime.utcnow()
+        account.connection_status = 'connected'
+        account.message_count = InboxEmailMessage.query.filter_by(imap_account_id=account.id).count()
+        account.inbox_count = InboxEmailMessage.query.filter_by(imap_account_id=account.id, folder='INBOX').count()
+        account.spam_count = InboxEmailMessage.query.filter(
+            InboxEmailMessage.imap_account_id == account.id,
+            InboxEmailMessage.folder.ilike('%spam%')
+        ).count()
+        deleted_old = _cleanup_old_inbox_email_messages()
+        db.session.commit()
+        app.logger.info(f"[SYNC] {account.email}: synced {total_synced} message(s) across {len(folders)} folder(s) (since {shared_since})")
+        return total_synced, errors
+    except Exception as e:
+        db.session.rollback()
+        account.connection_status = 'error'
+        account.last_error = str(e)
+        try:
+            db.session.add(account)
+            db.session.commit()
+        except Exception:
+            pass
+        return total_synced, errors + [f'connection: {e}']
+    finally:
+        try:
+            if conn:
+                conn.close()
+                conn.logout()
+        except Exception:
+            pass
+        lock.release()
+
 def _sync_imap_account(account, folder='INBOX', limit=50, mark_errors=True, since=None):
     conn = None
     synced = 0
@@ -1482,9 +1564,10 @@ def api_inbox_sync_account(account_id):
     if not account:
         return jsonify({'success': False, 'error': 'IMAP account not found'}), 404
     data = request.get_json(silent=True) or {}
-    synced, error = _sync_imap_account(account, folder=data.get('folder') or 'INBOX', limit=min(200, int(data.get('limit') or 50)))
-    if error:
-        return jsonify({'success': False, 'error': error, 'account': _serialize_imap_account(account)}), 400
+    folders = data.get('folders') or ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk']
+    synced, errors = _sync_imap_account_folders(account, folders, limit=min(200, int(data.get('limit') or 80)))
+    if errors:
+        return jsonify({'success': True, 'synced': synced, 'errors': errors, 'account': _serialize_imap_account(account)})
     return jsonify({'success': True, 'synced': synced, 'account': _serialize_imap_account(account)})
 
 @app.route('/api/inbox-intelligence/explorer/sync', methods=['POST'])
@@ -1496,19 +1579,15 @@ def api_explorer_bulk_sync():
     limit = min(200, max(10, int(data.get('limit') or 80)))
     folders = data.get('folders') or ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk']
     since = _date_range_to_imap_since(data.get('date_range') or '')
+    if not since:
+        since = (datetime.utcnow() - timedelta(days=30)).strftime('%d-%b-%Y')
     if not account_ids:
         accounts = InboxImapAccount.query.all()
     else:
         accounts = InboxImapAccount.query.filter(InboxImapAccount.id.in_(account_ids)).all()
     results = []
     for account in accounts:
-        account_synced = 0
-        account_errors = []
-        for folder in folders:
-            synced, error = _sync_imap_account(account, folder=folder, limit=limit, mark_errors=(folder == 'INBOX'), since=since)
-            account_synced += synced
-            if error:
-                account_errors.append(f'{folder}: {error}')
+        account_synced, account_errors = _sync_imap_account_folders(account, folders, limit=limit, since=since)
         results.append({'account_id': account.id, 'email': account.email, 'synced': account_synced, 'errors': account_errors})
     total_synced = sum(r['synced'] for r in results)
     all_errors = [err for r in results for err in r['errors']]
@@ -1597,13 +1676,7 @@ def api_inbox_sync_all():
     since = _date_range_to_imap_since(data.get('date_range') or '2d')
     results = []
     for account in accounts:
-        account_synced = 0
-        account_errors = []
-        for folder in ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk']:
-            synced, error = _sync_imap_account(account, folder=folder, limit=80, mark_errors=(folder == 'INBOX'), since=since)
-            account_synced += synced
-            if error:
-                account_errors.append(f'{folder}: {error}')
+        account_synced, account_errors = _sync_imap_account_folders(account, ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk'], limit=80, since=since)
         results.append({'account_id': account.id, 'email': account.email, 'synced': account_synced, 'errors': account_errors})
     total_synced = sum(r['synced'] for r in results)
     all_errors = [err for r in results for err in r['errors']]
@@ -16871,9 +16944,11 @@ def _inbox_auto_sync_loop():
                     try:
                         if account.last_synced_at and (now - account.last_synced_at).total_seconds() < 600:
                             continue
-                        for folder in ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk']:
-                            _sync_imap_account(account, folder=folder, limit=50, mark_errors=(folder == 'INBOX'))
-                        app.logger.info(f"[AUTO-SYNC] {account.email}: synced OK")
+                        synced, errors = _sync_imap_account_folders(account, ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk'], limit=50)
+                        if errors:
+                            app.logger.warning(f"[AUTO-SYNC] {account.email}: {errors}")
+                        else:
+                            app.logger.info(f"[AUTO-SYNC] {account.email}: synced OK ({synced} messages)")
                     except Exception as e:
                         app.logger.warning(f"[AUTO-SYNC] {account.email}: {e}")
         except Exception as e:
