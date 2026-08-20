@@ -1175,7 +1175,7 @@ _inbox_sync_locks = {}  # account_id -> threading.Lock
 _inbox_sync_locks_lock = threading.Lock()  # protects _inbox_sync_locks dict itself
 
 # Header-only fetch: lightweight, no body content
-IMAP_HEADER_FETCH = '(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID X-TEST-ID X-TEST-BATCH-ID X-TEST-SOURCE-ID FROM TO SUBJECT DATE)])'
+IMAP_HEADER_FETCH = '(UID BODY.PEEK[HEADER.FIELDS (MESSAGE-ID X-TEST-ID X-TEST-BATCH-ID X-TEST-SOURCE-ID FROM TO SUBJECT DATE)])'
 
 # Folders to scan for test results
 TEST_RESULT_FOLDERS = ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk', 'Bulk Mail', 'Promotions', 'Updates', 'Social']
@@ -1428,6 +1428,10 @@ def _sync_imap_account_folders(account, folders, limit=80, since=None):
                 errors.append(f'{folder}: {e}')
         account.last_synced_at = datetime.utcnow()
         account.connection_status = 'connected'
+        InboxEmailMessage.query.filter(
+            InboxEmailMessage.imap_account_id == account.id,
+            InboxEmailMessage.uid.in_(['0', ''])
+        ).delete(synchronize_session=False)
         account.message_count = InboxEmailMessage.query.filter_by(imap_account_id=account.id).count()
         account.inbox_count = InboxEmailMessage.query.filter_by(imap_account_id=account.id, folder='INBOX').count()
         account.spam_count = InboxEmailMessage.query.filter(
@@ -2931,14 +2935,18 @@ def _imap_fetch_headers_batch(conn, uids, folder):
             continue
         if fetch_status != 'OK' or not fetch_data:
             continue
+        position = 0
         for item in fetch_data:
             if not isinstance(item, tuple) or len(item) != 2:
                 continue
             tag_line, raw_header = item
             if not raw_header:
                 continue
-            uid_match = re.match(rb'^\*?\s*(\d+)\s+FETCH', tag_line) if isinstance(tag_line, bytes) else re.match(r'^\*?\s*(\d+)\s+FETCH', tag_line)
+            uid_match = re.search(rb'UID\s+(\d+)', tag_line) if isinstance(tag_line, bytes) else re.search(r'UID\s+(\d+)', tag_line)
             uid_val = int(uid_match.group(1)) if uid_match else 0
+            if not uid_val and position < len(batch):
+                uid_val = int(batch[position])
+            position += 1
             try:
                 hdr = _parse_header(raw_header)
                 hdr['uid'] = uid_val
@@ -2996,6 +3004,10 @@ def _sync_test_inbox_folders(inbox, limit=80, since=None, identifiers=None):
         inbox.last_synced_at = datetime.utcnow()
         inbox.connection_status = 'connected'
         inbox.last_error = None
+        InboxEmailMessage.query.filter(
+            InboxEmailMessage.imap_account_id == inbox.id,
+            InboxEmailMessage.uid.in_(['0', ''])
+        ).delete(synchronize_session=False)
         inbox.message_count = InboxEmailMessage.query.filter_by(imap_account_id=inbox.id).count()
         inbox.inbox_count = InboxEmailMessage.query.filter_by(imap_account_id=inbox.id, folder='INBOX').count()
         inbox.spam_count = InboxEmailMessage.query.filter(
