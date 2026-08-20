@@ -451,7 +451,6 @@ with app.app_context():
         columns = [col['name'] for col in inspector.get_columns('user')]
         
         if 'last_login' not in columns:
-            logging.info("Adding missing 'last_login' column to user table...")
             # Add the column
             with db.engine.connect() as conn:
                 if 'postgresql' in str(db.engine.url):
@@ -466,6 +465,26 @@ with app.app_context():
             logging.debug("Column 'last_login' already exists")
     except Exception as e:
         logging.warning(f"Could not auto-migrate last_login column: {e}")
+        try:
+            db.session.rollback()
+        except:
+            pass
+
+    # Auto-migration: Add is_read / uid_validity columns to inbox_email_message
+    try:
+        from sqlalchemy import inspect as _ii_inspect
+        _ii_inspector = _ii_inspect(db.engine)
+        if 'inbox_email_message' in _ii_inspector.get_table_names():
+            _ii_columns = [col['name'] for col in _ii_inspector.get_columns('inbox_email_message')]
+            with db.engine.connect() as _ii_conn:
+                if 'uid_validity' not in _ii_columns:
+                    _ii_conn.execute(text('ALTER TABLE "inbox_email_message" ADD COLUMN uid_validity VARCHAR(64)'))
+                if 'is_read' not in _ii_columns:
+                    _ii_conn.execute(text('ALTER TABLE "inbox_email_message" ADD COLUMN is_read BOOLEAN DEFAULT FALSE'))
+                _ii_conn.commit()
+            logging.info("Inbox email message columns verified.")
+    except Exception as e:
+        logging.warning(f"Could not auto-migrate inbox_email_message columns: {e}")
         try:
             db.session.rollback()
         except:
@@ -1174,9 +1193,6 @@ INBOX_POLL_JOBS = {}  # kept for backward compat; actual storage uses InboxPollJ
 _inbox_sync_locks = {}  # account_id -> threading.Lock
 _inbox_sync_locks_lock = threading.Lock()  # protects _inbox_sync_locks dict itself
 
-# Header-only fetch: lightweight, no body content
-IMAP_HEADER_FETCH = '(UID BODY.PEEK[HEADER.FIELDS (MESSAGE-ID X-TEST-ID X-TEST-BATCH-ID X-TEST-SOURCE-ID FROM TO SUBJECT DATE)])'
-
 # Folders to scan for test results
 TEST_RESULT_FOLDERS = ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk', 'Bulk Mail', 'Promotions', 'Updates', 'Social']
 
@@ -1264,46 +1280,6 @@ def _imap_connect(account):
     conn.login(account.username, password)
     return conn
 
-def _upsert_imap_message_from_header(account, folder, hdr):
-    """Store a lightweight InboxEmailMessage from a parsed header dict.
-    Stores ALL messages (not just X-Test-ID) so fallback matching by subject/sender works."""
-    uid_value = str(hdr.get('uid', ''))
-    x_test_id = hdr.get('x_test_id')
-    existing = InboxEmailMessage.query.filter_by(
-        imap_account_id=account.id, folder=folder, uid=uid_value
-    ).first()
-    if not existing:
-        existing = InboxEmailMessage(imap_account_id=account.id, folder=folder, uid=uid_value)
-        db.session.add(existing)
-    existing.provider = account.provider
-    existing.message_id = hdr.get('message_id', '')
-    existing.sender = hdr.get('from', '')
-    existing.sender_domain = (hdr['from'].split('@')[-1].lower() if '@' in (hdr.get('from') or '') else '')
-    existing.recipient = hdr.get('to', '')
-    existing.subject = hdr.get('subject', '')
-    existing.preview = ''
-    existing.plain_text = ''
-    existing.html_content = ''
-    existing.headers_json = json.dumps({
-        'message_id': hdr.get('message_id'),
-        'x_test_id': x_test_id,
-        'x_test_batch_id': hdr.get('x_test_batch_id'),
-        'x_test_source_id': hdr.get('x_test_source_id'),
-    })
-    existing.x_test_id = x_test_id
-    existing.has_attachments = False
-    received_at = None
-    if hdr.get('date'):
-        try:
-            received_at = parsedate_to_datetime(hdr['date'])
-            if received_at and received_at.tzinfo:
-                received_at = received_at.replace(tzinfo=None)
-        except Exception:
-            received_at = None
-    existing.received_at = received_at
-    existing.synced_at = datetime.utcnow()
-    return existing
-
 def _serialize_imap_account(account):
     return {
         'id': account.id,
@@ -1321,11 +1297,84 @@ def _serialize_imap_account(account):
         'folder_count': account.folder_count or 0,
         'inbox_count': account.inbox_count or 0,
         'spam_count': account.spam_count or 0,
+        'unread_count': InboxEmailMessage.query.filter_by(imap_account_id=account.id, is_read=False).count(),
     }
 
-def _upsert_imap_message(account, folder, uid, raw_msg):
-    uid_value = uid.decode() if isinstance(uid, bytes) else str(uid)
-    msg = message_from_bytes(raw_msg)
+def _cleanup_old_inbox_email_messages(days=30):
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    return InboxEmailMessage.query.filter(InboxEmailMessage.synced_at < cutoff).delete(synchronize_session=False)
+
+def _imap_list_folders(conn):
+    """Real folder tree from an IMAP LIST response. Skips \\Noselect containers.
+    Returns folder name strings in server order."""
+    folders = []
+    try:
+        status, data = conn.list()
+    except Exception:
+        return folders
+    if status != 'OK' or not data:
+        return folders
+    for item in data:
+        if not isinstance(item, bytes):
+            continue
+        raw = item.decode('utf-8', errors='replace')
+        flags = ''
+        m = re.match(r'^\((?P<flags>[^)]*)\)', raw)
+        if m:
+            flags = m.group('flags').lower()
+            rest = raw[m.end():].strip()
+        else:
+            rest = raw
+        quoted = re.findall(r'"((?:[^"\\]|\\.)*)"', rest)
+        if quoted:
+            name = quoted[-1]
+        else:
+            name = rest.strip()
+        if not name:
+            continue
+        if '\\noselect' in flags:
+            continue
+        name = name.replace('\\"', '"').replace('\\\\', '\\')
+        if name and name not in folders:
+            folders.append(name)
+    return folders or ['INBOX']
+
+def _imap_select_folder(conn, folder):
+    """Select folder read-only. Returns dict(uidvalidity, uidnext, exists) or None."""
+    try:
+        status, data = conn.select(folder, readonly=True)
+        if status != 'OK':
+            return None
+    except Exception:
+        return None
+    meta = {'uidvalidity': None, 'uidnext': None, 'exists': 0}
+    for item in data or []:
+        if not isinstance(item, bytes):
+            continue
+        try:
+            s = item.decode('utf-8', errors='replace')
+        except Exception:
+            continue
+        m = re.search(r'UIDVALIDITY\s+(\d+)', s, re.I)
+        if m and not meta['uidvalidity']:
+            meta['uidvalidity'] = m.group(1)
+        m = re.search(r'UIDNEXT\s+(\d+)', s, re.I)
+        if m and meta['uidnext'] is None:
+            meta['uidnext'] = int(m.group(1))
+    try:
+        if data and isinstance(data[0], bytes):
+            meta['exists'] = int(data[0].decode(errors='ignore').strip() or 0)
+    except Exception:
+        pass
+    return meta
+
+def _parse_raw_message(uid_val, is_read, raw_body):
+    """Parse a full RFC822 body into a flat dict for _upsert_imap_message.
+    Returns None on failure."""
+    try:
+        msg = message_from_bytes(raw_body)
+    except Exception:
+        return None
     sender_raw = _decode_header_value(msg.get('From'))
     sender_email = parseaddr(sender_raw)[1]
     sender_domain = sender_email.split('@')[-1].lower() if '@' in sender_email else ''
@@ -1346,102 +1395,184 @@ def _upsert_imap_message(account, folder, uid, raw_msg):
     headers = {
         'message_id': _decode_header_value(msg.get('Message-ID')),
         'x_test_id': _decode_header_value(msg.get('X-Test-ID')),
+        'x_test_batch_id': _decode_header_value(msg.get('X-Test-Batch-ID')),
+        'x_test_source_id': _decode_header_value(msg.get('X-Test-Source-ID')),
         'authentication_results': _decode_header_value(msg.get('Authentication-Results')),
         'return_path': _decode_header_value(msg.get('Return-Path')),
         'content_type': _decode_header_value(msg.get('Content-Type')),
         'list_unsubscribe': _decode_header_value(msg.get('List-Unsubscribe')),
     }
-    existing = InboxEmailMessage.query.filter_by(imap_account_id=account.id, folder=folder, uid=uid_value).first()
+    return {
+        'uid': str(uid_val),
+        'is_read': bool(is_read),
+        'message_id': headers['message_id'],
+        'sender': sender_raw,
+        'sender_domain': sender_domain,
+        'recipient': recipient,
+        'subject': subject,
+        'preview': preview,
+        'plain_text': plain_text[:100000],
+        'html_content': html_content[:200000],
+        'has_attachments': has_attachments,
+        'received_at': received_at,
+        'headers': headers,
+    }
+
+def _upsert_imap_message_full(account, folder, parsed, uid_validity=None):
+    """Upsert a fully-parsed message dict into the InboxEmailMessage table."""
+    existing = InboxEmailMessage.query.filter_by(imap_account_id=account.id, folder=folder, uid=parsed['uid']).first()
     if not existing:
-        existing = InboxEmailMessage(imap_account_id=account.id, folder=folder, uid=uid_value)
+        existing = InboxEmailMessage(imap_account_id=account.id, folder=folder, uid=parsed['uid'])
         db.session.add(existing)
     existing.provider = account.provider
-    existing.message_id = headers['message_id']
-    existing.sender = sender_raw
-    existing.sender_domain = sender_domain
-    existing.recipient = recipient
-    existing.subject = subject
-    existing.preview = preview
-    existing.plain_text = plain_text[:100000] if plain_text else ''
-    existing.html_content = html_content[:200000] if html_content else ''
-    existing.headers_json = json.dumps(headers)
-    existing.x_test_id = headers['x_test_id'] or None
-    existing.has_attachments = has_attachments
-    existing.received_at = received_at
+    existing.message_id = parsed['message_id']
+    existing.sender = parsed['sender']
+    existing.sender_domain = parsed['sender_domain']
+    existing.recipient = parsed['recipient']
+    existing.subject = parsed['subject']
+    existing.preview = parsed['preview']
+    existing.plain_text = parsed['plain_text']
+    existing.html_content = parsed['html_content']
+    existing.headers_json = json.dumps(parsed['headers'])
+    existing.x_test_id = parsed['headers'].get('x_test_id') or None
+    existing.has_attachments = parsed['has_attachments']
+    existing.is_read = parsed['is_read']
+    existing.uid_validity = uid_validity or None
+    existing.received_at = parsed['received_at']
     existing.synced_at = datetime.utcnow()
     return existing
 
-def _cleanup_old_inbox_email_messages(days=30):
-    cutoff = datetime.utcnow() - timedelta(days=days)
-    return InboxEmailMessage.query.filter(InboxEmailMessage.synced_at < cutoff).delete(synchronize_session=False)
+def _imap_fetch_messages_batch(conn, uids, folder):
+    """Fetch full RFC822 bodies for a list of UIDs in batches. Returns a list of
+    fully-parsed message dicts (see _parse_raw_message)."""
+    results = []
+    if not uids:
+        return results
+    batch_size = 25
+    for i in range(0, len(uids), batch_size):
+        batch = uids[i:i + batch_size]
+        uid_range = b','.join(batch) if isinstance(batch[0], bytes) else ','.join(batch).encode()
+        try:
+            fetch_status, fetch_data = conn.uid('fetch', uid_range, '(UID FLAGS BODY.PEEK[])')
+        except Exception:
+            continue
+        if fetch_status != 'OK' or not fetch_data:
+            continue
+        position = 0
+        for item in fetch_data:
+            if not isinstance(item, tuple) or len(item) != 2:
+                continue
+            tag_line, raw_body = item
+            if not raw_body:
+                continue
+            uid_match = re.search(rb'UID\s+(\d+)', tag_line) if isinstance(tag_line, bytes) else re.search(r'UID\s+(\d+)', tag_line)
+            uid_val = int(uid_match.group(1)) if uid_match else 0
+            if not uid_val and position < len(batch):
+                uid_val = int(batch[position])
+            position += 1
+            is_read = b'\\Seen' in (tag_line if isinstance(tag_line, bytes) else tag_line.encode('utf-8', 'replace'))
+            parsed = _parse_raw_message(uid_val, is_read, raw_body)
+            if parsed:
+                results.append(parsed)
+    return results
 
-def _account_sync_since(account, since=None, default_days=2):
-    """Compute the IMAP SINCE date string ONCE per account (must not be re-derived
-    from last_synced_at per-folder or later folders would only get a tiny window).
-    'since' may be an explicit IMAP date string; otherwise falls back to the last
-    sync minus a margin, or a default window when never synced."""
-    if since:
-        return since
-    if account.last_synced_at:
-        return (account.last_synced_at - timedelta(minutes=5)).strftime('%d-%b-%Y')
-    return (datetime.utcnow() - timedelta(days=default_days)).strftime('%d-%b-%Y')
+def _folder_unread_count(account_id, folder):
+    return InboxEmailMessage.query.filter_by(imap_account_id=account_id, folder=folder, is_read=False).count()
 
-def _sync_imap_account_folders(account, folders, limit=80, since=None):
-    """Sync MULTIPLE folders for an account using ONE IMAP connection and ONE shared
-    SINCE window. Batch header-only fetch (fast). Updates last_synced_at once at the
-    end so every folder keeps the full since window. Returns (total_synced, errors)."""
+def _folder_message_count(account_id, folder):
+    return InboxEmailMessage.query.filter_by(imap_account_id=account_id, folder=folder).count()
+
+def _refresh_account_counts(account):
+    account.message_count = InboxEmailMessage.query.filter_by(imap_account_id=account.id).count()
+    account.inbox_count = InboxEmailMessage.query.filter_by(imap_account_id=account.id, folder='INBOX').count()
+    account.spam_count = InboxEmailMessage.query.filter(
+        InboxEmailMessage.imap_account_id == account.id,
+        InboxEmailMessage.folder.ilike('%spam%')
+    ).count()
+
+def _sync_mailbox_account(account, folders=None, limit=200, force_full=False):
+    """Sync ONE account across its real IMAP folders using incremental UID cursors.
+
+    Uses ImapFolderSyncState (uid_validity + last_seen_uid) so the second run only
+    downloads NEW messages. Fetches full RFC822 bodies so the mail panel shows real
+    content. One connection per account (per-account lock prevents concurrent runs).
+    Returns (total_synced, folder_results, errors)."""
     conn = None
     total_synced = 0
     errors = []
-    shared_since = _account_sync_since(account, since)
+    folder_results = []
     lock = _get_account_sync_lock(account.id)
     if not lock.acquire(blocking=False):
-        return 0, [f'Sync already in progress for this account']
+        return 0, [], ['Sync already in progress for this account']
     try:
         account.connection_status = 'syncing'
         account.last_error = None
         db.session.commit()
         conn = _imap_connect(account)
-        conn.sock.settimeout(15) if getattr(conn, 'sock', None) else None
         try:
-            folders_status, folders_data = conn.list()
-            account.folder_count = len(folders_data or []) if folders_status == 'OK' else account.folder_count
+            conn.sock.settimeout(30)
         except Exception:
             pass
-        for folder in folders:
+        all_folders = _imap_list_folders(conn)
+        account.folder_count = len(all_folders)
+        target_folders = folders or (all_folders or ['INBOX'])
+        for folder in target_folders:
             try:
-                status, data = conn.select(folder, readonly=True)
-                if status != 'OK':
-                    errors.append(f'{folder}: folder not found')
+                meta = _imap_select_folder(conn, folder)
+                if not meta:
+                    errors.append(f'{folder}: could not open folder')
                     continue
-                s, data = conn.uid('search', None, f'SINCE {shared_since}')
+                state = ImapFolderSyncState.query.filter_by(imap_account_id=account.id, folder_name=folder).first()
+                if not state:
+                    state = ImapFolderSyncState(imap_account_id=account.id, folder_name=folder)
+                    db.session.add(state)
+                if force_full or not state.uid_validity or str(state.uid_validity) != str(meta['uidvalidity']):
+                    state.uid_validity = str(meta['uidvalidity'])
+                    state.last_seen_uid = 0
+                start = int(state.last_seen_uid or 0) + 1
+                s, data = conn.uid('search', None, f'{start}:*')
                 if s != 'OK' or not data or not data[0]:
+                    state.sync_status = 'idle'
+                    state.last_sync_completed_at = datetime.utcnow()
+                    db.session.commit()
+                    folder_results.append({'folder': folder, 'synced': 0, 'unread': _folder_unread_count(account.id, folder), 'total': _folder_message_count(account.id, folder)})
                     continue
-                uids = (data[0] or b'').split()[-int(limit):]
+                uids = data[0].split()
                 if not uids:
+                    state.sync_status = 'idle'
+                    state.last_sync_completed_at = datetime.utcnow()
+                    db.session.commit()
                     continue
-                headers = _imap_fetch_headers_batch(conn, uids, folder)
-                for hdr in headers:
-                    _upsert_imap_message_from_header(account, folder, hdr)
-                    total_synced += 1
+                if limit and len(uids) > int(limit):
+                    uids = uids[-int(limit):]
+                messages = _imap_fetch_messages_batch(conn, uids, folder)
+                for parsed in messages:
+                    _upsert_imap_message_full(account, folder, parsed, uid_validity=str(meta['uidvalidity']))
+                total_synced += len(messages)
+                max_uid = max((int(u) for u in uids), default=0)
+                state.last_seen_uid = max(max_uid, state.last_seen_uid or 0)
+                state.sync_status = 'idle'
+                state.last_sync_completed_at = datetime.utcnow()
+                state.last_error = None
+                db.session.commit()
+                folder_results.append({'folder': folder, 'synced': len(messages), 'unread': _folder_unread_count(account.id, folder), 'total': _folder_message_count(account.id, folder)})
             except Exception as e:
+                db.session.rollback()
                 errors.append(f'{folder}: {e}')
+        try:
+            InboxEmailMessage.query.filter(
+                InboxEmailMessage.imap_account_id == account.id,
+                InboxEmailMessage.uid.in_(['0', ''])
+            ).delete(synchronize_session=False)
+        except Exception:
+            pass
+        _cleanup_old_inbox_email_messages()
         account.last_synced_at = datetime.utcnow()
         account.connection_status = 'connected'
-        InboxEmailMessage.query.filter(
-            InboxEmailMessage.imap_account_id == account.id,
-            InboxEmailMessage.uid.in_(['0', ''])
-        ).delete(synchronize_session=False)
-        account.message_count = InboxEmailMessage.query.filter_by(imap_account_id=account.id).count()
-        account.inbox_count = InboxEmailMessage.query.filter_by(imap_account_id=account.id, folder='INBOX').count()
-        account.spam_count = InboxEmailMessage.query.filter(
-            InboxEmailMessage.imap_account_id == account.id,
-            InboxEmailMessage.folder.ilike('%spam%')
-        ).count()
-        deleted_old = _cleanup_old_inbox_email_messages()
+        _refresh_account_counts(account)
         db.session.commit()
-        app.logger.info(f"[SYNC] {account.email}: synced {total_synced} message(s) across {len(folders)} folder(s) (since {shared_since})")
-        return total_synced, errors
+        app.logger.info(f"[SYNC] {account.email}: +{total_synced} message(s) across {len(folder_results)} folder(s)")
+        return total_synced, folder_results, errors
     except Exception as e:
         db.session.rollback()
         account.connection_status = 'error'
@@ -1451,7 +1582,7 @@ def _sync_imap_account_folders(account, folders, limit=80, since=None):
             db.session.commit()
         except Exception:
             pass
-        return total_synced, errors + [f'connection: {e}']
+        return total_synced, folder_results, errors + [f'connection: {e}']
     finally:
         try:
             if conn:
@@ -1461,59 +1592,16 @@ def _sync_imap_account_folders(account, folders, limit=80, since=None):
             pass
         lock.release()
 
-def _sync_imap_account(account, folder='INBOX', limit=50, mark_errors=True, since=None):
-    conn = None
-    synced = 0
-    if not since and account.last_synced_at:
-        since = (account.last_synced_at - timedelta(minutes=5)).strftime('%d-%b-%Y')
-    if not since:
-        since = (datetime.utcnow() - timedelta(days=2)).strftime('%d-%b-%Y')
-    try:
-        account.connection_status = 'syncing'
-        account.last_error = None
-        db.session.commit()
-        conn = _imap_connect(account)
-        folders_status, folders_data = conn.list()
-        account.folder_count = len(folders_data or []) if folders_status == 'OK' else account.folder_count
-        status, _ = conn.select(folder, readonly=True)
-        if status != 'OK':
-            raise RuntimeError(f"Could not open folder {folder}")
-        status, data = conn.uid('search', None, f'SINCE {since}')
-        if status != 'OK':
-            raise RuntimeError("Could not search mailbox")
-        uids = (data[0] or b'').split()[-int(limit):]
-        if uids:
-            headers = _imap_fetch_headers_batch(conn, uids, folder)
-            for hdr in headers:
-                _upsert_imap_message_from_header(account, folder, hdr)
-                synced += 1
-        deleted_old = _cleanup_old_inbox_email_messages()
-        account.last_synced_at = datetime.utcnow()
-        account.connection_status = 'connected'
-        account.message_count = InboxEmailMessage.query.filter_by(imap_account_id=account.id).count()
-        account.inbox_count = InboxEmailMessage.query.filter_by(imap_account_id=account.id, folder='INBOX').count()
-        account.spam_count = InboxEmailMessage.query.filter(
-            InboxEmailMessage.imap_account_id == account.id,
-            InboxEmailMessage.folder.ilike('%spam%')
-        ).count()
-        db.session.commit()
-        if deleted_old:
-            app.logger.info(f"Deleted {deleted_old} synced inbox email(s) older than 30 days")
-        return synced, None
-    except Exception as e:
-        db.session.rollback()
-        account.connection_status = 'error' if mark_errors else 'connected'
-        account.last_error = str(e) if mark_errors else account.last_error
-        db.session.add(account)
-        db.session.commit()
-        return synced, str(e)
-    finally:
-        try:
-            if conn:
-                conn.close()
-                conn.logout()
-        except Exception:
-            pass
+def _sync_mailbox_accounts(accounts, folders=None, limit=200):
+    """Sync multiple accounts, returning per-account results. Accounts with a lock
+    already held are skipped. Returns (results, all_errors)."""
+    results = []
+    all_errors = []
+    for account in accounts:
+        synced, folder_results, account_errors = _sync_mailbox_account(account, folders=folders, limit=limit)
+        results.append({'account_id': account.id, 'email': account.email, 'synced': synced, 'folders': folder_results, 'errors': account_errors})
+        all_errors.extend(account_errors)
+    return results, all_errors
 
 @app.route('/api/inbox-intelligence/imap-accounts', methods=['GET', 'POST'])
 @login_required
@@ -1554,9 +1642,9 @@ def api_inbox_imap_accounts():
     db.session.add(account)
     db.session.commit()
     if data.get('test_connection', True):
-        synced, error = _sync_imap_account(account, limit=min(10, int(data.get('sync_limit') or 10)))
-        if error:
-            return jsonify({'success': False, 'error': error, 'account': _serialize_imap_account(account)}), 400
+        synced, _folder_results, errors = _sync_mailbox_account(account, folders=['INBOX'], limit=min(int(data.get('sync_limit') or 10), 50))
+        if errors:
+            return jsonify({'success': False, 'error': '; '.join(errors), 'account': _serialize_imap_account(account)}), 400
         return jsonify({'success': True, 'message': f'Inbox saved and synchronized {synced} message(s).', 'account': _serialize_imap_account(account)})
     return jsonify({'success': True, 'message': 'Inbox saved.', 'account': _serialize_imap_account(account)})
 
@@ -1568,11 +1656,9 @@ def api_inbox_sync_account(account_id):
     if not account:
         return jsonify({'success': False, 'error': 'IMAP account not found'}), 404
     data = request.get_json(silent=True) or {}
-    folders = data.get('folders') or ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk']
-    synced, errors = _sync_imap_account_folders(account, folders, limit=min(200, int(data.get('limit') or 80)))
-    if errors:
-        return jsonify({'success': True, 'synced': synced, 'errors': errors, 'account': _serialize_imap_account(account)})
-    return jsonify({'success': True, 'synced': synced, 'account': _serialize_imap_account(account)})
+    folders = data.get('folders') or None
+    synced, folder_results, errors = _sync_mailbox_account(account, folders=folders, limit=min(200, int(data.get('limit') or 80)))
+    return jsonify({'success': True, 'synced': synced, 'folders': folder_results, 'errors': errors, 'account': _serialize_imap_account(account)})
 
 @app.route('/api/inbox-intelligence/explorer/sync', methods=['POST'])
 @login_required
@@ -1581,42 +1667,41 @@ def api_explorer_bulk_sync():
     data = request.get_json(silent=True) or {}
     account_ids = data.get('account_ids') or []
     limit = min(200, max(10, int(data.get('limit') or 80)))
-    folders = data.get('folders') or ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk']
-    since = _date_range_to_imap_since(data.get('date_range') or '')
-    if not since:
-        since = (datetime.utcnow() - timedelta(days=30)).strftime('%d-%b-%Y')
+    folders = data.get('folders') or None
     if not account_ids:
         accounts = InboxImapAccount.query.all()
     else:
         accounts = InboxImapAccount.query.filter(InboxImapAccount.id.in_(account_ids)).all()
-    results = []
-    for account in accounts:
-        account_synced, account_errors = _sync_imap_account_folders(account, folders, limit=limit, since=since)
-        results.append({'account_id': account.id, 'email': account.email, 'synced': account_synced, 'errors': account_errors})
+    results, all_errors = _sync_mailbox_accounts(accounts, folders=folders, limit=limit)
     total_synced = sum(r['synced'] for r in results)
-    all_errors = [err for r in results for err in r['errors']]
     return jsonify({'success': True, 'synced': total_synced, 'results': results, 'errors': all_errors})
 
 @app.route('/api/inbox-intelligence/explorer/folders', methods=['GET'])
 @login_required
 @permission_required('inbox_intelligence')
 def api_explorer_folders():
+    """Real folder tree per account: names, total/unread message counts, sync state."""
     account_id = request.args.get('account_id')
     if account_id:
         accounts = InboxImapAccount.query.filter_by(id=int(account_id)).all()
     else:
         accounts = InboxImapAccount.query.all()
-    folder_counts = {}
+    accounts_out = []
     for account in accounts:
-        msgs = InboxEmailMessage.query.filter_by(imap_account_id=account.id).all()
-        for msg in msgs:
-            f = msg.folder or 'Unknown'
-            if f not in folder_counts:
-                folder_counts[f] = {'folder': f, 'count': 0, 'account_ids': set()}
-            folder_counts[f]['count'] += 1
-            folder_counts[f]['account_ids'].add(account.id)
-    folders = sorted([{'folder': v['folder'], 'count': v['count'], 'account_ids': list(v['account_ids'])} for v in folder_counts.values()], key=lambda x: -x['count'])
-    return jsonify({'success': True, 'folders': folders})
+        states = ImapFolderSyncState.query.filter_by(imap_account_id=account.id).all()
+        folders = []
+        for state in states:
+            folders.append({
+                'folder': state.folder_name,
+                'total': _folder_message_count(account.id, state.folder_name),
+                'unread': _folder_unread_count(account.id, state.folder_name),
+                'uid_validity': state.uid_validity,
+                'last_seen_uid': state.last_seen_uid,
+                'last_sync_completed_at': state.last_sync_completed_at.isoformat() + 'Z' if state.last_sync_completed_at else None,
+            })
+        folders = sorted(folders, key=lambda f: (f['folder'] != 'INBOX', f['folder']))
+        accounts_out.append({'account': _serialize_imap_account(account), 'folders': folders})
+    return jsonify({'success': True, 'accounts': accounts_out})
 
 @app.route('/api/inbox-intelligence/imap-accounts/<int:account_id>/test', methods=['POST'])
 @login_required
@@ -1677,13 +1762,8 @@ def api_inbox_sync_all():
         accounts = InboxImapAccount.query.filter_by(auto_sync_enabled=True).all()
     if not accounts:
         return jsonify({'success': True, 'synced': 0, 'message': 'No accounts to sync.'})
-    since = _date_range_to_imap_since(data.get('date_range') or '2d')
-    results = []
-    for account in accounts:
-        account_synced, account_errors = _sync_imap_account_folders(account, ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk'], limit=80, since=since)
-        results.append({'account_id': account.id, 'email': account.email, 'synced': account_synced, 'errors': account_errors})
+    results, all_errors = _sync_mailbox_accounts(accounts, folders=None, limit=80)
     total_synced = sum(r['synced'] for r in results)
-    all_errors = [err for r in results for err in r['errors']]
     return jsonify({'success': True, 'synced': total_synced, 'results': results, 'errors': all_errors})
 
 @app.route('/api/inbox-intelligence/imap-accounts/<int:account_id>', methods=['DELETE'])
@@ -1722,10 +1802,13 @@ def api_inbox_messages():
     folder = request.args.get('folder')
     search = (request.args.get('search') or '').strip()
     date_range = (request.args.get('date_range') or '').strip()
+    unread_only = (request.args.get('unread_only') or '').lower() == 'true'
     if account_id:
         q = q.filter_by(imap_account_id=int(account_id))
     if folder:
         q = q.filter(InboxEmailMessage.folder.ilike(folder))
+    if unread_only:
+        q = q.filter(InboxEmailMessage.is_read.is_(False))
     if search:
         like = f"%{search}%"
         q = q.filter(or_(InboxEmailMessage.sender.ilike(like), InboxEmailMessage.subject.ilike(like), InboxEmailMessage.sender_domain.ilike(like), InboxEmailMessage.preview.ilike(like)))
@@ -1746,6 +1829,9 @@ def api_inbox_messages():
         'recipient': m.recipient,
         'subject': m.subject,
         'preview': m.preview,
+        'uid': m.uid,
+        'x_test_id': m.x_test_id,
+        'is_read': bool(m.is_read),
         'has_attachments': bool(m.has_attachments),
         'received_at': m.received_at.isoformat() + 'Z' if m.received_at else None,
     } for m in messages]})
@@ -1759,6 +1845,7 @@ def api_inbox_message_detail(message_id):
         return jsonify({'success': False, 'error': 'Message not found'}), 404
     return jsonify({'success': True, 'message': {
         'id': m.id,
+        'imap_account_id': m.imap_account_id,
         'sender': m.sender,
         'recipient': m.recipient,
         'subject': m.subject,
@@ -1768,8 +1855,25 @@ def api_inbox_message_detail(message_id):
         'headers': json.loads(m.headers_json or '{}'),
         'folder': m.folder,
         'provider': m.provider,
+        'uid': m.uid,
+        'x_test_id': m.x_test_id,
+        'is_read': bool(m.is_read),
         'received_at': m.received_at.isoformat() + 'Z' if m.received_at else None,
     }})
+
+@app.route('/api/inbox-intelligence/messages/<int:message_id>/read', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_message_set_read(message_id):
+    """Locally mark a message read or unread. Does not write back to the IMAP server."""
+    m = InboxEmailMessage.query.get(message_id)
+    if not m:
+        return jsonify({'success': False, 'error': 'Message not found'}), 404
+    data = request.get_json(silent=True) or {}
+    read = bool(data.get('read', True))
+    m.is_read = read
+    db.session.commit()
+    return jsonify({'success': True, 'message': 'Marked as read' if read else 'Marked as unread', 'is_read': read})
 
 def _serialize_test_email_source(source):
     return {
@@ -2905,128 +3009,17 @@ def _detect_message_placements(inbox, identifiers, max_direct_searches=8):
 def _placement_from_folder(folder):
     return 'SPAM' if any(x in (folder or '').lower() for x in ['spam', 'junk', 'bulk']) else 'INBOX'
 
-def _parse_header(raw_header):
-    """Parse raw header bytes into a dict for storage."""
-    msg = message_from_bytes(raw_header)
-    return {
-        'x_test_id': _decode_header_value(msg.get('X-Test-ID')),
-        'message_id': _decode_header_value(msg.get('Message-ID')),
-        'from': _decode_header_value(msg.get('From')),
-        'to': _decode_header_value(msg.get('To')),
-        'subject': _decode_header_value(msg.get('Subject')),
-        'date': _decode_header_value(msg.get('Date')),
-        'x_test_batch_id': _decode_header_value(msg.get('X-Test-Batch-ID')),
-        'x_test_source_id': _decode_header_value(msg.get('X-Test-Source-ID')),
-    }
-
-def _imap_fetch_headers_batch(conn, uids, folder):
-    """Fetch headers for a list of UIDs in one or more batched IMAP FETCH commands.
-    Returns list of parsed header dicts with 'uid' added."""
-    if not uids:
-        return []
-    results = []
-    batch_size = 50
-    for i in range(0, len(uids), batch_size):
-        batch = uids[i:i+batch_size]
-        uid_range = b','.join(batch) if isinstance(batch[0], bytes) else ','.join(batch).encode()
-        try:
-            fetch_status, fetch_data = conn.uid('fetch', uid_range, IMAP_HEADER_FETCH)
-        except Exception:
-            continue
-        if fetch_status != 'OK' or not fetch_data:
-            continue
-        position = 0
-        for item in fetch_data:
-            if not isinstance(item, tuple) or len(item) != 2:
-                continue
-            tag_line, raw_header = item
-            if not raw_header:
-                continue
-            uid_match = re.search(rb'UID\s+(\d+)', tag_line) if isinstance(tag_line, bytes) else re.search(r'UID\s+(\d+)', tag_line)
-            uid_val = int(uid_match.group(1)) if uid_match else 0
-            if not uid_val and position < len(batch):
-                uid_val = int(batch[position])
-            position += 1
-            try:
-                hdr = _parse_header(raw_header)
-                hdr['uid'] = uid_val
-                results.append(hdr)
-            except Exception:
-                continue
-    return results
-
-def _sync_test_inbox_folders(inbox, limit=80, since=None, identifiers=None):
-    """Sync test emails for an account: SINCE-based batch header fetch (one connection, batched IMAP).
-    Fetches ONLY UIDs in the last N days, batch-fetches headers (no per-UID round trips).
-    Stores ALL messages so both x_test_id fast-match and subject/sender fallback matching work.
-    Per-account lock prevents concurrent syncs."""
-    conn = None
-    synced_total = 0
-    x_test_id_count = 0
-    errors = []
-    folders_to_check = ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk']
-    if not since and inbox.last_synced_at:
-        since = (inbox.last_synced_at - timedelta(minutes=5)).strftime('%d-%b-%Y')
-    if not since:
-        since = (datetime.utcnow() - timedelta(days=30)).strftime('%d-%b-%Y')
-    lock = _get_account_sync_lock(inbox.id)
-    if not lock.acquire(blocking=False):
-        return 0, ['Sync already in progress for this account']
-    try:
-        try:
-            conn = _imap_connect(inbox)
-        except Exception as e:
-            return 0, [f'Connection failed: {e}']
-        conn.sock.settimeout(15) if getattr(conn, 'sock', None) else None
-        for folder in folders_to_check:
-            try:
-                status, _ = conn.select(folder, readonly=True)
-                if status != 'OK':
-                    continue
-                s, data = conn.uid('search', None, f'SINCE {since}')
-                if s != 'OK' or not data or not data[0]:
-                    continue
-                all_uids = data[0].split()
-                uid_list = all_uids[-int(limit):]
-                if not uid_list:
-                    continue
-                app.logger.info(f"[POLL] {inbox.email}/{folder}: fetching headers for last {len(uid_list)} of {len(all_uids)} message(s) since {since}")
-                headers = _imap_fetch_headers_batch(conn, uid_list, folder)
-                for hdr in headers:
-                    _upsert_imap_message_from_header(inbox, folder, hdr)
-                    synced_total += 1
-                    if hdr.get('x_test_id'):
-                        x_test_id_count += 1
-            except Exception as e:
-                if folder == 'INBOX':
-                    errors.append(f'{folder}: {e}')
-                continue
-        inbox.last_synced_at = datetime.utcnow()
-        inbox.connection_status = 'connected'
-        inbox.last_error = None
-        InboxEmailMessage.query.filter(
-            InboxEmailMessage.imap_account_id == inbox.id,
-            InboxEmailMessage.uid.in_(['0', ''])
-        ).delete(synchronize_session=False)
-        inbox.message_count = InboxEmailMessage.query.filter_by(imap_account_id=inbox.id).count()
-        inbox.inbox_count = InboxEmailMessage.query.filter_by(imap_account_id=inbox.id, folder='INBOX').count()
-        inbox.spam_count = InboxEmailMessage.query.filter(
-            InboxEmailMessage.imap_account_id == inbox.id,
-            InboxEmailMessage.folder.ilike('%spam%')
-        ).count()
-        db.session.commit()
-        app.logger.info(f"[POLL] {inbox.email}: synced {synced_total} message(s) ({x_test_id_count} with X-Test-ID) across {len(folders_to_check)} folders (since {since})")
-    except Exception as e:
-        errors.append(str(e))
-    finally:
-        try:
-            if conn:
-                conn.close()
-                conn.logout()
-        except Exception:
-            pass
-        lock.release()
-    return synced_total, errors
+def _sync_test_inbox_folders(inbox, limit=200, since=None, identifiers=None):
+    """Sync an inbox (used by test polling / User Inbox Test) using the new UID-cursor
+    engine. Syncing the real folders INBOX + Spam-like folders again is enough supply
+    both the fast x_test_id match and the subject/sender fallback matching.
+    Returns (synced_total, errors) for backward compatibility with the poll flow."""
+    synced, _folder_results, errors = _sync_mailbox_account(
+        inbox,
+        folders=['INBOX', '[Gmail]/Spam', 'Spam', 'Junk'],
+        limit=limit or 200,
+    )
+    return synced, errors
 
 def _date_range_to_imap_since(date_range):
     if not date_range or date_range == 'all':
@@ -16956,7 +16949,7 @@ def _inbox_auto_sync_loop():
                     try:
                         if account.last_synced_at and (now - account.last_synced_at).total_seconds() < 600:
                             continue
-                        synced, errors = _sync_imap_account_folders(account, ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk'], limit=50)
+                        synced, _folder_results, errors = _sync_mailbox_account(account, folders=None, limit=50)
                         if errors:
                             app.logger.warning(f"[AUTO-SYNC] {account.email}: {errors}")
                         else:

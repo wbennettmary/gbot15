@@ -430,6 +430,8 @@ class InboxEmailMessage(db.Model):
     html_content = db.Column(db.Text, nullable=True)
     headers_json = db.Column(db.Text, nullable=True)
     x_test_id = db.Column(db.String(255), nullable=True, index=True)
+    uid_validity = db.Column(db.String(64), nullable=True, index=True)
+    is_read = db.Column(db.Boolean, default=False, index=True)
     has_attachments = db.Column(db.Boolean, default=False)
     received_at = db.Column(db.DateTime, nullable=True, index=True)
     synced_at = db.Column(db.DateTime, default=db.func.current_timestamp())

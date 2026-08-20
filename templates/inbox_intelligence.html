@@ -637,6 +637,30 @@
         box-shadow: 0 12px 28px rgba(37, 99, 235, 0.08);
     }
 
+    .ii-message-card.unread {
+        background: #eff6ff;
+        border-left: 3px solid #2563eb;
+    }
+
+    .ii-message-card.unread strong {
+        font-weight: 700;
+    }
+
+    .ii-unread-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #2563eb;
+        margin-right: 6px;
+        vertical-align: middle;
+    }
+
+    .ii-message-detail-actions {
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
     .ii-message-preview {
         display: -webkit-box;
         -webkit-line-clamp: 2;
@@ -1487,8 +1511,9 @@
                         <p class="ii-muted mb-0">Content, headers, links, images, and structure analysis appear here.</p>
                     </div>
                 </div>
-                <div class="ii-row mt-3">
+                <div class="ii-row ii-message-detail-actions mt-3">
                     <button class="ii-btn ii-btn-primary" type="button" id="selectCurrentMessageBtn" onclick="toggleCurrentMessageTemplateSource()" disabled><i class="fas fa-check-square"></i> Select For Queue</button>
+                    <button class="ii-btn" type="button" id="markUnreadBtn" onclick="toggleCurrentMessageRead()" disabled><i class="fas fa-envelope"></i> Mark Unread</button>
                 </div>
                 <h4 class="mt-3">Structure</h4>
                 <div class="ii-row" id="messageStructure"><span class="ii-chip gray">No message selected</span></div>
@@ -2581,14 +2606,30 @@ merge_recipe_id, content_blueprint_id</pre>
             const data = await iiFetch('/api/inbox-intelligence/explorer/folders' + params);
             const folderList = document.getElementById('folderList');
             if (!folderList) return;
-            const allCount = (data.folders || []).reduce((sum, f) => sum + f.count, 0);
-            let html = `<div class="ii-folder ${(iiState.activeExplorerFolder || '') === '' ? 'active' : ''}" onclick="filterByFolder('')" data-folder=""><span>All Folders</span><span>${allCount}</span></div>`;
-            (data.folders || []).forEach((folder) => {
+            const accounts = data.accounts || [];
+            const allFolders = [];
+            accounts.forEach((acc) => {
+                (acc.folders || []).forEach((f) => {
+                    const existing = allFolders.find((x) => x.folder === f.folder);
+                    if (existing) {
+                        existing.total += f.total;
+                        existing.unread += f.unread;
+                        existing.account_ids.push(acc.account.id);
+                    } else {
+                        allFolders.push({folder: f.folder, total: f.total, unread: f.unread, account_ids: [acc.account.id]});
+                    }
+                });
+            });
+            const allTotal = allFolders.reduce((sum, f) => sum + f.total, 0);
+            const allUnread = allFolders.reduce((sum, f) => sum + f.unread, 0);
+            let html = `<div class="ii-folder ${(iiState.activeExplorerFolder || '') === '' ? 'active' : ''}" onclick="filterByFolder('')" data-folder="">
+                <span>All Folders</span><span>${allTotal}</span></div>`;
+            allFolders.forEach((folder) => {
                 const isActive = iiState.activeExplorerFolder === folder.folder;
                 const icon = folder.folder.toLowerCase().includes('spam') || folder.folder.toLowerCase().includes('junk') ? 'fa-shield-halved' : folder.folder.toLowerCase().includes('sent') ? 'fa-paper-plane' : 'fa-inbox';
                 html += `<div class="ii-folder ${isActive ? 'active' : ''}" onclick="filterByFolder('${escapeHtml(folder.folder).replace(/'/g, "\\'")}')" data-folder="${escapeHtml(folder.folder)}">
                     <span><i class="fas ${icon} ii-muted" style="font-size:0.8em;width:16px;text-align:center"></i> ${escapeHtml(folder.folder)}</span>
-                    <span>${folder.count}</span>
+                    <span>${folder.total}${folder.unread ? ` <strong class="text-danger">(${folder.unread})</strong>` : ''}</span>
                 </div>`;
             });
             folderList.innerHTML = html;
@@ -2791,12 +2832,15 @@ merge_recipe_id, content_blueprint_id</pre>
             return;
         }
         list.className = 'ii-message-grid';
-        list.innerHTML = iiState.messages.map((m) => `
-            <article class="ii-message-card ${iiState.activeMessageId === m.id ? 'active' : ''}" onclick="loadMessageDetail(${m.id})">
+        const unreadCount = iiState.messages.filter((m) => !m.is_read).length;
+        list.innerHTML = iiState.messages.map((m) => {
+            const unreadClass = m.is_read === false ? ' unread' : '';
+            const unreadDot = m.is_read === false ? '<span class="ii-unread-dot" title="Unread"></span>' : '';
+            return `<article class="ii-message-card${unreadClass} ${iiState.activeMessageId === m.id ? 'active' : ''}" onclick="loadMessageDetail(${m.id})">
                 <div class="ii-row justify-content-between">
                     <label class="ii-user-line" onclick="event.stopPropagation()">
                         <input type="checkbox" ${iiState.selectedMessageIds.has(m.id) ? 'checked' : ''} onchange="toggleMessageSelection(${m.id}, this.checked)">
-                        <strong>${escapeHtml(m.subject || '(no subject)')}</strong>
+                        ${unreadDot}<strong>${escapeHtml(m.subject || '(no subject)')}</strong>
                     </label>
                     <span class="ii-muted">${m.received_at ? new Date(m.received_at).toLocaleString() : ''}</span>
                 </div>
@@ -2805,10 +2849,14 @@ merge_recipe_id, content_blueprint_id</pre>
                     <span class="ii-chip gray">${escapeHtml(m.sender_domain || 'unknown')}</span>
                     <span class="ii-chip gray">${escapeHtml(m.folder || '')}</span>
                     ${m.has_attachments ? '<span class="ii-chip yellow">attachment</span>' : ''}
+                    ${m.is_read === false ? '<span class="ii-chip red">unread</span>' : ''}
                 </div>
                 <div class="ii-muted ii-email-text">${escapeHtml(m.sender || 'Unknown')}</div>
                 <div class="ii-message-preview">${escapeHtml(m.preview || '')}</div>
-            </article>`).join('');
+            </article>`;
+        }).join('');
+        const statusEl = document.getElementById('explorerMessageStatus');
+        if (statusEl) statusEl.textContent = `${iiState.messages.length} message(s)${unreadBadge ? ' · ' + unreadCount + ' unread' : ''}.`;
         renderSelectedMessageStatus();
     }
 
@@ -2816,6 +2864,18 @@ merge_recipe_id, content_blueprint_id</pre>
         const data = await iiFetch(`/api/inbox-intelligence/messages/${id}`);
         const m = data.message;
         iiState.activeMessageId = id;
+        if (m.is_read === false) {
+            try {
+                await iiFetch(`/api/inbox-intelligence/messages/${id}/read`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({read: true})
+                });
+                m.is_read = true;
+                const msg = iiState.messages.find((x) => x.id === id);
+                if (msg) msg.is_read = true;
+            } catch (err) { /* non-fatal */ }
+        }
         const bodyText = (m.plain_text || m.preview || 'No plain-text content synchronized.').slice(0, 12000);
         document.getElementById('messageDetail').innerHTML = `<div class="ii-muted">From ${escapeHtml(m.sender || '')}</div>
             <div class="ii-muted">To ${escapeHtml(m.recipient || '')}</div>
@@ -2826,6 +2886,11 @@ merge_recipe_id, content_blueprint_id</pre>
             btn.disabled = false;
             btn.innerHTML = iiState.selectedMessageIds.has(id) ? '<i class="fas fa-square-check"></i> Selected For Queue' : '<i class="fas fa-check-square"></i> Select For Queue';
         }
+        const markBtn = document.getElementById('markUnreadBtn');
+        if (markBtn) {
+            markBtn.disabled = false;
+            markBtn.innerHTML = m.is_read ? '<i class="fas fa-envelope"></i> Mark Unread' : '<i class="fas fa-envelope-open-text"></i> Mark Read';
+        }
         renderInboxMessagesList();
         const html = m.html_content || '';
         const links = (html.match(/href=/gi) || []).length;
@@ -2833,6 +2898,30 @@ merge_recipe_id, content_blueprint_id</pre>
         const ctas = (html.match(/<a/gi) || []).length;
         document.getElementById('messageStructure').innerHTML = `<span class="ii-chip blue">${ctas} CTA/link elements</span><span class="ii-chip gray">${links} href links</span><span class="ii-chip gray">${images} images</span>`;
         document.getElementById('messageHeaders').textContent = JSON.stringify(m.headers || {}, null, 2);
+    }
+
+    async function setMessageRead(id, read) {
+        await iiFetch(`/api/inbox-intelligence/messages/${id}/read`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({read: !!read})
+        });
+        const msg = iiState.messages.find((x) => x.id === id);
+        if (msg) msg.is_read = !!read;
+        renderInboxMessagesList();
+        await loadExplorerFolders(document.getElementById('messageAccountFilter')?.value || undefined);
+    }
+
+    async function toggleCurrentMessageRead() {
+        const m = iiState.messages.find((x) => x.id === iiState.activeMessageId);
+        if (!m) return;
+        await setMessageRead(m.id, m.is_read === false ? true : false);
+        const msg = iiState.messages.find((x) => x.id === m.id);
+        const btn = document.getElementById('markUnreadBtn');
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = msg.is_read ? '<i class="fas fa-envelope"></i> Mark Unread' : '<i class="fas fa-envelope-open-text"></i> Mark Read';
+        }
     }
 
     async function createTemplatesFromSelectedMessages() {
