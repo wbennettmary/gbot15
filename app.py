@@ -1301,8 +1301,13 @@ def _serialize_imap_account(account):
     }
 
 def _cleanup_old_inbox_email_messages(days=30):
+    """Purge very old synced messages. Keeps any row that carries an X-Test-ID header
+    (deliverability test evidence) so historical tests can still be re-polled."""
     cutoff = datetime.utcnow() - timedelta(days=days)
-    return InboxEmailMessage.query.filter(InboxEmailMessage.synced_at < cutoff).delete(synchronize_session=False)
+    return InboxEmailMessage.query.filter(
+        InboxEmailMessage.synced_at < cutoff,
+        or_(InboxEmailMessage.x_test_id.is_(None), InboxEmailMessage.x_test_id == '')
+    ).delete(synchronize_session=False)
 
 def _imap_list_folders(conn):
     """Real folder tree from an IMAP LIST response. Skips \\Noselect containers.
@@ -1490,19 +1495,24 @@ def _refresh_account_counts(account):
         InboxEmailMessage.folder.ilike('%spam%')
     ).count()
 
-def _sync_mailbox_account(account, folders=None, limit=200, force_full=False):
+def _sync_mailbox_account(account, folders=None, limit=200, force_full=False, wait_for_lock=False):
     """Sync ONE account across its real IMAP folders using incremental UID cursors.
 
     Uses ImapFolderSyncState (uid_validity + last_seen_uid) so the second run only
     downloads NEW messages. Fetches full RFC822 bodies so the mail panel shows real
     content. One connection per account (per-account lock prevents concurrent runs).
+    When wait_for_lock=True (test polling) the call blocks until the per-account lock
+    is free instead of being skipped by a concurrent auto/explorer sync.
     Returns (total_synced, folder_results, errors)."""
     conn = None
     total_synced = 0
     errors = []
     folder_results = []
     lock = _get_account_sync_lock(account.id)
-    if not lock.acquire(blocking=False):
+    if wait_for_lock:
+        if not lock.acquire(timeout=90):
+            return 0, [], ['Sync already in progress for this account']
+    elif not lock.acquire(blocking=False):
         return 0, [], ['Sync already in progress for this account']
     try:
         account.connection_status = 'syncing'
@@ -2919,107 +2929,110 @@ def api_inbox_automated_test_results(test_id):
         'verdict_counts': verdict_counts,
     }})
 
-def _detect_message_placement(inbox, identifier):
-    folders = ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk', 'Bulk Mail']
-    conn = None
-    try:
-        conn = _imap_connect(inbox)
-        for folder in folders:
-            status, _ = conn.select(folder, readonly=True)
-            if status != 'OK':
-                continue
-            search_terms = [
-                f'HEADER X-Test-ID "{identifier}"',
-                f'TEXT "{identifier}"',
-                f'HEADER Message-ID "{identifier}"',
-                f'SUBJECT "{identifier}"',
-            ]
-            for search_term in search_terms:
-                status, data = conn.uid('search', None, search_term)
-                if status == 'OK' and data and data[0]:
-                    placement = 'SPAM' if any(x in folder.lower() for x in ['spam', 'junk', 'bulk']) else 'INBOX'
-                    return placement, folder
-        return 'PENDING', None
-    finally:
-        try:
-            if conn:
-                conn.close()
-                conn.logout()
-        except Exception:
-            pass
-
-def _detect_message_placements(inbox, identifiers, max_direct_searches=8):
-    folders = ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk', 'Bulk Mail']
-    results = {identifier: ('PENDING', None) for identifier in identifiers}
-    pending = set(identifier for identifier in identifiers if identifier)
-    broad_token = next(iter(pending)).rsplit('-', 1)[0] if pending else ''
-    conn = None
-    try:
-        conn = _imap_connect(inbox)
-        for folder in folders:
-            if not pending:
-                break
-            status, _ = conn.select(folder, readonly=True)
-            if status != 'OK':
-                continue
-            if broad_token:
-                status, data = conn.uid('search', None, f'TEXT "{broad_token}"')
-                if status == 'OK' and data and data[0]:
-                    placement = 'SPAM' if any(x in folder.lower() for x in ['spam', 'junk', 'bulk']) else 'INBOX'
-                    for uid in data[0].split():
-                        fetch_status, fetch_data = conn.uid('fetch', uid, '(RFC822)')
-                        if fetch_status != 'OK' or not fetch_data:
-                            continue
-                        raw_chunks = []
-                        for item in fetch_data:
-                            if isinstance(item, tuple) and item[1]:
-                                raw_chunks.append(item[1])
-                        raw_text = b'\n'.join(raw_chunks).decode('utf-8', errors='ignore')
-                        for identifier in list(pending):
-                            if identifier in raw_text:
-                                results[identifier] = (placement, folder)
-                                pending.discard(identifier)
-                        if not pending:
-                            break
-                    if not pending:
-                        break
-            for identifier in list(pending)[:max_direct_searches]:
-                search_terms = [
-                    f'HEADER X-Test-ID "{identifier}"',
-                    f'TEXT "{identifier}"',
-                    f'HEADER Message-ID "{identifier}"',
-                    f'SUBJECT "{identifier}"',
-                ]
-                for search_term in search_terms:
-                    status, data = conn.uid('search', None, search_term)
-                    if status == 'OK' and data and data[0]:
-                        placement = 'SPAM' if any(x in folder.lower() for x in ['spam', 'junk', 'bulk']) else 'INBOX'
-                        results[identifier] = (placement, folder)
-                        pending.discard(identifier)
-                        break
-        return results
-    finally:
-        try:
-            if conn:
-                conn.close()
-                conn.logout()
-        except Exception:
-            pass
-
 def _placement_from_folder(folder):
     return 'SPAM' if any(x in (folder or '').lower() for x in ['spam', 'junk', 'bulk']) else 'INBOX'
 
+def _real_result_folders(conn):
+    """Intersect the account's real folder tree with the folders known to carry
+    deliverability test results (INBOX, Spam/Junk/Bulk, Gmail Promotions/Updates/Social...).
+    Falls back to all folders so non-standard providers still get scanned."""
+    real = _imap_list_folders(conn)
+    if not real:
+        return ['INBOX']
+    matches = []
+    for folder in real:
+        low = folder.lower()
+        if low == 'inbox' or any(k in low for k in ['spam', 'junk', 'bulk', 'promotion', 'updates', 'social']):
+            matches.append(folder)
+    return sorted(matches, key=lambda f: (f.lower() != 'inbox', f)) or real
+
+def _imap_fetch_by_identifiers(account, identifiers, folders=None):
+    """Targeted sync for test polling: connect once, search every relevant real folder
+    for each test identifier (HEADER X-Test-ID plus RESULT-marking header fallback), then
+    fetch and persist the full bodies. Works regardless of how far the incremental UID
+    cursor has advanced. Returns (found_count, errors, placements)."""
+    identifiers = [i for i in (identifiers or ()) if i]
+    if not identifiers:
+        return 0, [], {}
+    conn = None
+    found_count = 0
+    errors = []
+    placements = {}
+    lock = _get_account_sync_lock(account.id)
+    if not lock.acquire(timeout=90):
+        return 0, ['Sync already in progress for this account'], {}
+    try:
+        conn = _imap_connect(account)
+        try:
+            conn.sock.settimeout(30)
+        except Exception:
+            pass
+        target_folders = folders if folders else _real_result_folders(conn)
+        for folder in target_folders:
+            try:
+                meta = _imap_select_folder(conn, folder)
+                if not meta:
+                    continue
+                uid_set = set()
+                for identifier in identifiers:
+                    for search_term in (f'HEADER X-Test-ID "{identifier}"', f'TEXT "{identifier}"', f'HEADER Message-ID "{identifier}"'):
+                        try:
+                            s, data = conn.uid('search', None, search_term)
+                        except Exception:
+                            continue
+                        if s != 'OK' or not data or not data[0]:
+                            continue
+                        for u in data[0].split():
+                            uid_set.add(u)
+                        break
+                if not uid_set:
+                    continue
+                messages = _imap_fetch_messages_batch(conn, list(uid_set), folder)
+                for parsed in messages:
+                    _upsert_imap_message_full(account, folder, parsed, uid_validity=str(meta.get('uidvalidity') or ''))
+                    found_count += 1
+                    xid = (parsed.get('headers') or {}).get('x_test_id')
+                    if xid and xid in identifiers:
+                        placements[xid] = (_placement_from_folder(folder), folder)
+                db.session.commit()
+            except Exception as e:
+                db.session.rollback()
+                errors.append(f'{folder}: {e}')
+        return found_count, errors, placements
+    except Exception as e:
+        db.session.rollback()
+        return found_count, errors + [f'connection: {e}'], placements
+    finally:
+        try:
+            if conn:
+                conn.close()
+                conn.logout()
+        except Exception:
+            pass
+        lock.release()
+
 def _sync_test_inbox_folders(inbox, limit=200, since=None, identifiers=None):
     """Sync an inbox (used by test polling / User Inbox Test) using the new UID-cursor
-    engine. Syncing the real folders INBOX + Spam-like folders again is enough supply
-    both the fast x_test_id match and the subject/sender fallback matching.
+    engine across ALL real result folders (INBOX, Spam/Junk/Bulk, Gmail tabs), plus a
+    targeted X-Test-ID search that guarantees the exact test messages are fetched even
+    if the incremental cursor has already advanced past them.
     Returns (synced_total, errors) for backward compatibility with the poll flow."""
-    synced, _folder_results, errors = _sync_mailbox_account(
+    identifiers = [i for i in (identifiers or ()) if i]
+    errors = []
+    synced_total = 0
+    folder_synced, _folder_results, sync_errors = _sync_mailbox_account(
         inbox,
-        folders=['INBOX', '[Gmail]/Spam', 'Spam', 'Junk'],
+        folders=None,
         limit=limit or 200,
+        wait_for_lock=True,
     )
-    return synced, errors
+    synced_total += folder_synced
+    errors.extend(sync_errors)
+    if identifiers:
+        target_found, target_errors, placements = _imap_fetch_by_identifiers(inbox, identifiers)
+        synced_total += target_found
+        errors.extend(target_errors)
+    return synced_total, errors
 
 def _date_range_to_imap_since(date_range):
     if not date_range or date_range == 'all':
@@ -3112,9 +3125,14 @@ def api_inbox_poll_test(test_id):
     return jsonify(result), status_code
 
 def _poll_inbox_test_payload(test_id, data=None):
-    """Master orchestrator for test sync: sync IMAP folders (header-only, fast),
-    then match test messages by X-Test-ID, update placements and counts."""
+    """Master orchestrator for test sync: sync the real result folders (incremental UID
+    cursor) plus a targeted X-Test-ID search so test emails are found no matter the
+    cursor state, then match test messages, update placements and counts."""
     data = data or {}
+    try:
+        sync_limit = min(500, max(10, int(data.get('recent_limit') or data.get('limit') or 200)))
+    except (TypeError, ValueError):
+        sync_limit = 200
     test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
     if not test:
         return {'success': False, 'error': 'Test not found'}, 404
@@ -3153,7 +3171,7 @@ def _poll_inbox_test_payload(test_id, data=None):
         try:
             row_identifiers = {row.test_identifier for row in rows if row.test_identifier}
             app.logger.info(f"[POLL] Syncing {inbox.email} for test {test_id} ({len(rows)} pending rows, {len(row_identifiers)} identifiers: {row_identifiers})")
-            matched_count, recent_errors = _sync_test_inbox_folders(inbox, limit=200, identifiers=row_identifiers)
+            matched_count, recent_errors = _sync_test_inbox_folders(inbox, limit=sync_limit, identifiers=row_identifiers)
             diagnostic['headers_fetched'] += matched_count
             diagnostic['accounts_synced'] += 1
             sync_errors.extend([f'{inbox.email}: {error}' for error in recent_errors])
@@ -3189,18 +3207,28 @@ def _poll_inbox_test_payload(test_id, data=None):
 @permission_required('inbox_intelligence')
 def api_inbox_poll_test_async(test_id):
     payload = request.get_json(silent=True) or {}
-    running_jobs = InboxPollJob.query.filter_by(test_id=test_id, status='running').all()
     stale_cutoff = datetime.utcnow() - timedelta(minutes=5)
+    running_jobs = InboxPollJob.query.filter_by(test_id=test_id, status='running').all()
+    stale_found = False
     for rj in running_jobs:
         rj_created = rj.created_at or datetime.utcnow()
         if rj_created < stale_cutoff:
             rj.status = 'error'
             rj.message = 'Previous sync timed out. A new sync was started.'
             rj.finished_at = datetime.utcnow()
-    if running_jobs and all(rj.status == 'running' for rj in running_jobs):
-        existing = running_jobs[0]
-        return jsonify({'success': True, 'job_id': existing.job_id, 'message': 'A sync is already running for this test.'})
+            stale_found = True
     db.session.commit()
+    active = InboxPollJob.query.filter_by(test_id=test_id, status='running').first()
+    if active and active.status == 'running' and not stale_found:
+        return jsonify({'success': True, 'job_id': active.job_id, 'message': 'A sync is already running for this test.'})
+    if active:
+        try:
+            active.status = 'error'
+            active.message = 'Superseded by a new sync request.'
+            active.finished_at = datetime.utcnow()
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
     job_id = uuid.uuid4().hex
     job = InboxPollJob(job_id=job_id, test_id=test_id, status='running', message=f'Syncing {test_id} in background...')
     db.session.add(job)

@@ -773,6 +773,42 @@
         align-items: stretch;
     }
 
+    .ii-verdict-bar {
+        display: flex;
+        height: 12px;
+        border-radius: 999px;
+        overflow: hidden;
+        background: #e2e8f0;
+        gap: 2px;
+        margin: 8px 0 4px;
+    }
+
+    .ii-verdict-bar .ii-verdict-segment.inbox { background: #16a34a; border-radius: 999px; }
+    .ii-verdict-bar .ii-verdict-segment.mixed { background: #f59e0b; }
+    .ii-verdict-bar .ii-verdict-segment.spam { background: #dc2626; }
+    .ii-verdict-bar .ii-verdict-segment.pending { background: #94a3b8; }
+
+    .ii-auto-test-status {
+        display: grid;
+        gap: 6px;
+        min-width: 170px;
+    }
+
+    .ii-auto-test-progress {
+        height: 8px;
+        border-radius: 999px;
+        background: #e2e8f0;
+        overflow: hidden;
+        display: flex;
+        gap: 2px;
+    }
+
+    .ii-auto-test-progress .seg { height: 100%; }
+    .ii-auto-test-progress .seg.inbox { background: #16a34a; }
+    .ii-auto-test-progress .seg.spam { background: #dc2626; }
+    .ii-auto-test-progress .seg.pending { background: #f59e0b; }
+    .ii-auto-test-progress .seg.sent { background: #2563eb; }
+
     .ii-score-card {
         display: grid;
         gap: 12px;
@@ -3345,25 +3381,48 @@ merge_recipe_id, content_blueprint_id</pre>
         const el = document.getElementById('automatedTestsList');
         if (!el) return;
         if (!iiState.automatedTests.length) {
-            el.innerHTML = '<div class="ii-muted">No automated tests yet.</div>';
+            el.innerHTML = '<div class="ii-muted">No automated tests yet. Create one above and it will appear here with live progress.</div>';
             return;
         }
-        el.innerHTML = `
-            <table class="ii-auto-test-table">
-                <thead><tr><th>Test ID</th><th>Started</th><th>Status</th><th>Actions</th></tr></thead>
-                <tbody>
-                    ${iiState.automatedTests.slice(0, 6).map((test) => `
-                        <tr>
-                            <td><strong>${escapeHtml(test.test_id)}</strong></td>
-                            <td>${test.created_at ? new Date(test.created_at).toLocaleString() : ''}</td>
-                            <td><span class="ii-chip ${statusClass(test.status)}">${escapeHtml(test.status)}</span></td>
-                            <td>
-                                <button class="ii-btn" type="button" onclick="viewAutomatedEmailTest('${escapeHtml(test.test_id)}')"><i class="fas fa-eye"></i> View</button>
-                                <button class="ii-btn" type="button" onclick="pollAutomatedEmailTest('${escapeHtml(test.test_id)}', true, {background: true})"><i class="fas fa-arrows-rotate"></i> Sync</button>
-                            </td>
-                        </tr>`).join('')}
-                </tbody>
-            </table>`;
+        el.innerHTML = iiState.automatedTests.slice(0, 6).map((test) => {
+            const sent = test.sent_count || 0;
+            const total = test.total_messages || sent;
+            const inbox = test.inbox_count || 0;
+            const spam = test.spam_count || 0;
+            const pending = test.pending_count || 0;
+            const failed = test.failed_count || 0;
+            const sendW = total ? Math.round((sent / total) * 100) : 0;
+            const inboxW = sent ? Math.round((inbox / sent) * 100) : 0;
+            const spamW = sent ? Math.round((spam / sent) * 100) : 0;
+            const pendingW = sent ? Math.round((pending / sent) * 100) : 0;
+            return `
+            <div class="ii-analytics-row" onclick="viewAutomatedEmailTest('${escapeHtml(test.test_id)}')" style="cursor:pointer; ${iiState.automatedSelectedTestId === test.test_id ? 'border-color:#2563eb; box-shadow:0 0 0 2px rgba(37,99,235,0.12);' : ''}">
+                <div>
+                    <strong>${escapeHtml(test.test_id)}</strong>
+                    <div class="ii-muted ii-email-text">${escapeHtml(test.name || '')}</div>
+                    <div class="ii-muted" style="font-size:0.75em;">${test.created_at ? new Date(test.created_at).toLocaleString() : ''}</div>
+                </div>
+                <div class="ii-auto-test-status">
+                    <span class="ii-chip ${statusClass(test.status)}">${escapeHtml(test.status)}</span>
+                    <div class="ii-auto-test-progress" title="Send progress ${sendW}%">
+                        <div class="seg sent" style="width:${sendW}%;"></div>
+                    </div>
+                    <span class="ii-muted" style="font-size:0.75em;">${sent}/${total} sent</span>
+                </div>
+                <div class="ii-auto-test-status">
+                    <div class="ii-auto-test-progress" title="Placement split">
+                        <div class="seg inbox" style="width:${inboxW}%;"></div>
+                        <div class="seg spam" style="width:${spamW}%;"></div>
+                        <div class="seg pending" style="width:${pendingW}%;"></div>
+                    </div>
+                    <span class="ii-muted" style="font-size:0.75em;">${inbox} inbox · ${spam} spam · ${pending} pending${failed ? ` · ${failed} failed` : ''}</span>
+                </div>
+                <div>
+                    <button class="ii-btn" type="button" onclick="event.stopPropagation(); viewAutomatedEmailTest('${escapeHtml(test.test_id)}')"><i class="fas fa-eye"></i> View</button>
+                    <button class="ii-btn" type="button" onclick="event.stopPropagation(); pollAutomatedEmailTest('${escapeHtml(test.test_id)}', true, {background: true})"><i class="fas fa-arrows-rotate"></i> Sync</button>
+                </div>
+            </div>`;
+        }).join('');
     }
 
     function setAutomatedResultFilter(filter) {
@@ -3389,6 +3448,11 @@ merge_recipe_id, content_blueprint_id</pre>
             acc[row.verdict] = (acc[row.verdict] || 0) + 1;
             return acc;
         }, {});
+        const totalVerdicts = rows.length;
+        const verdictShare = (key) => (totalVerdicts ? Math.round(((verdictCounts[key] || 0) / totalVerdicts) * 100) : 0);
+        const observedRows = rows.reduce((sum, row) => sum + ((row.inbox_count || 0) + (row.spam_count || 0)), 0);
+        const observedTotal = rows.reduce((sum, row) => sum + ((row.inbox_count || 0) + (row.spam_count || 0) + (row.missing_count || 0)), 0);
+        const observedPct = observedTotal ? Math.round((observedRows / observedTotal) * 100) : 0;
         el.innerHTML = `
             <div class="ii-result-summary">
                 <div class="ii-result-pill"><span class="ii-muted">Total emails</span><strong>${rows.length}</strong></div>
@@ -3396,7 +3460,17 @@ merge_recipe_id, content_blueprint_id</pre>
                 <div class="ii-result-pill"><span class="ii-muted">Mixed</span><strong>${verdictCounts.MIXED || 0}</strong></div>
                 <div class="ii-result-pill"><span class="ii-muted">Spam</span><strong>${verdictCounts.SPAM || 0}</strong></div>
             </div>
-            <div class="ii-responsive-table">
+            <div class="ii-verdict-bar" role="img" aria-label="Verdict distribution">
+                <div class="ii-verdict-segment inbox" style="width:${verdictShare('INBOX')}%"></div>
+                <div class="ii-verdict-segment mixed" style="width:${verdictShare('MIXED')}%"></div>
+                <div class="ii-verdict-segment spam" style="width:${verdictShare('SPAM')}%"></div>
+                <div class="ii-verdict-segment pending" style="width:${verdictShare('INSUFFICIENT_DATA') + verdictShare('PENDING')}%"></div>
+            </div>
+            <div class="ii-row justify-content-between ii-muted" style="font-size: 0.8em;">
+                <span>${verdictCounts.INBOX || 0} inbox · ${verdictCounts.MIXED || 0} mixed · ${verdictCounts.SPAM || 0} spam</span>
+                <span>${observedPct}% observed (${observedRows}/${observedTotal || 0} classified placements)</span>
+            </div>
+            <div class="ii-responsive-table mt-2">
                 <table class="ii-table">
                     <tr><th>Email</th><th>Verdict</th><th>Inbox</th><th>Spam</th><th>Missing</th><th>Tests</th><th>Source</th><th>Actions</th></tr>
                     ${filtered.map((row) => `
@@ -4971,11 +5045,20 @@ merge_recipe_id, content_blueprint_id</pre>
         const el = document.getElementById(containerId);
         if (!el) return;
         const summary = matrixSummary(rows);
+        const total = summary.total || 1;
+        const inboxW = Math.round((summary.inbox / total) * 100);
+        const spamW = Math.round((summary.spam / total) * 100);
+        const pendingW = Math.max(0, 100 - inboxW - spamW);
         el.innerHTML = `
             <div class="ii-result-pill"><span class="ii-muted">${userLabel}</span><strong>${summary.total}</strong></div>
             <div class="ii-result-pill"><span class="ii-muted">Inbox</span><strong>${summary.inbox}</strong></div>
             <div class="ii-result-pill"><span class="ii-muted">Spam</span><strong>${summary.spam}</strong></div>
-            <div class="ii-result-pill"><span class="ii-muted">Missing</span><strong>${summary.pending + summary.failed}</strong></div>`;
+            <div class="ii-result-pill"><span class="ii-muted">Missing</span><strong>${summary.pending + summary.failed}</strong></div>
+            <div class="ii-verdict-bar" style="grid-column:1 / -1;" role="img" aria-label="Placement distribution">
+                <div class="ii-verdict-segment inbox" style="width:${inboxW}%"></div>
+                <div class="ii-verdict-segment spam" style="width:${spamW}%"></div>
+                <div class="ii-verdict-segment pending" style="width:${pendingW}%"></div>
+            </div>`;
     }
 
     function recipientProvider(email) {
