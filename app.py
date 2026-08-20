@@ -1302,12 +1302,28 @@ def _serialize_imap_account(account):
 
 def _cleanup_old_inbox_email_messages(days=30):
     """Purge very old synced messages. Keeps any row that carries an X-Test-ID header
-    (deliverability test evidence) so historical tests can still be re-polled."""
+    (deliverability test evidence) so historical tests can still be re-polled, and any
+    row still referenced as an Automated Email Test source. Safe under PostgreSQL: an
+    aborted or mid-failure transaction is rolled back first so the DELETE never crashes
+    on InFailedSqlTransaction."""
+    try:
+        db.session.rollback()
+    except Exception:
+        pass
     cutoff = datetime.utcnow() - timedelta(days=days)
-    return InboxEmailMessage.query.filter(
-        InboxEmailMessage.synced_at < cutoff,
-        or_(InboxEmailMessage.x_test_id.is_(None), InboxEmailMessage.x_test_id == '')
-    ).delete(synchronize_session=False)
+    try:
+        referenced = db.session.query(TestEmailSource.source_message_id).filter(TestEmailSource.source_message_id.isnot(None)).subquery()
+        return InboxEmailMessage.query.filter(
+            InboxEmailMessage.synced_at < cutoff,
+            or_(InboxEmailMessage.x_test_id.is_(None), InboxEmailMessage.x_test_id == ''),
+            ~InboxEmailMessage.id.in_(db.session.query(referenced.c.source_message_id))
+        ).delete(synchronize_session=False)
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return 0
 
 def _imap_list_folders(conn):
     """Real folder tree from an IMAP LIST response. Skips \\Noselect containers.
@@ -1525,7 +1541,7 @@ def _sync_mailbox_account(account, folders=None, limit=200, force_full=False, wa
             pass
         all_folders = _imap_list_folders(conn)
         account.folder_count = len(all_folders)
-        target_folders = folders or (all_folders or ['INBOX'])
+        target_folders = _resolve_sync_folder_targets(conn, folders, all_folders)
         for folder in target_folders:
             try:
                 meta = _imap_select_folder(conn, folder)
@@ -1575,7 +1591,10 @@ def _sync_mailbox_account(account, folders=None, limit=200, force_full=False, wa
                 InboxEmailMessage.uid.in_(['0', ''])
             ).delete(synchronize_session=False)
         except Exception:
-            pass
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
         _cleanup_old_inbox_email_messages()
         account.last_synced_at = datetime.utcnow()
         account.connection_status = 'connected'
@@ -1956,6 +1975,7 @@ def _automated_source_rollups(test_id=None):
             'inbox_count': bucket['inbox'],
             'spam_count': bucket['spam'],
             'other_count': bucket['other'],
+            'pending_count': bucket['pending'],
             'missing_count': bucket['missing'] + bucket['pending'],
             'inbox_percentage': inbox_pct,
             'spam_percentage': spam_pct,
@@ -1974,7 +1994,7 @@ def _update_automated_source_statuses(test_id):
         source.last_verdict = result['verdict']
         source.last_inbox_percentage = result['inbox_percentage']
         source.last_spam_percentage = result['spam_percentage']
-        if result['pending']:
+        if result['pending_count']:
             source.status = 'IN_TEST'
         elif result['tests']:
             source.status = 'TESTED'
@@ -2945,6 +2965,32 @@ def _real_result_folders(conn):
         if low == 'inbox' or any(k in low for k in ['spam', 'junk', 'bulk', 'promotion', 'updates', 'social']):
             matches.append(folder)
     return sorted(matches, key=lambda f: (f.lower() != 'inbox', f)) or real
+
+def _resolve_sync_folder_targets(conn, folders, all_folders=None):
+    """Map requested folder aliases onto the account's real folder tree so that
+    syncing a fixed list ('INBOX', 'Spam', 'Junk', '[Gmail]/Spam'...) never errors on
+    folders the account doesn't have. Alias resolution:
+      * 'INBOX'                      -> the real INBOX folder
+      * spam-ish names               -> every real folder containing spam/junk/bulk
+      * anything else                -> exact real folder name only
+    Aliases that resolve to nothing are silently skipped (they're not sync errors)."""
+    all_folders = all_folders or _imap_list_folders(conn)
+    if not folders:
+        return all_folders or ['INBOX']
+    real_lower = [f.lower() for f in all_folders]
+    targets = []
+    for folder in folders:
+        low = folder.lower()
+        if low == 'inbox':
+            matches = [f for i, f in enumerate(all_folders) if real_lower[i] == 'inbox']
+        elif 'spam' in low or 'junk' in low or 'bulk' in low:
+            matches = [f for i, f in enumerate(all_folders) if any(k in real_lower[i] for k in ('spam', 'junk', 'bulk'))]
+        else:
+            matches = [f for i, f in enumerate(all_folders) if real_lower[i] == low]
+        for match in matches:
+            if match not in targets:
+                targets.append(match)
+    return targets or all_folders or ['INBOX']
 
 def _imap_fetch_by_identifiers(account, identifiers, folders=None):
     """Targeted sync for test polling: connect once, search every relevant real folder
