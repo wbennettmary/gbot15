@@ -1771,13 +1771,14 @@
                             <button class="ii-btn" id="autoFilterSpam" type="button" onclick="setAutomatedResultFilter('SPAM')">Spam</button>
                         </div>
                         <div class="ii-row" style="gap: 6px;">
-                            <button class="ii-btn" type="button" onclick="copyAutomatedBucket('inboxUsers')"><i class="fas fa-users"></i> Inbox Users</button>
-                            <button class="ii-btn" type="button" onclick="copyAutomatedBucket('inboxDomains')"><i class="fas fa-globe"></i> Inbox Domains</button>
-                            <button class="ii-btn" type="button" onclick="copyAutomatedBucket('spamUsers')"><i class="fas fa-user-xmark"></i> Spam Users</button>
-                            <button class="ii-btn" type="button" onclick="copyAutomatedBucket('spamDomains')"><i class="fas fa-ban"></i> Spam Domains</button>
+                            <button class="ii-btn" type="button" id="autoCopyInboxUsersBtn" onclick="copyAutomatedBucket('inboxUsers')"><i class="fas fa-users"></i> Inbox Users <span class="ii-chip blue" id="autoCopyInboxUsersCount">0</span></button>
+                            <button class="ii-btn" type="button" id="autoCopyInboxDomainsBtn" onclick="copyAutomatedBucket('inboxDomains')"><i class="fas fa-globe"></i> Inbox Domains <span class="ii-chip blue" id="autoCopyInboxDomainsCount">0</span></button>
+                            <button class="ii-btn" type="button" id="autoCopySpamUsersBtn" onclick="copyAutomatedBucket('spamUsers')"><i class="fas fa-user-xmark"></i> Spam Users <span class="ii-chip blue" id="autoCopySpamUsersCount">0</span></button>
+                            <button class="ii-btn" type="button" id="autoCopySpamDomainsBtn" onclick="copyAutomatedBucket('spamDomains')"><i class="fas fa-ban"></i> Spam Domains <span class="ii-chip blue" id="autoCopySpamDomainsCount">0</span></button>
                         </div>
                     </div>
                 </div>
+                <div class="ii-muted mt-1" id="autoCopyStatus"></div>
                 <div id="automatedEmailResults" class="ii-muted">Run or select an automated test to see source-email verdicts.</div>
             </div>
         </div>
@@ -3536,6 +3537,11 @@ merge_recipe_id, content_blueprint_id</pre>
         iiState.automatedCopyBuckets.inboxDomains = inboxDomains;
         iiState.automatedCopyBuckets.spamUsers = spamEmails;
         iiState.automatedCopyBuckets.spamDomains = spamDomains;
+        const setCount = (id, n) => { const el = document.getElementById(id); if (el) el.textContent = n; };
+        setCount('autoCopyInboxUsersCount', inboxEmails.length);
+        setCount('autoCopyInboxDomainsCount', inboxDomains.length);
+        setCount('autoCopySpamUsersCount', spamEmails.length);
+        setCount('autoCopySpamDomainsCount', spamDomains.length);
         el.innerHTML = `
             <div class="ii-result-summary">
                 <div class="ii-result-pill"><span class="ii-muted">Total emails</span><strong>${rows.length}</strong></div>
@@ -5465,20 +5471,13 @@ merge_recipe_id, content_blueprint_id</pre>
         const values = (iiState.automatedCopyBuckets[bucketName] || [])
             .map((value) => String(value || '').trim())
             .filter(Boolean);
-        let statusEl = document.getElementById('autoCopyStatus');
-        if (!statusEl) {
-            statusEl = document.createElement('div');
-            statusEl.id = 'autoCopyStatus';
-            statusEl.className = 'ii-muted mt-2';
-            const results = document.getElementById('automatedEmailResults');
-            if (results) results.parentNode.appendChild(statusEl);
-        }
+        const statusEl = document.getElementById('autoCopyStatus');
         if (!values.length) {
-            statusEl.textContent = 'Nothing to copy for this bucket. Run a test with sync first.';
+            if (statusEl) statusEl.textContent = 'Nothing to copy for this bucket. Run a test with sync first.';
             return;
         }
         await copyTextToClipboard(`${values.join('\r\n')}\r\n`);
-        statusEl.textContent = `Copied ${values.length} item(s) to clipboard.`;
+        if (statusEl) statusEl.textContent = `Copied ${values.length} item(s) to clipboard.`;
     }
 
     function renderUserInboxSpamInsights(rows) {
