@@ -1132,16 +1132,19 @@
         background: var(--ii-soft);
         border-radius: var(--ii-radius);
         color: var(--ii-ink);
-        padding: 4px;
+        padding: 0;
+        position: relative;
+        display: grid;
+        gap: 10px;
     }
 
     .ii-pro-topbar {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto;
-        gap: 16px;
+        gap: 10px;
         align-items: center;
-        min-height: 52px;
-        padding: 12px 18px;
+        min-height: 44px;
+        padding: 8px 12px;
         border: 1px solid var(--ii-line);
         border-radius: var(--ii-radius);
         background: #fff;
@@ -1192,7 +1195,7 @@
         grid-template-columns: repeat(5, minmax(0, 1fr));
         gap: 0;
         align-items: flex-start;
-        padding: 20px 12px 16px;
+        padding: 10px 10px 8px;
         position: relative;
     }
 
@@ -1201,9 +1204,9 @@
         flex-direction: column;
         align-items: center;
         text-align: center;
-        gap: 8px;
+        gap: 5px;
         position: relative;
-        min-height: 52px;
+        min-height: 44px;
         padding: 0 4px;
     }
 
@@ -1222,8 +1225,8 @@
     }
 
     .ii-pro-step span {
-        width: 32px;
-        height: 32px;
+        width: 27px;
+        height: 27px;
         border-radius: 50%;
         display: grid;
         place-items: center;
@@ -1251,7 +1254,7 @@
     }
 
     .ii-pro-step strong {
-        font-size: 11.5px;
+        font-size: 11px;
         color: var(--ii-ink-secondary);
         white-space: nowrap;
         font-weight: 650;
@@ -1290,7 +1293,7 @@
         justify-content: space-between;
         align-items: center;
         gap: 12px;
-        padding: 14px 18px;
+        padding: 10px 12px;
         border-bottom: 1px solid var(--ii-line);
         background: var(--ii-soft);
         border-radius: var(--ii-radius) var(--ii-radius) 0 0;
@@ -1306,13 +1309,13 @@
     }
 
     .ii-pro-card-body {
-        padding: 16px 18px;
+        padding: 10px 12px;
     }
 
     .ii-message-setup-grid {
         display: grid;
         grid-template-columns: minmax(380px, 1fr) minmax(380px, 1fr);
-        gap: 16px;
+        gap: 10px;
     }
 
     .ii-pro-toolbar {
@@ -1320,7 +1323,7 @@
         align-items: center;
         gap: 6px;
         flex-wrap: wrap;
-        padding: 8px 10px;
+        padding: 6px 8px;
         border: 1px solid var(--ii-line);
         border-bottom: 0;
         border-radius: var(--ii-radius-sm) var(--ii-radius-sm) 0 0;
@@ -1343,7 +1346,7 @@
     }
 
     .ii-pro-textarea {
-        min-height: 132px;
+        min-height: 112px;
         border-radius: var(--ii-radius-sm);
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
         line-height: 1.5;
@@ -1351,7 +1354,7 @@
     }
 
     .ii-pro-body-input {
-        min-height: 132px;
+        min-height: 112px;
         border-radius: 0 0 var(--ii-radius-sm) var(--ii-radius-sm);
         font-family: Inter, system-ui, -apple-system, sans-serif;
         font-size: 13px;
@@ -1361,8 +1364,8 @@
     .ii-two-col-pro {
         display: grid;
         grid-template-columns: minmax(420px, 1.05fr) minmax(420px, 0.95fr);
-        gap: 14px;
-        margin-top: 14px;
+        gap: 10px;
+        margin-top: 0;
     }
 
     .ii-pro-compact-table {
@@ -1470,49 +1473,18 @@
     .ii-pro-summary-grid {
         display: grid;
         grid-template-columns: minmax(360px, 0.8fr) minmax(460px, 1.2fr);
-        gap: 14px;
-        margin-top: 14px;
+        gap: 10px;
+        margin-top: 0;
     }
 
     .ii-pro-summary-split {
         display: grid;
         grid-template-columns: minmax(170px, 1fr) minmax(170px, 1fr);
-        gap: 12px;
-    }
-
-    .ii-run-button-float {
-        position: sticky;
-        top: 84px;
-        margin-left: auto;
-        width: fit-content;
-        z-index: 5;
-        padding: 4px;
-    }
-
-    .ii-run-button-float .ii-btn {
-        min-width: 170px;
-        min-height: 50px;
-        border-radius: 999px;
-        box-shadow: 0 8px 24px rgba(37, 99, 235, 0.3), 0 2px 8px rgba(37, 99, 235, 0.15);
-        font-size: 14px;
-        font-weight: 700;
-        letter-spacing: -0.01em;
-        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-        border: none;
-        transition: transform 0.15s ease, box-shadow 0.15s ease;
-    }
-
-    .ii-run-button-float .ii-btn:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 12px 32px rgba(37, 99, 235, 0.35), 0 4px 12px rgba(37, 99, 235, 0.2);
-    }
-
-    .ii-run-button-float .ii-btn:active {
-        transform: translateY(0);
+        gap: 8px;
     }
 
     .ii-analytics-pro {
-        margin-top: 14px;
+        margin-top: 0;
         border-color: var(--ii-blue-border);
         box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.06), var(--ii-shadow-sm);
     }
@@ -1556,7 +1528,7 @@
 
     .ii-analytics-panel {
         display: none;
-        padding-top: 16px;
+        padding-top: 10px;
     }
 
     .ii-analytics-panel.active {
@@ -1570,17 +1542,17 @@
         align-items: center;
         justify-content: center;
         text-align: center;
-        padding: 48px 24px;
+        padding: 24px 18px;
         background: linear-gradient(135deg, var(--ii-blue-soft) 0%, #f0f9ff 100%);
         border: 2px dashed var(--ii-blue-border);
         border-radius: var(--ii-radius);
-        min-height: 260px;
+        min-height: 150px;
     }
 
     .ii-ai-placeholder i {
-        font-size: 42px;
+        font-size: 28px;
         color: var(--ii-blue-light);
-        margin-bottom: 16px;
+        margin-bottom: 8px;
         opacity: 0.6;
     }
 
@@ -1599,11 +1571,188 @@
     }
 
     .ii-ai-placeholder .ii-chip {
-        margin-top: 12px;
+        margin-top: 8px;
     }
     .ii-analytics-pro {
-        margin-top: 12px;
+        margin-top: 0;
         border-color: #8fb3ff;
+    }
+
+    .ii-floating-command-stack {
+        position: fixed;
+        right: 22px;
+        bottom: 22px;
+        z-index: 1040;
+        display: grid;
+        gap: 10px;
+        width: 172px;
+    }
+
+    .ii-floating-action {
+        border: 0;
+        border-radius: 16px;
+        padding: 12px 14px;
+        display: grid;
+        grid-template-columns: 28px minmax(0, 1fr);
+        grid-template-areas: "icon label" "icon meta";
+        column-gap: 10px;
+        align-items: center;
+        text-align: left;
+        color: #fff;
+        box-shadow: 0 16px 40px rgba(15, 23, 42, 0.22);
+        cursor: pointer;
+    }
+
+    .ii-floating-action i {
+        grid-area: icon;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        background: rgba(255,255,255,0.18);
+    }
+
+    .ii-floating-action span {
+        grid-area: label;
+        font-weight: 800;
+        font-size: 13px;
+    }
+
+    .ii-floating-action small {
+        grid-area: meta;
+        opacity: 0.82;
+        font-size: 11px;
+    }
+
+    .ii-floating-run {
+        background: linear-gradient(135deg, #155ee8 0%, #0f46b7 100%);
+    }
+
+    .ii-floating-agent {
+        background: linear-gradient(135deg, #0f172a 0%, #2563eb 100%);
+    }
+
+    .ii-agent-chat-drawer {
+        position: fixed;
+        inset: 0;
+        z-index: 1039;
+        display: none;
+        pointer-events: none;
+    }
+
+    .ii-agent-chat-drawer.open {
+        display: block;
+    }
+
+    .ii-agent-chat-panel {
+        pointer-events: auto;
+        position: absolute;
+        right: 22px;
+        bottom: 132px;
+        width: min(460px, calc(100vw - 32px));
+        max-height: min(720px, calc(100vh - 160px));
+        display: grid;
+        grid-template-rows: auto auto minmax(0, 1fr) auto;
+        background: #fff;
+        border: 1px solid #bfdbfe;
+        border-radius: 16px;
+        box-shadow: 0 24px 70px rgba(15, 23, 42, 0.26);
+        overflow: hidden;
+    }
+
+    .ii-agent-chat-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 16px;
+        background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);
+        border-bottom: 1px solid #dbeafe;
+    }
+
+    .ii-agent-chat-head h3 {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 800;
+    }
+
+    .ii-agent-chat-head p {
+        margin: 4px 0 0;
+        font-size: 12px;
+        color: #64748b;
+    }
+
+    .ii-agent-chat-tabs {
+        display: flex;
+        gap: 6px;
+        padding: 8px 12px 0;
+    }
+
+    .ii-agent-chat-tab {
+        border: 0;
+        background: transparent;
+        color: #64748b;
+        padding: 8px 12px;
+        font-weight: 700;
+        border-bottom: 2px solid transparent;
+        cursor: pointer;
+    }
+
+    .ii-agent-chat-tab.active {
+        color: #2563eb;
+        border-bottom-color: #2563eb;
+    }
+
+    .ii-agent-chat-body {
+        padding: 12px;
+        overflow-y: auto;
+    }
+
+    .ii-agent-chat-pane {
+        display: none;
+    }
+
+    .ii-agent-chat-pane.active {
+        display: block;
+    }
+
+    .ii-agent-example {
+        border: 1px solid #dbeafe;
+        background: #eff6ff;
+        color: #1e40af;
+        border-radius: 10px;
+        padding: 9px 10px;
+        font-size: 12px;
+        margin: 8px 0;
+        cursor: pointer;
+    }
+
+    .ii-agent-chat-status {
+        margin-top: 10px;
+        padding: 9px 10px;
+        border-radius: 10px;
+        background: #f8fafc;
+        color: #475569;
+        font-size: 12px;
+    }
+
+    .ii-agent-chat-status.success {
+        background: #f0fdf4;
+        color: #166534;
+    }
+
+    .ii-agent-chat-status.error {
+        background: #fef2f2;
+        color: #991b1b;
+    }
+
+    .ii-agent-chat-foot {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        padding: 12px;
+        border-top: 1px solid #e2e8f0;
+        background: #f8fafc;
     }
 
     .ii-modal-backdrop {
@@ -1878,8 +2027,9 @@
         .ii-pro-topbar { grid-template-columns: 1fr; }
         .ii-pro-stepper { grid-template-columns: 1fr; }
         .ii-pro-summary-split { grid-template-columns: 1fr; }
-        .ii-run-button-float { position: static; width: 100%; }
-        .ii-run-button-float .ii-btn { width: 100%; }
+        .ii-floating-command-stack { right: 12px; bottom: 12px; width: 150px; }
+        .ii-floating-action { padding: 10px 12px; border-radius: 14px; }
+        .ii-agent-chat-panel { right: 12px; bottom: 118px; width: calc(100vw - 24px); max-height: calc(100vh - 140px); }
         .ii-template-actions .ii-btn { flex-basis: calc(50% - 4px); }
         .ii-analytics-row { grid-template-columns: 1fr; }
         .ii-account-tab { max-width: none; width: 100%; }
@@ -2180,10 +2330,22 @@
                     </div>
                 </div>
                 <div class="ii-row">
-                    <button class="ii-btn ii-btn-primary" type="button" onclick="switchAnalyticsTab('ai'); document.getElementById('aiAgentPanel')?.scrollIntoView({behavior:'smooth', block:'center'});"><i class="fas fa-comments"></i> AI Test Agent</button>
                     <select class="ii-select" id="automatedDateFilter" style="width: 170px;" onchange="loadAutomatedTests()"><option value="24h">Last 24 hours</option><option value="2d" selected>Last 2 days</option><option value="7d">Last 7 days</option><option value="all">All time</option></select>
                     <button class="ii-btn" type="button" onclick="saveAutomatedDraft()"><i class="fas fa-floppy-disk"></i> Save draft</button>
                 </div>
+            </div>
+
+            <div class="ii-floating-command-stack" aria-label="Automated Email Test actions">
+                <button class="ii-floating-action ii-floating-run" type="button" id="automatedRunButton" onclick="runAutomatedEmailTest()">
+                    <i class="fas fa-bolt"></i>
+                    <span>Trigger Test</span>
+                    <small>Ready</small>
+                </button>
+                <button class="ii-floating-action ii-floating-agent" type="button" data-ii-ai="1" onclick="openAiAgentChat()">
+                    <i class="fas fa-comments"></i>
+                    <span>AI Agent</span>
+                    <small>Chat</small>
+                </button>
             </div>
 
             <div class="ii-pro-stepper">
@@ -2253,8 +2415,6 @@ The NightOwl Ranch Team</textarea>
                     </div>
                     <div id="automatedAiSuggestions" style="display:none;"></div>
                 </div>
-            </div>
-                <button class="ii-btn ii-btn-primary" type="button" id="automatedRunButton" onclick="runAutomatedEmailTest()"><i class="fas fa-bolt"></i> Trigger Test <span class="ii-chip green ms-1">Ready</span></button>
             </div>
 
             <div class="ii-two-col-pro">
@@ -2420,6 +2580,57 @@ The NightOwl Ranch Team</textarea>
                                 <span class="ii-chip blue" id="analyticsAiEnabledChip">Agent ready</span>
                             </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="ii-agent-chat-drawer" id="aiAgentChatDrawer" aria-hidden="true">
+                <div class="ii-agent-chat-panel" role="dialog" aria-modal="false" aria-labelledby="aiAgentChatTitle">
+                    <div class="ii-agent-chat-head">
+                        <div>
+                            <h3 id="aiAgentChatTitle"><i class="fas fa-comments"></i> AI Test Agent</h3>
+                            <p>Tell the agent what to test, or use setup mode for exact control.</p>
+                        </div>
+                        <button class="ii-btn" type="button" onclick="closeAiAgentChat()" aria-label="Close AI Test Agent"><i class="fas fa-xmark"></i></button>
+                    </div>
+                    <div class="ii-agent-chat-tabs">
+                        <button class="ii-agent-chat-tab active" type="button" data-agent-tab="prompt" onclick="switchAiAgentChatTab('prompt')">Prompt</button>
+                        <button class="ii-agent-chat-tab" type="button" data-agent-tab="setup" onclick="switchAiAgentChatTab('setup')">Setup</button>
+                    </div>
+                    <div class="ii-agent-chat-body">
+                        <div class="ii-agent-chat-pane active" id="aiAgentPromptPane">
+                            <label class="ii-field">
+                                <span>Agent prompt</span>
+                                <textarea class="ii-input ii-textarea" id="aiAgentPromptInput" rows="5" placeholder="Example: test the list 40 and 25 using 3 users each test to email@email.com and handle the grey-user action"></textarea>
+                            </label>
+                            <div class="ii-agent-example" onclick="fillAiAgentExamplePrompt()">test the list 40 and 25 using 3 users each test to email@email.com and handle the grey-user action</div>
+                            <button class="ii-btn ii-btn-primary w-100" type="button" onclick="applyAiAgentPrompt()"><i class="fas fa-wand-magic-sparkles"></i> Apply prompt to setup</button>
+                        </div>
+                        <div class="ii-agent-chat-pane" id="aiAgentSetupPane">
+                            <div class="ii-form-grid">
+                                <div class="ii-field" style="grid-column: 1 / -1;">
+                                    <label>List number(s)</label>
+                                    <input class="ii-input" id="aiAgentListIdsInput" placeholder="40, 25">
+                                </div>
+                                <div class="ii-field">
+                                    <label>Users each test</label>
+                                    <input class="ii-input" id="aiAgentUsersEachInput" type="number" min="1" placeholder="3">
+                                </div>
+                                <div class="ii-field">
+                                    <label>Receiving email</label>
+                                    <input class="ii-input" id="aiAgentRecipientEmailInput" placeholder="email@email.com">
+                                </div>
+                                <div class="ii-field" style="grid-column: 1 / -1;">
+                                    <label class="mb-0"><input type="checkbox" id="aiAgentSetupGreyAction" checked> Handle grey-user action automatically</label>
+                                </div>
+                            </div>
+                            <button class="ii-btn w-100 mt-2" type="button" onclick="applyAiAgentSetupToPage()"><i class="fas fa-sliders"></i> Apply setup to page</button>
+                        </div>
+                        <div class="ii-agent-chat-status" id="aiAgentChatStatus">Ready. Configure the test, then start the agent.</div>
+                    </div>
+                    <div class="ii-agent-chat-foot">
+                        <button class="ii-btn" type="button" onclick="closeAiAgentChat()">Close</button>
+                        <button class="ii-btn ii-btn-primary" type="button" id="aiAgentChatStartButton" data-ii-ai="1" onclick="startAiAgentFromChat()"><i class="fas fa-play"></i> Start AI Agent</button>
                     </div>
                 </div>
             </div>
@@ -4462,6 +4673,133 @@ merge_recipe_id, content_blueprint_id</pre>
         }
     }
 
+    function setAiAgentChatStatus(message, tone = 'info') {
+        const el = document.getElementById('aiAgentChatStatus');
+        if (!el) return;
+        el.textContent = message;
+        el.className = `ii-agent-chat-status ${tone}`;
+    }
+
+    function openAiAgentChat() {
+        const drawer = document.getElementById('aiAgentChatDrawer');
+        if (!drawer) return;
+        drawer.classList.add('open');
+        drawer.setAttribute('aria-hidden', 'false');
+        refreshAiAgentConfigLabels();
+        setAiAgentChatStatus('Ready. Type a prompt or review setup, then start the agent.');
+        window.setTimeout(() => document.getElementById('aiAgentPromptInput')?.focus(), 50);
+    }
+
+    function closeAiAgentChat() {
+        const drawer = document.getElementById('aiAgentChatDrawer');
+        if (!drawer) return;
+        drawer.classList.remove('open');
+        drawer.setAttribute('aria-hidden', 'true');
+    }
+
+    function switchAiAgentChatTab(tabName) {
+        document.querySelectorAll('.ii-agent-chat-tab').forEach((tab) => tab.classList.toggle('active', tab.dataset.agentTab === tabName));
+        document.querySelectorAll('.ii-agent-chat-pane').forEach((pane) => pane.classList.remove('active'));
+        document.getElementById(tabName === 'setup' ? 'aiAgentSetupPane' : 'aiAgentPromptPane')?.classList.add('active');
+    }
+
+    function fillAiAgentExamplePrompt() {
+        const input = document.getElementById('aiAgentPromptInput');
+        if (input) input.value = 'test the list 40 and 25 using 3 users each test to email@email.com and handle the grey-user action';
+        applyAiAgentPrompt();
+    }
+
+    function parseAiAgentPrompt(prompt) {
+        const text = String(prompt || '').toLowerCase();
+        const listIds = [];
+        const listMatch = text.match(/lists?\s+([0-9,\sand]+)/i);
+        if (listMatch) {
+            (listMatch[1].match(/\d+/g) || []).forEach((id) => {
+                if (!listIds.includes(id)) listIds.push(id);
+            });
+        }
+        const usersMatch = text.match(/(\d+)\s+users?/i);
+        const emailMatch = String(prompt || '').match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+        return {
+            listIds,
+            usersEach: usersMatch ? usersMatch[1] : '',
+            recipientEmail: emailMatch ? emailMatch[0].toLowerCase() : '',
+            greyAction: /without\s+(grey|gray)|disable\s+(grey|gray)|no\s+(grey|gray)/i.test(prompt || '')
+                ? false
+                : /grey|gray|name/i.test(prompt || ''),
+        };
+    }
+
+    function applyAiAgentPrompt() {
+        const prompt = document.getElementById('aiAgentPromptInput')?.value || '';
+        const parsed = parseAiAgentPrompt(prompt);
+        document.getElementById('aiAgentListIdsInput').value = parsed.listIds.join(', ');
+        document.getElementById('aiAgentUsersEachInput').value = parsed.usersEach || '';
+        document.getElementById('aiAgentRecipientEmailInput').value = parsed.recipientEmail || '';
+        document.getElementById('aiAgentSetupGreyAction').checked = parsed.greyAction;
+        switchAiAgentChatTab('setup');
+        return applyAiAgentSetupToPage();
+    }
+
+    function selectAutomatedRecipientByEmail(email) {
+        const select = document.getElementById('automatedInboxSelector');
+        if (!select || !email) return false;
+        let matched = false;
+        Array.from(select.options).forEach((option) => {
+            const hit = option.textContent.toLowerCase().includes(email.toLowerCase()) || String(option.value || '').toLowerCase() === email.toLowerCase();
+            if (hit) {
+                option.selected = true;
+                matched = true;
+            }
+        });
+        if (matched) updateAutomatedInboxSelection();
+        return matched;
+    }
+
+    async function applyAiAgentSetupToPage() {
+        const listIds = (document.getElementById('aiAgentListIdsInput')?.value || '').match(/\d+/g) || [];
+        const usersEach = (document.getElementById('aiAgentUsersEachInput')?.value || '').trim();
+        const recipient = (document.getElementById('aiAgentRecipientEmailInput')?.value || '').trim().toLowerCase();
+        const grey = document.getElementById('aiAgentSetupGreyAction')?.checked !== false;
+        const perAccount = document.getElementById('automatedUsersPerAccountInput');
+        if (perAccount && usersEach) {
+            perAccount.value = usersEach;
+            applyAutomatedUsersPerAccount();
+        }
+        const greyBox = document.getElementById('aiAgentAutoRenameGrey');
+        if (greyBox) greyBox.checked = grey;
+        let messages = [];
+        if (listIds.length) {
+            const select = document.getElementById('automatedWorkspaceListSelect');
+            const firstList = listIds[0];
+            if (select && Array.from(select.options).some((option) => option.value === firstList)) {
+                select.value = firstList;
+                mirrorAutomatedListSelection();
+                messages.push(`List ${firstList} selected${listIds.length > 1 ? `; queued note includes ${listIds.slice(1).join(', ')} for follow-up runs` : ''}.`);
+                await retrieveAutomatedWorkspaceListUsers();
+            } else {
+                messages.push(`List ${firstList} was not found in the loaded List Management options.`);
+            }
+        }
+        if (recipient) {
+            messages.push(selectAutomatedRecipientByEmail(recipient)
+                ? `Receiving inbox ${recipient} selected.`
+                : `Receiving inbox ${recipient} is not connected on this page.`);
+        }
+        refreshAiAgentConfigLabels();
+        setAiAgentChatStatus(messages.join(' ') || 'Setup applied to the current test page.');
+    }
+
+    async function startAiAgentFromChat() {
+        const promptPaneActive = document.getElementById('aiAgentPromptPane')?.classList.contains('active');
+        if (promptPaneActive && (document.getElementById('aiAgentPromptInput')?.value || '').trim()) {
+            await applyAiAgentPrompt();
+        } else {
+            await applyAiAgentSetupToPage();
+        }
+        await startAutomatedAiAgent();
+    }
+
     async function runAutomatedEmailTest() {
         const status = document.getElementById('automatedStatusText');
         const runButton = document.getElementById('automatedRunButton');
@@ -4485,7 +4823,7 @@ merge_recipe_id, content_blueprint_id</pre>
         } finally {
             if (runButton) {
                 runButton.disabled = false;
-                runButton.innerHTML = '<i class="fas fa-bolt"></i> Trigger Test <span class="ii-chip green ms-1">Ready</span>';
+                runButton.innerHTML = '<i class="fas fa-bolt"></i><span>Trigger Test</span><small>Ready</small>';
             }
         }
     }
@@ -4708,10 +5046,10 @@ merge_recipe_id, content_blueprint_id</pre>
         const analysis = payload.analysis || iiState.automatedAiResultAnalysis;
         if (!analysis) {
             panel.innerHTML = `<div class="ii-ai-placeholder">
-                <i class="fas fa-wand-magic-sparkles"></i>
-                <h4>${testId ? 'AI analysis ready to run' : 'Select a completed or synced test'}</h4>
-                <p>AI analysis uses the same message rows shown in User Inbox Analytics. It cannot change verdicts, send retries, or mutate users/domains.</p>
-                <span class="ii-chip blue">Read-only recommendations</span>
+                <i class="fas fa-comments"></i>
+                <h4>${testId ? 'Agent monitor ready' : 'Start from the floating AI Agent chat'}</h4>
+                <p>The floating AI Agent runs the configured test, syncs IMAP, classifies users, handles grey-user name changes, and shows the final lists here.</p>
+                <span class="ii-chip blue">Agent workflow</span>
             </div>`;
             return;
         }
@@ -4855,6 +5193,7 @@ merge_recipe_id, content_blueprint_id</pre>
 
     async function startAutomatedAiAgent() {
         const button = document.getElementById('aiAgentStartButton');
+        const chatButton = document.getElementById('aiAgentChatStartButton');
         const status = document.getElementById('automatedStatusText');
         if (!II_AI_ENABLED) { renderAiAgentState('error', {message: iiAiDisabledHint()}); return; }
         try {
@@ -4862,7 +5201,12 @@ merge_recipe_id, content_blueprint_id</pre>
                 button.disabled = true;
                 button.innerHTML = '<span class="ii-spinner" aria-hidden="true"></span> Agent running';
             }
+            if (chatButton) {
+                chatButton.disabled = true;
+                chatButton.innerHTML = '<span class="ii-spinner" aria-hidden="true"></span> Agent running';
+            }
             const config = collectAutomatedTestPayload('AI Agent');
+            setAiAgentChatStatus('Step 1/5: starting configured test...');
             renderAiAgentState('loading', {message: 'Step 1/5: starting configured test', detail: 'Using the selected queue, list/account source, users-per-account value, inboxes, and thresholds.'});
             if (status) status.textContent = 'AI Test Agent started the configured automated test.';
             const firstRun = await createAutomatedTestBatch(config.payload);
@@ -4871,10 +5215,12 @@ merge_recipe_id, content_blueprint_id</pre>
             document.getElementById('automatedManualTestIdInput').value = firstRun.test_id;
             localStorage.setItem('ii_automated_last_test_id', firstRun.test_id);
 
+            setAiAgentChatStatus(`Step 2/5: syncing first-run IMAP results for ${firstRun.test_id}...`);
             renderAiAgentState('loading', {message: 'Step 2/5: syncing first-run IMAP results', detail: firstRun.test_id});
             await runAutomatedSyncJob(firstRun.test_id, {sync_mode: 'recent', recent_limit: 200, date_range: document.getElementById('automatedDateFilter')?.value || '2d'});
             await viewAutomatedEmailTest(firstRun.test_id);
 
+            setAiAgentChatStatus('Step 3/5: classifying inbox, spam, and grey users...');
             renderAiAgentState('loading', {message: 'Step 3/5: classifying inbox, spam, and grey users', detail: firstRun.test_id});
             const firstClassification = await classifyAutomatedAgentTest(firstRun.test_id, firstSenderContext);
             const autoRename = document.getElementById('aiAgentAutoRenameGrey')?.checked !== false;
@@ -4882,6 +5228,7 @@ merge_recipe_id, content_blueprint_id</pre>
             const agentResult = {first: {test_id: firstRun.test_id, classification: firstClassification}, name_changes: {changed: [], failed: []}, retry: null};
 
             if (autoRename && greyUsers.length) {
+                setAiAgentChatStatus(`Step 4/5: changing ${greyUsers.length} grey-user name(s)...`);
                 renderAiAgentState('loading', {message: 'Step 4/5: changing grey-user names', detail: `${greyUsers.length} grey user(s) will be updated before retest.`});
                 agentResult.name_changes = await changeAiAgentGreyNames(greyUsers);
                 const changedEmails = new Set((agentResult.name_changes.changed || []).map((item) => item.email));
@@ -4889,6 +5236,7 @@ merge_recipe_id, content_blueprint_id</pre>
                     .filter((user) => changedEmails.has(user.email))
                     .map((user) => ({email: user.email, name: (agentResult.name_changes.changed || []).find((item) => item.email === user.email)?.new_name || user.name || '', service_account_id: user.service_account_id}));
                 if (retrySenders.length) {
+                    setAiAgentChatStatus(`Step 5/5: retesting ${retrySenders.length} changed grey user(s)...`);
                     renderAiAgentState('loading', {message: 'Step 5/5: retesting changed grey users', detail: `${retrySenders.length} changed user(s) selected for retry.`});
                     const retryPayload = {...config.payload, senders: retrySenders, service_account_ids: [], max_per_account: '', name: `AI Agent Retest: ${new Date().toLocaleString()}`};
                     const retryRun = await createAutomatedTestBatch(retryPayload);
@@ -4898,13 +5246,19 @@ merge_recipe_id, content_blueprint_id</pre>
                 }
             }
             renderAiAgentState('complete', agentResult);
+            setAiAgentChatStatus('AI Test Agent completed. Final lists are ready to copy.', 'success');
         } catch (err) {
             renderAiAgentState('error', {message: err.message});
+            setAiAgentChatStatus(`Agent stopped: ${err.message}`, 'error');
             if (status) status.textContent = `AI Test Agent stopped: ${err.message}`;
         } finally {
             if (button) {
                 button.disabled = false;
                 button.innerHTML = '<i class="fas fa-play"></i> Start AI Agent';
+            }
+            if (chatButton) {
+                chatButton.disabled = false;
+                chatButton.innerHTML = '<i class="fas fa-play"></i> Start AI Agent';
             }
         }
     }
@@ -4925,11 +5279,11 @@ merge_recipe_id, content_blueprint_id</pre>
             .filter(Boolean);
         const statusText = document.getElementById('automatedStatusText');
         if (!values.length) {
-            if (statusText) statusText.textContent = `Nothing to copy for ${bucketName}. Run AI analysis after sync.`;
+            if (statusText) statusText.textContent = `Nothing to copy for ${bucketName}. Run the AI Test Agent after sync.`;
             return;
         }
         await copyTextToClipboard(`${values.join('\r\n')}\r\n`);
-        if (statusText) statusText.textContent = `Copied ${values.length} AI analysis item(s).`;
+        if (statusText) statusText.textContent = `Copied ${values.length} AI Test Agent item(s).`;
     }
 
     function renderAutomatedProAnalytics(rows, test) {

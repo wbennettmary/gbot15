@@ -93,6 +93,9 @@
                         <button type="submit" class="btn-github btn-github-primary">
                             <i class="fas fa-save"></i> Save AI Credentials
                         </button>
+                        <button type="button" class="btn-github" onclick="testOpenRouterConfiguration()">
+                            <i class="fas fa-plug"></i> Test Credentials
+                        </button>
                         <span id="openRouterStatus" style="color: #656d76; font-size: 14px;"></span>
                     </div>
                 </form>
@@ -1476,6 +1479,23 @@
                 $('#openRouterApiKey').val('');
                 showOpenRouterStatus(data.message || 'AI credentials saved.', 'success');
                 loadOpenRouterConfiguration();
+            })
+            .catch(error => {
+                showOpenRouterStatus(error.message, 'error');
+            });
+    }
+
+    function testOpenRouterConfiguration() {
+        showOpenRouterStatus('Testing OpenRouter credentials...', 'info');
+        fetch('/api/settings/openrouter-config/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        })
+            .then(response => response.json().then(data => ({ok: response.ok, data})))
+            .then(({ok, data}) => {
+                if (!ok || !data.success) throw new Error(data.error || 'OpenRouter credential test failed');
+                showOpenRouterStatus(data.message || 'OpenRouter credentials are working.', 'success');
             })
             .catch(error => {
                 showOpenRouterStatus(error.message, 'error');

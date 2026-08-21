@@ -3584,6 +3584,45 @@ def api_inbox_openrouter_config():
     db.session.commit()
     return jsonify({'success': True, 'message': 'OpenRouter configuration saved'})
 
+@app.route('/api/settings/openrouter-config/test', methods=['POST'])
+@login_required
+def api_settings_openrouter_config_test():
+    if not _can_manage_ai_credentials():
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
+    try:
+        import requests
+        from services.inbox_ai_gateway import OPENROUTER_URL, load_settings
+        settings = load_settings(decrypt_secret=_unprotect_secret)
+        if not settings.api_key:
+            return jsonify({'success': False, 'error': 'No OpenRouter API key is configured.'}), 400
+        payload = {
+            'model': settings.model,
+            'temperature': 0,
+            'max_tokens': 8,
+            'messages': [
+                {'role': 'system', 'content': 'Reply with only OK.'},
+                {'role': 'user', 'content': 'Connectivity test'}
+            ],
+        }
+        response = requests.post(
+            OPENROUTER_URL,
+            headers={
+                'Authorization': f'Bearer {settings.api_key}',
+                'Content-Type': 'application/json',
+                'HTTP-Referer': request.host_url.rstrip('/'),
+                'X-Title': 'GBot Inbox Intelligence',
+            },
+            json=payload,
+            timeout=20,
+        )
+        if response.status_code >= 400:
+            return jsonify({'success': False, 'error': f'OpenRouter test failed with HTTP {response.status_code}.'}), 400
+        data = response.json()
+        model = data.get('model') or settings.model
+        return jsonify({'success': True, 'message': f'OpenRouter credentials are working with {model}.', 'model': model})
+    except Exception as exc:
+        return jsonify({'success': False, 'error': f'OpenRouter test failed: {type(exc).__name__}'}), 400
+
 def _agent_sender_context_lookup(sender_context):
     lookup = {}
     for item in sender_context or []:
