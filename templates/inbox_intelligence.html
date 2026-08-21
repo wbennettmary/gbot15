@@ -1763,11 +1763,19 @@
             <div class="ii-auto-card ii-auto-results-card">
                 <div class="ii-action-head">
                     <h4>Email-Level Results</h4>
-                    <div class="ii-auto-result-tabs">
-                        <button class="ii-btn" id="autoFilterAll" type="button" onclick="setAutomatedResultFilter('ALL')">All</button>
-                        <button class="ii-btn" id="autoFilterInbox" type="button" onclick="setAutomatedResultFilter('INBOX')">Inbox</button>
-                        <button class="ii-btn" id="autoFilterMixed" type="button" onclick="setAutomatedResultFilter('MIXED')">Mixed</button>
-                        <button class="ii-btn" id="autoFilterSpam" type="button" onclick="setAutomatedResultFilter('SPAM')">Spam</button>
+                    <div class="ii-row" style="flex-wrap: wrap; gap: 8px;">
+                        <div class="ii-auto-result-tabs">
+                            <button class="ii-btn" id="autoFilterAll" type="button" onclick="setAutomatedResultFilter('ALL')">All</button>
+                            <button class="ii-btn" id="autoFilterInbox" type="button" onclick="setAutomatedResultFilter('INBOX')">Inbox</button>
+                            <button class="ii-btn" id="autoFilterMixed" type="button" onclick="setAutomatedResultFilter('MIXED')">Mixed</button>
+                            <button class="ii-btn" id="autoFilterSpam" type="button" onclick="setAutomatedResultFilter('SPAM')">Spam</button>
+                        </div>
+                        <div class="ii-row" style="gap: 6px;">
+                            <button class="ii-btn" type="button" onclick="copyAutomatedBucket('inboxUsers')"><i class="fas fa-users"></i> Inbox Users</button>
+                            <button class="ii-btn" type="button" onclick="copyAutomatedBucket('inboxDomains')"><i class="fas fa-globe"></i> Inbox Domains</button>
+                            <button class="ii-btn" type="button" onclick="copyAutomatedBucket('spamUsers')"><i class="fas fa-user-xmark"></i> Spam Users</button>
+                            <button class="ii-btn" type="button" onclick="copyAutomatedBucket('spamDomains')"><i class="fas fa-ban"></i> Spam Domains</button>
+                        </div>
                     </div>
                 </div>
                 <div id="automatedEmailResults" class="ii-muted">Run or select an automated test to see source-email verdicts.</div>
@@ -2524,6 +2532,7 @@ merge_recipe_id, content_blueprint_id</pre>
         automatedSelectedTestId: null,
         automatedPollTimers: {},
         automatedResultFilter: 'ALL',
+        automatedCopyBuckets: {inboxUsers: [], inboxDomains: [], spamUsers: [], spamDomains: []},
         selectedResultsTest: null,
         tests: []
     };
@@ -3519,6 +3528,14 @@ merge_recipe_id, content_blueprint_id</pre>
         const observedRows = rows.reduce((sum, row) => sum + ((row.inbox_count || 0) + (row.spam_count || 0)), 0);
         const observedTotal = rows.reduce((sum, row) => sum + ((row.inbox_count || 0) + (row.spam_count || 0) + (row.missing_count || 0)), 0);
         const observedPct = observedTotal ? Math.round((observedRows / observedTotal) * 100) : 0;
+        const inboxEmails = [...new Set(rows.filter((r) => r.verdict === 'INBOX' || r.verdict === 'MIXED').map((r) => r.source_sender).filter(Boolean))];
+        const spamEmails = [...new Set(rows.filter((r) => r.verdict === 'SPAM' || r.verdict === 'MIXED').map((r) => r.source_sender).filter(Boolean))];
+        const inboxDomains = [...new Set(inboxEmails.map((e) => e.split('@').pop()).filter(Boolean))];
+        const spamDomains = [...new Set(spamEmails.map((e) => e.split('@').pop()).filter(Boolean))];
+        iiState.automatedCopyBuckets.inboxUsers = inboxEmails;
+        iiState.automatedCopyBuckets.inboxDomains = inboxDomains;
+        iiState.automatedCopyBuckets.spamUsers = spamEmails;
+        iiState.automatedCopyBuckets.spamDomains = spamDomains;
         el.innerHTML = `
             <div class="ii-result-summary">
                 <div class="ii-result-pill"><span class="ii-muted">Total emails</span><strong>${rows.length}</strong></div>
@@ -5442,6 +5459,27 @@ merge_recipe_id, content_blueprint_id</pre>
         }
         await copyTextToClipboard(`${values.join('\r\n')}\r\n`);
         if (status) status.textContent = `Copied ${values.length} item(s), one per line.`;
+    }
+
+    async function copyAutomatedBucket(bucketName) {
+        const values = (iiState.automatedCopyBuckets[bucketName] || [])
+            .map((value) => String(value || '').trim())
+            .filter(Boolean);
+        const status = document.getElementById('automatedEmailResults');
+        if (!values.length) {
+            const msg = document.querySelector('#automatedEmailResults .ii-muted');
+            if (msg) msg.insertAdjacentHTML('afterend', '<div class="ii-muted mt-2" id="autoCopyStatus">Nothing to copy for this bucket. Select a test first.</div>');
+            return;
+        }
+        await copyTextToClipboard(`${values.join('\r\n')}\r\n`);
+        let statusEl = document.getElementById('autoCopyStatus');
+        if (!statusEl) {
+            statusEl = document.createElement('div');
+            statusEl.id = 'autoCopyStatus';
+            statusEl.className = 'ii-muted mt-2';
+            status.insertAdjacentElement('beforeend', statusEl);
+        }
+        statusEl.textContent = `Copied ${values.length} item(s), one per line.`;
     }
 
     function renderUserInboxSpamInsights(rows) {
