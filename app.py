@@ -3759,7 +3759,7 @@ def api_inbox_ai_validate_placeholders():
     header_tokens = find_placeholders(header)
     missing_required = [token for token in REQUIRED_HEADER_PLACEHOLDERS if token not in header_tokens]
     structure = analyze_header_structure(header)
-    valid = not missing_required and not structure['problems']
+    valid = structure['has_subject'] and not structure['problems']
     return jsonify({
         'success': True,
         'valid': valid,
@@ -3773,8 +3773,6 @@ def api_inbox_ai_validate_placeholders():
     })
 
 @app.route('/api/inbox-intelligence/ai/jobs/<job_id>', methods=['GET'])
-
-@app.route('/api/inbox-intelligence/ai/jobs/<job_id>', methods=['GET'])
 @login_required
 @permission_required('inbox_intelligence')
 def api_inbox_ai_job_status(job_id):
@@ -3783,6 +3781,218 @@ def api_inbox_ai_job_status(job_id):
     if not payload:
         return jsonify({'success': False, 'error': 'AI job not found'}), 404
     return jsonify({'success': True, **payload})
+
+def _parse_id_list(values, limit=200):
+    """Coerce a client-supplied id list into safe positive integers."""
+    parsed = []
+    for value in (values or [])[:limit]:
+        try:
+            item = int(value)
+        except (TypeError, ValueError):
+            continue
+        if item > 0 and item not in parsed:
+            parsed.append(item)
+    return parsed
+
+@app.route('/api/inbox-intelligence/ai/recommend-queue', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_ai_recommend_queue():
+    data = request.get_json(silent=True) or {}
+    from services.inbox_ai_gateway import generate_queue_recommendations
+    from services.inbox_ai_persistence import (
+        JOB_TYPE_QUEUE_RECOMMENDATION,
+        SUGGESTION_TYPE_QUEUE_CLEANUP,
+        persist_suggestions,
+    )
+    source_ids = _parse_id_list(data.get('source_ids'), limit=100)
+    if not source_ids:
+        return jsonify({'success': False, 'error': 'Provide source_ids to review'}), 400
+    sources = TestEmailSource.query.filter(TestEmailSource.id.in_(source_ids)).all()
+    if not sources:
+        return jsonify({'success': False, 'error': 'No matching queued templates found'}), 404
+    now_utc = datetime.utcnow()
+    queue_items = []
+    for source in sources:
+        age_days = None
+        if source.original_received_at:
+            try:
+                age_days = max(0, (now_utc - source.original_received_at).days)
+            except TypeError:
+                age_days = None
+        queue_items.append({
+            'source_id': source.id,
+            'subject_chars': len(source.original_subject or ''),
+            'has_html_body': bool(source.html_snapshot),
+            'has_text_body': bool(source.text_snapshot),
+            'already_tested': bool(source.last_test_id),
+            'last_verdict': (source.last_verdict or '')[:30],
+            'sender_domain': (source.source_sender_domain or '')[:120],
+            'status': (source.status or '')[:30],
+            'age_days': age_days,
+        })
+    ai_job, error_response = _start_optional_ai_job(data, JOB_TYPE_QUEUE_RECOMMENDATION)
+    if error_response:
+        return error_response
+    result = generate_queue_recommendations(
+        {'queue_items': queue_items},
+        decrypt_secret=_unprotect_secret,
+        job_id=ai_job.job_id if ai_job else None,
+        referer=request.host_url.rstrip('/'),
+    )
+    recommendation = result.data.get('recommendation') or {}
+    response = {'success': True, 'provider': result.provider, 'recommendation': recommendation}
+    if result.model and result.provider == 'openrouter':
+        response['model'] = result.model
+    if result.message:
+        response['message'] = result.message
+    if ai_job:
+        delete_candidates = [
+            {'text': f'Delete queued template #{sid}', 'rationale': 'Flagged by AI cleanup review; deletion stays a manual action.'}
+            for sid in (recommendation.get('cleanup') or {}).get('delete_candidate_ids', [])
+        ]
+        persisted = _finalize_ai_job(
+            ai_job, result,
+            suggestions=delete_candidates,
+            persist_fn=lambda job, items: persist_suggestions(job, items, suggestion_type=SUGGESTION_TYPE_QUEUE_CLEANUP, target_region='test_queue'),
+            region='test_queue',
+            audit_event='queue_recommendation_generated' if delete_candidates else None,
+            output_override={'recommendation': recommendation},
+        )
+        response['job_id'] = ai_job.job_id
+        if delete_candidates:
+            response['suggestions_persisted'] = persisted
+    return jsonify(response)
+
+@app.route('/api/inbox-intelligence/ai/recommend-allocation', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_ai_recommend_allocation():
+    data = request.get_json(silent=True) or {}
+    from services.inbox_ai_gateway import generate_allocation_recommendation
+    from services.inbox_ai_persistence import JOB_TYPE_ALLOCATION_RECOMMENDATION
+    service_account_ids = _parse_id_list(data.get('service_account_ids'), limit=50)
+    inbox_account_ids = _parse_id_list(data.get('inbox_account_ids'), limit=50)
+    users_per_account = None
+    raw_per_account = str(data.get('users_per_account') or '').strip()
+    if raw_per_account:
+        try:
+            users_per_account = max(1, int(raw_per_account))
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'error': 'users_per_account must be a positive integer'}), 400
+    target_emails = None
+    if data.get('target_emails'):
+        try:
+            target_emails = max(0, int(data.get('target_emails')))
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'error': 'target_emails must be an integer'}), 400
+    account_count = 0
+    if service_account_ids:
+        account_count = ServiceAccount.query.filter(ServiceAccount.id.in_(service_account_ids)).count()
+    elif data.get('list_id'):
+        try:
+            workspace_list = WorkspaceList.query.filter(WorkspaceList.id == int(data.get('list_id'))).first()
+        except (TypeError, ValueError):
+            workspace_list = None
+        if not workspace_list:
+            return jsonify({'success': False, 'error': 'Unknown list_id'}), 404
+        service_accounts, _unmatched, _ambiguous = _resolve_workspace_list_service_accounts(workspace_list)
+        account_count = len(service_accounts)
+    recipient_count = InboxImapAccount.query.filter(InboxImapAccount.id.in_(inbox_account_ids)).count() if inbox_account_ids else 0
+    context = {
+        'account_count': account_count,
+        'list_source': bool(data.get('list_id')),
+        'users_per_account': users_per_account,
+        'selected_sender_count': max(0, int(data.get('selected_sender_count') or 0)) if str(data.get('selected_sender_count') or '').strip().isdigit() else 0,
+        'target_emails': target_emails,
+        'selected_email_count': TestEmailSource.query.filter(TestEmailSource.id.in_(_parse_id_list(data.get('source_ids'), limit=200))).count(),
+        'recipient_count': recipient_count,
+        'strategy': ('full_matrix' if data.get('strategy') == 'full_matrix' else 'distributed'),
+    }
+    ai_job, error_response = _start_optional_ai_job(data, JOB_TYPE_ALLOCATION_RECOMMENDATION)
+    if error_response:
+        return error_response
+    result = generate_allocation_recommendation(
+        context,
+        decrypt_secret=_unprotect_secret,
+        job_id=ai_job.job_id if ai_job else None,
+        referer=request.host_url.rstrip('/'),
+    )
+    recommendation = result.data.get('recommendation') or {}
+    response = {'success': True, 'provider': result.provider, 'facts': context, 'recommendation': recommendation}
+    if result.model and result.provider == 'openrouter':
+        response['model'] = result.model
+    if result.message:
+        response['message'] = result.message
+    if ai_job:
+        _finalize_ai_job(ai_job, result, output_override={'recommendation': recommendation}, audit_event='allocation_recommendation_generated')
+        response['job_id'] = ai_job.job_id
+    return jsonify(response)
+
+@app.route('/api/inbox-intelligence/ai/explain-readiness', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_ai_explain_readiness():
+    data = request.get_json(silent=True) or {}
+    from services.inbox_ai_gateway import generate_readiness_explanation
+    from services.inbox_ai_persistence import JOB_TYPE_READINESS_EXPLANATION
+    source_ids = _parse_id_list(data.get('source_ids'), limit=200)
+    service_account_ids = _parse_id_list(data.get('service_account_ids'), limit=50)
+    inbox_account_ids = _parse_id_list(data.get('inbox_account_ids'), limit=50)
+    users_per_account = None
+    raw_per_account = str(data.get('users_per_account') or '').strip()
+    if raw_per_account:
+        try:
+            users_per_account = max(1, int(raw_per_account))
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'error': 'users_per_account must be a positive integer'}), 400
+    selected_sender_count = max(0, int(data.get('selected_sender_count') or 0)) if str(data.get('selected_sender_count') or '').strip().isdigit() else 0
+    strategy = 'full_matrix' if data.get('strategy') == 'full_matrix' else 'distributed'
+    email_count = TestEmailSource.query.filter(TestEmailSource.id.in_(source_ids)).count()
+    account_count = ServiceAccount.query.filter(ServiceAccount.id.in_(service_account_ids)).count() if service_account_ids else 0
+    if not account_count and data.get('list_id'):
+        try:
+            workspace_list = WorkspaceList.query.filter(WorkspaceList.id == int(data.get('list_id'))).first()
+        except (TypeError, ValueError):
+            workspace_list = None
+        if workspace_list:
+            service_accounts, _unmatched, _ambiguous = _resolve_workspace_list_service_accounts(workspace_list)
+            account_count = len(service_accounts)
+    recipient_count = InboxImapAccount.query.filter(InboxImapAccount.id.in_(inbox_account_ids)).count() if inbox_account_ids else 0
+    effective_users = selected_sender_count or ((account_count or 0) * (users_per_account or 1))
+    estimated_messages = email_count * effective_users * (recipient_count if strategy == 'full_matrix' else 1)
+    context = {
+        'selected_email_count': email_count,
+        'account_count': account_count,
+        'list_source': bool(data.get('list_id')),
+        'selected_sender_count': selected_sender_count,
+        'users_per_account': users_per_account,
+        'recipient_count': recipient_count,
+        'strategy': strategy,
+        'inbox_threshold': max(1, min(100, int(data.get('inbox_threshold') or 80))),
+        'spam_threshold': max(0, min(99, int(data.get('spam_threshold') or 40))),
+        'minimum_observations': max(1, int(data.get('minimum_observations') or 10)),
+        'estimated_messages': estimated_messages,
+    }
+    ai_job, error_response = _start_optional_ai_job(data, JOB_TYPE_READINESS_EXPLANATION)
+    if error_response:
+        return error_response
+    result = generate_readiness_explanation(
+        context,
+        decrypt_secret=_unprotect_secret,
+        job_id=ai_job.job_id if ai_job else None,
+        referer=request.host_url.rstrip('/'),
+    )
+    explanation = result.data.get('recommendation') or {}
+    response = {'success': True, 'provider': result.provider, 'facts': context, 'explanation': explanation}
+    if result.model and result.provider == 'openrouter':
+        response['model'] = result.model
+    if result.message:
+        response['message'] = result.message
+    if ai_job:
+        _finalize_ai_job(ai_job, result, output_override={'explanation': explanation}, audit_event='readiness_explanation_generated')
+        response['job_id'] = ai_job.job_id
+    return jsonify(response)
 
 def _detect_template_regions(html_content):
     html_content = html_content or ''

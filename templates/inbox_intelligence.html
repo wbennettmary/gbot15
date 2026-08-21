@@ -2271,6 +2271,7 @@ The NightOwl Ranch Team</textarea>
                         <h4>1. Test Queue</h4>
                         <div class="ii-row">
                             <select class="ii-select" style="width: 130px;"><option>Bulk actions</option></select>
+                            <button class="ii-btn" type="button" onclick="aiReviewAutomatedQueue()"><i class="fas fa-wand-magic-sparkles"></i> AI Review</button>
                             <button class="ii-btn" type="button" onclick="deleteSelectedAutomatedQueue()"><i class="fas fa-trash"></i> Delete</button>
                             <button class="ii-btn" type="button" onclick="clearAutomatedQueueSelection()">Clear</button>
                         </div>
@@ -2282,13 +2283,17 @@ The NightOwl Ranch Team</textarea>
                         </div>
                         <div class="ii-muted mb-2" id="autoQueueCount">0 queued</div>
                         <div id="automatedQueueList" class="ii-muted">Push emails from Inbox Explorer to start.</div>
+                        <div id="automatedQueueAiPanel" style="display:none;" class="ii-ai-output"></div>
                     </div>
                 </div>
 
                 <div class="ii-pro-card ii-pro-card-accent">
                     <div class="ii-pro-card-head">
                         <h4>2. Workspace Sources</h4>
-                        <button class="ii-btn ii-btn-primary" type="button" onclick="retrieveAutomatedWorkspaceUsers()"><i class="fas fa-users-gear"></i> Retrieve Users</button>
+                        <div>
+                            <button class="ii-btn" type="button" onclick="aiRecommendAutomatedAllocation()"><i class="fas fa-wand-magic-sparkles"></i> AI Advice</button>
+                            <button class="ii-btn ii-btn-primary" type="button" onclick="retrieveAutomatedWorkspaceUsers()"><i class="fas fa-users-gear"></i> Retrieve Users</button>
+                        </div>
                     </div>
                     <div class="ii-pro-card-body">
                         <div class="ii-pro-tabs">
@@ -2321,12 +2326,13 @@ The NightOwl Ranch Team</textarea>
                         <div class="ii-muted mt-2" id="automatedInboxStatus">Connected inboxes will appear here.</div>
                         <div class="ii-form-grid mt-3">
                             <div class="ii-field"><label>Strategy</label><select class="ii-select" id="automatedStrategyInput" onchange="updateAutomatedSummary()"><option value="distributed">Distributed</option><option value="full_matrix">Full Matrix</option></select></div>
-                            <div class="ii-field"><label>Users per account</label><input class="ii-input" id="automatedUsersPerAccountInput" type="number" min="1" placeholder="Blank = all users" oninput="updateAutomatedSummary()"></div>
+                            <div class="ii-field"><label>Users per account</label><input class="ii-input" id="automatedUsersPerAccountInput" type="number" min="1" placeholder="Blank = all users" oninput="applyAutomatedUsersPerAccount()"></div>
                             <div class="ii-field"><label>Inbox verdict at</label><input class="ii-input" id="automatedInboxThresholdInput" type="number" min="1" max="100" value="80"></div>
                             <div class="ii-field"><label>Spam verdict below</label><input class="ii-input" id="automatedSpamThresholdInput" type="number" min="0" max="99" value="40"></div>
                             <div class="ii-field"><label>Minimum observations</label><input class="ii-input" id="automatedMinimumObservationsInput" type="number" min="1" value="10"></div>
                         </div>
                         <div class="ii-muted mt-2" id="automatedWorkspaceStatus">Select specific accounts or a saved list. Blank users-per-account sends all non-admin users from selected accounts.</div>
+                        <div id="automatedWorkspaceAiPanel" style="display:none;" class="ii-ai-output"></div>
                     </div>
                 </div>
             </div>
@@ -2345,6 +2351,8 @@ The NightOwl Ranch Team</textarea>
                             <div class="ii-card">
                                 <h4>Run readiness</h4>
                                 <div class="ii-muted" id="automatedReadinessList">Message template, receiving inboxes, Workspace users, and test settings are checked before run.</div>
+                                <button class="ii-btn mt-2" type="button" onclick="aiExplainAutomatedReadiness()"><i class="fas fa-wand-magic-sparkles"></i> Explain readiness</button>
+                                <div id="automatedReadinessAiPanel" style="display:none;" class="ii-ai-output"></div>
                             </div>
                             <div class="ii-card">
                                 <h4>Synced status</h4>
@@ -3143,7 +3151,7 @@ merge_recipe_id, content_blueprint_id</pre>
         userInboxListAccounts: [],
         userInboxListAccountOnly: false,
         selectedUserInboxListAccountIds: new Set(),
-        userInboxCopyBuckets: {inboxDomains: [], spamDomains: [], inboxUsers: [], spamUsers: []},
+        userInboxCopyBuckets: {inboxDomains: [], spamDomains: [], inboxUsers: [], spamUsers: [], greyDomainNameChangeUsers: []},
         serviceAccounts: [],
         activeMessageId: null,
         selectedMessageIds: new Set(),
@@ -3162,8 +3170,11 @@ merge_recipe_id, content_blueprint_id</pre>
         automatedTests: [],
         automatedSelectedTestId: null,
         automatedPollTimers: {},
-        automatedCopyBuckets: {inboxUsers: [], inboxDomains: [], spamUsers: [], spamDomains: []},
+        automatedCopyBuckets: {inboxUsers: [], inboxDomains: [], spamUsers: [], spamDomains: [], greyDomainNameChangeUsers: []},
         automatedMessages: [],
+        automatedAiSuggestions: [],
+        automatedAiSelectedIndex: 0,
+        automatedAiDraftBeforeApply: null,
 
         selectedResultsTest: null,
         tests: []
@@ -3278,6 +3289,298 @@ merge_recipe_id, content_blueprint_id</pre>
             if (draft.bodyMode && document.getElementById('automatedBodyMode')) document.getElementById('automatedBodyMode').value = draft.bodyMode;
         } catch (err) { /* ignore bad local draft */ }
         updateAutomatedMessageSetup();
+    }
+
+    function automatedAiPayload(extra = {}) {
+        return {
+            header: document.getElementById('automatedHeaderInput')?.value || '',
+            body: document.getElementById('automatedBodyInput')?.value || '',
+            body_mode: document.getElementById('automatedBodyMode')?.value || 'html',
+            test_id: iiState.automatedSelectedTestId || document.getElementById('automatedManualTestIdInput')?.value || '',
+            ...extra
+        };
+    }
+
+    function setAutomatedAiStatus(message, tone = 'muted') {
+        const status = document.getElementById('automatedAiStatus');
+        if (!status) return;
+        status.className = tone === 'error' ? 'text-danger' : tone === 'ok' ? 'text-success' : 'ii-muted';
+        status.textContent = message;
+    }
+
+    function renderAutomatedAiSuggestions(message = '') {
+        const container = document.getElementById('automatedAiSuggestions');
+        if (!container) return;
+        const suggestions = iiState.automatedAiSuggestions || [];
+        if (!suggestions.length) {
+            container.innerHTML = message ? `<div class="ii-card ii-muted mt-2">${escapeHtml(message)}</div>` : '';
+            return;
+        }
+        container.innerHTML = `
+            <div class="ii-card mt-2">
+                <div class="ii-row justify-content-between mb-2">
+                    <strong>AI draft suggestions</strong>
+                    <span class="ii-chip gray">${suggestions.length} draft${suggestions.length === 1 ? '' : 's'}</span>
+                </div>
+                ${suggestions.map((item, index) => `
+                    <button class="ii-suggestion-card text-start w-100 mb-2" type="button" onclick="selectAutomatedAiSuggestion(${index})">
+                        <div class="ii-row justify-content-between">
+                            <strong>${escapeHtml((item.target || 'draft').toUpperCase())} suggestion ${index + 1}</strong>
+                            <span class="ii-chip ${iiState.automatedAiSelectedIndex === index ? 'blue' : 'gray'}">${iiState.automatedAiSelectedIndex === index ? 'Selected' : 'Draft'}</span>
+                        </div>
+                        <div class="ii-muted mt-1">${escapeHtml(item.rationale || 'AI-generated draft. Review before applying.')}</div>
+                        <pre class="ii-modal-preview mt-2" style="max-height:140px;white-space:pre-wrap">${escapeHtml(item.text || '')}</pre>
+                    </button>
+                `).join('')}
+            </div>`;
+    }
+
+    function selectAutomatedAiSuggestion(index) {
+        iiState.automatedAiSelectedIndex = index;
+        renderAutomatedAiSuggestions();
+    }
+
+    async function aiAnalyzeAutomatedTemplate() {
+        setAutomatedAiStatus('Analyzing Message Setup draft...');
+        renderAutomatedAiSuggestions();
+        try {
+            const data = await iiFetch('/api/inbox-intelligence/ai/analyze-template', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(automatedAiPayload())
+            });
+            const analysis = data.analysis || {};
+            const risks = analysis.risks || [];
+            iiState.automatedAiSuggestions = [];
+            renderAutomatedAiSuggestions(`
+                ${analysis.summary || 'Template analyzed.'}
+                ${risks.length ? ' Risks: ' + risks.join(' | ') : ''}
+            `.trim());
+            setAutomatedAiStatus(data.message || `Analysis complete via ${data.provider || 'local checks'}.`, 'ok');
+        } catch (err) {
+            setAutomatedAiStatus(err.message, 'error');
+            renderAutomatedAiSuggestions(err.message);
+        }
+    }
+
+    async function aiImproveAutomatedMessage(target) {
+        setAutomatedAiStatus(`Creating ${target} draft suggestion...`);
+        renderAutomatedAiSuggestions();
+        try {
+            const data = await iiFetch('/api/inbox-intelligence/ai/improve-message', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(automatedAiPayload({target}))
+            });
+            iiState.automatedAiSuggestions = (data.suggestions || []).map((item) => ({...item, target: data.target || target}));
+            iiState.automatedAiSelectedIndex = 0;
+            renderAutomatedAiSuggestions(data.message || '');
+            setAutomatedAiStatus(
+                iiState.automatedAiSuggestions.length
+                    ? `${iiState.automatedAiSuggestions.length} ${target} draft suggestion(s) ready. Review, then apply.`
+                    : (data.message || 'No usable draft suggestions were returned.'),
+                iiState.automatedAiSuggestions.length ? 'ok' : 'muted'
+            );
+        } catch (err) {
+            setAutomatedAiStatus(err.message, 'error');
+            renderAutomatedAiSuggestions(err.message);
+        }
+    }
+
+    async function aiValidateAutomatedPlaceholders() {
+        setAutomatedAiStatus('Validating placeholders...');
+        try {
+            const data = await iiFetch('/api/inbox-intelligence/ai/validate-placeholders', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(automatedAiPayload())
+            });
+            const missing = data.header?.missing_required || [];
+            const problems = data.header?.structure_problems || [];
+            renderAutomatedAiSuggestions([
+                data.valid ? 'Header structure is valid.' : 'Header needs review.',
+                missing.length ? `Missing recommended placeholders: ${missing.join(', ')}` : 'All recommended header placeholders are present.',
+                problems.length ? `Problems: ${problems.join(' | ')}` : ''
+            ].filter(Boolean).join(' '));
+            setAutomatedAiStatus(data.valid ? 'Placeholder validation passed.' : 'Placeholder validation found warnings.', data.valid ? 'ok' : 'muted');
+        } catch (err) {
+            setAutomatedAiStatus(err.message, 'error');
+        }
+    }
+
+    function renderAiAdvicePanel(panelId, html) {
+        const panel = document.getElementById(panelId);
+        if (!panel) return;
+        if (!html) {
+            panel.style.display = 'none';
+            panel.innerHTML = '';
+            return;
+        }
+        panel.style.display = '';
+        panel.innerHTML = `<div class="ii-card mt-2">${html}</div>`;
+    }
+
+    async function aiReviewAutomatedQueue() {
+        const status = document.getElementById('automatedStatusText');
+        const sourceIds = iiState.automatedSelectedSourceIds.size
+            ? [...iiState.automatedSelectedSourceIds]
+            : iiState.automatedQueue.slice(0, 100).map((source) => source.id);
+        if (!sourceIds.length) {
+            if (status) status.textContent = 'Push emails to the queue first, then run AI Review.';
+            return;
+        }
+        if (status) status.textContent = `AI reviewing ${sourceIds.length} queued template(s)...`;
+        try {
+            const data = await iiFetch('/api/inbox-intelligence/ai/recommend-queue', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({source_ids: sourceIds})
+            });
+            const recommendation = data.recommendation || {};
+            const risks = recommendation.risk_summary || {};
+            const items = recommendation.queue_items || [];
+            const cleanup = recommendation.cleanup || {};
+            const chip = (label, count, cls) => count ? `<span class="ii-chip ${cls}">${escapeHtml(label)}: ${count}</span>` : '';
+            const modelLabel = data.provider === 'openrouter' && data.model ? data.model : 'local checks';
+            renderAiAdvicePanel('automatedQueueAiPanel', `
+                <div class="ii-row justify-content-between mb-2">
+                    <strong>AI queue review</strong>
+                    <span class="ii-chip blue">${escapeHtml(modelLabel)}</span>
+                </div>
+                <div class="ii-row mb-2">
+                    ${chip('High risk', risks.high ?? items.filter((item) => item.risk === 'high').length, 'red')}
+                    ${chip('Review', risks.medium ?? risks.review ?? items.filter((item) => item.risk === 'review').length, 'yellow')}
+                    ${chip('Low risk', risks.low ?? items.filter((item) => item.risk === 'low').length, 'green')}
+                </div>
+                ${items.slice(0, 8).map((item) => `
+                    <div class="ii-muted">#${escapeHtml(item.source_id)} · ${escapeHtml(item.risk || 'review')}: ${escapeHtml(item.reason || 'Review recommended')}</div>
+                `).join('')}
+                ${(cleanup.delete_candidate_ids || []).length ? `<div class="ii-muted mt-2">Cleanup candidates: templates #${cleanup.delete_candidate_ids.join(', #')}. Deletion stays manual — select them above and use Delete.</div>` : ''}
+                ${(recommendation.notes || []).length ? `<div class="ii-muted mt-1">${escapeHtml(recommendation.notes.join(' '))}</div>` : ''}
+            `);
+            if (status) status.textContent = data.message || `Queue review complete via ${modelLabel}.`;
+        } catch (err) {
+            if (status) status.textContent = err.message;
+        }
+    }
+
+    async function aiRecommendAutomatedAllocation() {
+        const status = document.getElementById('automatedWorkspaceStatus');
+        const listId = document.getElementById('automatedWorkspaceListSelect')?.value || '';
+        const listAccountIds = [...(iiState.selectedUserInboxListAccountIds || new Set())];
+        const accountIds = listAccountIds.length ? listAccountIds : [...(iiState.selectedServiceAccountIds || new Set())];
+        const inboxIds = [...(iiState.selectedInboxIds || new Set())];
+        const rawPerAccount = (document.getElementById('automatedUsersPerAccountInput')?.value || '').trim();
+        if (status) status.textContent = 'Requesting AI allocation advice...';
+        try {
+            const data = await iiFetch('/api/inbox-intelligence/ai/recommend-allocation', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    service_account_ids: accountIds,
+                    list_id: listId || null,
+                    inbox_account_ids: inboxIds,
+                    users_per_account: rawPerAccount || null,
+                    strategy: document.getElementById('automatedStrategyInput')?.value || 'distributed',
+                    source_ids: [...iiState.automatedSelectedSourceIds],
+                    selected_sender_count: automatedSenderCount()
+                })
+            });
+            const recommendation = data.recommendation || {};
+            const modelLabel = data.provider === 'openrouter' && data.model ? data.model : 'local checks';
+            const facts = data.facts || {};
+            renderAiAdvicePanel('automatedWorkspaceAiPanel', `
+                <strong>AI allocation advice</strong>
+                <span class="ii-chip blue ms-2">${escapeHtml(modelLabel)}</span>
+                <div class="ii-muted mt-2">
+                    Accounts: ${facts.account_count ?? 0} · Users: ${facts.users_per_account ?? 'all'} ·
+                    Recipients: ${facts.recipient_count ?? 0} · Strategy: ${escapeHtml(facts.strategy || 'distributed')}
+                </div>
+                <div class="mt-1">${escapeHtml(recommendation.summary || '')}</div>
+                ${recommendation.coverage_note ? `<div class="ii-muted mt-2">${escapeHtml(recommendation.coverage_note)}</div>` : ''}
+                ${(recommendation.warnings || []).length ? `<div class="ii-muted mt-2">${recommendation.warnings.map((warning) => escapeHtml(warning)).join(' ')}</div>` : ''}
+            `);
+            if (status) status.textContent = data.message || `Allocation advice ready via ${modelLabel}.`;
+        } catch (err) {
+            if (status) status.textContent = err.message;
+        }
+    }
+
+    async function aiExplainAutomatedReadiness() {
+        const summary = updateAutomatedSummary();
+        const rawPerAccount = (document.getElementById('automatedUsersPerAccountInput')?.value || '').trim();
+        try {
+            const data = await iiFetch('/api/inbox-intelligence/ai/explain-readiness', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    source_ids: [...iiState.automatedSelectedSourceIds],
+                    service_account_ids: [...(iiState.selectedUserInboxListAccountIds?.size ? iiState.selectedUserInboxListAccountIds : iiState.selectedServiceAccountIds || new Set())],
+                    list_id: document.getElementById('automatedWorkspaceListSelect')?.value || null,
+                    inbox_account_ids: [...(iiState.selectedInboxIds || new Set())],
+                    users_per_account: rawPerAccount || null,
+                    selected_sender_count: summary.users,
+                    strategy: summary.strategy,
+                    inbox_threshold: document.getElementById('automatedInboxThresholdInput')?.value || 80,
+                    spam_threshold: document.getElementById('automatedSpamThresholdInput')?.value || 40,
+                    minimum_observations: document.getElementById('automatedMinimumObservationsInput')?.value || 10
+                })
+            });
+            const explanation = data.explanation || {};
+            const facts = data.facts || {};
+            const modelLabel = data.provider === 'openrouter' && data.model ? data.model : 'local checks';
+            const blockers = explanation.blockers || [];
+            const nextSteps = explanation.next_steps || explanation.suggestions || [];
+            renderAiAdvicePanel('automatedReadinessAiPanel', `
+                <div class="ii-row justify-content-between mb-2">
+                    <strong>AI readiness check</strong>
+                    <span class="ii-chip ${blockers.length ? 'yellow' : 'green'}">${blockers.length ? 'Needs attention' : 'Looks ready'}</span>
+                    <span class="ii-chip gray">${escapeHtml(modelLabel)}</span>
+                </div>
+                <div class="ii-muted">Emails: ${facts.selected_email_count ?? 0} · Users: ${summary.users} · Recipients: ${facts.recipient_count ?? 0} · Est. messages: ${(facts.estimated_messages ?? 0).toLocaleString()}</div>
+                <div class="mt-1">${escapeHtml(explanation.summary || '')}</div>
+                ${blockers.length ? `<div class="ii-muted mt-2"><strong>Blockers:</strong> ${blockers.map((blocker) => escapeHtml(blocker)).join('; ')}</div>` : ''}
+                ${nextSteps.length ? `<ul class="ii-muted mt-2 mb-0">${nextSteps.map((step) => `<li>${escapeHtml(step)}</li>`).join('')}</ul>` : ''}
+            `);
+        } catch (err) {
+            renderAiAdvicePanel('automatedReadinessAiPanel', `<span class="ii-muted">${escapeHtml(err.message)}</span>`);
+        }
+    }
+
+    function aiApplyAutomatedSuggestion() {
+        const suggestion = (iiState.automatedAiSuggestions || [])[iiState.automatedAiSelectedIndex || 0];
+        if (!suggestion || !suggestion.text) {
+            setAutomatedAiStatus('No AI draft suggestion selected.', 'error');
+            return;
+        }
+        const headerInput = document.getElementById('automatedHeaderInput');
+        const bodyInput = document.getElementById('automatedBodyInput');
+        iiState.automatedAiDraftBeforeApply = {
+            header: headerInput?.value || '',
+            body: bodyInput?.value || '',
+            bodyMode: document.getElementById('automatedBodyMode')?.value || 'html'
+        };
+        if (suggestion.target === 'header' && headerInput) headerInput.value = suggestion.text;
+        if (suggestion.target === 'body' && bodyInput) bodyInput.value = suggestion.text;
+        updateAutomatedMessageSetup();
+        setAutomatedAiStatus('AI draft applied. Use Revert to restore the previous draft.', 'ok');
+    }
+
+    function aiRevertAutomatedSuggestion() {
+        const previous = iiState.automatedAiDraftBeforeApply;
+        if (!previous) {
+            setAutomatedAiStatus('No applied AI draft to revert.', 'muted');
+            return;
+        }
+        const headerInput = document.getElementById('automatedHeaderInput');
+        const bodyInput = document.getElementById('automatedBodyInput');
+        const modeInput = document.getElementById('automatedBodyMode');
+        if (headerInput) headerInput.value = previous.header || '';
+        if (bodyInput) bodyInput.value = previous.body || '';
+        if (modeInput) modeInput.value = previous.bodyMode || 'html';
+        iiState.automatedAiDraftBeforeApply = null;
+        updateAutomatedMessageSetup();
+        setAutomatedAiStatus('Previous Message Setup draft restored.', 'ok');
     }
 
     function previewAutomatedMessage() {
@@ -4358,7 +4661,8 @@ merge_recipe_id, content_blueprint_id</pre>
         const spamDomains = domains.filter((item) => item.spam > 0).map((item) => item.key);
         const inboxUsers = users.filter((item) => item.inbox > 0).map((item) => item.key);
         const spamUsers = users.filter((item) => item.spam > 0).map((item) => item.key);
-        iiState.automatedCopyBuckets = {inboxDomains, spamDomains, inboxUsers, spamUsers};
+        const greyDomainNameChangeUsers = greyDomainNameChangeRows(rows, 'sender');
+        iiState.automatedCopyBuckets = {inboxDomains, spamDomains, inboxUsers, spamUsers, greyDomainNameChangeUsers};
         const providers = {};
         rows.forEach((row) => {
             const key = recipientProvider(row.recipient);
@@ -4403,6 +4707,7 @@ merge_recipe_id, content_blueprint_id</pre>
                     <button class="ii-btn ii-copy-stat-button" type="button" onclick="copyAutomatedBucket('spamDomains')"><strong>${spamDomains.length}</strong><span>Spam domains</span></button>
                     <button class="ii-btn ii-copy-stat-button" type="button" onclick="copyAutomatedBucket('inboxUsers')"><strong>${inboxUsers.length}</strong><span>Inbox users</span></button>
                     <button class="ii-btn ii-copy-stat-button" type="button" onclick="copyAutomatedBucket('spamUsers')"><strong>${spamUsers.length}</strong><span>Spam users</span></button>
+                    <button class="ii-btn ii-copy-stat-button" type="button" onclick="copyAutomatedBucket('greyDomainNameChangeUsers')"><strong>${greyDomainNameChangeUsers.length}</strong><span>Grey-domain name changes</span></button>
                 </div>
                 <div class="ii-insight-grid mt-3">
                     <div class="ii-insight-card">
@@ -5221,7 +5526,43 @@ merge_recipe_id, content_blueprint_id</pre>
         await retrieveWorkspaceUsers();
         renderAutomatedServiceAccountSelector();
         renderAutomatedWorkspaceUsers();
-        if (status) status.textContent = `${automatedSenderCount()} Workspace user(s) available for this automated test.`;
+        applyAutomatedUsersPerAccount();
+    }
+
+    function applyAutomatedUsersPerAccount() {
+        const raw = (document.getElementById('automatedUsersPerAccountInput')?.value || '').trim();
+        const perAccount = raw ? Math.max(1, parseInt(raw, 10) || 1) : null;
+        const selectable = iiState.workspaceSenders.filter((sender) => sender.service_account_id && !isAdminWorkspaceSender(sender));
+        const status = document.getElementById('automatedWorkspaceStatus');
+        if (selectable.length) {
+            let picked;
+            if (!perAccount) {
+                picked = selectable.map((sender) => sender.email);
+                if (status) status.textContent = `All ${picked.length} retrieved non-admin user(s) selected (blank users-per-account).`;
+            } else {
+                const byAccount = {};
+                selectable.forEach((sender) => {
+                    const key = String(sender.service_account_id);
+                    byAccount[key] = byAccount[key] || [];
+                    byAccount[key].push(sender);
+                });
+                picked = [];
+                Object.values(byAccount).forEach((group) => {
+                    group.sort((a, b) => String(a.email).localeCompare(String(b.email)));
+                    group.slice(0, perAccount).forEach((sender) => picked.push(sender.email));
+                });
+                if (status) status.textContent = `Selected ${picked.length} non-admin user(s): up to ${perAccount} per account across ${Object.keys(byAccount).length} account(s).`;
+            }
+            iiState.selectedSenderEmails = new Set(picked);
+            iiState.userInboxListAccountOnly = false;
+            renderAutomatedServiceAccountSelector();
+        } else if (status && raw) {
+            status.textContent = `Users per account set to ${perAccount}. It will apply when users are retrieved from accounts or lists.`;
+        }
+        renderAutomatedWorkspaceUsers();
+        renderTestSenderSelector();
+        renderUserInboxSenderSelector();
+        updateAutomatedSummary();
     }
 
     async function retrieveWorkspaceUsers() {
@@ -6111,10 +6452,12 @@ merge_recipe_id, content_blueprint_id</pre>
         const spamDomains = domains.filter((item) => item.spam > 0).map((item) => item.key);
         const inboxUsers = users.filter((item) => item.inbox > 0).map((item) => item.key);
         const spamUsers = users.filter((item) => item.spam > 0).map((item) => item.key);
+        const greyDomainNameChangeUsers = greyDomainNameChangeRows(rows, senderField);
         copyBuckets.inboxDomains = inboxDomains;
         copyBuckets.spamDomains = spamDomains;
         copyBuckets.inboxUsers = inboxUsers;
         copyBuckets.spamUsers = spamUsers;
+        copyBuckets.greyDomainNameChangeUsers = greyDomainNameChangeUsers;
         const providerMap = {};
         rows.forEach((row) => {
             const provider = providerFn(row);
@@ -6177,6 +6520,7 @@ merge_recipe_id, content_blueprint_id</pre>
                     <button class="ii-btn ii-copy-stat-button" type="button" onclick="${copyFn}('spamDomains')"><strong>${spamDomains.length}</strong><span>Copy spam domains</span></button>
                     <button class="ii-btn ii-copy-stat-button" type="button" onclick="${copyFn}('inboxUsers')"><strong>${inboxUsers.length}</strong><span>Copy inbox users</span></button>
                     <button class="ii-btn ii-copy-stat-button" type="button" onclick="${copyFn}('spamUsers')"><strong>${spamUsers.length}</strong><span>Copy spam users</span></button>
+                    <button class="ii-btn ii-copy-stat-button" type="button" onclick="${copyFn}('greyDomainNameChangeUsers')"><strong>${greyDomainNameChangeUsers.length}</strong><span>Copy grey-domain name changes</span></button>
                 </div>
                 <div class="ii-compact-stat-grid mt-2">
                     <div class="ii-compact-stat"><span class="ii-muted">Inbox domains</span><strong>${inboxDomains.length}</strong><span class="ii-muted">${summary.inbox} inbox hit(s)</span></div>
@@ -6216,6 +6560,28 @@ merge_recipe_id, content_blueprint_id</pre>
 
     function senderLookup(email) {
         return iiState.workspaceSenders.find((sender) => sender.email === email) || {};
+    }
+
+    function greyDomainNameChangeRows(rows, senderField = 'sender') {
+        const domainStats = userInboxObservationStats(rows, (row) => (row[senderField] || '').split('@').pop().toLowerCase());
+        const greyDomains = new Set(domainStats.filter((item) => item.inbox > 0 && item.spam > 0).map((item) => item.key));
+        const seen = new Set();
+        const lines = [];
+        rows.forEach((row) => {
+            if (row.placement !== 'SPAM') return;
+            const user = String(row[senderField] || '').trim().toLowerCase();
+            const domain = user.split('@').pop();
+            if (!user || !greyDomains.has(domain)) return;
+            const sender = senderLookup(user);
+            const account = String(sender.service_account_name || sender.source || domain || '').trim();
+            const line = `${account},${user}`;
+            const key = line.toLowerCase();
+            if (account && !seen.has(key)) {
+                seen.add(key);
+                lines.push(line);
+            }
+        });
+        return lines.sort((a, b) => a.localeCompare(b));
     }
 
     function userInboxObservationStats(rows, keyFn) {
