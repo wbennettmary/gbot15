@@ -2054,6 +2054,7 @@ The NightOwl Ranch Team</textarea>
                         <h4>1. Test Queue</h4>
                         <div class="ii-row">
                             <select class="ii-select" style="width: 130px;"><option>Bulk actions</option></select>
+                            <button class="ii-btn" type="button" onclick="deleteSelectedAutomatedQueue()"><i class="fas fa-trash"></i> Delete</button>
                             <button class="ii-btn" type="button" onclick="clearAutomatedQueueSelection()">Clear</button>
                         </div>
                     </div>
@@ -2931,6 +2932,7 @@ merge_recipe_id, content_blueprint_id</pre>
         automatedPollTimers: {},
         automatedCopyBuckets: {inboxUsers: [], inboxDomains: [], spamUsers: [], spamDomains: []},
         automatedMessages: [],
+        automatedDraftTemplate: '',
         selectedResultsTest: null,
         tests: []
     };
@@ -3025,12 +3027,57 @@ merge_recipe_id, content_blueprint_id</pre>
         updateAutomatedMessageSetup();
     }
 
-    function applyAutomatedTemplatePreset() {
+    function renderAutomatedTemplateSelector() {
+        const select = document.getElementById('automatedTemplateSelect');
+        if (!select) return;
+        const current = select.value || iiState.automatedDraftTemplate || '';
+        const userOptions = iiState.userInboxTemplates.map((template) => `<option value="user:${template.id}">${escapeHtml(template.name || template.subject || 'User Inbox Template')}</option>`).join('');
+        const staticOptions = iiState.staticTemplates.map((template) => `<option value="static:${template.id}">${escapeHtml(template.name || 'Static Template')}</option>`).join('');
+        select.innerHTML = `
+            <option value="">Queued inbox email body, unless custom body is filled</option>
+            <option value="launch">August Campaign - Product Launch</option>
+            <option value="short">Short direct announcement</option>
+            <option value="text">Plain-text friendly variant</option>
+            ${userOptions ? `<optgroup label="Saved User Inbox Templates">${userOptions}</optgroup>` : ''}
+            ${staticOptions ? `<optgroup label="Static Template Library">${staticOptions}</optgroup>` : ''}`;
+        if ([...select.options].some((option) => option.value === current)) {
+            select.value = current;
+            iiState.automatedDraftTemplate = current;
+        }
+    }
+
+    async function applyAutomatedTemplatePreset() {
         const preset = document.getElementById('automatedTemplateSelect')?.value || '';
         const title = document.getElementById('automatedCampaignTitle');
         const body = document.getElementById('automatedBodyInput');
-        if (preset === 'launch') {
+        const header = document.getElementById('automatedHeaderInput');
+        if (preset.startsWith('user:')) {
+            const id = Number(preset.split(':')[1]);
+            const template = iiState.userInboxTemplates.find((item) => item.id === id);
+            if (template) {
+                if (title) title.textContent = template.name || template.subject || 'User Inbox Template';
+                if (header) header.value = template.custom_headers || `Date: [date]\nTo: [to]\nFrom: [from]\nMessage-ID: <custom-[test_id]@example.com>\nSubject: ${template.subject || '[subject]'}`;
+                if (body) body.value = template.html_content || template.plain_text || '';
+                const mode = document.getElementById('automatedBodyMode');
+                if (mode) mode.value = template.html_content ? 'html' : 'text';
+            }
+        } else if (preset.startsWith('static:')) {
+            const id = Number(preset.split(':')[1]);
+            try {
+                const data = await iiFetch(`/api/inbox-intelligence/static-templates/${id}`);
+                const template = data.template || {};
+                if (title) title.textContent = template.name || 'Static Template';
+                if (header) header.value = `Date: [date]\nTo: [to]\nFrom: [from]\nMessage-ID: <custom-[test_id]@example.com>\nSubject: ${template.name || '[subject]'}`;
+                if (body) body.value = template.html_content || template.plain_text || '';
+                const mode = document.getElementById('automatedBodyMode');
+                if (mode) mode.value = template.html_content ? 'html' : 'text';
+            } catch (err) {
+                const status = document.getElementById('automatedStatusText');
+                if (status) status.textContent = `Could not load selected template: ${err.message}`;
+            }
+        } else if (preset === 'launch') {
             if (title) title.textContent = 'August Campaign - Product Launch';
+            if (header) header.value = `Date: [date]\nTo: [to]\nFrom: [from]\nMessage-ID: <custom-[test_id]@example.com>\nSubject: August Campaign - Product Launch`;
             if (body) body.value = `Hi there,
 
 We are excited to announce the launch of our new product. It is faster, smarter, and built to help you achieve more in less time.
@@ -3040,11 +3087,13 @@ Learn more and get started today.
 The NightOwl Ranch Team`;
         } else if (preset === 'short') {
             if (title) title.textContent = 'Short Direct Announcement';
+            if (header) header.value = `Date: [date]\nTo: [to]\nFrom: [from]\nMessage-ID: <custom-[test_id]@example.com>\nSubject: Short Direct Announcement`;
             if (body) body.value = `Hi there,
 
 A quick update is ready for you. Review the details and get started today.`;
         } else if (preset === 'text') {
             if (title) title.textContent = 'Plain Text Variant';
+            if (header) header.value = `Date: [date]\nTo: [to]\nFrom: [from]\nMessage-ID: <custom-[test_id]@example.com>\nSubject: Plain Text Variant`;
             const mode = document.getElementById('automatedBodyMode');
             if (mode) mode.value = 'text';
             if (body) body.value = `Hi there,
@@ -3069,6 +3118,7 @@ Here is a concise update for your account. Reply to this email if you have any q
     function loadAutomatedDraft() {
         try {
             const draft = JSON.parse(localStorage.getItem('ii_automated_message_draft') || '{}');
+            iiState.automatedDraftTemplate = draft.template || '';
             if (draft.template && document.getElementById('automatedTemplateSelect')) document.getElementById('automatedTemplateSelect').value = draft.template;
             if (draft.headers && document.getElementById('automatedHeaderInput')) document.getElementById('automatedHeaderInput').value = draft.headers;
             if (draft.body && document.getElementById('automatedBodyInput')) document.getElementById('automatedBodyInput').value = draft.body;
@@ -3700,6 +3750,27 @@ Here is a concise update for your account. Reply to this email if you have any q
         updateAutomatedSummary();
     }
 
+    async function deleteSelectedAutomatedQueue() {
+        const status = document.getElementById('automatedStatusText');
+        if (!iiState.automatedSelectedSourceIds.size) {
+            if (status) status.textContent = 'Select queued templates first, then click Delete.';
+            return;
+        }
+        if (!confirm(`Delete ${iiState.automatedSelectedSourceIds.size} selected queued template(s)?`)) return;
+        try {
+            const data = await iiFetch('/api/inbox-intelligence/test-email-sources', {
+                method: 'DELETE',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({source_ids: [...iiState.automatedSelectedSourceIds]})
+            });
+            iiState.automatedSelectedSourceIds = new Set();
+            if (status) status.textContent = data.message || 'Selected queued templates deleted.';
+            await loadAutomatedQueue(iiState.automatedQueuePage);
+        } catch (err) {
+            if (status) status.textContent = `Delete failed: ${err.message}`;
+        }
+    }
+
     function renderAutomatedInboxSelector() {
         const el = document.getElementById('automatedInboxSelector');
         const status = document.getElementById('automatedInboxStatus');
@@ -4049,7 +4120,7 @@ Here is a concise update for your account. Reply to this email if you have any q
         const rows = test?.messages || iiState.automatedMessages || [];
         iiState.automatedMessages = rows;
         renderAnalyticsSummary('automatedAnalyticsSummary', rows, 'Users');
-        renderAutomatedEmailAnalytics(rows, test || {});
+        renderAutomatedProAnalytics(rows, test || {});
         const status = document.getElementById('automatedAnalyticsStatus');
         if (status) {
             const summary = matrixSummary(rows);
@@ -4057,6 +4128,108 @@ Here is a concise update for your account. Reply to this email if you have any q
                 ? `${test?.test_id || iiState.automatedSelectedTestId}: ${summary.inbox} inbox, ${summary.spam} spam, ${summary.pending + summary.failed} missing.`
                 : 'No message rows found yet. Sync after delivery has had time to complete.';
         }
+    }
+
+    function renderAutomatedProAnalytics(rows, test) {
+        const cards = document.getElementById('autoAnalyticsCards');
+        const provider = document.getElementById('autoProviderSummary');
+        const domain = document.getElementById('autoDomainActions');
+        const user = document.getElementById('autoUserActions');
+        const spam = document.getElementById('autoSpamInsights');
+        [provider, domain, user, spam].forEach((el) => {
+            if (el) {
+                el.style.display = 'none';
+                el.innerHTML = '';
+            }
+        });
+        if (!cards) return;
+        if (!rows.length) {
+            cards.className = 'ii-analytics-dashboard mt-3';
+            cards.innerHTML = '<div class="ii-pro-card ii-pro-card-body ii-muted">No analytics yet. Trigger or sync a test after messages have had time to arrive.</div>';
+            return;
+        }
+        const summary = matrixSummary(rows);
+        const score = deliveryScore({sent_count: summary.total}, rows) || 0;
+        const scoreClass = score >= 80 ? 'green' : score >= 60 ? 'yellow' : 'red';
+        const inboxPct = numericPercent(summary.inbox, summary.total);
+        const spamPct = numericPercent(summary.spam, summary.total);
+        const waitingPct = numericPercent(summary.pending, summary.total);
+        const missing = summary.pending + summary.failed;
+        const missingPct = Math.max(0, 100 - inboxPct - spamPct - waitingPct);
+        const domains = userInboxObservationStats(rows, (row) => (row.sender || '').split('@').pop().toLowerCase());
+        const users = userInboxObservationStats(rows, (row) => row.sender || '');
+        const inboxDomains = domains.filter((item) => item.inbox > 0).map((item) => item.key);
+        const spamDomains = domains.filter((item) => item.spam > 0).map((item) => item.key);
+        const inboxUsers = users.filter((item) => item.inbox > 0).map((item) => item.key);
+        const spamUsers = users.filter((item) => item.spam > 0).map((item) => item.key);
+        iiState.automatedCopyBuckets = {inboxDomains, spamDomains, inboxUsers, spamUsers};
+        const providers = {};
+        rows.forEach((row) => {
+            const key = recipientProvider(row.recipient);
+            providers[key] ||= {total: 0, inbox: 0, spam: 0};
+            providers[key].total += 1;
+            if (row.placement === 'INBOX') providers[key].inbox += 1;
+            if (row.placement === 'SPAM') providers[key].spam += 1;
+        });
+        const providerRows = Object.entries(providers).sort((a, b) => b[1].total - a[1].total);
+        const domainRows = domains.filter((item) => item.inbox || item.spam).sort((a, b) => b.spam - a.spam || b.inbox - a.inbox).slice(0, 8);
+        const userRows = users.filter((item) => item.inbox || item.spam).sort((a, b) => b.spam - a.spam || b.inbox - a.inbox).slice(0, 8);
+        cards.className = 'ii-analytics-dashboard mt-3';
+        cards.innerHTML = `
+            <div class="ii-pro-card ii-pro-card-body">
+                <div class="ii-row justify-content-between mb-2">
+                    <div><h4>Placement Score</h4><div class="ii-muted">Exact-id sync: ${escapeHtml(test.test_id || '')}</div></div>
+                    <span class="ii-chip ${scoreClass}">${escapeHtml(scoreLabel(score))}</span>
+                </div>
+                <div class="ii-score-value">${score}<span style="font-size:18px;"> /100</span></div>
+                <div class="ii-compact-stat-grid mt-3">
+                    <div class="ii-compact-stat"><span class="ii-muted">Inbox</span><strong>${summary.inbox}</strong><span class="ii-chip green">${inboxPct}%</span></div>
+                    <div class="ii-compact-stat"><span class="ii-muted">Spam</span><strong>${summary.spam}</strong><span class="ii-chip red">${spamPct}%</span></div>
+                    <div class="ii-compact-stat"><span class="ii-muted">Waiting</span><strong>${summary.pending}</strong><span class="ii-chip yellow">${waitingPct}%</span></div>
+                    <div class="ii-compact-stat"><span class="ii-muted">Missing</span><strong>${missing}</strong><span class="ii-chip gray">${missingPct}%</span></div>
+                </div>
+                <div class="ii-card mt-3">
+                    <div class="ii-row justify-content-between"><strong>Observed outcome</strong><span class="ii-muted">${summary.inbox + summary.spam}/${summary.total} classified</span></div>
+                    <div class="ii-bar-track mt-2">
+                        <div class="ii-bar-segment inbox" style="width:${inboxPct}%"></div>
+                        <div class="ii-bar-segment spam" style="width:${spamPct}%"></div>
+                        <div class="ii-bar-segment pending" style="width:${waitingPct}%"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="ii-pro-card ii-pro-card-body">
+                <div class="ii-row justify-content-between mb-2">
+                    <div><h4>Classified Results</h4><div class="ii-muted">${domains.length} domain(s), ${users.length} user(s)</div></div>
+                    <span class="ii-chip blue">${summary.inbox + summary.spam} located</span>
+                </div>
+                <div class="ii-analytics-copy-grid">
+                    <button class="ii-btn ii-copy-stat-button" type="button" onclick="copyAutomatedBucket('inboxDomains')"><strong>${inboxDomains.length}</strong><span>Inbox domains</span></button>
+                    <button class="ii-btn ii-copy-stat-button" type="button" onclick="copyAutomatedBucket('spamDomains')"><strong>${spamDomains.length}</strong><span>Spam domains</span></button>
+                    <button class="ii-btn ii-copy-stat-button" type="button" onclick="copyAutomatedBucket('inboxUsers')"><strong>${inboxUsers.length}</strong><span>Inbox users</span></button>
+                    <button class="ii-btn ii-copy-stat-button" type="button" onclick="copyAutomatedBucket('spamUsers')"><strong>${spamUsers.length}</strong><span>Spam users</span></button>
+                </div>
+                <div class="ii-insight-grid mt-3">
+                    <div class="ii-insight-card">
+                        <h4>Provider Mix</h4>
+                        ${providerRows.map(([name, stats]) => `<div class="ii-insight-row">
+                            <strong>${escapeHtml(name)}</strong>
+                            <span class="ii-chip green">${stats.inbox} inbox</span>
+                            <span class="ii-chip red">${stats.spam} spam</span>
+                            <div style="grid-column:1 / -1;" class="ii-provider-bar">
+                                <div class="ii-bar-segment inbox" style="width:${numericPercent(stats.inbox, stats.total)}%"></div>
+                                <div class="ii-bar-segment spam" style="width:${numericPercent(stats.spam, stats.total)}%"></div>
+                            </div>
+                            <span class="ii-muted" style="grid-column:1 / -1;">${percent(stats.inbox, stats.total)} inbox across ${stats.total} message(s)</span>
+                        </div>`).join('') || '<div class="ii-muted">No provider stats yet.</div>'}
+                    </div>
+                    <div class="ii-insight-card">
+                        <h4>Domains & Users</h4>
+                        ${domainRows.map((item) => `<div class="ii-insight-row"><strong class="ii-domain-text">${escapeHtml(item.key)}</strong><span class="ii-chip green">${item.inbox} inbox</span><span class="ii-chip red">${item.spam} spam</span></div>`).join('')}
+                        ${userRows.map((item) => `<div class="ii-insight-row"><span class="ii-email-text">${escapeHtml(item.key)}</span><span class="ii-chip green">${item.inbox} inbox</span><span class="ii-chip red">${item.spam} spam</span></div>`).join('')}
+                        ${!domainRows.length && !userRows.length ? '<div class="ii-muted">No classified domains or users yet.</div>' : ''}
+                    </div>
+                </div>
+            </div>`;
     }
 
     function renderAutomatedEmailAnalytics(messages, test) {
@@ -4271,6 +4444,7 @@ Here is a concise update for your account. Reply to this email if you have any q
         const data = await iiFetch('/api/inbox-intelligence/static-templates');
         iiState.staticTemplates = data.templates || [];
         renderStaticTemplates();
+        renderAutomatedTemplateSelector();
     }
 
     async function loadTemplateAiPrompt() {
@@ -4330,6 +4504,7 @@ Here is a concise update for your account. Reply to this email if you have any q
     async function loadUserInboxTemplates() {
         const data = await iiFetch('/api/inbox-intelligence/user-inbox-templates');
         iiState.userInboxTemplates = data.templates || [];
+        renderAutomatedTemplateSelector();
         if (iiState.userInboxTemplatePage * 4 >= iiState.userInboxTemplates.length) {
             iiState.userInboxTemplatePage = 0;
         }
@@ -4826,16 +5001,53 @@ Here is a concise update for your account. Reply to this email if you have any q
     }
 
     async function retrieveAutomatedWorkspaceListUsers() {
-        const autoSelect = document.getElementById('automatedWorkspaceListSelect');
-        const userSelect = document.getElementById('userInboxWorkspaceListSelect');
-        const userLimit = document.getElementById('userInboxUsersPerAccountInput');
-        const autoLimit = document.getElementById('automatedUsersPerAccountInput');
-        if (userSelect && autoSelect) userSelect.value = autoSelect.value;
-        if (userLimit && autoLimit) userLimit.value = autoLimit.value;
-        await retrieveUserInboxWorkspaceListUsers();
-        renderAutomatedServiceAccountSelector();
-        renderAutomatedWorkspaceUsers();
-        updateAutomatedSummary();
+        const status = document.getElementById('automatedWorkspaceStatus');
+        const listId = document.getElementById('automatedWorkspaceListSelect')?.value;
+        const rawLimit = (document.getElementById('automatedUsersPerAccountInput')?.value || '').trim();
+        const maxPerAccount = rawLimit ? Math.max(1, parseInt(rawLimit, 10) || 1) : null;
+        if (!listId) {
+            if (status) status.textContent = 'Select a List Management source first.';
+            return;
+        }
+        const accountsOnly = !rawLimit;
+        if (status) status.textContent = accountsOnly
+            ? 'Retrieving list account cards. Set Users per account to retrieve sender users.'
+            : `Retrieving ${maxPerAccount} user(s) per list account...`;
+        try {
+            const data = await iiFetch('/api/inbox-intelligence/workspace-senders/retrieve-list', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({list_id: listId, max_per_account: maxPerAccount || 0, accounts_only: accountsOnly})
+            });
+            iiState.userInboxListAccounts = data.service_accounts || [];
+            iiState.userInboxListAccountOnly = accountsOnly;
+            if (accountsOnly) {
+                iiState.selectedSenderEmails = new Set();
+                iiState.selectedUserInboxListAccountIds = new Set(iiState.userInboxListAccounts.map((account) => account.id));
+                if (status) status.textContent = `Loaded ${iiState.userInboxListAccounts.length} account card(s). Enter Users per account and Retrieve List to display users.`;
+            } else {
+                const byEmail = {};
+                iiState.workspaceSenders.forEach((sender) => { byEmail[sender.email] = sender; });
+                const returnedEmails = [];
+                (data.senders || []).forEach((sender) => {
+                    byEmail[sender.email] = sender;
+                    if (sender.service_account_id && !isAdminWorkspaceSender(sender)) returnedEmails.push(sender.email);
+                });
+                iiState.workspaceSenders = Object.values(byEmail).sort((a, b) => a.email.localeCompare(b.email));
+                iiState.selectedSenderEmails = new Set(returnedEmails);
+                iiState.userInboxListAccountOnly = false;
+                iiState.selectedUserInboxListAccountIds = new Set();
+                if (status) status.textContent = `Retrieved and selected ${returnedEmails.length} non-admin user(s), ${maxPerAccount} per list account.`;
+            }
+            renderWorkspaceSenders();
+            renderTestSenderSelector();
+            renderUserInboxSenderSelector();
+            renderAutomatedServiceAccountSelector();
+            renderAutomatedWorkspaceUsers();
+            updateAutomatedSummary();
+        } catch (err) {
+            if (status) status.textContent = err.message;
+        }
     }
 
     async function retrieveAutomatedWorkspaceUsers() {

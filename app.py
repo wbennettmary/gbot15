@@ -1999,10 +1999,37 @@ def _update_automated_source_statuses(test_id):
         elif result['tests']:
             source.status = 'TESTED'
 
-@app.route('/api/inbox-intelligence/test-email-sources', methods=['GET', 'POST'])
+@app.route('/api/inbox-intelligence/test-email-sources', methods=['GET', 'POST', 'DELETE'])
 @login_required
 @permission_required('inbox_intelligence')
 def api_inbox_test_email_sources():
+    if request.method == 'DELETE':
+        data = request.get_json(silent=True) or {}
+        source_ids = []
+        for value in data.get('source_ids', []):
+            try:
+                source_id = int(value)
+            except (TypeError, ValueError):
+                continue
+            if source_id and source_id not in source_ids:
+                source_ids.append(source_id)
+        if not source_ids:
+            return jsonify({'success': False, 'error': 'Select at least one queued template to delete'}), 400
+        sources = TestEmailSource.query.filter(TestEmailSource.id.in_(source_ids)).all()
+        deleted = 0
+        for source in sources:
+            in_active_test = InboxDeliverabilityMessage.query.filter(
+                InboxDeliverabilityMessage.source_email_id == source.id,
+                InboxDeliverabilityMessage.status.in_(['QUEUED', 'WAITING_FOR_DELIVERY'])
+            ).first()
+            if in_active_test:
+                source.status = 'ARCHIVED'
+            else:
+                db.session.delete(source)
+            deleted += 1
+        db.session.commit()
+        return jsonify({'success': True, 'deleted': deleted, 'message': f'Deleted {deleted} queued template(s).'})
+
     if request.method == 'POST':
         data = request.get_json(silent=True) or {}
         message_ids = []
