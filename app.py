@@ -455,6 +455,16 @@ with app.app_context():
                         conn.execute(text("ALTER TABLE inbox_email_message ADD COLUMN x_test_id VARCHAR(255)"))
                     conn.commit()
                 logging.info("✅ Added x_test_id column!")
+        if 'inbox_deliverability_test' in inspector.get_table_names():
+            columns = [col['name'] for col in inspector.get_columns('inbox_deliverability_test')]
+            if 'custom_headers' not in columns:
+                logging.info("Adding custom_headers column to inbox_deliverability_test...")
+                with db.engine.connect() as conn:
+                    if 'postgresql' in str(db.engine.url):
+                        conn.execute(text('ALTER TABLE "inbox_deliverability_test" ADD COLUMN custom_headers TEXT'))
+                    else:
+                        conn.execute(text("ALTER TABLE inbox_deliverability_test ADD COLUMN custom_headers TEXT"))
+                    conn.commit()
     except Exception as e:
         logging.warning(f"Could not add x_test_id column: {e}")
         try:
@@ -2946,6 +2956,10 @@ def api_inbox_automated_tests():
             'test_id': test.test_id,
             'name': test.name,
             'status': test.status,
+            'subject': test.subject or '',
+            'html_body': test.html_body or '',
+            'text_body': test.text_body or '',
+            'custom_headers': getattr(test, 'custom_headers', None) or '',
             'strategy': getattr(test, 'strategy', None),
             'total_email_sources': getattr(test, 'total_email_sources', 0) or 0,
             'total_users': getattr(test, 'total_users', 0) or 0,
@@ -3043,13 +3057,18 @@ def api_inbox_automated_tests():
     if not name.lower().startswith('automated:'):
         name = f'Automated: {name}'
     source_slots = sources if sources else [None]
+    first_source = sources[0] if sources else None
+    stored_subject = custom_subject or (first_source.original_subject if first_source else '') or 'Automated Email Test'
+    stored_html_body = custom_html_body if custom_html_body.strip() else ((first_source.html_snapshot if first_source else '') or '')
+    stored_text_body = custom_text_body if custom_text_body.strip() else (((first_source.text_snapshot or first_source.preview_snapshot) if first_source else '') or '')
     total_operations = len(source_slots) * len(senders) * len(inboxes) if strategy == 'full_matrix' else len(source_slots) * len(senders)
     test = InboxDeliverabilityTest(
         test_id=test_id,
         name=name,
-        subject=custom_subject or 'Automated Email Test',
-        html_body=custom_html_body,
-        text_body=custom_text_body,
+        subject=stored_subject,
+        html_body=stored_html_body,
+        text_body=stored_text_body,
+        custom_headers=custom_headers,
         status='QUEUED',
         total_messages=total_operations,
         sent_count=0,
@@ -3566,6 +3585,7 @@ def api_inbox_test_detail(test_id):
         'subject': test.subject,
         'html_body': test.html_body,
         'text_body': test.text_body,
+        'custom_headers': getattr(test, 'custom_headers', None) or '',
         'status': test.status,
         'total_messages': test.total_messages,
         'sent_count': test.sent_count,

@@ -1663,13 +1663,17 @@
     .ii-agent-chat-drawer {
         position: fixed;
         inset: 0;
-        z-index: 1039;
+        z-index: 1060;
         display: none;
         pointer-events: none;
     }
 
     .ii-agent-chat-drawer.open {
         display: block;
+    }
+
+    .ii-floating-command-stack.is-hidden {
+        display: none;
     }
 
     .ii-agent-chat-panel {
@@ -4929,6 +4933,7 @@ merge_recipe_id, content_blueprint_id</pre>
         if (!drawer) return;
         drawer.classList.add('open');
         drawer.setAttribute('aria-hidden', 'false');
+        document.querySelector('.ii-floating-command-stack')?.classList.add('is-hidden');
         refreshAiAgentConfigLabels();
         setAiAgentChatStatus('Ready. Type a prompt or review setup, then start the agent.');
         window.setTimeout(() => document.getElementById('aiAgentPromptInput')?.focus(), 50);
@@ -4939,6 +4944,7 @@ merge_recipe_id, content_blueprint_id</pre>
         if (!drawer) return;
         drawer.classList.remove('open');
         drawer.setAttribute('aria-hidden', 'true');
+        document.querySelector('.ii-floating-command-stack')?.classList.remove('is-hidden');
     }
 
     function switchAiAgentChatTab(tabName) {
@@ -5247,10 +5253,38 @@ merge_recipe_id, content_blueprint_id</pre>
                 <td>${test.total_users || 0}</td>
                 <td>${test.total_recipients || 0}</td>
                 <td>${total}</td>
-                <td><button class="ii-btn" type="button" onclick="event.stopPropagation(); viewAutomatedEmailTest('${escapeHtml(test.test_id)}')"><i class="fas fa-eye"></i> View</button> <button class="ii-btn" type="button" onclick="event.stopPropagation(); pollAutomatedEmailTest('${escapeHtml(test.test_id)}', true, {background: true})"><i class="fas fa-arrows-rotate"></i> Sync</button></td>
+                <td>
+                    <button class="ii-btn" type="button" title="Load saved header/body" onclick="event.stopPropagation(); loadAutomatedTestSetup('${escapeHtml(test.test_id)}')"><i class="fas fa-download"></i></button>
+                    <button class="ii-btn" type="button" onclick="event.stopPropagation(); viewAutomatedEmailTest('${escapeHtml(test.test_id)}')"><i class="fas fa-eye"></i> View</button>
+                    <button class="ii-btn" type="button" onclick="event.stopPropagation(); pollAutomatedEmailTest('${escapeHtml(test.test_id)}', true, {background: true})"><i class="fas fa-arrows-rotate"></i> Sync</button>
+                </td>
             </tr>`;
         }).join('')}
         </table></div><button class="ii-btn mt-2" type="button" onclick="activateInboxTab('history')">View all tests</button>`;
+    }
+
+    async function loadAutomatedTestSetup(testId) {
+        const status = document.getElementById('automatedStatusText');
+        try {
+            const data = await iiFetch(`/api/inbox-intelligence/tests/${testId}`);
+            const test = data.test || {};
+            const headerInput = document.getElementById('automatedHeaderInput');
+            const bodyInput = document.getElementById('automatedBodyInput');
+            const modeInput = document.getElementById('automatedBodyMode');
+            const fallbackHeader = `Date: [date]\nTo: [to]\nFrom: [from]\nMessage-ID: <custom-[test_id]@example.com>\nSubject: ${test.subject || '[subject]'}`;
+            if (headerInput) headerInput.value = test.custom_headers || fallbackHeader;
+            if (bodyInput) bodyInput.value = test.html_body || test.text_body || '';
+            if (modeInput) modeInput.value = test.html_body ? 'html' : 'text';
+            iiState.automatedSelectedTestId = test.test_id || testId;
+            const manualInput = document.getElementById('automatedManualTestIdInput');
+            if (manualInput) manualInput.value = iiState.automatedSelectedTestId;
+            localStorage.setItem('ii_automated_last_test_id', iiState.automatedSelectedTestId);
+            updateAutomatedMessageSetup();
+            activateInboxTab('automatedTests');
+            if (status) status.textContent = `Loaded saved Message Setup from ${iiState.automatedSelectedTestId}.`;
+        } catch (err) {
+            if (status) status.textContent = `Could not load saved setup: ${err.message}`;
+        }
     }
 
     function renderAutomatedInboxAnalytics(test) {
@@ -5561,6 +5595,19 @@ merge_recipe_id, content_blueprint_id</pre>
             if (chatButton) {
                 chatButton.disabled = true;
                 chatButton.innerHTML = '<span class="ii-spinner" aria-hidden="true"></span> Agent running';
+            }
+            if (document.getElementById('aiAgentChatDrawer')?.classList.contains('open')) {
+                const promptPaneActive = document.getElementById('aiAgentPromptPane')?.classList.contains('active');
+                if (promptPaneActive && (document.getElementById('aiAgentPromptInput')?.value || '').trim()) {
+                    await applyAiAgentPrompt();
+                } else {
+                    await applyAiAgentSetupToPage();
+                }
+            }
+            const selectedListId = document.getElementById('automatedWorkspaceListSelect')?.value || '';
+            if (selectedListId && !iiState.selectedSenderEmails.size && !iiState.selectedUserInboxListAccountIds.size) {
+                setAiAgentChatStatus('Retrieving selected List Management users before starting the agent...');
+                await retrieveAutomatedWorkspaceListUsers();
             }
             const config = collectAutomatedTestPayload('AI Agent');
             const listId = document.getElementById('automatedWorkspaceListSelect')?.value || '';

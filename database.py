@@ -491,6 +491,7 @@ class InboxDeliverabilityTest(db.Model):
     subject = db.Column(db.Text, nullable=False)
     html_body = db.Column(db.Text, nullable=True)
     text_body = db.Column(db.Text, nullable=True)
+    custom_headers = db.Column(db.Text, nullable=True)
     status = db.Column(db.String(50), default='queued')
     total_messages = db.Column(db.Integer, default=0)
     sent_count = db.Column(db.Integer, default=0)
