@@ -5545,6 +5545,11 @@ merge_recipe_id, content_blueprint_id</pre>
         return summary.queued === 0 && summary.waiting === 0 && summary.pending === 0 && summary.finished >= summary.total;
     }
 
+    function automatedTestHasObservedEvidence(test) {
+        const summary = automatedTestSummary(test);
+        return summary.observed > 0;
+    }
+
     async function fetchAutomatedTestDetail(testId, render = true) {
         const data = await iiFetch(`/api/inbox-intelligence/tests/${testId}`);
         const test = data.test || {};
@@ -5977,11 +5982,11 @@ merge_recipe_id, content_blueprint_id</pre>
     function aiAgentExistingTestSyncOptions(overrides = {}) {
         return aiAgentSyncOptions({
             requireComplete: false,
-            timeoutMs: 4 * 60 * 1000,
-            sendWait: {timeoutMs: 2 * 60 * 1000, intervalMs: 2000},
+            timeoutMs: 90 * 1000,
+            sendWait: {timeoutMs: 45 * 1000, intervalMs: 2000},
             intervalMs: 3000,
             recentLimit: 80,
-            maxPollAttempts: 120,
+            maxPollAttempts: 30,
             staleMinutes: 10,
             ...overrides,
         });
@@ -6322,9 +6327,17 @@ merge_recipe_id, content_blueprint_id</pre>
             renderAiAgentState('loading', {message: 'Loading existing test results', detail: sourceTestId});
             if (status) status.textContent = `AI Test Agent is reading existing test ${sourceTestId}.`;
 
-            await syncAutomatedTestUntilComplete(sourceTestId, aiAgentExistingTestSyncOptions());
+            let sourceTest = await fetchAutomatedTestDetail(sourceTestId, true);
             assertAiAgentNotStopped();
-            const sourceTest = await fetchAutomatedTestDetail(sourceTestId, true);
+            const sourceSummary = automatedTestSummary(sourceTest);
+            if (automatedTestHasObservedEvidence(sourceTest)) {
+                setAiAgentChatStatus(`${sourceTestId}: using saved results (${sourceSummary.inbox} inbox, ${sourceSummary.spam} spam, ${sourceSummary.pending} missing).`, 'success');
+            } else {
+                setAiAgentChatStatus(`${sourceTestId}: no saved inbox/spam evidence yet; running one fast targeted sync...`);
+                await syncAutomatedTestUntilComplete(sourceTestId, aiAgentExistingTestSyncOptions());
+                assertAiAgentNotStopped();
+                sourceTest = await fetchAutomatedTestDetail(sourceTestId, true);
+            }
             const senderContext = senderContextForTest(sourceTest);
             cacheTestSenderContext(sourceTestId, senderContext);
 
