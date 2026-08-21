@@ -2249,9 +2249,9 @@ The NightOwl Ranch Team</textarea>
                     </div>
                     <div class="ii-row flex-wrap align-items-center mt-3">
                         <span class="ii-chip blue"><i class="fas fa-wand-magic-sparkles"></i> AI Assistant</span>
-                        <button class="ii-btn" type="button" onclick="aiAnalyzeAutomatedTemplate()"><i class="fas fa-clipboard-check"></i> Analyze template</button>
-                        <button class="ii-btn" type="button" onclick="aiImproveAutomatedMessage('header')"><i class="fas fa-heading"></i> Improve header</button>
-                        <button class="ii-btn" type="button" onclick="aiImproveAutomatedMessage('body')"><i class="fas fa-align-left"></i> Improve body</button>
+                        <button class="ii-btn" type="button" data-ii-ai="1" onclick="aiAnalyzeAutomatedTemplate()"><i class="fas fa-clipboard-check"></i> Analyze template</button>
+                        <button class="ii-btn" type="button" data-ii-ai="1" onclick="aiImproveAutomatedMessage('header')"><i class="fas fa-heading"></i> Improve header</button>
+                        <button class="ii-btn" type="button" data-ii-ai="1" onclick="aiImproveAutomatedMessage('body')"><i class="fas fa-align-left"></i> Improve body</button>
                         <button class="ii-btn" type="button" onclick="aiValidateAutomatedPlaceholders()"><i class="fas fa-list-check"></i> Validate placeholders</button>
                         <button class="ii-btn" type="button" onclick="aiApplyAutomatedSuggestion()"><i class="fas fa-check"></i> Apply suggestion</button>
                         <button class="ii-btn" type="button" onclick="aiRevertAutomatedSuggestion()"><i class="fas fa-rotate-left"></i> Revert</button>
@@ -2271,7 +2271,7 @@ The NightOwl Ranch Team</textarea>
                         <h4>1. Test Queue</h4>
                         <div class="ii-row">
                             <select class="ii-select" style="width: 130px;"><option>Bulk actions</option></select>
-                            <button class="ii-btn" type="button" onclick="aiReviewAutomatedQueue()"><i class="fas fa-wand-magic-sparkles"></i> AI Review</button>
+                            <button class="ii-btn" type="button" data-ii-ai="1" onclick="aiReviewAutomatedQueue()"><i class="fas fa-wand-magic-sparkles"></i> AI Review</button>
                             <button class="ii-btn" type="button" onclick="deleteSelectedAutomatedQueue()"><i class="fas fa-trash"></i> Delete</button>
                             <button class="ii-btn" type="button" onclick="clearAutomatedQueueSelection()">Clear</button>
                         </div>
@@ -2291,7 +2291,7 @@ The NightOwl Ranch Team</textarea>
                     <div class="ii-pro-card-head">
                         <h4>2. Workspace Sources</h4>
                         <div>
-                            <button class="ii-btn" type="button" onclick="aiRecommendAutomatedAllocation()"><i class="fas fa-wand-magic-sparkles"></i> AI Advice</button>
+                            <button class="ii-btn" type="button" data-ii-ai="1" onclick="aiRecommendAutomatedAllocation()"><i class="fas fa-wand-magic-sparkles"></i> AI Advice</button>
                             <button class="ii-btn ii-btn-primary" type="button" onclick="retrieveAutomatedWorkspaceUsers()"><i class="fas fa-users-gear"></i> Retrieve Users</button>
                         </div>
                     </div>
@@ -2351,7 +2351,7 @@ The NightOwl Ranch Team</textarea>
                             <div class="ii-card">
                                 <h4>Run readiness</h4>
                                 <div class="ii-muted" id="automatedReadinessList">Message template, receiving inboxes, Workspace users, and test settings are checked before run.</div>
-                                <button class="ii-btn mt-2" type="button" onclick="aiExplainAutomatedReadiness()"><i class="fas fa-wand-magic-sparkles"></i> Explain readiness</button>
+                                <button class="ii-btn mt-2" type="button" data-ii-ai="1" onclick="aiExplainAutomatedReadiness()"><i class="fas fa-wand-magic-sparkles"></i> Explain readiness</button>
                                 <div id="automatedReadinessAiPanel" style="display:none;" class="ii-ai-output"></div>
                             </div>
                             <div class="ii-card">
@@ -2415,14 +2415,14 @@ The NightOwl Ranch Team</textarea>
                                 <h4>AI Optimization</h4>
                                 <p class="ii-muted mb-0">Diagnosis, retry planning, and copy-ready lists from the selected automated test.</p>
                             </div>
-                            <button class="ii-btn ii-btn-primary" type="button" onclick="analyzeAutomatedResultsWithAi()"><i class="fas fa-wand-magic-sparkles"></i> Analyze results</button>
+                            <button class="ii-btn ii-btn-primary" type="button" data-ii-ai="1" onclick="analyzeAutomatedResultsWithAi()"><i class="fas fa-wand-magic-sparkles"></i> Analyze results</button>
                         </div>
                         <div id="automatedAiResultsPanel">
                             <div class="ii-ai-placeholder">
                                 <i class="fas fa-wand-magic-sparkles"></i>
                                 <h4>Select a completed or synced test</h4>
                                 <p>AI analysis uses the same message rows shown in User Inbox Analytics. It cannot change verdicts, send retries, or mutate users/domains.</p>
-                                <span class="ii-chip blue">Read-only recommendations</span>
+                                <span class="ii-chip blue" id="analyticsAiEnabledChip">Read-only recommendations</span>
                             </div>
                         </div>
                     </div>
@@ -2463,8 +2463,8 @@ The NightOwl Ranch Team</textarea>
                         <div class="ii-actions">
                             <button class="ii-btn" type="button" onclick="selectAllStaticTemplates(true)">Select All</button>
                             <button class="ii-btn" type="button" onclick="selectAllStaticTemplates(false)">Clear</button>
-                            <button class="ii-btn" type="button" onclick="runTemplateAiAction('modify')"><i class="fas fa-wand-magic-sparkles"></i> AI Modify</button>
-                            <button class="ii-btn ii-btn-primary" type="button" onclick="runTemplateAiAction('merge')"><i class="fas fa-code-merge"></i> AI Merge</button>
+                            <button class="ii-btn" type="button" data-ii-ai="1" onclick="runTemplateAiAction('modify')"><i class="fas fa-wand-magic-sparkles"></i> AI Modify</button>
+                            <button class="ii-btn ii-btn-primary" type="button" data-ii-ai="1" onclick="runTemplateAiAction('merge')"><i class="fas fa-code-merge"></i> AI Merge</button>
                         </div>
                     </div>
                 </div>
@@ -3144,6 +3144,26 @@ merge_recipe_id, content_blueprint_id</pre>
 </div>
 
 <script>
+    const II_AI_ENABLED = '{{ "1" if inbox_ai_enabled else "0" }}' === '1';
+
+    function iiAiDisabledHint() {
+        return 'AI features are disabled by the INBOX_AI_ENABLED setting.';
+    }
+
+    function applyInboxAiFeatureFlag() {
+        if (II_AI_ENABLED) return;
+        document.querySelectorAll('[data-ii-ai]').forEach((button) => {
+            button.disabled = true;
+            button.title = iiAiDisabledHint();
+        });
+        const chip = document.getElementById('analyticsAiEnabledChip');
+        if (chip) {
+            chip.textContent = 'AI disabled';
+            chip.className = 'ii-chip gray';
+        }
+    }
+    document.addEventListener('DOMContentLoaded', applyInboxAiFeatureFlag);
+
     const iiState = {
         imapAccounts: [],
         messages: [],
@@ -3353,6 +3373,7 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     async function aiAnalyzeAutomatedTemplate() {
+        if (!II_AI_ENABLED) { setAutomatedAiStatus(iiAiDisabledHint(), 'muted'); return; }
         setAutomatedAiStatus('Analyzing Message Setup draft...');
         renderAutomatedAiSuggestions();
         try {
@@ -3376,6 +3397,7 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     async function aiImproveAutomatedMessage(target) {
+        if (!II_AI_ENABLED) { setAutomatedAiStatus(iiAiDisabledHint(), 'muted'); return; }
         setAutomatedAiStatus(`Creating ${target} draft suggestion...`);
         renderAutomatedAiSuggestions();
         try {
@@ -3434,6 +3456,7 @@ merge_recipe_id, content_blueprint_id</pre>
 
     async function aiReviewAutomatedQueue() {
         const status = document.getElementById('automatedStatusText');
+        if (!II_AI_ENABLED) { if (status) status.textContent = iiAiDisabledHint(); return; }
         const sourceIds = iiState.automatedSelectedSourceIds.size
             ? [...iiState.automatedSelectedSourceIds]
             : iiState.automatedQueue.slice(0, 100).map((source) => source.id);
@@ -3478,6 +3501,7 @@ merge_recipe_id, content_blueprint_id</pre>
 
     async function aiRecommendAutomatedAllocation() {
         const status = document.getElementById('automatedWorkspaceStatus');
+        if (!II_AI_ENABLED) { if (status) status.textContent = iiAiDisabledHint(); return; }
         const listId = document.getElementById('automatedWorkspaceListSelect')?.value || '';
         const listAccountIds = [...(iiState.selectedUserInboxListAccountIds || new Set())];
         const accountIds = listAccountIds.length ? listAccountIds : [...(iiState.selectedServiceAccountIds || new Set())];
@@ -3519,6 +3543,7 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     async function aiExplainAutomatedReadiness() {
+        if (!II_AI_ENABLED) { renderAiAdvicePanel('automatedReadinessAiPanel', `<span class="ii-muted">${iiAiDisabledHint()}</span>`); return; }
         const summary = updateAutomatedSummary();
         const rawPerAccount = (document.getElementById('automatedUsersPerAccountInput')?.value || '').trim();
         try {
@@ -3624,7 +3649,12 @@ merge_recipe_id, content_blueprint_id</pre>
         const res = await fetch(url, options);
         const data = await res.json().catch(() => ({}));
         if (!res.ok || data.success === false) {
-            throw new Error(data.error || `Request failed: ${res.status}`);
+            const fallback = res.status === 429
+                ? 'Too many requests. Please wait a moment and try again.'
+                : res.status === 503
+                    ? 'Service is temporarily unavailable. Please try again shortly.'
+                    : `Request failed: ${res.status}`;
+            throw new Error(data.error || data.message || fallback);
         }
         return data;
     }
@@ -4723,6 +4753,7 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     async function analyzeAutomatedResultsWithAi() {
+        if (!II_AI_ENABLED) { renderAutomatedAiResultsState('error', {message: iiAiDisabledHint()}); return; }
         const testId = iiState.automatedSelectedTestId || document.getElementById('automatedManualTestIdInput')?.value || '';
         if (!testId) {
             renderAutomatedAiResultsState('error', {message: 'Select an automated test first.'});
@@ -5238,6 +5269,7 @@ merge_recipe_id, content_blueprint_id</pre>
 
     async function runTemplateAiAction(action) {
         const status = document.getElementById('selectedTemplateActionStatus');
+        if (!II_AI_ENABLED) { status.textContent = iiAiDisabledHint(); return; }
         if (!iiState.selectedTemplateIds.size) {
             status.textContent = 'Select at least one template first.';
             return;

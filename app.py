@@ -1173,7 +1173,9 @@ def list_management():
 @permission_required('inbox_intelligence')
 def inbox_intelligence():
     """Inbox Intelligence workspace for mailbox analysis and controlled deliverability testing."""
-    return render_template('inbox_intelligence.html', user=session.get('user'), role=session.get('role'))
+    from services.inbox_ai_gateway import ai_enabled
+    return render_template('inbox_intelligence.html', user=session.get('user'), role=session.get('role'),
+                           inbox_ai_enabled=ai_enabled())
 
 INBOX_PROVIDER_DEFAULTS = {
     'gmail': ('imap.gmail.com', 993),
@@ -3648,6 +3650,7 @@ def api_inbox_ai_region_editor():
         decrypt_secret=_unprotect_secret,
         job_id=ai_job.job_id if ai_job else None,
         referer=request.host_url.rstrip('/'),
+        user_key=session.get('user'),
     )
     response = result.to_response_dict()
     if ai_job:
@@ -3680,6 +3683,7 @@ def api_inbox_ai_analyze_template():
         decrypt_secret=_unprotect_secret,
         job_id=ai_job.job_id if ai_job else None,
         referer=request.host_url.rstrip('/'),
+        user_key=session.get('user'),
     )
     response = {'success': True, 'provider': result.provider, 'analysis': result.data.get('analysis') or {}}
     if result.model and result.provider == 'openrouter':
@@ -3718,6 +3722,7 @@ def api_inbox_ai_improve_message():
         decrypt_secret=_unprotect_secret,
         job_id=ai_job.job_id if ai_job else None,
         referer=request.host_url.rstrip('/'),
+        user_key=session.get('user'),
     )
     response = {
         'success': True,
@@ -3839,6 +3844,7 @@ def api_inbox_ai_recommend_queue():
         decrypt_secret=_unprotect_secret,
         job_id=ai_job.job_id if ai_job else None,
         referer=request.host_url.rstrip('/'),
+        user_key=session.get('user'),
     )
     recommendation = result.data.get('recommendation') or {}
     response = {'success': True, 'provider': result.provider, 'recommendation': recommendation}
@@ -3917,6 +3923,7 @@ def api_inbox_ai_recommend_allocation():
         decrypt_secret=_unprotect_secret,
         job_id=ai_job.job_id if ai_job else None,
         referer=request.host_url.rstrip('/'),
+        user_key=session.get('user'),
     )
     recommendation = result.data.get('recommendation') or {}
     response = {'success': True, 'provider': result.provider, 'facts': context, 'recommendation': recommendation}
@@ -3982,6 +3989,7 @@ def api_inbox_ai_explain_readiness():
         decrypt_secret=_unprotect_secret,
         job_id=ai_job.job_id if ai_job else None,
         referer=request.host_url.rstrip('/'),
+        user_key=session.get('user'),
     )
     explanation = result.data.get('recommendation') or {}
     response = {'success': True, 'provider': result.provider, 'facts': context, 'explanation': explanation}
@@ -4101,6 +4109,7 @@ def api_inbox_ai_analyze_results():
         decrypt_secret=_unprotect_secret,
         job_id=ai_job.job_id if ai_job else None,
         referer=request.host_url.rstrip('/'),
+        user_key=session.get('user'),
     )
     analysis = result.data.get('analysis') or {}
     response = {'success': True, 'provider': result.provider, 'facts': facts, 'analysis': analysis}
@@ -4261,6 +4270,13 @@ def api_inbox_static_templates_from_messages():
 @login_required
 @permission_required('inbox_intelligence')
 def api_inbox_static_templates_ai_action():
+    from services.inbox_ai_gateway import ai_enabled
+    if not ai_enabled():
+        return jsonify({
+            'success': False,
+            'error': 'AI features are disabled by the INBOX_AI_ENABLED setting.',
+            'status': 'disabled'
+        }), 503
     data = request.get_json(silent=True) or {}
     template_ids = [int(x) for x in data.get('template_ids', [])]
     action = (data.get('action') or 'modify').strip().lower()
