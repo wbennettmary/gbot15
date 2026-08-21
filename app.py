@@ -1340,6 +1340,8 @@ def _current_inbox_owner():
     return (session.get('user') or '').strip()
 
 def _owned_imap_accounts_query():
+    if session.get('role') == 'admin':
+        return InboxImapAccount.query
     owner = _current_inbox_owner().lower()
     return InboxImapAccount.query.filter(or_(
         func.lower(InboxImapAccount.owner) == owner,
@@ -1354,6 +1356,8 @@ def _get_owned_imap_account(account_id):
     return _owned_imap_accounts_query().filter(InboxImapAccount.id == account_id).first()
 
 def _owned_imap_account_ids_query():
+    if session.get('role') == 'admin':
+        return db.session.query(InboxImapAccount.id)
     owner = _current_inbox_owner().lower()
     return db.session.query(InboxImapAccount.id).filter(or_(
         func.lower(InboxImapAccount.owner) == owner,
@@ -1502,6 +1506,7 @@ def _parse_raw_message(uid_val, is_read, raw_body):
 def _upsert_imap_message_full(account, folder, parsed, uid_validity=None):
     """Upsert a fully-parsed message dict into the InboxEmailMessage table."""
     existing = InboxEmailMessage.query.filter_by(imap_account_id=account.id, folder=folder, uid=parsed['uid']).first()
+    created = existing is None
     if not existing:
         existing = InboxEmailMessage(imap_account_id=account.id, folder=folder, uid=parsed['uid'])
         db.session.add(existing)
@@ -1521,7 +1526,7 @@ def _upsert_imap_message_full(account, folder, parsed, uid_validity=None):
     existing.uid_validity = uid_validity or None
     existing.received_at = parsed['received_at']
     existing.synced_at = datetime.utcnow()
-    return existing
+    return existing, created
 
 def _imap_fetch_messages_batch(conn, uids, folder):
     """Fetch full RFC822 bodies for a list of UIDs in batches. Returns a list of
@@ -1615,7 +1620,8 @@ def _sync_mailbox_account(account, folders=None, limit=200, force_full=False, wa
                 if force_full or not state.uid_validity or str(state.uid_validity) != str(meta['uidvalidity']):
                     state.uid_validity = str(meta['uidvalidity'])
                     state.last_seen_uid = 0
-                start = int(state.last_seen_uid or 0) + 1
+                last_seen_uid = int(state.last_seen_uid or 0)
+                start = last_seen_uid + 1
                 s, data = conn.uid('search', None, f'{start}:*')
                 if s != 'OK' or not data or not data[0]:
                     state.sync_status = 'idle'
@@ -1623,25 +1629,29 @@ def _sync_mailbox_account(account, folders=None, limit=200, force_full=False, wa
                     db.session.commit()
                     folder_results.append({'folder': folder, 'synced': 0, 'unread': _folder_unread_count(account.id, folder), 'total': _folder_message_count(account.id, folder)})
                     continue
-                uids = data[0].split()
+                uids = [uid for uid in data[0].split() if int(uid) > last_seen_uid]
                 if not uids:
                     state.sync_status = 'idle'
                     state.last_sync_completed_at = datetime.utcnow()
                     db.session.commit()
+                    folder_results.append({'folder': folder, 'synced': 0, 'new': 0, 'checked': 0, 'unread': _folder_unread_count(account.id, folder), 'total': _folder_message_count(account.id, folder)})
                     continue
                 if limit and len(uids) > int(limit):
                     uids = uids[-int(limit):]
                 messages = _imap_fetch_messages_batch(conn, uids, folder)
+                new_messages = 0
                 for parsed in messages:
-                    _upsert_imap_message_full(account, folder, parsed, uid_validity=str(meta['uidvalidity']))
-                total_synced += len(messages)
+                    _message, created = _upsert_imap_message_full(account, folder, parsed, uid_validity=str(meta['uidvalidity']))
+                    if created:
+                        new_messages += 1
+                total_synced += new_messages
                 max_uid = max((int(u) for u in uids), default=0)
                 state.last_seen_uid = max(max_uid, state.last_seen_uid or 0)
                 state.sync_status = 'idle'
                 state.last_sync_completed_at = datetime.utcnow()
                 state.last_error = None
                 db.session.commit()
-                folder_results.append({'folder': folder, 'synced': len(messages), 'unread': _folder_unread_count(account.id, folder), 'total': _folder_message_count(account.id, folder)})
+                folder_results.append({'folder': folder, 'synced': new_messages, 'new': new_messages, 'checked': len(messages), 'unread': _folder_unread_count(account.id, folder), 'total': _folder_message_count(account.id, folder)})
             except Exception as e:
                 db.session.rollback()
                 errors.append(f'{folder}: {e}')
@@ -1681,13 +1691,13 @@ def _sync_mailbox_account(account, folders=None, limit=200, force_full=False, wa
             pass
         lock.release()
 
-def _sync_mailbox_accounts(accounts, folders=None, limit=200):
+def _sync_mailbox_accounts(accounts, folders=None, limit=200, force_full=False):
     """Sync multiple accounts, returning per-account results. Accounts with a lock
     already held are skipped. Returns (results, all_errors)."""
     results = []
     all_errors = []
     for account in accounts:
-        synced, folder_results, account_errors = _sync_mailbox_account(account, folders=folders, limit=limit)
+        synced, folder_results, account_errors = _sync_mailbox_account(account, folders=folders, limit=limit, force_full=force_full)
         results.append({'account_id': account.id, 'email': account.email, 'synced': synced, 'folders': folder_results, 'errors': account_errors})
         all_errors.extend(account_errors)
     return results, all_errors
@@ -1710,7 +1720,9 @@ def api_inbox_imap_accounts():
     tls_enabled = bool(data.get('tls_enabled', True))
     auto_sync_enabled = bool(data.get('auto_sync_enabled', True))
     account_type = (data.get('account_type') or 'both').strip().lower()
-    if account_type not in ('both', 'template_source', 'receiving_analytics'):
+    legacy_type_map = {'template_source': 'concurrent', 'receiving_analytics': 'test'}
+    account_type = legacy_type_map.get(account_type, account_type)
+    if account_type not in ('both', 'concurrent', 'test'):
         account_type = 'both'
     owner = _normalize_imap_credential(data.get('owner') or session.get('user') or '').lower()
     if not email_addr or '@' not in email_addr:
@@ -1720,7 +1732,7 @@ def api_inbox_imap_accounts():
     existing = InboxImapAccount.query.filter_by(email=email_addr).first()
     session_owner = (session.get('user') or '').strip().lower()
     existing_owner = (getattr(existing, 'owner', None) or existing.created_by or '').strip().lower() if existing else ''
-    if existing and existing_owner and existing_owner != session_owner:
+    if session.get('role') != 'admin' and existing and existing_owner and existing_owner != session_owner:
         return jsonify({'success': False, 'error': 'This IMAP account belongs to another user.'}), 403
     if existing and not password:
         password = _unprotect_secret(existing.encrypted_password)
@@ -1747,6 +1759,23 @@ def api_inbox_imap_accounts():
         return jsonify({'success': True, 'message': f'Inbox saved and synchronized {synced} message(s).', 'account': _serialize_imap_account(account)})
     return jsonify({'success': True, 'message': 'Inbox saved.', 'account': _serialize_imap_account(account)})
 
+@app.route('/api/inbox-intelligence/imap-accounts/<int:account_id>/type', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_update_account_type(account_id):
+    account = _get_owned_imap_account(account_id)
+    if not account:
+        return jsonify({'success': False, 'error': 'IMAP account not found'}), 404
+    data = request.get_json(silent=True) or {}
+    account_type = (data.get('account_type') or 'both').strip().lower()
+    if account_type not in ('both', 'concurrent', 'test'):
+        return jsonify({'success': False, 'error': 'Invalid IMAP account type'}), 400
+    account.account_type = account_type
+    if session.get('role') == 'admin' and data.get('owner'):
+        account.owner = _normalize_imap_credential(data.get('owner')).lower()
+    db.session.commit()
+    return jsonify({'success': True, 'account': _serialize_imap_account(account)})
+
 @app.route('/api/inbox-intelligence/imap-accounts/<int:account_id>/sync', methods=['POST'])
 @login_required
 @permission_required('inbox_intelligence')
@@ -1756,7 +1785,7 @@ def api_inbox_sync_account(account_id):
         return jsonify({'success': False, 'error': 'IMAP account not found'}), 404
     data = request.get_json(silent=True) or {}
     folders = data.get('folders') or None
-    synced, folder_results, errors = _sync_mailbox_account(account, folders=folders, limit=min(200, int(data.get('limit') or 80)))
+    synced, folder_results, errors = _sync_mailbox_account(account, folders=folders, limit=min(200, int(data.get('limit') or 80)), force_full=bool(data.get('force_full')))
     return jsonify({'success': True, 'synced': synced, 'folders': folder_results, 'errors': errors, 'account': _serialize_imap_account(account)})
 
 @app.route('/api/inbox-intelligence/explorer/sync', methods=['POST'])
@@ -1767,11 +1796,12 @@ def api_explorer_bulk_sync():
     account_ids = data.get('account_ids') or []
     limit = min(200, max(10, int(data.get('limit') or 80)))
     folders = data.get('folders') or None
+    force_full = bool(data.get('force_full', True))
     if not account_ids:
         accounts = _owned_imap_accounts_query().all()
     else:
         accounts = _owned_imap_accounts_query().filter(InboxImapAccount.id.in_(account_ids)).all()
-    results, all_errors = _sync_mailbox_accounts(accounts, folders=folders, limit=limit)
+    results, all_errors = _sync_mailbox_accounts(accounts, folders=folders, limit=limit, force_full=force_full)
     total_synced = sum(r['synced'] for r in results)
     return jsonify({'success': True, 'synced': total_synced, 'results': results, 'errors': all_errors})
 
@@ -1862,7 +1892,7 @@ def api_inbox_sync_all():
         accounts = _owned_imap_accounts_query().filter_by(auto_sync_enabled=True).all()
     if not accounts:
         return jsonify({'success': True, 'synced': 0, 'message': 'No accounts to sync.'})
-    results, all_errors = _sync_mailbox_accounts(accounts, folders=None, limit=80)
+    results, all_errors = _sync_mailbox_accounts(accounts, folders=None, limit=80, force_full=bool(data.get('force_full')))
     total_synced = sum(r['synced'] for r in results)
     return jsonify({'success': True, 'synced': total_synced, 'results': results, 'errors': all_errors})
 
@@ -2120,6 +2150,7 @@ def api_inbox_test_email_sources():
             if in_active_test:
                 source.status = 'ARCHIVED'
             else:
+                InboxDeliverabilityMessage.query.filter_by(source_email_id=source.id).delete(synchronize_session=False)
                 db.session.delete(source)
             deleted += 1
         db.session.commit()

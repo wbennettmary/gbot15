@@ -1329,8 +1329,9 @@
 
     .ii-message-setup-grid {
         display: grid;
-        grid-template-columns: minmax(380px, 1fr) minmax(380px, 1fr);
-        gap: 10px;
+        grid-template-columns: minmax(320px, 0.75fr) minmax(560px, 1.25fr);
+        gap: 14px;
+        align-items: stretch;
     }
 
     .ii-pro-toolbar {
@@ -1361,7 +1362,8 @@
     }
 
     .ii-pro-textarea {
-        min-height: 180px;
+        min-height: 230px;
+        height: 100%;
         border-radius: var(--ii-radius-sm);
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
         line-height: 1.5;
@@ -1369,11 +1371,21 @@
     }
 
     .ii-pro-body-input {
-        min-height: 280px;
+        min-height: 460px;
+        height: 460px;
         border-radius: 0 0 var(--ii-radius-sm) var(--ii-radius-sm);
-        font-family: Inter, system-ui, -apple-system, sans-serif;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
         font-size: 13px;
         line-height: 1.55;
+        white-space: pre;
+        overflow: auto;
+    }
+
+    .ii-sync-status-grid {
+        display: grid;
+        grid-template-columns: minmax(220px, 1fr) auto;
+        gap: 10px;
+        align-items: end;
     }
 
     .ii-two-col-pro {
@@ -1855,6 +1867,40 @@
         overflow: auto;
     }
 
+    .ii-modal.automated-preview {
+        width: min(1180px, 100%);
+    }
+
+    .ii-modal.automated-preview .ii-layout-2 {
+        grid-template-columns: minmax(320px, 0.9fr) minmax(360px, 1.1fr);
+    }
+
+    .ii-modal.automated-preview .ii-modal-preview {
+        max-height: 62vh;
+        overflow: auto;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    .ii-modal.automated-preview #userInboxTemplateModalHtml {
+        background: #fff;
+        padding: 12px;
+    }
+
+    .ii-email-preview-iframe {
+        width: 100%;
+        min-height: 58vh;
+        border: 0;
+        background: #fff;
+    }
+
+    .ii-modal.automated-preview #userInboxTemplateModalText,
+    .ii-modal.automated-preview #userInboxTemplateModalHeaders {
+        white-space: pre-wrap;
+        font-size: 12px;
+        line-height: 1.5;
+    }
+
     .ii-studio-shell {
         display: grid;
         grid-template-columns: minmax(0, 1.25fr) minmax(360px, 0.95fr);
@@ -2096,6 +2142,8 @@
         .ii-floating-command-stack { right: 12px; bottom: 92px; width: 150px; }
         .ii-floating-action { padding: 10px 12px; border-radius: 14px; }
         .ii-agent-chat-panel { right: 12px; bottom: 118px; width: calc(100vw - 24px); max-height: calc(100vh - 140px); }
+        .ii-sync-status-grid,
+        .ii-modal.automated-preview .ii-layout-2 { grid-template-columns: 1fr; }
         .ii-template-actions .ii-btn { flex-basis: calc(50% - 4px); }
         .ii-analytics-row { grid-template-columns: 1fr; }
         .ii-account-tab { max-width: none; width: 100%; }
@@ -2247,7 +2295,7 @@
                             <div class="ii-form-grid">
                                 <div class="ii-field"><label>Provider</label><select class="ii-select" id="imapProviderInput"><option value="gmail">Gmail</option><option value="google workspace">Google Workspace</option><option value="outlook">Outlook</option><option value="hotmail">Hotmail</option><option value="microsoft 365">Microsoft 365</option><option value="yahoo">Yahoo</option><option value="generic">Generic IMAP</option></select></div>
                                 <div class="ii-field"><label>Email address</label><input class="ii-input" id="imapEmailInput" type="email" placeholder="inbox@example.com" required></div>
-                                <div class="ii-field"><label>IMAP type</label><select class="ii-select" id="imapTypeInput"><option value="both">Template source + analytics inbox</option><option value="template_source">Template source inbox</option><option value="receiving_analytics">Receiving analytics inbox</option></select></div>
+                                <div class="ii-field"><label>IMAP type</label><select class="ii-select" id="imapTypeInput"><option value="both">Both</option><option value="concurrent">Concurrent - template source</option><option value="test">Test - send and analytics</option></select></div>
                                 <div class="ii-field"><label>Owner</label><input class="ii-input" id="imapOwnerInput" value="{{ user }}" placeholder="Logged user or owner email"></div>
                                 <div class="ii-field"><label>IMAP hostname</label><input class="ii-input" id="imapHostInput" placeholder="imap.example.com"></div>
                                 <div class="ii-field"><label>Port</label><input class="ii-input" id="imapPortInput" type="number" value="993"></div>
@@ -2289,7 +2337,7 @@
             <aside class="ii-panel">
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <h3 class="mb-0">Folders</h3>
-                    <button class="ii-btn ii-btn-sm" type="button" onclick="loadExplorerFolders()" title="Refresh folders"><i class="fas fa-rotate"></i></button>
+                    <button class="ii-btn ii-btn-sm" type="button" onclick="refreshInboxExplorer()" title="Refresh folders and messages"><i class="fas fa-rotate"></i></button>
                 </div>
                 <div id="folderList">
                     <div class="ii-folder active" onclick="filterByFolder('')" data-folder="">
@@ -2560,15 +2608,17 @@ The NightOwl Ranch Team</textarea>
                             </div>
                             <div class="ii-card">
                                 <h4>Synced status</h4>
-                                <div class="ii-row"><i class="fas fa-arrows-rotate text-primary"></i><span class="ii-muted" id="automatedLastSync">No sync yet</span></div>
-                                <button class="ii-btn mt-2" id="automatedSyncButton" type="button" onclick="syncAutomatedEmailTest()"><i class="fas fa-arrows-rotate"></i> Sync now</button>
+                                <div class="ii-row mb-2"><i class="fas fa-arrows-rotate text-primary"></i><span class="ii-muted" id="automatedLastSync">No sync yet</span></div>
+                                <div class="ii-sync-status-grid">
+                                    <div class="ii-field mb-0">
+                                        <label>Test ID to sync</label>
+                                        <input class="ii-input" id="automatedManualTestIdInput" placeholder="AT-6C57D4E9">
+                                    </div>
+                                    <button class="ii-btn" id="automatedSyncButton" type="button" onclick="syncAutomatedEmailTest()"><i class="fas fa-arrows-rotate"></i> Sync now</button>
+                                </div>
                             </div>
                         </div>
                         <div class="ii-row mt-3">
-                            <div class="ii-field mb-0" style="max-width: 280px;">
-                                <label>Test ID to sync</label>
-                                <input class="ii-input" id="automatedManualTestIdInput" placeholder="AT-6C57D4E9">
-                            </div>
                             <div class="ii-muted" id="automatedStatusText">Select queued emails, Workspace sources, and receiving inboxes.</div>
                         </div>
                     </div>
@@ -2593,6 +2643,7 @@ The NightOwl Ranch Team</textarea>
                         </div>
                         <div class="ii-row">
                             <span class="ii-muted" id="automatedAnalyticsStatus">Run or select an automated test to see analytics.</span>
+                            <button class="ii-btn" type="button" onclick="clearAutomatedAnalytics()"><i class="fas fa-eraser"></i> Clear</button>
                         </div>
                     </div>
                     <div class="ii-analytics-tabs" style="padding: 0 18px;">
@@ -3864,9 +3915,13 @@ merge_recipe_id, content_blueprint_id</pre>
             alert(`${subject}\n\n${payload.text || 'The selected queued source body will be used.'}`);
             return;
         }
+        modal.querySelector('.ii-modal')?.classList.add('automated-preview');
         document.getElementById('userInboxTemplateModalTitle').textContent = 'Automated Message Preview';
         document.getElementById('userInboxTemplateModalSubject').textContent = subject;
-        document.getElementById('userInboxTemplateModalHtml').innerHTML = preview;
+        const htmlPreview = document.getElementById('userInboxTemplateModalHtml');
+        htmlPreview.innerHTML = '<iframe class="ii-email-preview-iframe" title="Automated HTML preview"></iframe>';
+        const frame = htmlPreview.querySelector('iframe');
+        if (frame) frame.srcdoc = preview;
         document.getElementById('userInboxTemplateModalText').textContent = payload.text || '';
         document.getElementById('userInboxTemplateModalHeaders').textContent = document.getElementById('automatedHeaderInput')?.value || '';
         modal.classList.add('active');
@@ -3881,7 +3936,7 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     async function iiFetch(url, options = {}) {
-        const res = await fetch(url, options);
+        const res = await fetch(url, {cache: 'no-store', ...options});
         const data = await res.json().catch(() => ({}));
         if (!res.ok || data.success === false) {
             const fallback = res.status === 429
@@ -3909,6 +3964,7 @@ merge_recipe_id, content_blueprint_id</pre>
             const statusClass = account.connection_status === 'connected' ? 'green' : account.connection_status === 'syncing' ? 'blue' : account.connection_status === 'error' ? 'red' : 'gray';
             const errorHtml = account.last_error ? `<div class="ii-inbox-error" id="inboxError${account.id}" style="display:none;cursor:pointer" onclick="document.getElementById('inboxErrorDetail${account.id}').classList.toggle('d-none')"><div class="text-danger" style="word-break:break-all">${escapeHtml(account.last_error)}</div></div><button class="ii-btn" type="button" style="font-size:0.75em;color:#f87171" title="${escapeHtml(account.last_error).replace(/"/g, '&quot;')}" onclick="document.getElementById('inboxError${account.id}').style.display = document.getElementById('inboxError${account.id}').style.display === 'none' ? 'block' : 'none'"><i class="fas fa-triangle-exclamation"></i> Error</button>` : '';
             const timeAgo = account.last_synced_at ? _timeAgo(new Date(account.last_synced_at)) : 'Never';
+            const type = normalizeImapAccountType(account.account_type);
             return `
             <div class="ii-inbox-card">
                 <div class="ii-provider"><i class="fas fa-inbox"></i></div>
@@ -3922,7 +3978,11 @@ merge_recipe_id, content_blueprint_id</pre>
                     </div>
                     <div class="ii-muted" style="font-size:0.85em">${escapeHtml(account.provider)} &middot; ${escapeHtml(account.imap_host)}:${account.imap_port}</div>
                     <div class="ii-row mt-1" style="flex-wrap:wrap;gap:4px">
-                        <span class="ii-chip blue" style="font-size:0.75em">${escapeHtml(account.account_type || 'both')}</span>
+                        <select class="ii-select" style="width:190px;max-width:100%;padding:5px 8px;font-size:12px" onchange="updateImapAccountType(${account.id}, this.value)" title="Change account usage type">
+                            <option value="both" ${type === 'both' ? 'selected' : ''}>Both</option>
+                            <option value="concurrent" ${type === 'concurrent' ? 'selected' : ''}>Concurrent - template source</option>
+                            <option value="test" ${type === 'test' ? 'selected' : ''}>Test - send and analytics</option>
+                        </select>
                         <span class="ii-chip gray" style="font-size:0.75em">Owner: ${escapeHtml(account.owner || 'current user')}</span>
                         <span class="ii-chip gray" style="font-size:0.75em">INBOX: ${account.inbox_count || 0}</span>
                         <span class="ii-chip gray" style="font-size:0.75em">Spam: ${account.spam_count || 0}</span>
@@ -3938,6 +3998,41 @@ merge_recipe_id, content_blueprint_id</pre>
                 </div>
             </div>`;
         }).join('');
+    }
+
+    function normalizeImapAccountType(value) {
+        const type = String(value || 'both').toLowerCase();
+        if (type === 'template_source') return 'concurrent';
+        if (type === 'receiving_analytics') return 'test';
+        return ['both', 'concurrent', 'test'].includes(type) ? type : 'both';
+    }
+
+    function imapAccountTypeLabel(value) {
+        const type = normalizeImapAccountType(value);
+        if (type === 'concurrent') return 'Concurrent - template source';
+        if (type === 'test') return 'Test - send and analytics';
+        return 'Both';
+    }
+
+    function isReceivingImapAccount(account) {
+        return ['both', 'test'].includes(normalizeImapAccountType(account?.account_type));
+    }
+
+    async function updateImapAccountType(id, accountType) {
+        try {
+            await iiFetch(`/api/inbox-intelligence/imap-accounts/${id}/type`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({account_type: accountType})
+            });
+            if (!['both', 'test'].includes(normalizeImapAccountType(accountType))) {
+                iiState.selectedInboxIds.delete(id);
+            }
+            await loadImapAccounts();
+        } catch (err) {
+            alert('Type update failed: ' + err.message);
+            await loadImapAccounts();
+        }
     }
 
     function _timeAgo(date) {
@@ -4123,12 +4218,10 @@ merge_recipe_id, content_blueprint_id</pre>
             const data = await iiFetch('/api/inbox-intelligence/imap-accounts/sync-all', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({account_ids: iiState.imapAccounts.map(a => a.id)})
+                body: JSON.stringify({account_ids: iiState.imapAccounts.map(a => a.id), force_full: true})
             });
             status.textContent = `Sync complete: ${data.synced || 0} message(s) synced.`;
-            await loadImapAccounts();
-            await loadExplorerFolders();
-            await loadExplorerMessages();
+            await refreshInboxExplorer();
         } catch (err) {
             status.textContent = `Sync failed: ${err.message}`;
         } finally {
@@ -4172,11 +4265,9 @@ merge_recipe_id, content_blueprint_id</pre>
         await iiFetch(`/api/inbox-intelligence/imap-accounts/${id}/sync`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({limit: 80})
+            body: JSON.stringify({limit: 80, force_full: true})
         });
-        await loadImapAccounts();
-        await loadExplorerFolders();
-        await loadExplorerMessages();
+        await refreshInboxExplorer();
     }
 
     async function testImapConnection(id) {
@@ -4224,14 +4315,12 @@ merge_recipe_id, content_blueprint_id</pre>
             const data = await iiFetch('/api/inbox-intelligence/explorer/sync', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({account_ids: accountIds, folders, limit: 80})
+                body: JSON.stringify({account_ids: accountIds, folders, limit: 80, force_full: true})
             });
             const totalSynced = data.synced || 0;
             const errCount = (data.errors || []).length;
             status.textContent = `Sync complete: ${totalSynced} message(s) synced${errCount ? `, ${errCount} folder(s) had errors` : ''}.`;
-            await loadImapAccounts();
-            await loadExplorerFolders();
-            await loadExplorerMessages();
+            await refreshInboxExplorer();
         } catch (err) {
             status.textContent = `Sync failed: ${err.message}`;
         } finally {
@@ -4254,6 +4343,7 @@ merge_recipe_id, content_blueprint_id</pre>
 
     async function loadExplorerMessages() {
         const params = new URLSearchParams({limit: 200});
+        params.set('_', Date.now().toString());
         const accountId = document.getElementById('messageAccountFilter')?.value;
         const search = document.getElementById('messageSearchInput')?.value;
         const dateRange = document.getElementById('messageDateFilter')?.value;
@@ -4269,6 +4359,14 @@ merge_recipe_id, content_blueprint_id</pre>
         }
         renderInboxMessagesList();
         loadExplorerFolders(accountId || undefined);
+    }
+
+    async function refreshInboxExplorer() {
+        await loadImapAccounts();
+        await Promise.allSettled([
+            loadExplorerFolders(document.getElementById('messageAccountFilter')?.value || undefined),
+            loadExplorerMessages()
+        ]);
     }
 
     function startInboxExplorerAutoRefresh() {
@@ -4584,19 +4682,21 @@ merge_recipe_id, content_blueprint_id</pre>
         const picker = document.getElementById('automatedInboxPicker');
         const status = document.getElementById('automatedInboxStatus');
         if (!el) return;
-        if (!iiState.imapAccounts.length) {
+        const receivingAccounts = iiState.imapAccounts.filter(isReceivingImapAccount);
+        iiState.selectedInboxIds = new Set([...iiState.selectedInboxIds].filter((id) => receivingAccounts.some((account) => account.id === id)));
+        if (!receivingAccounts.length) {
             el.innerHTML = '';
-            if (picker) picker.innerHTML = '<div class="ii-muted">Connect receiving IMAP inboxes first.</div>';
-            if (status) status.textContent = 'Connect receiving IMAP inboxes first.';
+            if (picker) picker.innerHTML = '<div class="ii-muted">Connect or mark an IMAP account as Test/Both first.</div>';
+            if (status) status.textContent = 'Only Test or Both IMAP accounts can receive automated test analytics.';
             return;
         }
-        el.innerHTML = iiState.imapAccounts.map((account) => `
-            <option value="${account.id}" ${iiState.selectedInboxIds.has(account.id) ? 'selected' : ''}>${escapeHtml(account.email)} · ${escapeHtml(account.provider || 'imap')}</option>`).join('');
+        el.innerHTML = receivingAccounts.map((account) => `
+            <option value="${account.id}" ${iiState.selectedInboxIds.has(account.id) ? 'selected' : ''}>${escapeHtml(account.email)} · ${escapeHtml(account.provider || 'imap')} · ${escapeHtml(imapAccountTypeLabel(account.account_type))}</option>`).join('');
         if (picker) {
-            picker.innerHTML = iiState.imapAccounts.map((account) => `
+            picker.innerHTML = receivingAccounts.map((account) => `
                 <label class="ii-inbox-option ${iiState.selectedInboxIds.has(account.id) ? 'active' : ''}">
                     <input type="checkbox" ${iiState.selectedInboxIds.has(account.id) ? 'checked' : ''} onchange="toggleAutomatedInbox(${account.id}, this.checked)">
-                    <span><strong>${escapeHtml(account.email)}</strong><small>${escapeHtml(account.provider || 'imap')}</small></span>
+                    <span><strong>${escapeHtml(account.email)}</strong><small>${escapeHtml(account.provider || 'imap')} · ${escapeHtml(imapAccountTypeLabel(account.account_type))}</small></span>
                 </label>`).join('');
         }
         if (status) status.textContent = `${iiState.selectedInboxIds.size} receiving inbox(es) selected. Each selected inbox is used as a receiving analytics account.`;
@@ -5172,6 +5272,26 @@ merge_recipe_id, content_blueprint_id</pre>
                 ? `${test?.test_id || iiState.automatedSelectedTestId}: ${summary.inbox} inbox, ${summary.spam} spam, ${summary.pending + summary.failed} missing.`
                 : 'No message rows found yet. Sync after delivery has had time to complete.';
         }
+    }
+
+    function clearAutomatedAnalytics() {
+        iiState.automatedSelectedTestId = null;
+        iiState.automatedMessages = [];
+        iiState.automatedCopyBuckets = {inboxUsers: [], inboxDomains: [], spamUsers: [], spamDomains: [], greyDomainNameChangeUsers: []};
+        iiState.automatedAiResultCopyBuckets = {inbox_users: [], spam_users: [], inbox_domains: [], spam_domains: []};
+        iiState.automatedAiResultAnalysis = null;
+        iiState.automatedAiResultTestId = null;
+        const manualInput = document.getElementById('automatedManualTestIdInput');
+        if (manualInput) manualInput.value = '';
+        localStorage.removeItem('ii_automated_last_test_id');
+        renderAnalyticsSummary('automatedAnalyticsSummary', [], 'Messages');
+        renderAutomatedProAnalytics([], {});
+        renderAutomatedAiResultsState();
+        renderAutomatedTests();
+        const status = document.getElementById('automatedAnalyticsStatus');
+        if (status) status.textContent = 'Analytics cleared. Select a Test ID or sync after sending to load data.';
+        const syncLabel = document.getElementById('automatedLastSync');
+        if (syncLabel) syncLabel.textContent = 'No sync yet';
     }
 
     function renderAutomatedAiResultsState(state = 'idle', payload = {}) {
@@ -5950,7 +6070,9 @@ merge_recipe_id, content_blueprint_id</pre>
 
     function closeUserInboxTemplateModal(event) {
         if (event && event.target?.id !== 'userInboxTemplateModal') return;
-        document.getElementById('userInboxTemplateModal')?.classList.remove('active');
+        const modal = document.getElementById('userInboxTemplateModal');
+        modal?.classList.remove('active');
+        modal?.querySelector('.ii-modal')?.classList.remove('automated-preview');
     }
 
     async function renameUserInboxSavedTemplate(id) {
@@ -6871,11 +6993,12 @@ merge_recipe_id, content_blueprint_id</pre>
 
     function renderTestInboxSelector() {
         const el = document.getElementById('testInboxSelector');
-        if (!iiState.imapAccounts.length) {
+        const receivingAccounts = iiState.imapAccounts.filter(isReceivingImapAccount);
+        if (!receivingAccounts.length) {
             el.innerHTML = '<span class="ii-muted">Connect receiving test inboxes first.</span>';
             return;
         }
-        el.innerHTML = iiState.imapAccounts.map((account) => `<label class="d-block mb-1"><input type="checkbox" ${iiState.selectedInboxIds.has(account.id) ? 'checked' : ''} onchange="toggleInboxSource(${account.id}, this.checked)"> ${escapeHtml(account.email)}</label>`).join('');
+        el.innerHTML = receivingAccounts.map((account) => `<label class="d-block mb-1"><input type="checkbox" ${iiState.selectedInboxIds.has(account.id) ? 'checked' : ''} onchange="toggleInboxSource(${account.id}, this.checked)"> ${escapeHtml(account.email)} <span class="ii-muted">(${escapeHtml(imapAccountTypeLabel(account.account_type))})</span></label>`).join('');
     }
 
     function selectedUserInboxRecipient() {
