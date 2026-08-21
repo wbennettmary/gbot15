@@ -2069,7 +2069,7 @@ def api_inbox_test_email_sources():
             item.update(rollups[item['id']])
     return jsonify({'success': True, 'sources': source_payload, 'total': total, 'page': page, 'per_page': per_page})
 
-def _send_automated_test_messages_async(test_id, senders, custom_headers=''):
+def _send_automated_test_messages_async(test_id, senders, custom_headers='', custom_subject='', custom_html_body='', custom_text_body=''):
     with app.app_context():
         sender_lookup = {sender['email']: sender for sender in senders}
         rows = InboxDeliverabilityMessage.query.filter_by(test_id=test_id, status='QUEUED').order_by(InboxDeliverabilityMessage.id.asc()).all()
@@ -2088,13 +2088,18 @@ def _send_automated_test_messages_async(test_id, senders, custom_headers=''):
                         f'X-Test-Batch-ID: {test_id}',
                         f'X-Test-Source-ID: {source.id}',
                     ]).strip()
+                    subject = custom_subject or source.original_subject or row.subject or 'Automated Email Test'
+                    custom_html = str(custom_html_body or '')
+                    custom_text = str(custom_text_body or '')
+                    html_body = custom_html if custom_html.strip() else (source.html_snapshot or '')
+                    text_body = custom_text if custom_text.strip() else (source.text_snapshot or source.preview_snapshot or '')
                     row.provider_message_id = _send_test_email_gmail_api(
                         sender_info['service_account_id'],
                         row.workspace_sender,
                         row.recipient,
-                        source.original_subject or row.subject or 'Automated Email Test',
-                        source.html_snapshot or '',
-                        source.text_snapshot or source.preview_snapshot or '',
+                        subject,
+                        html_body,
+                        text_body,
                         row.test_identifier,
                         headers,
                         sender_info.get('name')
@@ -2865,6 +2870,10 @@ def api_inbox_automated_tests():
         minimum_observations = max(1, int(data.get('minimum_observations') or 10))
     except (TypeError, ValueError):
         minimum_observations = 10
+    custom_headers = data.get('custom_headers') or ''
+    custom_subject = (data.get('subject') or _custom_header_value(custom_headers, 'Subject') or '').strip()
+    custom_html_body = str(data.get('html_body') or '')
+    custom_text_body = str(data.get('text_body') or '')
     test_id = f"AT-{uuid.uuid4().hex[:8].upper()}"
     name = (data.get('name') or f"Automated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}").strip()
     if not name.lower().startswith('automated:'):
@@ -2873,7 +2882,9 @@ def api_inbox_automated_tests():
     test = InboxDeliverabilityTest(
         test_id=test_id,
         name=name,
-        subject='Automated Email Test',
+        subject=custom_subject or 'Automated Email Test',
+        html_body=custom_html_body,
+        text_body=custom_text_body,
         status='QUEUED',
         total_messages=total_operations,
         sent_count=0,
@@ -2906,7 +2917,7 @@ def api_inbox_automated_tests():
                     imap_account_id=inbox.id,
                     recipient=inbox.email.lower(),
                     test_identifier=identifier,
-                    subject=source.original_subject,
+                    subject=custom_subject or source.original_subject or 'Automated Email Test',
                     status='QUEUED',
                     placement='PENDING'
                 )
@@ -2916,7 +2927,11 @@ def api_inbox_automated_tests():
         source.last_test_id = test_id
     test.total_messages = rows_created
     db.session.commit()
-    threading.Thread(target=_send_automated_test_messages_async, args=(test_id, senders, data.get('custom_headers') or ''), daemon=True).start()
+    threading.Thread(
+        target=_send_automated_test_messages_async,
+        args=(test_id, senders, custom_headers, custom_subject, custom_html_body, custom_text_body),
+        daemon=True
+    ).start()
     return jsonify({'success': True, 'test_id': test_id, 'queued': rows_created, 'message': f'Automated test queued with {rows_created} operation(s).'})
 
 @app.route('/api/inbox-intelligence/automated-tests/<test_id>/results', methods=['GET'])
