@@ -2025,13 +2025,26 @@ def api_inbox_test_email_sources():
     if request.method == 'DELETE':
         data = request.get_json(silent=True) or {}
         source_ids = []
-        for value in data.get('source_ids', []):
-            try:
-                source_id = int(value)
-            except (TypeError, ValueError):
-                continue
-            if source_id and source_id not in source_ids:
-                source_ids.append(source_id)
+        if data.get('delete_all'):
+            query = TestEmailSource.query
+            search = (data.get('search') or '').strip()
+            if search:
+                like = f'%{search}%'
+                query = query.filter(or_(
+                    TestEmailSource.original_subject.ilike(like),
+                    TestEmailSource.source_sender.ilike(like),
+                    TestEmailSource.source_sender_domain.ilike(like),
+                    TestEmailSource.preview_snapshot.ilike(like)
+                ))
+            source_ids = [row.id for row in query.all()]
+        else:
+            for value in data.get('source_ids', []):
+                try:
+                    source_id = int(value)
+                except (TypeError, ValueError):
+                    continue
+                if source_id and source_id not in source_ids:
+                    source_ids.append(source_id)
         if not source_ids:
             return jsonify({'success': False, 'error': 'Select at least one queued template to delete'}), 400
         sources = TestEmailSource.query.filter(TestEmailSource.id.in_(source_ids)).all()
@@ -2123,22 +2136,22 @@ def _send_automated_test_messages_async(test_id, senders, custom_headers='', cus
         for row in rows:
             sender_info = sender_lookup.get(row.workspace_sender)
             source = sources.get(row.source_email_id)
-            if not sender_info or not source:
+            if not sender_info:
                 row.status = 'FAILED'
                 row.placement = 'FAILED'
-                row.error_message = 'Automated source or sender payload was not available.'
+                row.error_message = 'Sender payload was not available.'
             else:
                 try:
                     headers = '\n'.join([
                         custom_headers or '',
                         f'X-Test-Batch-ID: {test_id}',
-                        f'X-Test-Source-ID: {source.id}',
+                        f'X-Test-Source-ID: {source.id if source else "manual"}',
                     ]).strip()
-                    subject = custom_subject or source.original_subject or row.subject or 'Automated Email Test'
+                    subject = custom_subject or (source.original_subject if source else '') or row.subject or 'Automated Email Test'
                     custom_html = str(custom_html_body or '')
                     custom_text = str(custom_text_body or '')
-                    html_body = custom_html if custom_html.strip() else (source.html_snapshot or '')
-                    text_body = custom_text if custom_text.strip() else (source.text_snapshot or source.preview_snapshot or '')
+                    html_body = custom_html if custom_html.strip() else ((source.html_snapshot if source else '') or '')
+                    text_body = custom_text if custom_text.strip() else ((source.text_snapshot or source.preview_snapshot) if source else '')
                     row.provider_message_id = _send_test_email_gmail_api(
                         sender_info['service_account_id'],
                         row.workspace_sender,
@@ -2242,7 +2255,7 @@ def _email_is_reserved_admin_sender(email_addr, service_account=None):
         local in {'admin', 'admins', 'administrator', 'superadmin', 'workspaceadmin', 'googleadmin'}
     )
 
-def _retrieve_workspace_senders_from_service_accounts(service_accounts, max_per_account=None):
+def _retrieve_workspace_senders_from_service_accounts(service_accounts, max_per_account=None, offset_per_account=0):
     from services.google_domains_service import GoogleDomainsService
     retrieved = []
     errors = []
@@ -2252,6 +2265,7 @@ def _retrieve_workspace_senders_from_service_accounts(service_accounts, max_per_
             admin_service = svc._get_admin_service()
             page_token = None
             account_count = 0
+            account_seen = 0
             while True:
                 resp = admin_service.users().list(customer='my_customer', maxResults=500, pageToken=page_token, orderBy='email').execute()
                 for user in resp.get('users', []):
@@ -2259,6 +2273,9 @@ def _retrieve_workspace_senders_from_service_accounts(service_accounts, max_per_
                     if not email_addr:
                         continue
                     if _workspace_user_is_admin(user, email_addr, sa) or _email_is_reserved_admin_sender(email_addr, sa):
+                        continue
+                    if offset_per_account and account_seen < offset_per_account:
+                        account_seen += 1
                         continue
                     retrieved.append({
                         'email': email_addr,
@@ -2272,6 +2289,7 @@ def _retrieve_workspace_senders_from_service_accounts(service_accounts, max_per_
                         'status': 'suspended' if user.get('suspended') else 'active',
                         'send_method': 'workspace_api',
                     })
+                    account_seen += 1
                     account_count += 1
                     if max_per_account and account_count >= max_per_account:
                         break
@@ -2369,6 +2387,10 @@ def api_inbox_retrieve_workspace_senders_from_list():
     except (TypeError, ValueError):
         max_per_account = 0
     max_per_account = max(max_per_account, 0) or None
+    try:
+        offset_per_account = max(0, int(data.get('offset_per_account') or 0))
+    except (TypeError, ValueError):
+        offset_per_account = 0
     accounts_only = bool(data.get('accounts_only'))
     workspace_list = WorkspaceList.query.get(list_id) if list_id else None
     if not workspace_list:
@@ -2389,7 +2411,7 @@ def api_inbox_retrieve_workspace_senders_from_list():
             'max_per_account': None,
             'accounts_only': True,
         })
-    senders, errors = _retrieve_workspace_senders_from_service_accounts(service_accounts, max_per_account=max_per_account)
+    senders, errors = _retrieve_workspace_senders_from_service_accounts(service_accounts, max_per_account=max_per_account, offset_per_account=offset_per_account)
     return jsonify({
         'success': True,
         'senders': senders,
@@ -2400,6 +2422,7 @@ def api_inbox_retrieve_workspace_senders_from_list():
         'count': len(senders),
         'service_account_count': len(service_accounts),
         'max_per_account': max_per_account,
+        'offset_per_account': offset_per_account,
     })
 
 @app.route('/api/inbox-intelligence/workspace-senders/retrieve', methods=['POST'])
@@ -2852,11 +2875,16 @@ def api_inbox_automated_tests():
             continue
         if source_id and source_id not in source_ids:
             source_ids.append(source_id)
-    if not source_ids:
-        return jsonify({'success': False, 'error': 'Select at least one queued email source'}), 400
-    sources = TestEmailSource.query.filter(TestEmailSource.id.in_(source_ids), TestEmailSource.status != 'ARCHIVED').all()
-    if not sources:
+    custom_headers = data.get('custom_headers') or ''
+    custom_subject = (data.get('subject') or _custom_header_value(custom_headers, 'Subject') or '').strip()
+    custom_html_body = str(data.get('html_body') or '')
+    custom_text_body = str(data.get('text_body') or '')
+    manual_message_ready = bool(custom_subject or custom_html_body.strip() or custom_text_body.strip())
+    sources = TestEmailSource.query.filter(TestEmailSource.id.in_(source_ids), TestEmailSource.status != 'ARCHIVED').all() if source_ids else []
+    if source_ids and not sources:
         return jsonify({'success': False, 'error': 'No queued email sources are available'}), 400
+    if not sources and not manual_message_ready:
+        return jsonify({'success': False, 'error': 'Add a manual subject/body or select at least one queued email source'}), 400
 
     senders = []
     for item in data.get('senders', []):
@@ -2916,15 +2944,12 @@ def api_inbox_automated_tests():
         minimum_observations = max(1, int(data.get('minimum_observations') or 10))
     except (TypeError, ValueError):
         minimum_observations = 10
-    custom_headers = data.get('custom_headers') or ''
-    custom_subject = (data.get('subject') or _custom_header_value(custom_headers, 'Subject') or '').strip()
-    custom_html_body = str(data.get('html_body') or '')
-    custom_text_body = str(data.get('text_body') or '')
     test_id = f"AT-{uuid.uuid4().hex[:8].upper()}"
     name = (data.get('name') or f"Automated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}").strip()
     if not name.lower().startswith('automated:'):
         name = f'Automated: {name}'
-    total_operations = len(sources) * len(senders) * len(inboxes) if strategy == 'full_matrix' else len(sources) * len(senders)
+    source_slots = sources if sources else [None]
+    total_operations = len(source_slots) * len(senders) * len(inboxes) if strategy == 'full_matrix' else len(source_slots) * len(senders)
     test = InboxDeliverabilityTest(
         test_id=test_id,
         name=name,
@@ -2940,7 +2965,7 @@ def api_inbox_automated_tests():
         failed_count=0,
         test_type='automated',
         strategy=strategy,
-        total_email_sources=len(sources),
+        total_email_sources=len(source_slots),
         total_users=len(senders),
         total_recipients=len(inboxes),
         inbox_threshold=inbox_threshold,
@@ -2951,26 +2976,28 @@ def api_inbox_automated_tests():
     db.session.add(test)
     db.session.flush()
     rows_created = 0
-    for source in sources:
+    for source in source_slots:
         recipient_pool = inboxes if strategy == 'full_matrix' else [inboxes[rows_created % len(inboxes)]]
         for sender_info in senders:
             for inbox in recipient_pool:
-                identifier = f"{test_id}-{source.id}-{uuid.uuid4().hex[:6].upper()}"
+                source_id = source.id if source else None
+                identifier = f"{test_id}-{source_id or 'MANUAL'}-{uuid.uuid4().hex[:6].upper()}"
                 row = InboxDeliverabilityMessage(
                     test_id=test_id,
-                    source_email_id=source.id,
+                    source_email_id=source_id,
                     workspace_sender=sender_info['email'],
                     imap_account_id=inbox.id,
                     recipient=inbox.email.lower(),
                     test_identifier=identifier,
-                    subject=custom_subject or source.original_subject or 'Automated Email Test',
+                    subject=custom_subject or (source.original_subject if source else '') or 'Automated Email Test',
                     status='QUEUED',
                     placement='PENDING'
                 )
                 db.session.add(row)
                 rows_created += 1
-        source.status = 'IN_TEST'
-        source.last_test_id = test_id
+        if source:
+            source.status = 'IN_TEST'
+            source.last_test_id = test_id
     test.total_messages = rows_created
     db.session.commit()
     threading.Thread(

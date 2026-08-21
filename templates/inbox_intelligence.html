@@ -1755,6 +1755,57 @@
         background: #f8fafc;
     }
 
+    .ii-workspace-source-pane {
+        margin-bottom: 8px;
+    }
+
+    .ii-inbox-picker {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 8px;
+        max-height: 170px;
+        overflow-y: auto;
+        padding: 8px;
+        border: 1px solid #dbe4ef;
+        border-radius: 10px;
+        background: #f8fafc;
+    }
+
+    .ii-inbox-option {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 10px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background: #fff;
+        cursor: pointer;
+        min-width: 0;
+    }
+
+    .ii-inbox-option.active {
+        border-color: #2563eb;
+        background: #eff6ff;
+        box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.15);
+    }
+
+    .ii-inbox-option span {
+        min-width: 0;
+        display: grid;
+    }
+
+    .ii-inbox-option strong,
+    .ii-inbox-option small {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .ii-inbox-option small {
+        color: #64748b;
+        font-size: 11px;
+    }
+
     .ii-modal-backdrop {
         position: fixed;
         inset: 0;
@@ -2366,7 +2417,7 @@
                 </div>
                 <div class="ii-pro-card-body">
                     <div class="ii-row justify-content-between mb-3">
-                        <span class="ii-muted" id="automatedTemplateSource">Select a single queued email to load its header and body.</span>
+                        <span class="ii-muted" id="automatedTemplateSource">Write a manual header/body, or select one queued email to load its content.</span>
                     </div>
                     <div class="ii-message-setup-grid">
                         <div>
@@ -2422,8 +2473,8 @@ The NightOwl Ranch Team</textarea>
                     <div class="ii-pro-card-head">
                         <h4>1. Test Queue</h4>
                         <div class="ii-row">
-                            <select class="ii-select" style="width: 130px;"><option>Bulk actions</option></select>
-                            <button class="ii-btn" type="button" onclick="deleteSelectedAutomatedQueue()"><i class="fas fa-trash"></i> Delete</button>
+                            <button class="ii-btn" type="button" onclick="deleteSelectedAutomatedQueue()"><i class="fas fa-trash"></i> Delete selected</button>
+                            <button class="ii-btn" type="button" onclick="deleteAllAutomatedQueue()"><i class="fas fa-trash-can"></i> Delete all</button>
                             <button class="ii-btn" type="button" onclick="clearAutomatedQueueSelection()">Clear</button>
                         </div>
                     </div>
@@ -2447,17 +2498,21 @@ The NightOwl Ranch Team</textarea>
                     </div>
                     <div class="ii-pro-card-body">
                         <div class="ii-pro-tabs">
-                            <button class="ii-pro-tab active" type="button">Manual Account Lookup</button>
-                            <button class="ii-pro-tab" type="button">List Management Source</button>
+                            <button class="ii-pro-tab active" type="button" data-auto-source-tab="list" onclick="switchAutomatedWorkspaceSourceTab('list')">List Management Source</button>
+                            <button class="ii-pro-tab" type="button" data-auto-source-tab="manual" onclick="switchAutomatedWorkspaceSourceTab('manual')">Manual Account Lookup</button>
                         </div>
-                        <div class="ii-row mb-2">
+                        <div class="ii-workspace-source-pane" id="automatedListSourcePane">
+                            <div class="ii-row mb-2">
+                                <select class="ii-select" id="automatedWorkspaceListSelect" onchange="mirrorAutomatedListSelection()"><option value="">Loading lists...</option></select>
+                                <button class="ii-btn" type="button" onclick="retrieveAutomatedWorkspaceListUsers()"><i class="fas fa-list-check"></i> Retrieve List</button>
+                                <button class="ii-btn" type="button" onclick="loadWorkspaceLists()"><i class="fas fa-arrows-rotate"></i> Refresh List</button>
+                            </div>
+                        </div>
+                        <div class="ii-workspace-source-pane" id="automatedManualSourcePane" style="display:none;">
+                            <div class="ii-row mb-2">
                             <input class="ii-input" id="automatedWorkspaceAccountSearchInput" placeholder="Search account name, admin email, or client email">
                             <button class="ii-btn" type="button" onclick="searchAutomatedWorkspaceAccounts()"><i class="fas fa-search"></i> Search</button>
-                            <button class="ii-btn" type="button" onclick="loadWorkspaceLists()"><i class="fas fa-arrows-rotate"></i> Refresh List</button>
-                        </div>
-                        <div class="ii-row mb-2">
-                            <select class="ii-select" id="automatedWorkspaceListSelect" onchange="mirrorAutomatedListSelection()"><option value="">Loading lists...</option></select>
-                            <button class="ii-btn" type="button" onclick="retrieveAutomatedWorkspaceListUsers()"><i class="fas fa-list-check"></i> Retrieve List</button>
+                            </div>
                         </div>
                         <div id="automatedServiceAccountSelector" class="ii-auto-source-active ii-muted">Search saved Workspace service accounts or choose a List Management source.</div>
                         <div class="ii-row justify-content-between mt-3 mb-2">
@@ -2472,7 +2527,8 @@ The NightOwl Ranch Team</textarea>
                                 <button class="ii-btn" type="button" onclick="selectAutomatedInboxes(false)"><i class="fas fa-xmark"></i> Clear</button>
                             </div>
                         </div>
-                        <select class="ii-select ii-multiselect" id="automatedInboxSelector" multiple onchange="updateAutomatedInboxSelection()"></select>
+                        <div class="ii-inbox-picker" id="automatedInboxPicker"></div>
+                        <select class="ii-select ii-multiselect" id="automatedInboxSelector" multiple onchange="updateAutomatedInboxSelection()" style="display:none;"></select>
                         <div class="ii-muted mt-2" id="automatedInboxStatus">Connected inboxes will appear here.</div>
                         <div class="ii-form-grid mt-3">
                             <div class="ii-field"><label>Strategy</label><select class="ii-select" id="automatedStrategyInput" onchange="updateAutomatedSummary()"><option value="distributed">Distributed</option><option value="full_matrix">Full Matrix</option></select></div>
@@ -4402,6 +4458,12 @@ merge_recipe_id, content_blueprint_id</pre>
             </div>`;
     }
 
+    function manualAutomatedMessageReady() {
+        const body = (document.getElementById('automatedBodyInput')?.value || '').trim();
+        const subject = automatedHeaderSubject();
+        return Boolean(body || subject);
+    }
+
     function toggleAutomatedSource(id, checked) {
         if (checked) iiState.automatedSelectedSourceIds.add(id);
         else iiState.automatedSelectedSourceIds.delete(id);
@@ -4434,7 +4496,7 @@ merge_recipe_id, content_blueprint_id</pre>
         const mode = document.getElementById('automatedBodyMode');
         if (iiState.automatedSelectedSourceIds.size !== 1) {
             if (templateLabel) templateLabel.textContent = iiState.automatedSelectedSourceIds.size === 0
-                ? 'Select a single queued email to load its header and body.'
+                ? 'Manual header/body mode. Select one queued email only if you want to load its content.'
                 : 'Multiple emails selected. Select exactly one to load its content.';
             return;
         }
@@ -4486,18 +4548,59 @@ merge_recipe_id, content_blueprint_id</pre>
         }
     }
 
+    async function deleteAllAutomatedQueue() {
+        const status = document.getElementById('automatedStatusText');
+        if (!iiState.automatedQueueTotal) {
+            if (status) status.textContent = 'No queued templates to delete.';
+            return;
+        }
+        const search = (document.getElementById('autoQueueSearch')?.value || '').trim();
+        const scope = search ? `matching "${search}"` : 'in the queue';
+        if (!confirm(`Delete all ${iiState.automatedQueueTotal} queued template(s) ${scope}?`)) return;
+        try {
+            const data = await iiFetch('/api/inbox-intelligence/test-email-sources', {
+                method: 'DELETE',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({delete_all: true, search})
+            });
+            iiState.automatedSelectedSourceIds = new Set();
+            if (status) status.textContent = data.message || 'All queued templates deleted.';
+            await loadAutomatedQueue(1);
+        } catch (err) {
+            if (status) status.textContent = `Delete all failed: ${err.message}`;
+        }
+    }
+
     function renderAutomatedInboxSelector() {
         const el = document.getElementById('automatedInboxSelector');
+        const picker = document.getElementById('automatedInboxPicker');
         const status = document.getElementById('automatedInboxStatus');
         if (!el) return;
         if (!iiState.imapAccounts.length) {
             el.innerHTML = '';
+            if (picker) picker.innerHTML = '<div class="ii-muted">Connect receiving IMAP inboxes first.</div>';
             if (status) status.textContent = 'Connect receiving IMAP inboxes first.';
             return;
         }
         el.innerHTML = iiState.imapAccounts.map((account) => `
             <option value="${account.id}" ${iiState.selectedInboxIds.has(account.id) ? 'selected' : ''}>${escapeHtml(account.email)} · ${escapeHtml(account.provider || 'imap')}</option>`).join('');
-        if (status) status.textContent = `${iiState.selectedInboxIds.size} receiving inbox(es) selected. Hold Ctrl/Cmd to select more than one.`;
+        if (picker) {
+            picker.innerHTML = iiState.imapAccounts.map((account) => `
+                <label class="ii-inbox-option ${iiState.selectedInboxIds.has(account.id) ? 'active' : ''}">
+                    <input type="checkbox" ${iiState.selectedInboxIds.has(account.id) ? 'checked' : ''} onchange="toggleAutomatedInbox(${account.id}, this.checked)">
+                    <span><strong>${escapeHtml(account.email)}</strong><small>${escapeHtml(account.provider || 'imap')}</small></span>
+                </label>`).join('');
+        }
+        if (status) status.textContent = `${iiState.selectedInboxIds.size} receiving inbox(es) selected. Each selected inbox is used as a receiving analytics account.`;
+    }
+
+    function toggleAutomatedInbox(id, checked) {
+        if (checked) iiState.selectedInboxIds.add(id);
+        else iiState.selectedInboxIds.delete(id);
+        renderTestInboxSelector();
+        syncRecipientInputFromSelectedInboxes();
+        renderAutomatedInboxSelector();
+        updateAutomatedSummary();
     }
 
     function updateAutomatedInboxSelection() {
@@ -4526,17 +4629,22 @@ merge_recipe_id, content_blueprint_id</pre>
         const selectedAccounts = iiState.selectedUserInboxListAccountIds?.size || iiState.selectedServiceAccountIds?.size || 0;
         const perAccountRaw = (document.getElementById('automatedUsersPerAccountInput')?.value || '').trim();
         const perAccount = perAccountRaw ? Math.max(1, parseInt(perAccountRaw, 10) || 1) : null;
+        const listId = document.getElementById('automatedWorkspaceListSelect')?.value || '';
+        const selectedList = listId ? (iiState.workspaceLists || []).find((item) => String(item.id) === String(listId)) : null;
+        if (!selectedUsers && selectedList && perAccount) {
+            return (selectedList.account_count || 1) * perAccount;
+        }
         return selectedUsers || (selectedAccounts * (perAccount || 1));
     }
 
     function updateAutomatedSummary() {
-        const emails = iiState.automatedSelectedSourceIds.size;
+        const emails = iiState.automatedSelectedSourceIds.size || (manualAutomatedMessageReady() ? 1 : 0);
         const users = automatedSenderCount();
         const recipients = iiState.selectedInboxIds.size;
         const strategy = document.getElementById('automatedStrategyInput')?.value || 'distributed';
         const operations = strategy === 'full_matrix' ? emails * users * recipients : emails * users;
         const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
-        setText('autoStepEmails', `${emails} selected`);
+        setText('autoStepEmails', iiState.automatedSelectedSourceIds.size ? `${iiState.automatedSelectedSourceIds.size} selected` : (emails ? 'manual message' : '0 selected'));
         setText('autoStepSources', `${(iiState.selectedUserInboxListAccountIds?.size || iiState.selectedServiceAccountIds?.size || 0)} sources`);
         setText('autoStepUsers', `${users} users`);
         setText('autoStepInboxes', `${recipients} inboxes`);
@@ -4549,7 +4657,7 @@ merge_recipe_id, content_blueprint_id</pre>
             <div class="ii-result-pill"><span class="ii-muted">Operations</span><strong>${operations.toLocaleString()}</strong></div>`;
         const readiness = document.getElementById('automatedReadinessList');
         if (readiness) {
-            const bodyReady = Boolean((document.getElementById('automatedBodyInput')?.value || '').trim()) || emails > 0;
+            const bodyReady = manualAutomatedMessageReady() || emails > 0;
             readiness.innerHTML = `
                 <div><span class="ii-chip ${bodyReady ? 'green' : 'yellow'}">${bodyReady ? 'Ready' : 'Needs source'}</span> Message template</div>
                 <div class="mt-1"><span class="ii-chip ${recipients ? 'green' : 'yellow'}">${recipients || 0} selected</span> Receiving inboxes</div>
@@ -4624,7 +4732,7 @@ merge_recipe_id, content_blueprint_id</pre>
 
     function collectAutomatedTestPayload(namePrefix = 'Automated') {
         const summary = updateAutomatedSummary();
-        if (!summary.emails) throw new Error('Select queued emails first.');
+        if (!summary.emails) throw new Error('Select queued emails or type a manual header/body first.');
         if (!summary.users) throw new Error('Select Workspace users or admin/account tabs first.');
         if (!summary.recipients) throw new Error('Select receiving IMAP inboxes first.');
         const messagePayload = automatedBodyPayload();
@@ -4671,6 +4779,18 @@ merge_recipe_id, content_blueprint_id</pre>
             document.querySelectorAll('.ii-analytics-tab')[0]?.classList.add('active');
             document.getElementById('analyticsPanelInbox')?.classList.add('active');
         }
+    }
+
+    function switchAutomatedWorkspaceSourceTab(tab) {
+        const listPane = document.getElementById('automatedListSourcePane');
+        const manualPane = document.getElementById('automatedManualSourcePane');
+        document.querySelectorAll('[data-auto-source-tab]').forEach((btn) => btn.classList.toggle('active', btn.dataset.autoSourceTab === tab));
+        if (listPane) listPane.style.display = tab === 'list' ? '' : 'none';
+        if (manualPane) manualPane.style.display = tab === 'manual' ? '' : 'none';
+        const status = document.getElementById('automatedWorkspaceStatus');
+        if (status) status.textContent = tab === 'list'
+            ? 'Select a List Management source, set Users per account, then Retrieve List.'
+            : 'Search saved Workspace service accounts, retrieve users, then apply Users per account.';
     }
 
     function setAiAgentChatStatus(message, tone = 'info') {
@@ -5191,6 +5311,100 @@ merge_recipe_id, content_blueprint_id</pre>
         });
     }
 
+    async function retrieveAutomatedListBatch(listId, perAccount, offsetPerAccount) {
+        const data = await iiFetch('/api/inbox-intelligence/workspace-senders/retrieve-list', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                list_id: listId,
+                max_per_account: perAccount,
+                offset_per_account: offsetPerAccount,
+                accounts_only: false
+            })
+        });
+        return (data.senders || []).filter((sender) => sender.service_account_id && !isAdminWorkspaceSender(sender));
+    }
+
+    function mergeAgentClassifications(classifications) {
+        const merged = {totals: {messages: 0, inbox: 0, spam: 0, pending: 0, failed: 0, users: 0, grey: 0}, lists: {inbox_users: [], spam_users: [], grey_users: [], waiting_users: [], grey_name_change_lines: []}};
+        const seen = {inbox_users: new Set(), spam_users: new Set(), grey_users: new Set(), waiting_users: new Set(), grey_name_change_lines: new Set()};
+        (classifications || []).forEach((classification) => {
+            const totals = classification.totals || {};
+            Object.keys(merged.totals).forEach((key) => { merged.totals[key] += Number(totals[key] || 0); });
+            const lists = classification.lists || {};
+            Object.keys(merged.lists).forEach((key) => {
+                (lists[key] || []).forEach((item) => {
+                    const id = typeof item === 'string' ? item : (item.email || item.copy_line || JSON.stringify(item));
+                    if (!seen[key].has(id)) {
+                        seen[key].add(id);
+                        merged.lists[key].push(item);
+                    }
+                });
+            });
+        });
+        merged.totals.users = seen.inbox_users.size + seen.spam_users.size + seen.grey_users.size + seen.waiting_users.size;
+        merged.totals.grey = seen.grey_users.size;
+        return merged;
+    }
+
+    async function runAiAgentCycle(config, senders, label) {
+        const payload = {...config.payload, senders, service_account_ids: [], max_per_account: '', name: label};
+        const firstRun = await createAutomatedTestBatch(payload);
+        const senderContext = firstRun.senders || senders;
+        iiState.automatedSelectedTestId = firstRun.test_id;
+        document.getElementById('automatedManualTestIdInput').value = firstRun.test_id;
+        localStorage.setItem('ii_automated_last_test_id', firstRun.test_id);
+        await runAutomatedSyncJob(firstRun.test_id, {sync_mode: 'recent', recent_limit: 200, date_range: document.getElementById('automatedDateFilter')?.value || '2d'});
+        await viewAutomatedEmailTest(firstRun.test_id);
+        const firstClassification = await classifyAutomatedAgentTest(firstRun.test_id, senderContext);
+        const autoRename = document.getElementById('aiAgentAutoRenameGrey')?.checked !== false;
+        const greyUsers = ((firstClassification.lists || {}).grey_users || []).filter((user) => user.service_account_id);
+        const cycle = {test_id: firstRun.test_id, classification: firstClassification, name_changes: {changed: [], failed: []}, retry: null};
+        if (autoRename && greyUsers.length) {
+            cycle.name_changes = await changeAiAgentGreyNames(greyUsers);
+            const changedEmails = new Set((cycle.name_changes.changed || []).map((item) => item.email));
+            const retrySenders = greyUsers
+                .filter((user) => changedEmails.has(user.email))
+                .map((user) => ({email: user.email, name: (cycle.name_changes.changed || []).find((item) => item.email === user.email)?.new_name || user.name || '', service_account_id: user.service_account_id}));
+            if (retrySenders.length) {
+                const retryPayload = {...config.payload, senders: retrySenders, service_account_ids: [], max_per_account: '', name: `${label} Retest`};
+                const retryRun = await createAutomatedTestBatch(retryPayload);
+                await runAutomatedSyncJob(retryRun.test_id, {sync_mode: 'recent', recent_limit: 200, date_range: document.getElementById('automatedDateFilter')?.value || '2d'});
+                await viewAutomatedEmailTest(retryRun.test_id);
+                cycle.retry = {test_id: retryRun.test_id, classification: await classifyAutomatedAgentTest(retryRun.test_id, retryRun.senders || retrySenders)};
+            }
+        }
+        return cycle;
+    }
+
+    async function startAutomatedAiAgentBatched(config, listId, perAccount) {
+        const batches = [];
+        const finalClassifications = [];
+        let offset = 0;
+        for (let batch = 1; batch <= 200; batch += 1) {
+            setAiAgentChatStatus(`Batch ${batch}: retrieving users ${offset + 1}-${offset + perAccount} from each account...`);
+            renderAiAgentState('loading', {message: `Batch ${batch}: retrieving users`, detail: `${perAccount} user(s) from each account in list ${listId}. The next batch advances to the next users.`});
+            const senders = await retrieveAutomatedListBatch(listId, perAccount, offset);
+            if (!senders.length) break;
+            setAiAgentChatStatus(`Batch ${batch}: testing ${senders.length} selected user(s)...`);
+            renderAiAgentState('loading', {message: `Batch ${batch}: running test`, detail: `${senders.length} user(s) selected from list ${listId}.`});
+            const cycle = await runAiAgentCycle(config, senders, `AI Agent Batch ${batch}: ${new Date().toLocaleString()}`);
+            batches.push(cycle);
+            finalClassifications.push(cycle.retry?.classification || cycle.classification);
+            offset += perAccount;
+            if (senders.length < perAccount) break;
+        }
+        if (!batches.length) throw new Error('No list users were available for the configured batch size.');
+        const combined = mergeAgentClassifications(finalClassifications);
+        const nameChanges = {changed: [], failed: []};
+        batches.forEach((batch) => {
+            nameChanges.changed.push(...(batch.name_changes?.changed || []));
+            nameChanges.failed.push(...(batch.name_changes?.failed || []));
+        });
+        renderAiAgentState('complete', {batches, first: {test_id: batches[0].test_id, classification: combined}, name_changes: nameChanges, retry: null});
+        setAiAgentChatStatus(`AI Test Agent completed ${batches.length} batch(es). Final lists are ready to copy.`, 'success');
+    }
+
     async function startAutomatedAiAgent() {
         const button = document.getElementById('aiAgentStartButton');
         const chatButton = document.getElementById('aiAgentChatStartButton');
@@ -5206,6 +5420,13 @@ merge_recipe_id, content_blueprint_id</pre>
                 chatButton.innerHTML = '<span class="ii-spinner" aria-hidden="true"></span> Agent running';
             }
             const config = collectAutomatedTestPayload('AI Agent');
+            const listId = document.getElementById('automatedWorkspaceListSelect')?.value || '';
+            const perAccountRaw = (document.getElementById('automatedUsersPerAccountInput')?.value || '').trim();
+            const perAccount = perAccountRaw ? Math.max(1, parseInt(perAccountRaw, 10) || 1) : 0;
+            if (listId && perAccount) {
+                await startAutomatedAiAgentBatched(config, listId, perAccount);
+                return;
+            }
             setAiAgentChatStatus('Step 1/5: starting configured test...');
             renderAiAgentState('loading', {message: 'Step 1/5: starting configured test', detail: 'Using the selected queue, list/account source, users-per-account value, inboxes, and thresholds.'});
             if (status) status.textContent = 'AI Test Agent started the configured automated test.';
