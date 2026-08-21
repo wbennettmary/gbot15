@@ -29,6 +29,10 @@
         border-left: 4px solid #2563eb;
     }
 
+    .ii-hero-copy {
+        max-width: 760px;
+    }
+
     .ii-title {
         margin: 0;
         font-size: 28px;
@@ -109,6 +113,14 @@
 
     .ii-card {
         padding: 16px;
+    }
+
+    .ii-empty {
+        display: grid;
+        place-items: center;
+        gap: 10px;
+        min-height: 220px;
+        text-align: center;
     }
 
     .ii-card-label {
@@ -624,6 +636,10 @@
         padding-right: 4px;
     }
 
+    .ii-message-count {
+        min-height: 18px;
+    }
+
     .ii-message-card {
         display: grid;
         gap: 8px;
@@ -1000,25 +1016,6 @@
         padding: 8px;
         border-bottom: 1px solid #e2e8f0;
         vertical-align: middle;
-    }
-
-    .ii-auto-result-tabs {
-        display: flex;
-        gap: 4px;
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        padding: 3px;
-        background: #f8fafc;
-    }
-
-    .ii-auto-result-tabs .ii-btn {
-        border: 0;
-        background: transparent;
-    }
-
-    .ii-auto-result-tabs .ii-btn.active {
-        background: #dbeafe;
-        color: #1d4ed8;
     }
 
     #automatedTests > .ii-panel {
@@ -1412,9 +1409,9 @@
 
 <div class="ii-shell">
     <section class="ii-hero">
-        <div>
+        <div class="ii-hero-copy">
             <h1 class="ii-title"><i class="fas fa-magnifying-glass-chart me-2 text-primary"></i>Inbox Intelligence</h1>
-            <p class="ii-muted mb-0 mt-2">Connect inboxes, analyze email patterns, create smarter templates, and test Workspace email deliverability.</p>
+            <p class="ii-muted mb-0 mt-2">Connect authorized inboxes, review synchronized mail, queue real samples, and measure Workspace sender placement across inbox, spam, and missing results.</p>
         </div>
         <div class="ii-actions">
             <select class="ii-select" style="width: 150px;">
@@ -1424,8 +1421,8 @@
                 <option>90 days</option>
                 <option>Custom</option>
             </select>
-            <button class="ii-btn"><i class="fas fa-search"></i> Search</button>
-            <button class="ii-btn ii-btn-primary"><i class="fas fa-plus"></i> Connect Inbox</button>
+            <button class="ii-btn" type="button" onclick="activateInboxTab('explorer'); document.getElementById('messageSearchInput')?.focus();"><i class="fas fa-search"></i> Search Mail</button>
+            <button class="ii-btn ii-btn-primary" type="button" onclick="activateInboxTab('connected'); toggleAddInboxForm();"><i class="fas fa-plus"></i> Connect Inbox</button>
         </div>
     </section>
 
@@ -1598,10 +1595,11 @@
                     </div>
                 </div>
                 <div class="ii-muted mb-2" id="selectedMessageStatus">No emails selected.</div>
-                <div id="messageList" class="ii-card text-center py-5">
+                <div id="explorerMessageStatus" class="ii-muted ii-message-count mb-2">No synced messages loaded.</div>
+                <div id="messageList" class="ii-card ii-empty">
                     <i class="fas fa-envelope-open-text fa-3x text-muted mb-3"></i>
                     <h4>No messages yet</h4>
-                    <p class="ii-muted mb-0">Connect an inbox in <strong>Connected Inboxes</strong>, then come back and click <strong>Sync Emails</strong>.</p>
+                    <p class="ii-muted mb-0">Connect an inbox, select the account in the sidebar, then click <strong>Sync Emails</strong>.</p>
                 </div>
             </main>
             <aside class="ii-panel">
@@ -1762,15 +1760,18 @@
             </div>
             <div class="ii-auto-card ii-auto-results-card">
                 <div class="ii-action-head">
-                    <h4>Email-Level Results</h4>
-                    <div class="ii-auto-result-tabs">
-                        <button class="ii-btn" id="autoFilterAll" type="button" onclick="setAutomatedResultFilter('ALL')">All</button>
-                        <button class="ii-btn" id="autoFilterInbox" type="button" onclick="setAutomatedResultFilter('INBOX')">Inbox</button>
-                        <button class="ii-btn" id="autoFilterMixed" type="button" onclick="setAutomatedResultFilter('MIXED')">Mixed</button>
-                        <button class="ii-btn" id="autoFilterSpam" type="button" onclick="setAutomatedResultFilter('SPAM')">Spam</button>
+                    <div>
+                        <h4>Automated User Inbox Analytics</h4>
+                        <p class="ii-muted mb-0">Same placement analytics used by User Inbox Test, scoped to the selected automated test.</p>
                     </div>
+                    <span class="ii-muted" id="automatedAnalyticsStatus">Run or select an automated test to see analytics.</span>
                 </div>
-                <div id="automatedEmailResults" class="ii-muted">Run or select an automated test to see source-email verdicts.</div>
+                <div class="ii-result-summary" id="automatedAnalyticsSummary">
+                    <div class="ii-result-pill"><span class="ii-muted">Users</span><strong>0</strong></div>
+                    <div class="ii-result-pill"><span class="ii-muted">Inbox</span><strong>0</strong></div>
+                    <div class="ii-result-pill"><span class="ii-muted">Spam</span><strong>0</strong></div>
+                    <div class="ii-result-pill"><span class="ii-muted">Missing</span><strong>0</strong></div>
+                </div>
             </div>
             <div id="autoAnalyticsCards" class="ii-analytics-dashboard"></div>
             <div id="autoProviderSummary" class="ii-auto-card mt-3" style="display:none;"></div>
@@ -2528,7 +2529,6 @@ merge_recipe_id, content_blueprint_id</pre>
         automatedTests: [],
         automatedSelectedTestId: null,
         automatedPollTimers: {},
-        automatedResultFilter: 'ALL',
         automatedCopyBuckets: {inboxUsers: [], inboxDomains: [], spamUsers: [], spamDomains: []},
         automatedMessages: [],
         selectedResultsTest: null,
@@ -2556,8 +2556,11 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     function activateInboxTab(tabName) {
+        const pane = document.getElementById(tabName);
+        if (!pane) return;
         document.querySelectorAll('.ii-tab').forEach((item) => item.classList.toggle('active', item.dataset.tab === tabName));
-        document.querySelectorAll('.ii-tabpane').forEach((pane) => pane.classList.toggle('active', pane.id === tabName));
+        document.querySelectorAll('.ii-tabpane').forEach((item) => item.classList.toggle('active', item.id === tabName));
+        pane.scrollIntoView({block: 'start', behavior: 'smooth'});
     }
 
     async function iiFetch(url, options = {}) {
@@ -2933,10 +2936,12 @@ merge_recipe_id, content_blueprint_id</pre>
     function renderInboxMessagesList() {
         const list = document.getElementById('messageList');
         if (!iiState.messages.length) {
-            list.className = 'ii-card text-center py-5';
+            list.className = 'ii-card ii-empty';
             list.innerHTML = `<i class="fas fa-envelope-open-text fa-3x text-muted mb-3"></i>
                 <h4>No messages found</h4>
                 <p class="ii-muted mb-0">Click <strong>Sync Emails</strong> in the sidebar to fetch recent messages from your connected inboxes.</p>`;
+            const statusEl = document.getElementById('explorerMessageStatus');
+            if (statusEl) statusEl.textContent = 'No messages match the current filters.';
             renderSelectedMessageStatus();
             return;
         }
@@ -2965,7 +2970,7 @@ merge_recipe_id, content_blueprint_id</pre>
             </article>`;
         }).join('');
         const statusEl = document.getElementById('explorerMessageStatus');
-        if (statusEl) statusEl.textContent = `${iiState.messages.length} message(s)${unreadBadge ? ' · ' + unreadCount + ' unread' : ''}.`;
+        if (statusEl) statusEl.textContent = `${iiState.messages.length} message(s)${unreadCount ? ' · ' + unreadCount + ' unread' : ''}.`;
         renderSelectedMessageStatus();
     }
 
@@ -3291,7 +3296,7 @@ merge_recipe_id, content_blueprint_id</pre>
             if (manualInput) manualInput.value = data.test_id;
             localStorage.setItem('ii_automated_last_test_id', data.test_id);
             if (status) status.textContent = data.message;
-            await loadAutomatedTests();
+            await loadAutomatedTests(false);
             pollAutomatedEmailTest(data.test_id, true, {background: true});
         } catch (err) {
             if (status) status.textContent = err.message;
@@ -3369,26 +3374,27 @@ merge_recipe_id, content_blueprint_id</pre>
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(pollPayload)
                 });
-            const data = await iiFetch(`/api/inbox-intelligence/automated-tests/${testId}/results`);
+            const data = await iiFetch(`/api/inbox-intelligence/tests/${testId}`);
             const test = data.test || {};
             iiState.automatedSelectedTestId = test.test_id || testId;
             const manualInput = document.getElementById('automatedManualTestIdInput');
             if (manualInput) manualInput.value = iiState.automatedSelectedTestId;
             localStorage.setItem('ii_automated_last_test_id', iiState.automatedSelectedTestId);
+            iiState.automatedMessages = test.messages || [];
             const existing = iiState.automatedTests.findIndex((item) => item.test_id === iiState.automatedSelectedTestId);
             if (existing >= 0) iiState.automatedTests[existing] = {...iiState.automatedTests[existing], ...test};
             else iiState.automatedTests.unshift(test);
             renderAutomatedTests();
-            renderAutomatedEmailResults(test);
-            const rows = test.source_results || [];
-            const observed = rows.reduce((sum, row) => sum + ((row.inbox_count || 0) + (row.spam_count || 0)), 0);
+            renderAutomatedInboxAnalytics(test);
+            const rows = test.messages || [];
+            const observed = rows.filter((row) => row.placement === 'INBOX' || row.placement === 'SPAM').length;
             const diag = pollData.diagnostic || {};
             const diagText = `fetched ${diag.headers_fetched || 0} headers, matched ${diag.matched_rows || 0}, checked ${diag.checked_rows || 0}`;
             if (runStatus) runStatus.textContent = test.status || 'Updated';
-            if (status) status.textContent = `${test.test_id || testId}: ${test.status || 'updated'} · ${observed} observed placement(s) across ${rows.length} source email(s). IMAP/database ${diagText}.`;
+            if (status) status.textContent = `${test.test_id || testId}: ${test.status || 'updated'} · ${observed} observed placement(s) across ${rows.length} sent message(s). IMAP/database ${diagText}.`;
             const syncLabel = document.getElementById('automatedLastSync');
             if (syncLabel) syncLabel.textContent = `Last sync: ${new Date().toLocaleTimeString()}`;
-            await loadAutomatedTests();
+            await loadAutomatedTests(false);
             if (keepWatching && automatedTestIsActive(test.status)) scheduleAutomatedPoll(test.test_id || testId);
         } catch (err) {
             if (status) status.textContent = `Automated test sync failed: ${err.message}`;
@@ -3401,7 +3407,7 @@ merge_recipe_id, content_blueprint_id</pre>
     async function viewAutomatedEmailTest(testId) {
         const status = document.getElementById('automatedStatusText');
         try {
-            const data = await iiFetch(`/api/inbox-intelligence/automated-tests/${testId}/results`);
+            const data = await iiFetch(`/api/inbox-intelligence/tests/${testId}`);
             const test = data.test || {};
             iiState.automatedSelectedTestId = test.test_id || testId;
             const manualInput = document.getElementById('automatedManualTestIdInput');
@@ -3412,7 +3418,7 @@ merge_recipe_id, content_blueprint_id</pre>
             if (existing >= 0) iiState.automatedTests[existing] = {...iiState.automatedTests[existing], ...test};
             else iiState.automatedTests.unshift(test);
             renderAutomatedTests();
-            renderAutomatedEmailResults(test);
+            renderAutomatedInboxAnalytics(test);
             if (status) status.textContent = `Loaded saved results for ${iiState.automatedSelectedTestId}. Press Sync fresh data to import fresh IMAP messages.`;
         } catch (err) {
             if (status) status.textContent = `Could not load automated results: ${err.message}`;
@@ -3438,16 +3444,17 @@ merge_recipe_id, content_blueprint_id</pre>
         throw new Error('Background sync is still running. Press Sync fresh data again in a moment.');
     }
 
-    async function loadAutomatedTests() {
+    async function loadAutomatedTests(hydrateSelected = true) {
         const data = await iiFetch('/api/inbox-intelligence/automated-tests');
         iiState.automatedTests = data.tests || [];
         renderAutomatedTests();
+        if (!hydrateSelected) return;
         if (!iiState.automatedSelectedTestId && iiState.automatedTests[0]) {
             iiState.automatedSelectedTestId = iiState.automatedTests[0].test_id;
-            renderAutomatedEmailResults(iiState.automatedTests[0]);
+            viewAutomatedEmailTest(iiState.automatedTests[0].test_id);
         } else if (iiState.automatedSelectedTestId) {
             const selected = iiState.automatedTests.find((test) => test.test_id === iiState.automatedSelectedTestId);
-            if (selected) renderAutomatedEmailResults(selected);
+            if (selected) viewAutomatedEmailTest(selected.test_id);
         }
     }
 
@@ -3499,80 +3506,26 @@ merge_recipe_id, content_blueprint_id</pre>
         }).join('');
     }
 
-    function setAutomatedResultFilter(filter) {
-        iiState.automatedResultFilter = filter || 'ALL';
-        ['All', 'Inbox', 'Mixed', 'Spam'].forEach((name) => {
-            const el = document.getElementById(`autoFilter${name}`);
-            if (el) el.classList.toggle('active', iiState.automatedResultFilter === name.toUpperCase() || (name === 'All' && iiState.automatedResultFilter === 'ALL'));
-        });
-        const test = iiState.automatedTests.find((item) => item.test_id === iiState.automatedSelectedTestId);
-        if (test) renderAutomatedEmailResults(test);
-    }
-
-    function renderAutomatedEmailResults(test) {
-        const el = document.getElementById('automatedEmailResults');
-        if (!el) return;
-        const rows = test?.source_results || [];
-        const filtered = iiState.automatedResultFilter === 'ALL' ? rows : rows.filter((row) => row.verdict === iiState.automatedResultFilter);
-        if (!filtered.length && !rows.length) {
-            el.innerHTML = '<div class="ii-muted">No email-level results match this bucket yet.</div>';
-            renderAutomatedEmailAnalytics([], test);
-            return;
+    function renderAutomatedInboxAnalytics(test) {
+        const rows = test?.messages || iiState.automatedMessages || [];
+        iiState.automatedMessages = rows;
+        renderAnalyticsSummary('automatedAnalyticsSummary', rows, 'Users');
+        renderAutomatedEmailAnalytics(rows, test || {});
+        const status = document.getElementById('automatedAnalyticsStatus');
+        if (status) {
+            const summary = matrixSummary(rows);
+            status.textContent = rows.length
+                ? `${test?.test_id || iiState.automatedSelectedTestId}: ${summary.inbox} inbox, ${summary.spam} spam, ${summary.pending + summary.failed} missing.`
+                : 'No message rows found yet. Sync after delivery has had time to complete.';
         }
-        const verdictCounts = rows.reduce((acc, row) => {
-            acc[row.verdict] = (acc[row.verdict] || 0) + 1;
-            return acc;
-        }, {});
-        const totalVerdicts = rows.length;
-        const verdictShare = (key) => (totalVerdicts ? Math.round(((verdictCounts[key] || 0) / totalVerdicts) * 100) : 0);
-        const totalInbox = rows.reduce((sum, r) => sum + (r.inbox_count || 0), 0);
-        const totalSpam = rows.reduce((sum, r) => sum + (r.spam_count || 0), 0);
-        const totalMissing = rows.reduce((sum, r) => sum + (r.missing_count || 0), 0);
-        const totalPlacements = totalInbox + totalSpam + totalMissing;
-        const observedPct = totalPlacements ? Math.round(((totalInbox + totalSpam) / totalPlacements) * 100) : 0;
-        el.innerHTML = `
-            <div class="ii-result-summary">
-                <div class="ii-result-pill"><span class="ii-muted">Total emails</span><strong>${rows.length}</strong></div>
-                <div class="ii-result-pill"><span class="ii-muted">Inbox</span><strong>${totalInbox}</strong></div>
-                <div class="ii-result-pill"><span class="ii-muted">Spam</span><strong>${totalSpam}</strong></div>
-                <div class="ii-result-pill"><span class="ii-muted">Missing</span><strong>${totalMissing}</strong></div>
-            </div>
-            <div class="ii-verdict-bar" role="img" aria-label="Verdict distribution">
-                <div class="ii-verdict-segment inbox" style="width:${verdictShare('INBOX')}%"></div>
-                <div class="ii-verdict-segment mixed" style="width:${verdictShare('MIXED')}%"></div>
-                <div class="ii-verdict-segment spam" style="width:${verdictShare('SPAM')}%"></div>
-                <div class="ii-verdict-segment pending" style="width:${verdictShare('INSUFFICIENT_DATA') + verdictShare('PENDING')}%"></div>
-            </div>
-            <div class="ii-row justify-content-between ii-muted" style="font-size: 0.8em;">
-                <span>${verdictCounts.INBOX || 0} inbox · ${verdictCounts.MIXED || 0} mixed · ${verdictCounts.SPAM || 0} spam · ${verdictCounts.INSUFFICIENT_DATA || 0} insufficient</span>
-                <span>${observedPct}% observed (${totalInbox + totalSpam}/${totalPlacements || 0} classified placements)</span>
-            </div>
-            <div class="ii-responsive-table mt-2">
-                <table class="ii-table">
-                    <tr><th>Email</th><th>Verdict</th><th>Inbox</th><th>Spam</th><th>Missing</th><th>Tests</th><th>Source</th><th>Actions</th></tr>
-                    ${filtered.map((row) => `
-                        <tr>
-                            <td><strong>${escapeHtml(row.original_subject || '(no subject)')}</strong><div class="ii-muted ii-email-text">${escapeHtml(row.source_sender || '')}</div></td>
-                            <td><span class="ii-chip ${verdictChip(row.verdict)}">${escapeHtml(row.verdict)}</span></td>
-                            <td>${row.inbox_percentage}%</td>
-                            <td>${row.spam_percentage}%</td>
-                            <td>${row.missing_percentage}%</td>
-                            <td>${row.tests}</td>
-                            <td>${escapeHtml(row.source_provider || 'IMAP')}</td>
-                            <td><button class="ii-btn" type="button" onclick="copyTextToClipboard(${JSON.stringify(row.original_subject || '')})"><i class="fas fa-copy"></i> Subject</button></td>
-                        </tr>`).join('')}
-                </table>
-            </div>`;
-        const messages = iiState.automatedMessages || [];
-        renderAutomatedEmailAnalytics(messages, test);
     }
 
     function renderAutomatedEmailAnalytics(messages, test) {
-        const autoProviderOpts = {el: 'autoProviderSummary', providerFn: (row) => row.source_provider || recipientProvider(row.recipient)};
-        const autoDomainOpts = {el: 'autoDomainActions', senderField: 'source_sender', copyBuckets: iiState.automatedCopyBuckets};
-        const autoUserOpts = {el: 'autoUserActions', senderField: 'source_sender', copyBuckets: iiState.automatedCopyBuckets};
-        const autoSpamOpts = {el: 'autoSpamInsights', senderField: 'source_sender'};
-        const autoCardOpts = {el: 'autoAnalyticsCards', senderField: 'source_sender', copyBuckets: iiState.automatedCopyBuckets, providerFn: (row) => row.source_provider || recipientProvider(row.recipient), copyFn: 'copyAutomatedBucket'};
+        const autoProviderOpts = {el: 'autoProviderSummary'};
+        const autoDomainOpts = {el: 'autoDomainActions', copyBuckets: iiState.automatedCopyBuckets};
+        const autoUserOpts = {el: 'autoUserActions', copyBuckets: iiState.automatedCopyBuckets};
+        const autoSpamOpts = {el: 'autoSpamInsights'};
+        const autoCardOpts = {el: 'autoAnalyticsCards', copyBuckets: iiState.automatedCopyBuckets, copyFn: 'copyAutomatedBucket'};
         if (!messages.length) {
         ['autoProviderSummary', 'autoDomainActions', 'autoUserActions', 'autoSpamInsights', 'autoAnalyticsCards'].forEach((id) => {
                 const e = document.getElementById(id);
@@ -5856,10 +5809,7 @@ merge_recipe_id, content_blueprint_id</pre>
     document.addEventListener('DOMContentLoaded', function () {
         document.querySelectorAll('.ii-tab').forEach((tab) => {
             tab.addEventListener('click', () => {
-                document.querySelectorAll('.ii-tab').forEach((item) => item.classList.remove('active'));
-                document.querySelectorAll('.ii-tabpane').forEach((pane) => pane.classList.remove('active'));
-                tab.classList.add('active');
-                document.getElementById(tab.dataset.tab).classList.add('active');
+                activateInboxTab(tab.dataset.tab);
             });
         });
 
