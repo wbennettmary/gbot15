@@ -3528,8 +3528,8 @@ merge_recipe_id, content_blueprint_id</pre>
         const observedRows = rows.reduce((sum, row) => sum + ((row.inbox_count || 0) + (row.spam_count || 0)), 0);
         const observedTotal = rows.reduce((sum, row) => sum + ((row.inbox_count || 0) + (row.spam_count || 0) + (row.missing_count || 0)), 0);
         const observedPct = observedTotal ? Math.round((observedRows / observedTotal) * 100) : 0;
-        const inboxEmails = [...new Set(rows.filter((r) => r.verdict === 'INBOX' || r.verdict === 'MIXED').map((r) => r.source_sender).filter(Boolean))];
-        const spamEmails = [...new Set(rows.filter((r) => r.verdict === 'SPAM' || r.verdict === 'MIXED').map((r) => r.source_sender).filter(Boolean))];
+        const inboxEmails = [...new Set(rows.filter((r) => (r.inbox_percentage || 0) > 0).map((r) => r.source_sender).filter(Boolean))];
+        const spamEmails = [...new Set(rows.filter((r) => (r.spam_percentage || 0) > 0).map((r) => r.source_sender).filter(Boolean))];
         const inboxDomains = [...new Set(inboxEmails.map((e) => e.split('@').pop()).filter(Boolean))];
         const spamDomains = [...new Set(spamEmails.map((e) => e.split('@').pop()).filter(Boolean))];
         iiState.automatedCopyBuckets.inboxUsers = inboxEmails;
@@ -5465,21 +5465,20 @@ merge_recipe_id, content_blueprint_id</pre>
         const values = (iiState.automatedCopyBuckets[bucketName] || [])
             .map((value) => String(value || '').trim())
             .filter(Boolean);
-        const status = document.getElementById('automatedEmailResults');
-        if (!values.length) {
-            const msg = document.querySelector('#automatedEmailResults .ii-muted');
-            if (msg) msg.insertAdjacentHTML('afterend', '<div class="ii-muted mt-2" id="autoCopyStatus">Nothing to copy for this bucket. Select a test first.</div>');
-            return;
-        }
-        await copyTextToClipboard(`${values.join('\r\n')}\r\n`);
         let statusEl = document.getElementById('autoCopyStatus');
         if (!statusEl) {
             statusEl = document.createElement('div');
             statusEl.id = 'autoCopyStatus';
             statusEl.className = 'ii-muted mt-2';
-            status.insertAdjacentElement('beforeend', statusEl);
+            const results = document.getElementById('automatedEmailResults');
+            if (results) results.parentNode.appendChild(statusEl);
         }
-        statusEl.textContent = `Copied ${values.length} item(s), one per line.`;
+        if (!values.length) {
+            statusEl.textContent = 'Nothing to copy for this bucket. Run a test with sync first.';
+            return;
+        }
+        await copyTextToClipboard(`${values.join('\r\n')}\r\n`);
+        statusEl.textContent = `Copied ${values.length} item(s) to clipboard.`;
     }
 
     function renderUserInboxSpamInsights(rows) {
