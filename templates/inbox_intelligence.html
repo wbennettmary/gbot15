@@ -5337,6 +5337,121 @@ merge_recipe_id, content_blueprint_id</pre>
         throw new Error('Sync is taking longer than expected. It is still running in the background; press Sync fresh data again in a moment.');
     }
 
+    function sleep(ms) {
+        return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    function automatedTestSummary(test) {
+        const rows = test?.messages || [];
+        const summary = matrixSummary(rows);
+        const total = Number(test?.total_messages || summary.total || 0);
+        const sent = Number(test?.sent_count ?? Math.max(0, summary.total - summary.queued));
+        const pending = Number(test?.pending_count ?? summary.pending);
+        const failed = Number(test?.failed_count ?? summary.failed);
+        const inbox = Number(test?.inbox_count ?? summary.inbox);
+        const spam = Number(test?.spam_count ?? summary.spam);
+        const queued = summary.queued;
+        const waiting = summary.waiting;
+        return {
+            total,
+            sent,
+            inbox,
+            spam,
+            pending,
+            failed,
+            queued,
+            waiting,
+            observed: inbox + spam,
+            finished: inbox + spam + failed + summary.unobserved,
+            rows: summary.total,
+        };
+    }
+
+    function automatedTestHasCompleteEvidence(test) {
+        const summary = automatedTestSummary(test);
+        if (!summary.total) return false;
+        return summary.queued === 0 && summary.waiting === 0 && summary.pending === 0 && summary.finished >= summary.total;
+    }
+
+    async function fetchAutomatedTestDetail(testId, render = true) {
+        const data = await iiFetch(`/api/inbox-intelligence/tests/${testId}`);
+        const test = data.test || {};
+        iiState.automatedSelectedTestId = test.test_id || testId;
+        const manualInput = document.getElementById('automatedManualTestIdInput');
+        if (manualInput) manualInput.value = iiState.automatedSelectedTestId;
+        localStorage.setItem('ii_automated_last_test_id', iiState.automatedSelectedTestId);
+        iiState.automatedMessages = test.messages || [];
+        const existing = iiState.automatedTests.findIndex((item) => item.test_id === iiState.automatedSelectedTestId);
+        if (existing >= 0) iiState.automatedTests[existing] = {...iiState.automatedTests[existing], ...test};
+        else iiState.automatedTests.unshift(test);
+        if (render) {
+            renderAutomatedTests();
+            renderAutomatedInboxAnalytics(test);
+        }
+        return test;
+    }
+
+    async function waitForAutomatedSendingComplete(testId, options = {}) {
+        const startedAt = Date.now();
+        const timeoutMs = options.timeoutMs || 8 * 60 * 1000;
+        const intervalMs = options.intervalMs || 2500;
+        let test = await fetchAutomatedTestDetail(testId, true);
+        while (true) {
+            assertAiAgentNotStopped();
+            const summary = automatedTestSummary(test);
+            const statusText = `Sending ${summary.sent}/${summary.total || summary.rows} message(s); ${summary.queued} queued.`;
+            setAiAgentChatStatus(statusText);
+            renderAiAgentState('loading', {message: 'Waiting for Gmail API sending to finish', detail: `${testId}: ${statusText}`});
+            if (summary.queued === 0 && !['QUEUED', 'SENDING'].includes(String(test.status || '').toUpperCase())) return test;
+            if (Date.now() - startedAt > timeoutMs) {
+                throw new Error(`${testId} is still sending after ${Math.round(timeoutMs / 60000)} minute(s). Agent Results were not saved because the test is incomplete.`);
+            }
+            await sleep(intervalMs);
+            test = await fetchAutomatedTestDetail(testId, true);
+        }
+    }
+
+    async function syncAutomatedTestUntilComplete(testId, options = {}) {
+        const startedAt = Date.now();
+        const timeoutMs = options.timeoutMs || 15 * 60 * 1000;
+        const intervalMs = options.intervalMs || 5000;
+        const requireComplete = options.requireComplete !== false;
+        let test = await waitForAutomatedSendingComplete(testId, options.sendWait || {});
+        let attempt = 0;
+        while (true) {
+            assertAiAgentNotStopped();
+            attempt += 1;
+            const before = automatedTestSummary(test);
+            setAiAgentChatStatus(`Sync ${attempt}: ${before.observed}/${before.total || before.rows} observed, ${before.pending} pending...`);
+            renderAiAgentState('loading', {
+                message: `Sync ${attempt}: importing IMAP placement evidence`,
+                detail: `${testId}: ${before.observed}/${before.total || before.rows} observed before this sync.`
+            });
+            await runAutomatedSyncJob(testId, {
+                sync_mode: 'targeted',
+                recent_limit: options.recentLimit ?? 200,
+                targeted_only: options.targetedOnly !== undefined ? options.targetedOnly : true,
+                include_text_search: options.includeTextSearch === true,
+                skip_deep_scan: options.skipDeepScan !== undefined ? options.skipDeepScan : true,
+                date_range: document.getElementById('automatedDateFilter')?.value || '2d',
+                max_poll_attempts: options.maxPollAttempts || 360,
+                stale_minutes: options.staleMinutes || 15
+            });
+            test = await fetchAutomatedTestDetail(testId, true);
+            const after = automatedTestSummary(test);
+            if (automatedTestHasCompleteEvidence(test)) {
+                setAiAgentChatStatus(`${testId}: all ${after.total} result row(s) are classified.`, 'success');
+                return test;
+            }
+            const elapsedMs = Date.now() - startedAt;
+            if (!requireComplete) return test;
+            if (elapsedMs > timeoutMs) {
+                throw new Error(`${testId} still has ${after.pending} pending result row(s) after ${Math.round(timeoutMs / 60000)} minute(s). Agent Results were not saved; run Sync fresh data again after delivery finishes.`);
+            }
+            await sleep(intervalMs);
+        }
+    }
+
     async function loadAutomatedTests(hydrateSelected = true) {
         const data = await iiFetch('/api/inbox-intelligence/automated-tests');
         iiState.automatedTests = data.tests || [];
@@ -5671,6 +5786,20 @@ merge_recipe_id, content_blueprint_id</pre>
         });
     }
 
+    function aiAgentSyncOptions(overrides = {}) {
+        return {
+            timeoutMs: 15 * 60 * 1000,
+            sendWait: {timeoutMs: 8 * 60 * 1000, intervalMs: 2500},
+            intervalMs: 5000,
+            recentLimit: 200,
+            targetedOnly: true,
+            skipDeepScan: true,
+            maxPollAttempts: 360,
+            staleMinutes: 15,
+            ...overrides,
+        };
+    }
+
     function assertAiAgentNotStopped() {
         if (iiState.aiAgentStopRequested) {
             throw new Error('Stopped by user.');
@@ -5799,7 +5928,7 @@ merge_recipe_id, content_blueprint_id</pre>
         iiState.automatedSelectedTestId = firstRun.test_id;
         document.getElementById('automatedManualTestIdInput').value = firstRun.test_id;
         localStorage.setItem('ii_automated_last_test_id', firstRun.test_id);
-        await runAutomatedSyncJob(firstRun.test_id, {sync_mode: 'targeted', recent_limit: 60, targeted_only: true, skip_deep_scan: true, date_range: document.getElementById('automatedDateFilter')?.value || '2d'});
+        await syncAutomatedTestUntilComplete(firstRun.test_id, aiAgentSyncOptions());
         assertAiAgentNotStopped();
         await viewAutomatedEmailTest(firstRun.test_id);
         const firstClassification = await classifyAutomatedAgentTest(firstRun.test_id, senderContext);
@@ -5818,7 +5947,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 const retryPayload = {...config.payload, senders: retrySenders, service_account_ids: [], max_per_account: '', name: `${label} Retest`};
                 const retryRun = await createAutomatedTestBatch(retryPayload);
                 assertAiAgentNotStopped();
-                await runAutomatedSyncJob(retryRun.test_id, {sync_mode: 'targeted', recent_limit: 60, targeted_only: true, skip_deep_scan: true, date_range: document.getElementById('automatedDateFilter')?.value || '2d'});
+                await syncAutomatedTestUntilComplete(retryRun.test_id, aiAgentSyncOptions());
                 assertAiAgentNotStopped();
                 await viewAutomatedEmailTest(retryRun.test_id);
                 cycle.retry = {test_id: retryRun.test_id, classification: await classifyAutomatedAgentTest(retryRun.test_id, retryRun.senders || retrySenders)};
@@ -5931,7 +6060,7 @@ merge_recipe_id, content_blueprint_id</pre>
 
             setAiAgentChatStatus(`Step 2/5: syncing first-run IMAP results for ${firstRun.test_id}...`);
             renderAiAgentState('loading', {message: 'Step 2/5: syncing first-run IMAP results', detail: firstRun.test_id});
-            await runAutomatedSyncJob(firstRun.test_id, {sync_mode: 'targeted', recent_limit: 60, targeted_only: true, skip_deep_scan: true, date_range: document.getElementById('automatedDateFilter')?.value || '2d'});
+            await syncAutomatedTestUntilComplete(firstRun.test_id, aiAgentSyncOptions());
             assertAiAgentNotStopped();
             await viewAutomatedEmailTest(firstRun.test_id);
 
@@ -5958,7 +6087,7 @@ merge_recipe_id, content_blueprint_id</pre>
                     const retryPayload = {...config.payload, senders: retrySenders, service_account_ids: [], max_per_account: '', name: `AI Agent Retest: ${new Date().toLocaleString()}`};
                     const retryRun = await createAutomatedTestBatch(retryPayload);
                     assertAiAgentNotStopped();
-                    await runAutomatedSyncJob(retryRun.test_id, {sync_mode: 'targeted', recent_limit: 60, targeted_only: true, skip_deep_scan: true, date_range: document.getElementById('automatedDateFilter')?.value || '2d'});
+                    await syncAutomatedTestUntilComplete(retryRun.test_id, aiAgentSyncOptions());
                     assertAiAgentNotStopped();
                     await viewAutomatedEmailTest(retryRun.test_id);
                     agentResult.retry = {test_id: retryRun.test_id, classification: await classifyAutomatedAgentTest(retryRun.test_id, retryRun.senders || retrySenders)};

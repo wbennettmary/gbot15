@@ -3595,7 +3595,11 @@ def _poll_inbox_test_payload(test_id, data=None):
 @permission_required('inbox_intelligence')
 def api_inbox_poll_test_async(test_id):
     payload = request.get_json(silent=True) or {}
-    stale_cutoff = datetime.utcnow() - timedelta(minutes=2)
+    try:
+        stale_minutes = min(30, max(5, int(payload.get('stale_minutes') or 15)))
+    except (TypeError, ValueError):
+        stale_minutes = 15
+    stale_cutoff = datetime.utcnow() - timedelta(minutes=stale_minutes)
     running_jobs = InboxPollJob.query.filter_by(test_id=test_id, status='running').all()
     stale_found = False
     for rj in running_jobs:
