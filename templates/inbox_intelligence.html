@@ -2247,10 +2247,21 @@ The NightOwl Ranch Team</textarea>
                             </div>
                         </div>
                     </div>
+                    <div class="ii-row flex-wrap align-items-center mt-3">
+                        <span class="ii-chip blue"><i class="fas fa-wand-magic-sparkles"></i> AI Assistant</span>
+                        <button class="ii-btn" type="button" onclick="aiAnalyzeAutomatedTemplate()"><i class="fas fa-clipboard-check"></i> Analyze template</button>
+                        <button class="ii-btn" type="button" onclick="aiImproveAutomatedMessage('header')"><i class="fas fa-heading"></i> Improve header</button>
+                        <button class="ii-btn" type="button" onclick="aiImproveAutomatedMessage('body')"><i class="fas fa-align-left"></i> Improve body</button>
+                        <button class="ii-btn" type="button" onclick="aiValidateAutomatedPlaceholders()"><i class="fas fa-list-check"></i> Validate placeholders</button>
+                        <button class="ii-btn" type="button" onclick="aiApplyAutomatedSuggestion()"><i class="fas fa-check"></i> Apply suggestion</button>
+                        <button class="ii-btn" type="button" onclick="aiRevertAutomatedSuggestion()"><i class="fas fa-rotate-left"></i> Revert</button>
+                    </div>
+                    <div class="ii-row justify-content-between mt-2">
+                        <span class="ii-muted" id="automatedAiStatus">AI drafts only. Nothing changes until you click Apply suggestion.</span>
+                    </div>
+                    <div id="automatedAiSuggestions"></div>
                 </div>
             </div>
-
-            <div class="ii-run-button-float mt-2">
                 <button class="ii-btn ii-btn-primary" type="button" id="automatedRunButton" onclick="runAutomatedEmailTest()"><i class="fas fa-bolt"></i> Trigger Test <span class="ii-chip green ms-1">Ready</span></button>
             </div>
 

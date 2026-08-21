@@ -573,3 +573,59 @@ class ImapFolderSyncState(db.Model):
     created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
     updated_at = db.Column(db.DateTime, default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
     __table_args__ = (db.UniqueConstraint('imap_account_id', 'folder_name', name='uq_imap_folder_sync'),)
+
+class InboxAiJob(db.Model):
+    """AI Placement Optimization job: one auditable provider call."""
+    __tablename__ = 'inbox_ai_job'
+    id = db.Column(db.Integer, primary_key=True)
+    job_id = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    job_type = db.Column(db.String(50), nullable=False, index=True)
+    status = db.Column(db.String(30), default='running', nullable=False, index=True)
+    test_id = db.Column(db.String(80), nullable=True, index=True)
+    source_template_id = db.Column(db.Integer, nullable=True)
+    created_by = db.Column(db.String(255), nullable=True)
+    provider = db.Column(db.String(50), nullable=True)
+    model = db.Column(db.String(255), nullable=True)
+    input_summary_json = db.Column(db.Text, nullable=True)
+    output_json = db.Column(db.Text, nullable=True)
+    error_message = db.Column(db.Text, nullable=True)
+    started_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+    completed_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+
+class InboxAiSuggestion(db.Model):
+    """Persisted AI suggestion so results stay visible across refreshes."""
+    __tablename__ = 'inbox_ai_suggestion'
+    id = db.Column(db.Integer, primary_key=True)
+    job_id = db.Column(db.String(64), db.ForeignKey('inbox_ai_job.job_id'), nullable=False, index=True)
+    test_id = db.Column(db.String(80), nullable=True, index=True)
+    suggestion_type = db.Column(db.String(50), default='region_text', nullable=False)
+    target_region = db.Column(db.String(50), nullable=True)
+    content_json = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(20), default='pending', nullable=False, index=True)
+    confidence = db.Column(db.String(20), nullable=True)
+    created_at = db.Column(db.DateTime, default=db.func.current_timestamp(), index=True)
+    decided_at = db.Column(db.DateTime, nullable=True)
+    decided_by = db.Column(db.String(255), nullable=True)
+
+class InboxAiAuditEvent(db.Model):
+    """Audit trail for AI generation and later suggestion decisions."""
+    __tablename__ = 'inbox_ai_audit_event'
+    id = db.Column(db.Integer, primary_key=True)
+    event_type = db.Column(db.String(50), nullable=False, index=True)
+    job_id = db.Column(db.String(64), nullable=True, index=True)
+    test_id = db.Column(db.String(80), nullable=True, index=True)
+    suggestion_id = db.Column(db.Integer, nullable=True)
+    user_email = db.Column(db.String(255), nullable=True)
+    payload_json = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+
+class InboxAiPromptVersion(db.Model):
+    """Version history for saved AI prompts, tied to user and time."""
+    __tablename__ = 'inbox_ai_prompt_version'
+    id = db.Column(db.Integer, primary_key=True)
+    prompt_key = db.Column(db.String(80), nullable=False, index=True)
+    prompt_text = db.Column(db.Text, nullable=False)
+    version = db.Column(db.Integer, nullable=False, default=1)
+    updated_by = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())

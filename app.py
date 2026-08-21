@@ -30,6 +30,7 @@ import uuid
 import paramiko
 import pyotp
 import re
+import unicodedata
 
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -39,7 +40,7 @@ from email.mime.multipart import MIMEMultipart
 import re
 
 from core_logic import google_api, unique_random_alias, get_random_name_pools
-from database import db, User, WhitelistedIP, UsedDomain, GoogleAccount, GoogleToken, Scope, ServerConfig, UserAppPassword, AutomationAccount, RetrievedUser, NamecheapConfig, DomainOperation, AwsConfig, ServiceAccount, CloudflareConfig, Notification, WorkspaceList, AwsGeneratedPassword, InboxImapAccount, InboxEmailMessage, InboxStaticTemplate, InboxUserTemplate, InboxOpenRouterConfig, InboxDeliverabilityTest, InboxDeliverabilityMessage, TestEmailSource, InboxPollJob, ImapFolderSyncState
+from database import db, User, WhitelistedIP, UsedDomain, GoogleAccount, GoogleToken, Scope, ServerConfig, UserAppPassword, AutomationAccount, RetrievedUser, NamecheapConfig, DomainOperation, AwsConfig, ServiceAccount, CloudflareConfig, Notification, WorkspaceList, AwsGeneratedPassword, InboxImapAccount, InboxEmailMessage, InboxStaticTemplate, InboxUserTemplate, InboxOpenRouterConfig, InboxDeliverabilityTest, InboxDeliverabilityMessage, TestEmailSource, InboxPollJob, ImapFolderSyncState, InboxAiJob, InboxAiSuggestion, InboxAiAuditEvent, InboxAiPromptVersion
 from routes.dns_manager import dns_manager
 from routes.aws_manager import aws_manager
 from routes.digitalocean_manager import digitalocean_manager
@@ -1271,13 +1272,27 @@ def _message_text_parts(msg):
             plain_parts.append(text)
     return '\n'.join(plain_parts).strip(), '\n'.join(html_parts).strip(), has_attachments
 
+def _normalize_imap_credential(value, *, strip_outer=True):
+    """Normalize copy/pasted IMAP fields before imaplib's ASCII login path."""
+    text = unicodedata.normalize('NFKC', str(value or ''))
+    text = (
+        text.replace('\u00a0', ' ')
+            .replace('\u2007', ' ')
+            .replace('\u202f', ' ')
+            .replace('\u200b', '')
+            .replace('\ufeff', '')
+    )
+    return text.strip() if strip_outer else text
+
 def _imap_connect(account):
-    password = _unprotect_secret(account.encrypted_password)
+    host = _normalize_imap_credential(account.imap_host).lower()
+    username = _normalize_imap_credential(account.username)
+    password = _normalize_imap_credential(_unprotect_secret(account.encrypted_password))
     if account.tls_enabled:
-        conn = imaplib.IMAP4_SSL(account.imap_host, int(account.imap_port or 993), ssl_context=ssl.create_default_context(), timeout=30)
+        conn = imaplib.IMAP4_SSL(host, int(account.imap_port or 993), ssl_context=ssl.create_default_context(), timeout=30)
     else:
-        conn = imaplib.IMAP4(account.imap_host, int(account.imap_port or 143), timeout=30)
-    conn.login(account.username, password)
+        conn = imaplib.IMAP4(host, int(account.imap_port or 143), timeout=30)
+    conn.login(username, password)
     return conn
 
 def _serialize_imap_account(account):
@@ -1640,12 +1655,12 @@ def api_inbox_imap_accounts():
         accounts = InboxImapAccount.query.order_by(InboxImapAccount.created_at.desc()).all()
         return jsonify({'success': True, 'accounts': [_serialize_imap_account(a) for a in accounts]})
     data = request.get_json(silent=True) or {}
-    provider = (data.get('provider') or 'generic').strip().lower()
-    email_addr = (data.get('email') or '').strip().lower()
-    username = (data.get('username') or email_addr).strip()
-    password = data.get('password') or ''
+    provider = _normalize_imap_credential(data.get('provider') or 'generic').lower()
+    email_addr = _normalize_imap_credential(data.get('email') or '').lower()
+    username = _normalize_imap_credential(data.get('username') or email_addr)
+    password = _normalize_imap_credential(data.get('password') or '')
     host_default, port_default = INBOX_PROVIDER_DEFAULTS.get(provider, ('', 993))
-    imap_host = (data.get('imap_host') or host_default).strip()
+    imap_host = _normalize_imap_credential(data.get('imap_host') or host_default).lower()
     imap_port = int(data.get('imap_port') or port_default or 993)
     tls_enabled = bool(data.get('tls_enabled', True))
     auto_sync_enabled = bool(data.get('auto_sync_enabled', True))
@@ -3550,118 +3565,224 @@ def api_inbox_openrouter_config():
     db.session.commit()
     return jsonify({'success': True, 'message': 'OpenRouter configuration saved'})
 
-def _local_template_region_suggestions(subject, html_body, text_body, custom_prompt, region):
-    source = subject or text_body or re.sub(r'<[^>]+>', ' ', html_body or '')
-    source = re.sub(r'\s+', ' ', source).strip()
-    if not source:
-        source = 'Your update is ready'
-    compact = source[:90].rstrip(' .')
-    prompt_hint = re.sub(r'\s+', ' ', custom_prompt or '').strip()[:80]
-    base = [
-        f"{compact}",
-        f"{compact} for {{{{first_name}}}}",
-        f"Quick update: {compact}",
-    ]
-    if region == 'cta':
-        base = ['Review the details', 'Open your update', 'Continue to next step']
-    elif region == 'preheader':
-        base = [f"Details inside for {{{{first_name}}}}.", 'A short update with the next action.', f"{compact}."]
-    suggestions = []
-    for idx, text in enumerate(base[:3], start=1):
-        suggestions.append({
-            'text': text,
-            'rationale': prompt_hint or 'Local fallback generated because OpenRouter is not configured or unavailable.',
-            'expected_lift': f"+{max(2, 8 - idx * 2)}%",
-        })
-    return suggestions
+def _start_optional_ai_job(data, job_type, input_summary=None):
+    """Validate optional job_id/test_id and open a running AI job row.
 
-def _extract_json_object(text_value):
-    text_value = (text_value or '').strip()
-    if not text_value:
-        return None
-    try:
-        return json.loads(text_value)
-    except Exception:
-        match = re.search(r'\{.*\}', text_value, re.DOTALL)
-        if not match:
-            return None
+    Returns (ai_job_or_none, error_response_or_none). A job is only
+    created when the caller supplied a job_id or test_id reference.
+    """
+    from services.inbox_ai_persistence import create_ai_job
+    job_ref = str(data.get('job_id') or '').strip()
+    test_id = str(data.get('test_id') or '').strip()
+    source_template_id = None
+    if data.get('source_template_id'):
         try:
-            return json.loads(match.group(0))
-        except Exception:
-            return None
+            source_template_id = int(data.get('source_template_id'))
+        except (TypeError, ValueError):
+            return None, (jsonify({'success': False, 'error': 'source_template_id must be an integer'}), 400)
+    if not job_ref and not test_id:
+        return None, None
+    if test_id and not InboxDeliverabilityTest.query.filter_by(test_id=test_id).first():
+        return None, (jsonify({'success': False, 'error': f'Unknown test_id: {test_id}'}), 404)
+    if job_ref and not re.fullmatch(r'[A-Za-z0-9_-]{1,64}', job_ref):
+        return None, (jsonify({'success': False, 'error': 'job_id must be 1-64 characters of [A-Za-z0-9_-]'}), 400)
+    try:
+        job = create_ai_job(
+            job_type,
+            job_id=job_ref or None,
+            test_id=test_id or None,
+            source_template_id=source_template_id,
+            created_by=session.get('user'),
+            input_summary=input_summary,
+        )
+    except ValueError as e:
+        return None, (jsonify({'success': False, 'error': str(e)}), 400)
+    return job, None
+
+def _finalize_ai_job(ai_job, result, *, suggestions=None, persist_fn=None, region=None,
+                     audit_event=None, output_override=None):
+    """Complete/fail an AI job row and optionally persist its suggestions."""
+    from services.inbox_ai_persistence import complete_ai_job, fail_ai_job, record_audit_event
+    try:
+        if output_override is not None:
+            complete_ai_job(ai_job, provider=result.provider, model=result.model,
+                            output=output_override)
+        elif suggestions:
+            complete_ai_job(ai_job, provider=result.provider, model=result.model,
+                            output={'suggestions': suggestions})
+        else:
+            complete_ai_job(ai_job, provider=result.provider, model=result.model)
+        persisted = 0
+        if suggestions and persist_fn is not None:
+            persisted = persist_fn(ai_job, suggestions) or 0
+        if audit_event:
+            record_audit_event(
+                audit_event,
+                job_id=ai_job.job_id,
+                test_id=ai_job.test_id,
+                user_email=session.get('user'),
+                payload={'count': persisted, 'region': region, 'provider': result.provider},
+            )
+        return persisted
+    except Exception as exc:
+        fail_ai_job(ai_job, f'finalization failed: {type(exc).__name__}')
+        return 0
 
 @app.route('/api/inbox-intelligence/ai-region-editor', methods=['POST'])
 @login_required
 @permission_required('inbox_intelligence')
 def api_inbox_ai_region_editor():
     data = request.get_json(silent=True) or {}
-    subject = (data.get('subject') or '').strip()
-    html_body = data.get('html_body') or ''
-    text_body = data.get('text_body') or ''
-    custom_prompt = data.get('custom_prompt') or ''
+    from services.inbox_ai_gateway import generate_region_suggestions
+    from services.inbox_ai_persistence import (
+        JOB_TYPE_REGION_EDITOR,
+        build_region_input_summary,
+    )
     region = (data.get('region') or 'headline').strip().lower()
-    current_text = (data.get('current_text') or subject or '').strip()
-    fallback = _local_template_region_suggestions(subject, html_body, text_body, custom_prompt, region)
-    config = InboxOpenRouterConfig.query.first()
-    api_key = ''
-    if config and config.encrypted_api_key:
-        try:
-            api_key = _unprotect_secret(config.encrypted_api_key)
-        except Exception as e:
-            app.logger.warning(f"Unable to decrypt OpenRouter key: {e}")
-    if not api_key:
-        return jsonify({'success': True, 'provider': 'local_fallback', 'message': 'OpenRouter API key is not configured; local suggestions were generated.', 'suggestions': fallback})
-    model = (config.custom_model or config.default_model or config.fallback_model or 'openai/gpt-4o-mini').strip()
-    payload = {
-        'model': model,
-        'temperature': float(config.temperature if config else 0.7),
-        'max_tokens': int(config.max_tokens if config else 1800),
-        'messages': [
-            {'role': 'system', 'content': 'You are an email template region editor. Return only compact JSON with a suggestions array. Preserve merge tags like {{first_name}} and do not rewrite locked layout, headers, footers, legal text, or tracking structure.'},
-            {'role': 'user', 'content': json.dumps({
-                'region': region,
-                'current_text': current_text,
-                'subject': subject,
-                'plain_text': text_body[:4000],
-                'html_excerpt': html_body[:6000],
-                'custom_prompt': custom_prompt,
-                'return_schema': {'suggestions': [{'text': 'string', 'rationale': 'string', 'expected_lift': '+n%'}]}
-            })}
-        ]
-    }
-    try:
-        import requests
-        response = requests.post(
-            'https://openrouter.ai/api/v1/chat/completions',
-            headers={
-                'Authorization': f'Bearer {api_key}',
-                'Content-Type': 'application/json',
-                'HTTP-Referer': request.host_url.rstrip('/'),
-                'X-Title': 'GBot Inbox Intelligence',
-            },
-            json=payload,
-            timeout=45
+    ai_job, error_response = _start_optional_ai_job(data, JOB_TYPE_REGION_EDITOR,
+                                                    input_summary=build_region_input_summary(data))
+    if error_response:
+        return error_response
+    result = generate_region_suggestions(
+        data,
+        decrypt_secret=_unprotect_secret,
+        job_id=ai_job.job_id if ai_job else None,
+        referer=request.host_url.rstrip('/'),
+    )
+    response = result.to_response_dict()
+    if ai_job:
+        response['job_id'] = ai_job.job_id
+        suggestions = result.data.get('suggestions') or []
+        from services.inbox_ai_persistence import persist_suggestions
+        persisted = _finalize_ai_job(
+            ai_job, result,
+            suggestions=suggestions,
+            persist_fn=lambda job, items: persist_suggestions(job, items, suggestion_type='region_text', target_region=region),
+            region=region,
+            audit_event='region_suggestions_generated' if suggestions else None,
         )
-        response.raise_for_status()
-        content = (((response.json() or {}).get('choices') or [{}])[0].get('message') or {}).get('content') or ''
-        parsed = _extract_json_object(content) or {}
-        suggestions = parsed.get('suggestions') or []
-        normalized = []
-        for item in suggestions[:6]:
-            if isinstance(item, str):
-                normalized.append({'text': item, 'rationale': 'Generated by OpenRouter.', 'expected_lift': '+4%'})
-            elif isinstance(item, dict) and item.get('text'):
-                normalized.append({
-                    'text': str(item.get('text') or ''),
-                    'rationale': str(item.get('rationale') or 'Generated by OpenRouter.'),
-                    'expected_lift': str(item.get('expected_lift') or '+4%'),
-                })
-        if not normalized:
-            normalized = fallback
-        return jsonify({'success': True, 'provider': 'openrouter', 'model': model, 'suggestions': normalized})
-    except Exception as e:
-        app.logger.error(f"OpenRouter AI Region Editor failed: {e}")
-        return jsonify({'success': True, 'provider': 'local_fallback', 'message': f'OpenRouter failed, local suggestions were generated: {e}', 'suggestions': fallback})
+        if suggestions:
+            response['suggestions_persisted'] = persisted
+    return jsonify(response)
+
+@app.route('/api/inbox-intelligence/ai/analyze-template', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_ai_analyze_template():
+    data = request.get_json(silent=True) or {}
+    from services.inbox_ai_gateway import generate_template_analysis
+    from services.inbox_ai_persistence import JOB_TYPE_TEMPLATE_ANALYSIS
+    ai_job, error_response = _start_optional_ai_job(data, JOB_TYPE_TEMPLATE_ANALYSIS)
+    if error_response:
+        return error_response
+    result = generate_template_analysis(
+        data,
+        decrypt_secret=_unprotect_secret,
+        job_id=ai_job.job_id if ai_job else None,
+        referer=request.host_url.rstrip('/'),
+    )
+    response = {'success': True, 'provider': result.provider, 'analysis': result.data.get('analysis') or {}}
+    if result.model and result.provider == 'openrouter':
+        response['model'] = result.model
+    if result.message:
+        response['message'] = result.message
+    if ai_job:
+        _finalize_ai_job(ai_job, result,
+                         output_override={'analysis': response['analysis']},
+                         audit_event='template_analyzed')
+        response['job_id'] = ai_job.job_id
+    return jsonify(response)
+
+@app.route('/api/inbox-intelligence/ai/improve-message', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_ai_improve_message():
+    data = request.get_json(silent=True) or {}
+    target = (data.get('target') or '').strip().lower()
+    if target not in ('header', 'body'):
+        return jsonify({'success': False, 'error': "target must be 'header' or 'body'"}), 400
+    from services.inbox_ai_gateway import generate_message_suggestions
+    from services.inbox_ai_persistence import (
+        JOB_TYPE_MESSAGE_IMPROVE,
+        SUGGESTION_TYPE_MESSAGE_BODY,
+        SUGGESTION_TYPE_MESSAGE_HEADER,
+        build_message_input_summary,
+        persist_suggestions,
+    )
+    ai_job, error_response = _start_optional_ai_job(data, JOB_TYPE_MESSAGE_IMPROVE,
+                                                    input_summary=build_message_input_summary(data, target))
+    if error_response:
+        return error_response
+    result = generate_message_suggestions(
+        data,
+        decrypt_secret=_unprotect_secret,
+        job_id=ai_job.job_id if ai_job else None,
+        referer=request.host_url.rstrip('/'),
+    )
+    response = {
+        'success': True,
+        'provider': result.provider,
+        'target': target,
+        'suggestions': result.data.get('suggestions') or [],
+    }
+    if result.model and result.provider == 'openrouter':
+        response['model'] = result.model
+    if result.message:
+        response['message'] = result.message
+    if ai_job:
+        suggestion_type = SUGGESTION_TYPE_MESSAGE_HEADER if target == 'header' else SUGGESTION_TYPE_MESSAGE_BODY
+        suggestions = response['suggestions']
+        persisted = _finalize_ai_job(
+            ai_job, result,
+            suggestions=suggestions,
+            persist_fn=lambda job, items: persist_suggestions(job, items, suggestion_type=suggestion_type, target_region=target),
+            region=target,
+            audit_event='message_suggestions_generated' if suggestions else None,
+        )
+        response['job_id'] = ai_job.job_id
+        if suggestions:
+            response['suggestions_persisted'] = persisted
+    return jsonify(response)
+
+@app.route('/api/inbox-intelligence/ai/validate-placeholders', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_ai_validate_placeholders():
+    data = request.get_json(silent=True) or {}
+    from services.inbox_ai_schemas import (
+        REQUIRED_HEADER_PLACEHOLDERS,
+        analyze_header_structure,
+        find_placeholders,
+    )
+    header = data.get('header') or ''
+    body = data.get('body') or ''
+    header_tokens = find_placeholders(header)
+    missing_required = [token for token in REQUIRED_HEADER_PLACEHOLDERS if token not in header_tokens]
+    structure = analyze_header_structure(header)
+    valid = not missing_required and not structure['problems']
+    return jsonify({
+        'success': True,
+        'valid': valid,
+        'header': {
+            'placeholders_found': sorted(header_tokens),
+            'missing_required': missing_required,
+            'structure_problems': structure['problems'],
+            'has_subject': structure['has_subject'],
+        },
+        'body': {'placeholders_found': sorted(find_placeholders(body))},
+    })
+
+@app.route('/api/inbox-intelligence/ai/jobs/<job_id>', methods=['GET'])
+
+@app.route('/api/inbox-intelligence/ai/jobs/<job_id>', methods=['GET'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_ai_job_status(job_id):
+    from services.inbox_ai_persistence import get_job_payload
+    payload = get_job_payload(job_id)
+    if not payload:
+        return jsonify({'success': False, 'error': 'AI job not found'}), 404
+    return jsonify({'success': True, **payload})
 
 def _detect_template_regions(html_content):
     html_content = html_content or ''
@@ -3724,6 +3845,11 @@ def api_inbox_template_ai_prompt():
     prompt = data.get('prompt') or ''
     with open(path, 'w') as f:
         json.dump({'prompt': prompt, 'updated_at': datetime.utcnow().isoformat() + 'Z', 'updated_by': session.get('user')}, f)
+    try:
+        from services.inbox_ai_persistence import record_prompt_version
+        record_prompt_version('template_region_prompt', prompt, session.get('user'))
+    except Exception as e:
+        app.logger.warning(f"Could not record AI prompt version: {type(e).__name__}")
     return jsonify({'success': True, 'message': 'Template AI prompt saved'})
 
 @app.route('/api/inbox-intelligence/static-templates', methods=['GET', 'POST'])
