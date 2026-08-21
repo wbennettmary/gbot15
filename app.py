@@ -2978,7 +2978,19 @@ def api_inbox_automated_tests():
         args=(test_id, senders, custom_headers, custom_subject, custom_html_body, custom_text_body),
         daemon=True
     ).start()
-    return jsonify({'success': True, 'test_id': test_id, 'queued': rows_created, 'message': f'Automated test queued with {rows_created} operation(s).'})
+    return jsonify({
+        'success': True,
+        'test_id': test_id,
+        'queued': rows_created,
+        'senders': [
+            {
+                'email': sender.get('email'),
+                'name': sender.get('name') or '',
+                'service_account_id': sender.get('service_account_id')
+            } for sender in senders
+        ],
+        'message': f'Automated test queued with {rows_created} operation(s).'
+    })
 
 @app.route('/api/inbox-intelligence/automated-tests/<test_id>/results', methods=['GET'])
 @login_required
@@ -3539,10 +3551,15 @@ def api_inbox_start_merge(test_id):
         'workspace_sender': inbox_hit.workspace_sender
     })
 
+def _can_manage_ai_credentials():
+    return session.get('role') in {'admin', 'mailer', 'support'}
+
+@app.route('/api/settings/openrouter-config', methods=['GET', 'POST'])
 @app.route('/api/inbox-intelligence/openrouter-config', methods=['GET', 'POST'])
 @login_required
-@permission_required('inbox_intelligence')
 def api_inbox_openrouter_config():
+    if not _can_manage_ai_credentials():
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
     config = InboxOpenRouterConfig.query.first()
     if request.method == 'GET':
         return jsonify({'success': True, 'config': {
@@ -3566,6 +3583,204 @@ def api_inbox_openrouter_config():
     config.max_tokens = int(data.get('max_tokens') or 1800)
     db.session.commit()
     return jsonify({'success': True, 'message': 'OpenRouter configuration saved'})
+
+def _agent_sender_context_lookup(sender_context):
+    lookup = {}
+    for item in sender_context or []:
+        if not isinstance(item, dict):
+            continue
+        email_addr = (item.get('email') or '').strip().lower()
+        if not email_addr:
+            continue
+        try:
+            service_account_id = int(item.get('service_account_id') or 0) or None
+        except (TypeError, ValueError):
+            service_account_id = None
+        lookup[email_addr] = {
+            'email': email_addr,
+            'name': (item.get('name') or '').strip(),
+            'service_account_id': service_account_id,
+        }
+    return lookup
+
+def _agent_classify_test_payload(test_id, sender_context=None):
+    test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
+    if not test:
+        return None
+    context_lookup = _agent_sender_context_lookup(sender_context)
+    rows = InboxDeliverabilityMessage.query.filter_by(test_id=test_id).order_by(InboxDeliverabilityMessage.id.asc()).all()
+    stats = {}
+    for row in rows:
+        sender = (row.workspace_sender or '').strip().lower()
+        if not sender:
+            continue
+        item = stats.setdefault(sender, {
+            'email': sender,
+            'domain': sender.split('@')[-1].lower() if '@' in sender else '',
+            'service_account_id': context_lookup.get(sender, {}).get('service_account_id'),
+            'name': context_lookup.get(sender, {}).get('name') or '',
+            'inbox': 0,
+            'spam': 0,
+            'pending': 0,
+            'failed': 0,
+            'recipients': set(),
+            'sources': set(),
+        })
+        placement = (row.placement or '').upper()
+        if placement == 'INBOX':
+            item['inbox'] += 1
+        elif placement == 'SPAM':
+            item['spam'] += 1
+        elif placement == 'FAILED' or (row.status or '').upper() == 'FAILED':
+            item['failed'] += 1
+        else:
+            item['pending'] += 1
+        if row.recipient:
+            item['recipients'].add(row.recipient.lower())
+        if row.source_email_id:
+            item['sources'].add(str(row.source_email_id))
+
+    def finish(item):
+        total_observed = item['inbox'] + item['spam']
+        payload = dict(item)
+        payload['recipients'] = sorted(item['recipients'])
+        payload['sources'] = sorted(item['sources'])
+        payload['observed'] = total_observed
+        payload['inbox_rate'] = round((item['inbox'] / total_observed) * 100) if total_observed else 0
+        payload['copy_line'] = item['email']
+        payload['name_change_line'] = f"{item.get('service_account_id') or item['domain']},{item['email']}"
+        return payload
+
+    inbox_users, spam_users, grey_users, waiting_users = [], [], [], []
+    for item in stats.values():
+        payload = finish(item)
+        if item['inbox'] and item['spam']:
+            grey_users.append(payload)
+        elif item['spam']:
+            spam_users.append(payload)
+        elif item['inbox']:
+            inbox_users.append(payload)
+        else:
+            waiting_users.append(payload)
+    sort_key = lambda item: (-item.get('spam', 0), -item.get('inbox', 0), item.get('email', ''))
+    inbox_users.sort(key=lambda item: item['email'])
+    spam_users.sort(key=sort_key)
+    grey_users.sort(key=sort_key)
+    waiting_users.sort(key=lambda item: item['email'])
+    return {
+        'test_id': test.test_id,
+        'status': test.status,
+        'totals': {
+            'messages': len(rows),
+            'inbox': test.inbox_count or 0,
+            'spam': test.spam_count or 0,
+            'pending': test.pending_count or 0,
+            'failed': test.failed_count or 0,
+            'users': len(stats),
+            'grey': len(grey_users),
+        },
+        'lists': {
+            'inbox_users': inbox_users,
+            'spam_users': spam_users,
+            'grey_users': grey_users,
+            'waiting_users': waiting_users,
+            'grey_name_change_lines': [item['name_change_line'] for item in grey_users],
+        },
+        'next_step': 'change_grey_names' if grey_users else ('retest_spam_users' if spam_users else 'complete'),
+    }
+
+@app.route('/api/inbox-intelligence/ai-test-agent/classify', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_ai_test_agent_classify():
+    data = request.get_json(silent=True) or {}
+    test_id = (data.get('test_id') or '').strip()
+    if not test_id:
+        return jsonify({'success': False, 'error': 'test_id is required'}), 400
+    payload = _agent_classify_test_payload(test_id, data.get('sender_context') or [])
+    if not payload:
+        return jsonify({'success': False, 'error': 'Automated test not found'}), 404
+    return jsonify({'success': True, 'classification': payload})
+
+def _generate_workspace_identity(existing_locals=None):
+    existing_locals = existing_locals or set()
+    first_names, last_names = get_random_name_pools()
+    for _ in range(300):
+        first = random.choice(first_names)
+        last = random.choice(last_names)
+        local = re.sub(r'[^a-z0-9]', '', f'{first}{last}'.lower())
+        if local and local not in existing_locals:
+            existing_locals.add(local)
+            return first, last
+    return 'User', ''.join(random.choices(string.ascii_uppercase, k=5))
+
+def _change_workspace_user_name(service_account_id, user_email):
+    from google.oauth2 import service_account as google_service_account
+    from googleapiclient.discovery import build
+    sa = ServiceAccount.query.get(int(service_account_id or 0))
+    if not sa or not sa.json_content:
+        raise ValueError('Selected Workspace service account is missing or has no JSON key.')
+    credentials_info = json.loads(sa.json_content)
+    creds = google_service_account.Credentials.from_service_account_info(
+        credentials_info,
+        scopes=['https://www.googleapis.com/auth/admin.directory.user']
+    ).with_subject(sa.admin_email)
+    service = build('admin', 'directory_v1', credentials=creds, cache_discovery=False)
+    existing = set()
+    try:
+        current = service.users().get(userKey=user_email).execute()
+        primary = (current.get('primaryEmail') or user_email).lower()
+        if '@' in primary:
+            existing.add(primary.split('@', 1)[0])
+    except Exception:
+        current = {}
+    first, last = _generate_workspace_identity(existing)
+    service.users().patch(
+        userKey=user_email,
+        body={'name': {'givenName': first, 'familyName': last}}
+    ).execute()
+    try:
+        retrieved = RetrievedUser.query.filter(func.lower(RetrievedUser.email) == user_email.lower()).all()
+        for row in retrieved:
+            row.name = f'{first} {last}'
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+    return {
+        'email': user_email,
+        'service_account_id': service_account_id,
+        'new_name': f'{first} {last}',
+        'primary_email': (current.get('primaryEmail') or user_email),
+    }
+
+@app.route('/api/inbox-intelligence/ai-test-agent/change-grey-names', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_ai_test_agent_change_grey_names():
+    data = request.get_json(silent=True) or {}
+    users = data.get('users') or []
+    if not isinstance(users, list) or not users:
+        return jsonify({'success': False, 'error': 'No grey users supplied for name change'}), 400
+    changed, failed = [], []
+    for item in users[:100]:
+        if not isinstance(item, dict):
+            continue
+        email_addr = (item.get('email') or '').strip().lower()
+        service_account_id = item.get('service_account_id')
+        if not email_addr or not service_account_id:
+            failed.append({'email': email_addr, 'error': 'Missing service_account_id for this Workspace user'})
+            continue
+        try:
+            changed.append(_change_workspace_user_name(service_account_id, email_addr))
+        except Exception as exc:
+            db.session.rollback()
+            failed.append({'email': email_addr, 'service_account_id': service_account_id, 'error': str(exc)})
+    return jsonify({
+        'success': True,
+        'changed': changed,
+        'failed': failed,
+        'message': f'Changed {len(changed)} grey-user name(s); {len(failed)} failed.'
+    })
 
 def _start_optional_ai_job(data, job_type, input_summary=None):
     """Validate optional job_id/test_id and open a running AI job row.

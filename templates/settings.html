@@ -35,6 +35,69 @@
         </style>
         <div id="settings-sortable-container" style="display: flex; flex-direction: column; gap: 24px;">
 
+            <!-- AI Credentials Section -->
+            <div class="github-card draggable-card" data-id="ai-credentials" style="margin-bottom: 24px;">
+                <div class="github-card-header" style="cursor: move;">
+                    <h3 class="github-card-title" style="font-size: 18px;">
+                        <i class="fas fa-robot"></i>
+                        AI Credentials
+                    </h3>
+                </div>
+                <p style="color: #656d76; margin-bottom: 24px; font-size: 14px;">
+                    Configure OpenRouter for the Inbox Intelligence AI Test Agent. The API key is encrypted at rest and is never returned after saving.
+                </p>
+
+                <form id="openrouter-config-form">
+                    <div class="d-flex flex-wrap gap-3 mb-3">
+                        <div class="flex-grow-1" style="min-width: 300px;">
+                            <label for="openRouterApiKey" class="form-label-github">
+                                <i class="fas fa-key"></i> OpenRouter API Key
+                            </label>
+                            <input type="password" class="form-control-github w-100" id="openRouterApiKey"
+                                placeholder="Leave blank to keep the saved key">
+                            <small id="openRouterKeyStatus" style="color: #656d76; font-size: 12px;">
+                                Loading key status...
+                            </small>
+                        </div>
+                        <div class="flex-grow-1" style="min-width: 250px;">
+                            <label for="openRouterDefaultModel" class="form-label-github">
+                                <i class="fas fa-microchip"></i> Default Model
+                            </label>
+                            <input type="text" class="form-control-github w-100" id="openRouterDefaultModel"
+                                placeholder="openai/gpt-4o-mini">
+                        </div>
+                    </div>
+
+                    <div class="d-flex flex-wrap gap-3 mb-3">
+                        <div class="flex-grow-1" style="min-width: 250px;">
+                            <label for="openRouterCustomModel" class="form-label-github">Custom AI Model</label>
+                            <input type="text" class="form-control-github w-100" id="openRouterCustomModel"
+                                placeholder="openrouter/provider/model-name">
+                        </div>
+                        <div class="flex-grow-1" style="min-width: 250px;">
+                            <label for="openRouterFallbackModel" class="form-label-github">Fallback Model</label>
+                            <input type="text" class="form-control-github w-100" id="openRouterFallbackModel"
+                                placeholder="openai/gpt-4o-mini">
+                        </div>
+                        <div style="min-width: 160px;">
+                            <label for="openRouterTemperature" class="form-label-github">Temperature</label>
+                            <input type="number" step="0.1" min="0" max="2" class="form-control-github w-100" id="openRouterTemperature" value="0.7">
+                        </div>
+                        <div style="min-width: 180px;">
+                            <label for="openRouterMaxTokens" class="form-label-github">Max Output Tokens</label>
+                            <input type="number" min="1" max="4000" class="form-control-github w-100" id="openRouterMaxTokens" value="1800">
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 16px; align-items: center; justify-content: center; margin-top: 24px; flex-wrap: wrap;">
+                        <button type="submit" class="btn-github btn-github-primary">
+                            <i class="fas fa-save"></i> Save AI Credentials
+                        </button>
+                        <span id="openRouterStatus" style="color: #656d76; font-size: 14px;"></span>
+                    </div>
+                </form>
+            </div>
+
             <!-- Server Configuration Section -->
             <div class="github-card draggable-card" data-id="server-config" style="margin-bottom: 24px;">
                 <div class="github-card-header" style="cursor: move;">
@@ -1262,6 +1325,9 @@
         // Load 2Captcha configuration
         loadTwoCaptchaConfiguration();
 
+        // Load AI credentials
+        loadOpenRouterConfiguration();
+
         // Handle authentication method change
         $('#server_auth_method').change(function () {
             const method = $(this).val();
@@ -1330,6 +1396,12 @@
             saveTwoCaptchaConfiguration();
         });
 
+        // Handle AI credentials form submission
+        $('#openrouter-config-form').submit(function (e) {
+            e.preventDefault();
+            saveOpenRouterConfiguration();
+        });
+
         // Handle file upload
         $('#bulk-json-upload').change(function (e) {
             handleJsonFileSelection(e);
@@ -1353,6 +1425,62 @@
             }
         });
     });
+
+    function showOpenRouterStatus(message, type = 'info') {
+        const status = document.getElementById('openRouterStatus');
+        if (!status) return;
+        const color = type === 'success' ? '#1a7f37' : type === 'error' ? '#cf222e' : '#656d76';
+        status.style.color = color;
+        status.textContent = message;
+    }
+
+    function loadOpenRouterConfiguration() {
+        fetch('/api/settings/openrouter-config', {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) throw new Error(data.error || 'Could not load AI credentials');
+                const config = data.config || {};
+                $('#openRouterDefaultModel').val(config.default_model || '');
+                $('#openRouterCustomModel').val(config.custom_model || '');
+                $('#openRouterFallbackModel').val(config.fallback_model || '');
+                $('#openRouterTemperature').val(config.temperature ?? 0.7);
+                $('#openRouterMaxTokens').val(config.max_tokens ?? 1800);
+                $('#openRouterKeyStatus').text(config.has_api_key ? 'Saved key is configured. Enter a new key only if you want to replace it.' : 'No API key saved yet.');
+                showOpenRouterStatus('AI credential settings loaded.', 'info');
+            })
+            .catch(error => {
+                showOpenRouterStatus(error.message, 'error');
+            });
+    }
+
+    function saveOpenRouterConfiguration() {
+        showOpenRouterStatus('Saving AI credentials...', 'info');
+        fetch('/api/settings/openrouter-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                api_key: $('#openRouterApiKey').val(),
+                default_model: $('#openRouterDefaultModel').val(),
+                custom_model: $('#openRouterCustomModel').val(),
+                fallback_model: $('#openRouterFallbackModel').val(),
+                temperature: $('#openRouterTemperature').val(),
+                max_tokens: $('#openRouterMaxTokens').val()
+            })
+        })
+            .then(response => response.json().then(data => ({ok: response.ok, data})))
+            .then(({ok, data}) => {
+                if (!ok || !data.success) throw new Error(data.error || 'Could not save AI credentials');
+                $('#openRouterApiKey').val('');
+                showOpenRouterStatus(data.message || 'AI credentials saved.', 'success');
+                loadOpenRouterConfiguration();
+            })
+            .catch(error => {
+                showOpenRouterStatus(error.message, 'error');
+            });
+    }
 
     function loadCurrentConfiguration() {
         console.log('Loading current server configuration...');
