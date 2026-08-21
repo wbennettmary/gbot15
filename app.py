@@ -1657,7 +1657,7 @@ def _sync_mailbox_account(account, folders=None, limit=200, force_full=False, wa
         db.session.commit()
         conn = _imap_connect(account)
         try:
-            conn.sock.settimeout(30)
+            conn.sock.settimeout(12)
         except Exception:
             pass
         all_folders = _imap_list_folders(conn)
@@ -1980,13 +1980,17 @@ def api_inbox_toggle_auto_sync(account_id):
 def api_inbox_sync_all():
     data = request.get_json(silent=True) or {}
     account_ids = data.get('account_ids')
+    try:
+        limit = min(200, max(10, int(data.get('limit') or 50)))
+    except (TypeError, ValueError):
+        limit = 50
     if account_ids:
         accounts = _enabled_imap_accounts_query().filter(InboxImapAccount.id.in_(account_ids)).all()
     else:
         accounts = _enabled_imap_accounts_query().filter_by(auto_sync_enabled=True).all()
     if not accounts:
         return _json_no_store({'success': True, 'synced': 0, 'message': 'No enabled accounts to sync.'})
-    results, all_errors = _sync_mailbox_accounts(accounts, folders=None, limit=80, force_full=bool(data.get('force_full')))
+    results, all_errors = _sync_mailbox_accounts(accounts, folders=None, limit=limit, force_full=bool(data.get('force_full')))
     total_synced = sum(r['synced'] for r in results)
     return _json_no_store({'success': True, 'synced': total_synced, 'results': results, 'errors': all_errors})
 
@@ -3308,7 +3312,7 @@ def _resolve_sync_folder_targets(conn, folders, all_folders=None):
                 targets.append(match)
     return targets or all_folders or ['INBOX']
 
-def _imap_fetch_by_identifiers(account, identifiers, folders=None):
+def _imap_fetch_by_identifiers(account, identifiers, folders=None, include_text_search=False):
     """Targeted sync for test polling: connect once, search every relevant real folder
     for each test identifier (HEADER X-Test-ID plus RESULT-marking header fallback), then
     fetch and persist the full bodies. Works regardless of how far the incremental UID
@@ -3337,7 +3341,10 @@ def _imap_fetch_by_identifiers(account, identifiers, folders=None):
                     continue
                 uid_set = set()
                 for identifier in identifiers:
-                    for search_term in (f'HEADER X-Test-ID "{identifier}"', f'TEXT "{identifier}"', f'HEADER Message-ID "{identifier}"'):
+                    search_terms = [f'HEADER X-Test-ID "{identifier}"', f'HEADER Message-ID "{identifier}"']
+                    if include_text_search:
+                        search_terms.append(f'TEXT "{identifier}"')
+                    for search_term in search_terms:
                         try:
                             s, data = conn.uid('search', None, search_term)
                         except Exception:
@@ -3373,7 +3380,7 @@ def _imap_fetch_by_identifiers(account, identifiers, folders=None):
             pass
         lock.release()
 
-def _sync_test_inbox_folders(inbox, limit=200, since=None, identifiers=None):
+def _sync_test_inbox_folders(inbox, limit=200, since=None, identifiers=None, targeted_only=True, include_text_search=False):
     """Sync an inbox (used by test polling / User Inbox Test) using the new UID-cursor
     engine across ALL real result folders (INBOX, Spam/Junk/Bulk, Gmail tabs), plus a
     targeted X-Test-ID search that guarantees the exact test messages are fetched even
@@ -3382,6 +3389,12 @@ def _sync_test_inbox_folders(inbox, limit=200, since=None, identifiers=None):
     identifiers = [i for i in (identifiers or ()) if i]
     errors = []
     synced_total = 0
+    if identifiers:
+        target_found, target_errors, placements = _imap_fetch_by_identifiers(inbox, identifiers, include_text_search=include_text_search)
+        synced_total += target_found
+        errors.extend(target_errors)
+        if targeted_only:
+            return synced_total, errors
     folder_synced, _folder_results, sync_errors = _sync_mailbox_account(
         inbox,
         folders=None,
@@ -3390,10 +3403,6 @@ def _sync_test_inbox_folders(inbox, limit=200, since=None, identifiers=None):
     )
     synced_total += folder_synced
     errors.extend(sync_errors)
-    if identifiers:
-        target_found, target_errors, placements = _imap_fetch_by_identifiers(inbox, identifiers)
-        synced_total += target_found
-        errors.extend(target_errors)
     return synced_total, errors
 
 def _date_range_to_imap_since(date_range):
@@ -3429,7 +3438,7 @@ def _message_database_searchable(message):
         message.html_content or '',
     ])
 
-def _detect_message_placements_from_synced(inbox_id, rows, test_id=None):
+def _detect_message_placements_from_synced(inbox_id, rows, test_id=None, allow_deep_scan=False):
     results = {}
     info = {'scanned_messages': 0, 'match_modes': {'exact': 0, 'x_test_id': 0, 'broad_sender': 0}, 'errors': []}
     if not rows:
@@ -3440,17 +3449,20 @@ def _detect_message_placements_from_synced(inbox_id, rows, test_id=None):
 
     matched_identifiers = set()
 
-    # FAST PATH: exact match on indexed x_test_id column (milliseconds)
-    for identifier in identifiers:
-        msg = InboxEmailMessage.query.filter_by(imap_account_id=inbox_id, x_test_id=identifier).first()
-        if msg:
-            results[identifier] = (_placement_from_folder(msg.folder), msg.folder)
-            matched_identifiers.add(identifier)
+    # FAST PATH: exact match on indexed x_test_id column in a single query.
+    messages = InboxEmailMessage.query.filter(
+        InboxEmailMessage.imap_account_id == inbox_id,
+        InboxEmailMessage.x_test_id.in_(list(identifiers)),
+    ).order_by(InboxEmailMessage.received_at.desc().nullslast(), InboxEmailMessage.id.desc()).all()
+    for msg in messages:
+        if msg.x_test_id and msg.x_test_id not in matched_identifiers:
+            results[msg.x_test_id] = (_placement_from_folder(msg.folder), msg.folder)
+            matched_identifiers.add(msg.x_test_id)
             info['match_modes']['x_test_id'] += 1
 
     # SLOW PATH: only for unmatched identifiers — ILIKE fallback on subject, sender, recipient
     unmatched = identifiers - matched_identifiers
-    if unmatched:
+    if unmatched and allow_deep_scan:
         id_filters = []
         for token in unmatched:
             like_token = f'%{token}%'
@@ -3495,10 +3507,17 @@ def _poll_inbox_test_payload(test_id, data=None):
         sync_limit = min(500, max(10, int(data.get('recent_limit') or data.get('limit') or 200)))
     except (TypeError, ValueError):
         sync_limit = 200
+    targeted_only = data.get('targeted_only')
+    if targeted_only is None:
+        targeted_only = True
+    else:
+        targeted_only = _truthy_setting(targeted_only, True)
+    include_text_search = _truthy_setting(data.get('include_text_search'), False)
+    allow_deep_scan = not _truthy_setting(data.get('skip_deep_scan'), True)
     test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
     if not test:
         return {'success': False, 'error': 'Test not found'}, 404
-    deleted_old = _cleanup_old_inbox_email_messages()
+    deleted_old = _cleanup_old_inbox_email_messages() if _truthy_setting(data.get('cleanup_old'), False) else 0
     try:
         InboxPollJob.query.filter(InboxPollJob.created_at < datetime.utcnow() - timedelta(hours=2)).delete(synchronize_session=False)
         db.session.flush()
@@ -3512,6 +3531,7 @@ def _poll_inbox_test_payload(test_id, data=None):
         'headers_fetched': 0, 'deleted_old_messages': deleted_old,
         'match_modes': {'x_test_id': 0, 'exact': 0},
         'accounts_synced': 0,
+        'sync_mode': 'targeted' if targeted_only else 'targeted_plus_recent',
     }
     for row in all_messages:
         if not row.imap_account_id:
@@ -3532,12 +3552,18 @@ def _poll_inbox_test_payload(test_id, data=None):
             continue
         try:
             row_identifiers = {row.test_identifier for row in rows if row.test_identifier}
-            app.logger.info(f"[POLL] Syncing {inbox.email} for test {test_id} ({len(rows)} pending rows, {len(row_identifiers)} identifiers: {row_identifiers})")
-            matched_count, recent_errors = _sync_test_inbox_folders(inbox, limit=sync_limit, identifiers=row_identifiers)
+            app.logger.info(f"[POLL] Syncing {inbox.email} for test {test_id} ({len(rows)} rows, {len(row_identifiers)} identifiers, mode={diagnostic['sync_mode']})")
+            matched_count, recent_errors = _sync_test_inbox_folders(
+                inbox,
+                limit=sync_limit,
+                identifiers=row_identifiers,
+                targeted_only=targeted_only,
+                include_text_search=include_text_search,
+            )
             diagnostic['headers_fetched'] += matched_count
             diagnostic['accounts_synced'] += 1
             sync_errors.extend([f'{inbox.email}: {error}' for error in recent_errors])
-            placements, scan_info = _detect_message_placements_from_synced(inbox.id, rows, test_id=test.test_id)
+            placements, scan_info = _detect_message_placements_from_synced(inbox.id, rows, test_id=test.test_id, allow_deep_scan=allow_deep_scan)
             for mode, count in (scan_info.get('match_modes') or {}).items():
                 diagnostic['match_modes'][mode] = diagnostic['match_modes'].get(mode, 0) + count
             for row in rows:
@@ -3569,7 +3595,7 @@ def _poll_inbox_test_payload(test_id, data=None):
 @permission_required('inbox_intelligence')
 def api_inbox_poll_test_async(test_id):
     payload = request.get_json(silent=True) or {}
-    stale_cutoff = datetime.utcnow() - timedelta(minutes=5)
+    stale_cutoff = datetime.utcnow() - timedelta(minutes=2)
     running_jobs = InboxPollJob.query.filter_by(test_id=test_id, status='running').all()
     stale_found = False
     for rj in running_jobs:

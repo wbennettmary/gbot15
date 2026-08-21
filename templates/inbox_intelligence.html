@@ -1379,13 +1379,15 @@
 
     .ii-pro-body-input {
         min-height: 620px;
-        height: 620px;
+        height: 620px !important;
+        max-height: none !important;
         border-radius: 0 0 var(--ii-radius-sm) var(--ii-radius-sm);
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
         font-size: 14px;
         line-height: 1.65;
         white-space: pre;
         overflow: auto;
+        resize: none;
         tab-size: 2;
     }
 
@@ -2695,7 +2697,10 @@ The NightOwl Ranch Team</textarea>
                                 <h4><i class="fas fa-comments text-primary"></i> AI Test Agent</h4>
                                 <p class="ii-muted mb-0">Runs the configured Automated Email Test, syncs IMAP results, classifies inbox/spam/grey users, changes grey-user names, then retests.</p>
                             </div>
-                            <button class="ii-btn ii-btn-primary" type="button" id="aiAgentStartButton" data-ii-ai="1" onclick="startAutomatedAiAgent()"><i class="fas fa-play"></i> Start AI Agent</button>
+                            <div class="ii-row">
+                                <button class="ii-btn ii-btn-primary" type="button" id="aiAgentStartButton" data-ii-ai="1" onclick="startAutomatedAiAgent()"><i class="fas fa-play"></i> Start AI Agent</button>
+                                <button class="ii-btn" type="button" id="aiAgentStopButton" onclick="stopAutomatedAiAgent()" disabled><i class="fas fa-stop"></i> Stop</button>
+                            </div>
                         </div>
                         <div class="ii-form-grid mb-3">
                             <div class="ii-card"><span class="ii-muted">List source</span><strong id="aiAgentListConfig">Manual selection</strong></div>
@@ -2759,11 +2764,7 @@ The NightOwl Ranch Team</textarea>
                                     <input class="ii-input" id="aiAgentRecipientEmailInput" placeholder="email@email.com">
                                 </div>
                                 <div class="ii-field" style="grid-column: 1 / -1;">
-                                    <label>Run scope</label>
-                                    <select class="ii-select" id="aiAgentSetupRunScope">
-                                        <option value="one">One test only</option>
-                                        <option value="all">Continue until all users are tested</option>
-                                    </select>
+                                    <label class="mb-0"><input type="checkbox" id="aiAgentSetupContinueAll"> Continue testing until all users are finished</label>
                                 </div>
                                 <div class="ii-field" style="grid-column: 1 / -1;">
                                     <label class="mb-0"><input type="checkbox" id="aiAgentSetupGreyAction" checked> Handle grey-user action automatically</label>
@@ -2775,6 +2776,7 @@ The NightOwl Ranch Team</textarea>
                     </div>
                     <div class="ii-agent-chat-foot">
                         <button class="ii-btn" type="button" onclick="closeAiAgentChat()">Close</button>
+                        <button class="ii-btn" type="button" id="aiAgentChatStopButton" onclick="stopAutomatedAiAgent()" disabled><i class="fas fa-stop"></i> Stop</button>
                         <button class="ii-btn ii-btn-primary" type="button" id="aiAgentChatStartButton" data-ii-ai="1" onclick="startAiAgentFromChat()"><i class="fas fa-play"></i> Start AI Agent</button>
                     </div>
                 </div>
@@ -3531,6 +3533,8 @@ merge_recipe_id, content_blueprint_id</pre>
         automatedAiResultTestId: null,
         automatedAgentRun: null,
         automatedAgentResults: [],
+        aiAgentRunning: false,
+        aiAgentStopRequested: false,
         automatedMessages: [],
         automatedAiSuggestions: [],
         automatedAiSelectedIndex: 0,
@@ -4302,7 +4306,7 @@ merge_recipe_id, content_blueprint_id</pre>
             const data = await iiFetch('/api/inbox-intelligence/imap-accounts/sync-all', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({account_ids: iiState.imapAccounts.map(a => a.id), force_full: true})
+                body: JSON.stringify({account_ids: iiState.imapAccounts.map(a => a.id), limit: 50, force_full: false})
             });
             status.textContent = `Sync complete: ${data.synced || 0} message(s) synced.`;
             await refreshInboxExplorer();
@@ -4349,7 +4353,7 @@ merge_recipe_id, content_blueprint_id</pre>
         await iiFetch(`/api/inbox-intelligence/imap-accounts/${id}/sync`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({limit: 80, force_full: true})
+            body: JSON.stringify({limit: 50, force_full: false})
         });
         await refreshInboxExplorer();
     }
@@ -4399,7 +4403,7 @@ merge_recipe_id, content_blueprint_id</pre>
             const data = await iiFetch('/api/inbox-intelligence/explorer/sync', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({account_ids: accountIds, folders, limit: 80, force_full: true})
+                body: JSON.stringify({account_ids: accountIds, folders, limit: 50, force_full: false})
             });
             const totalSynced = data.synced || 0;
             const errCount = (data.errors || []).length;
@@ -4811,7 +4815,7 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     function selectAutomatedInboxes(checked) {
-        if (checked) iiState.imapAccounts.forEach((account) => iiState.selectedInboxIds.add(account.id));
+        if (checked) iiState.imapAccounts.filter(isReceivingImapAccount).forEach((account) => iiState.selectedInboxIds.add(account.id));
         else iiState.selectedInboxIds = new Set();
         renderInboxSourceSelector();
         renderTestInboxSelector();
@@ -5021,6 +5025,8 @@ merge_recipe_id, content_blueprint_id</pre>
     function openAiAgentChat() {
         const drawer = document.getElementById('aiAgentChatDrawer');
         if (!drawer) return;
+        const continueBox = document.getElementById('aiAgentSetupContinueAll');
+        if (continueBox) continueBox.checked = (document.getElementById('aiAgentRunScope')?.value || 'one') === 'all';
         drawer.classList.add('open');
         drawer.setAttribute('aria-hidden', 'false');
         document.querySelector('.ii-floating-command-stack')?.classList.add('is-hidden');
@@ -5077,7 +5083,8 @@ merge_recipe_id, content_blueprint_id</pre>
         document.getElementById('aiAgentListIdsInput').value = parsed.listIds.join(', ');
         document.getElementById('aiAgentUsersEachInput').value = parsed.usersEach || '';
         document.getElementById('aiAgentRecipientEmailInput').value = parsed.recipientEmail || '';
-        document.getElementById('aiAgentSetupRunScope').value = parsed.runScope || 'one';
+        const continueBox = document.getElementById('aiAgentSetupContinueAll');
+        if (continueBox) continueBox.checked = (parsed.runScope || 'one') === 'all';
         document.getElementById('aiAgentSetupGreyAction').checked = parsed.greyAction;
         switchAiAgentChatTab('setup');
         return applyAiAgentSetupToPage();
@@ -5098,14 +5105,20 @@ merge_recipe_id, content_blueprint_id</pre>
         const select = document.getElementById('automatedInboxSelector');
         if (!select || !email) return false;
         let matched = false;
+        const normalized = email.toLowerCase();
+        iiState.selectedInboxIds = new Set();
         Array.from(select.options).forEach((option) => {
-            const hit = option.textContent.toLowerCase().includes(email.toLowerCase()) || String(option.value || '').toLowerCase() === email.toLowerCase();
+            const account = iiState.imapAccounts.find((item) => String(item.id) === String(option.value));
+            const hit = (account?.email || '').toLowerCase() === normalized;
+            option.selected = false;
             if (hit) {
                 option.selected = true;
+                iiState.selectedInboxIds.add(Number(option.value));
                 matched = true;
             }
         });
-        if (matched) updateAutomatedInboxSelection();
+        renderAutomatedInboxSelector();
+        updateAutomatedSummary();
         return matched;
     }
 
@@ -5114,7 +5127,7 @@ merge_recipe_id, content_blueprint_id</pre>
         const usersEach = (document.getElementById('aiAgentUsersEachInput')?.value || '').trim();
         const recipient = (document.getElementById('aiAgentRecipientEmailInput')?.value || '').trim().toLowerCase();
         const grey = document.getElementById('aiAgentSetupGreyAction')?.checked !== false;
-        const scope = document.getElementById('aiAgentSetupRunScope')?.value || 'one';
+        const scope = document.getElementById('aiAgentSetupContinueAll')?.checked ? 'all' : 'one';
         const perAccount = document.getElementById('automatedUsersPerAccountInput');
         if (perAccount && usersEach) {
             perAccount.value = usersEach;
@@ -5139,7 +5152,7 @@ merge_recipe_id, content_blueprint_id</pre>
         }
         if (recipient) {
             messages.push(selectAutomatedRecipientByEmail(recipient)
-                ? `Receiving inbox ${recipient} selected.`
+                ? `Receiving inbox locked to ${recipient}.`
                 : `Receiving inbox ${recipient} is not connected on this page.`);
         }
         refreshAiAgentConfigLabels();
@@ -5218,7 +5231,7 @@ merge_recipe_id, content_blueprint_id</pre>
         iiState.automatedSelectedTestId = testId;
         if (manualInput) manualInput.value = testId;
         localStorage.setItem('ii_automated_last_test_id', testId);
-        await pollAutomatedEmailTest(testId, false, {syncMode: 'recent', skipDeepScan: false, background: true});
+        await pollAutomatedEmailTest(testId, false, {syncMode: 'targeted', skipDeepScan: true, background: true});
     }
 
     function scheduleAutomatedPoll(testId) {
@@ -5238,9 +5251,11 @@ merge_recipe_id, content_blueprint_id</pre>
             setAutomatedSyncing(true, 'Importing recent IMAP messages...');
             const dateFilter = document.getElementById('automatedDateFilter')?.value || '2d';
             const pollPayload = {
-                sync_mode: options.syncMode || 'recent',
-                recent_limit: options.recentLimit ?? 200,
-                skip_deep_scan: options.skipDeepScan !== undefined ? options.skipDeepScan : false,
+                sync_mode: options.syncMode || 'targeted',
+                recent_limit: options.recentLimit ?? 60,
+                targeted_only: options.targetedOnly !== undefined ? options.targetedOnly : true,
+                include_text_search: options.includeTextSearch === true,
+                skip_deep_scan: options.skipDeepScan !== undefined ? options.skipDeepScan : true,
                 date_range: dateFilter
             };
             const pollData = options.background
@@ -5310,15 +5325,16 @@ merge_recipe_id, content_blueprint_id</pre>
         });
         const jobId = started.job_id;
         const syncLabel = document.getElementById('automatedLastSync');
-        for (let attempt = 0; attempt < 240; attempt += 1) {
-            if (syncLabel) syncLabel.textContent = `Background sync running... ${attempt + 1}`;
-            await new Promise((resolve) => setTimeout(resolve, 2500));
+        const maxAttempts = Number(payload?.max_poll_attempts || 60);
+        for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+            if (syncLabel) syncLabel.textContent = `Fast sync running... ${attempt + 1}/${maxAttempts}`;
+            await new Promise((resolve) => setTimeout(resolve, attempt < 5 ? 1000 : 1500));
             const data = await iiFetch(`/api/inbox-intelligence/poll-jobs/${jobId}`);
             const job = data.job || {};
             if (job.status === 'completed') return job.result || {success: true, diagnostic: {}};
             if (job.status === 'error') throw new Error(job.message || job.error || 'Background sync failed');
         }
-        throw new Error('Background sync is still running. Press Sync fresh data again in a moment.');
+        throw new Error('Sync is taking longer than expected. It is still running in the background; press Sync fresh data again in a moment.');
     }
 
     async function loadAutomatedTests(hydrateSelected = true) {
@@ -5533,31 +5549,61 @@ merge_recipe_id, content_blueprint_id</pre>
                     <div class="ii-row"><span class="ii-spinner" aria-hidden="true"></span><strong>${escapeHtml(payload.message || 'AI Test Agent is running...')}</strong></div>
                     <div class="ii-muted mt-2">${escapeHtml(payload.detail || 'The configured test process is executing.')}</div>
                 </div>`;
+            switchAnalyticsTab('agentResults');
             return;
         }
         if (state === 'error') {
-            panel.innerHTML = `<div class="ii-ai-output"><span class="ii-chip red">Agent stopped</span><div class="mt-2">${escapeHtml(payload.message || 'The AI Test Agent could not finish.')}</div></div>`;
+            panel.innerHTML = `<div class="ii-ai-output">
+                <div class="ii-row justify-content-between mb-2">
+                    <span class="ii-chip red">Agent stopped</span>
+                    <button class="ii-btn" type="button" onclick="switchAnalyticsTab('ai')"><i class="fas fa-sliders"></i> Back to setup</button>
+                </div>
+                <div class="mt-2">${escapeHtml(payload.message || 'The AI Test Agent could not finish.')}</div>
+                <div class="ii-muted mt-2">No additional batches, grey-user changes, or retests will be started.</div>
+            </div>`;
+            switchAnalyticsTab('agentResults');
             return;
         }
         const first = payload.first || {};
         const retry = payload.retry || null;
         const finalClass = retry?.classification || first.classification || {};
-        const lists = finalClass.lists || {};
-        const totals = finalClass.totals || {};
+        const lists = {
+            inbox_users: [],
+            spam_users: [],
+            grey_users: [],
+            waiting_users: [],
+            grey_name_change_lines: [],
+            ...(finalClass.lists || {})
+        };
+        const totals = {
+            messages: 0,
+            inbox: 0,
+            spam: 0,
+            pending: 0,
+            failed: 0,
+            users: 0,
+            grey: 0,
+            ...(finalClass.totals || {})
+        };
+        const batchCount = (payload.batches || []).length || 1;
+        const noObservedData = !Number(totals.messages || 0) && !(lists.inbox_users || []).length && !(lists.spam_users || []).length && !(lists.grey_users || []).length;
         iiState.automatedAgentRun = payload;
         if (!payload.fromStorage) storeAiAgentResult(payload);
         panel.innerHTML = `
             <div class="ii-ai-output">
                 <div class="ii-row justify-content-between mb-2">
-                    <div><strong>AI Test Agent completed</strong><div class="ii-muted">First run ${escapeHtml(first.test_id || '-')} ${retry ? `-> retry ${escapeHtml(retry.test_id || '-')}` : ''}</div></div>
-                    <span class="ii-chip green">${totals.inbox || 0} inbox / ${totals.spam || 0} spam</span>
+                    <div><strong>AI Test Agent completed</strong><div class="ii-muted">First run ${escapeHtml(first.test_id || '-')} ${retry ? `-> retry ${escapeHtml(retry.test_id || '-')}` : ''} · ${batchCount} execution(s)</div></div>
+                    <span class="ii-chip ${noObservedData ? 'yellow' : 'green'}">${totals.inbox || 0} inbox / ${totals.spam || 0} spam / ${totals.pending || 0} waiting</span>
                 </div>
+                ${noObservedData ? '<div class="ii-card mb-3"><strong>No observed placement data yet</strong><div class="ii-muted mt-1">The agent created/synced the test, but no inbox/spam rows were classified. Check that the Receiving email is the connected IMAP inbox you intended, then press Sync fresh data for the created test ID.</div></div>' : ''}
                 <div class="ii-result-summary mb-3">
+                    <div class="ii-result-pill"><span class="ii-muted">Messages</span><strong>${totals.messages || 0}</strong></div>
                     <div class="ii-result-pill"><span class="ii-muted">Inbox users</span><strong>${(lists.inbox_users || []).length}</strong></div>
                     <div class="ii-result-pill"><span class="ii-muted">Spam users</span><strong>${(lists.spam_users || []).length}</strong></div>
                     <div class="ii-result-pill"><span class="ii-muted">Grey users</span><strong>${(lists.grey_users || []).length}</strong></div>
                     <div class="ii-result-pill"><span class="ii-muted">Names changed</span><strong>${(payload.name_changes?.changed || []).length}</strong></div>
                 </div>
+                ${(payload.batches || []).length ? `<div class="ii-insight-card mb-3"><h4>Executions</h4>${(payload.batches || []).map((batch, index) => `<div class="ii-insight-row"><span>Batch ${index + 1}</span><span class="ii-chip blue">${escapeHtml(batch.test_id || '-')}</span>${batch.retry?.test_id ? `<span class="ii-chip green">Retry ${escapeHtml(batch.retry.test_id)}</span>` : ''}</div>`).join('')}</div>` : ''}
                 <div class="ii-analytics-copy-grid">
                     <button class="ii-btn ii-copy-stat-button" type="button" onclick="copyAiAgentBucket('inbox_users')"><strong>${(lists.inbox_users || []).length}</strong><span>Copy inbox users</span></button>
                     <button class="ii-btn ii-copy-stat-button" type="button" onclick="copyAiAgentBucket('spam_users')"><strong>${(lists.spam_users || []).length}</strong><span>Copy spam users</span></button>
@@ -5623,6 +5669,37 @@ merge_recipe_id, content_blueprint_id</pre>
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({users: greyUsers || []})
         });
+    }
+
+    function assertAiAgentNotStopped() {
+        if (iiState.aiAgentStopRequested) {
+            throw new Error('Stopped by user.');
+        }
+    }
+
+    function setAiAgentRunning(isRunning) {
+        iiState.aiAgentRunning = isRunning;
+        const startButton = document.getElementById('aiAgentStartButton');
+        const chatStartButton = document.getElementById('aiAgentChatStartButton');
+        const stopButton = document.getElementById('aiAgentStopButton');
+        const chatStopButton = document.getElementById('aiAgentChatStopButton');
+        if (startButton) {
+            startButton.disabled = isRunning;
+            startButton.innerHTML = isRunning ? '<span class="ii-spinner" aria-hidden="true"></span> Agent running' : '<i class="fas fa-play"></i> Start AI Agent';
+        }
+        if (chatStartButton) {
+            chatStartButton.disabled = isRunning;
+            chatStartButton.innerHTML = isRunning ? '<span class="ii-spinner" aria-hidden="true"></span> Agent running' : '<i class="fas fa-play"></i> Start AI Agent';
+        }
+        if (stopButton) stopButton.disabled = !isRunning;
+        if (chatStopButton) chatStopButton.disabled = !isRunning;
+    }
+
+    function stopAutomatedAiAgent() {
+        if (!iiState.aiAgentRunning) return;
+        iiState.aiAgentStopRequested = true;
+        setAiAgentChatStatus('Stop requested. The agent will stop before the next step.', 'error');
+        renderAiAgentState('loading', {message: 'Stopping AI Test Agent...', detail: 'The current server request may finish, but no new batch, rename, or retest will start.'});
     }
 
     async function retrieveAutomatedListBatch(listId, perAccount, offsetPerAccount) {
@@ -5714,20 +5791,25 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     async function runAiAgentCycle(config, senders, label) {
+        assertAiAgentNotStopped();
         const payload = {...config.payload, senders, service_account_ids: [], max_per_account: '', name: label};
         const firstRun = await createAutomatedTestBatch(payload);
+        assertAiAgentNotStopped();
         const senderContext = firstRun.senders || senders;
         iiState.automatedSelectedTestId = firstRun.test_id;
         document.getElementById('automatedManualTestIdInput').value = firstRun.test_id;
         localStorage.setItem('ii_automated_last_test_id', firstRun.test_id);
-        await runAutomatedSyncJob(firstRun.test_id, {sync_mode: 'recent', recent_limit: 200, date_range: document.getElementById('automatedDateFilter')?.value || '2d'});
+        await runAutomatedSyncJob(firstRun.test_id, {sync_mode: 'targeted', recent_limit: 60, targeted_only: true, skip_deep_scan: true, date_range: document.getElementById('automatedDateFilter')?.value || '2d'});
+        assertAiAgentNotStopped();
         await viewAutomatedEmailTest(firstRun.test_id);
         const firstClassification = await classifyAutomatedAgentTest(firstRun.test_id, senderContext);
+        assertAiAgentNotStopped();
         const autoRename = document.getElementById('aiAgentAutoRenameGrey')?.checked !== false;
         const greyUsers = ((firstClassification.lists || {}).grey_users || []).filter((user) => user.service_account_id);
         const cycle = {test_id: firstRun.test_id, classification: firstClassification, name_changes: {changed: [], failed: []}, retry: null};
         if (autoRename && greyUsers.length) {
             cycle.name_changes = await changeAiAgentGreyNames(greyUsers);
+            assertAiAgentNotStopped();
             const changedEmails = new Set((cycle.name_changes.changed || []).map((item) => item.email));
             const retrySenders = greyUsers
                 .filter((user) => changedEmails.has(user.email))
@@ -5735,7 +5817,9 @@ merge_recipe_id, content_blueprint_id</pre>
             if (retrySenders.length) {
                 const retryPayload = {...config.payload, senders: retrySenders, service_account_ids: [], max_per_account: '', name: `${label} Retest`};
                 const retryRun = await createAutomatedTestBatch(retryPayload);
-                await runAutomatedSyncJob(retryRun.test_id, {sync_mode: 'recent', recent_limit: 200, date_range: document.getElementById('automatedDateFilter')?.value || '2d'});
+                assertAiAgentNotStopped();
+                await runAutomatedSyncJob(retryRun.test_id, {sync_mode: 'targeted', recent_limit: 60, targeted_only: true, skip_deep_scan: true, date_range: document.getElementById('automatedDateFilter')?.value || '2d'});
+                assertAiAgentNotStopped();
                 await viewAutomatedEmailTest(retryRun.test_id);
                 cycle.retry = {test_id: retryRun.test_id, classification: await classifyAutomatedAgentTest(retryRun.test_id, retryRun.senders || retrySenders)};
             }
@@ -5748,9 +5832,11 @@ merge_recipe_id, content_blueprint_id</pre>
         const finalClassifications = [];
         let offset = 0;
         for (let batch = 1; batch <= 200; batch += 1) {
+            assertAiAgentNotStopped();
             setAiAgentChatStatus(`Batch ${batch}: retrieving users ${offset + 1}-${offset + perAccount} from each account...`);
             renderAiAgentState('loading', {message: `Batch ${batch}: retrieving users`, detail: `${perAccount} user(s) from each account in list ${listId}. The next batch advances to the next users.`});
             const senders = await retrieveAutomatedListBatch(listId, perAccount, offset);
+            assertAiAgentNotStopped();
             if (!senders.length) break;
             setAiAgentChatStatus(`Batch ${batch}: testing ${senders.length} selected user(s)...`);
             renderAiAgentState('loading', {message: `Batch ${batch}: running test`, detail: `${senders.length} user(s) selected from list ${listId}.`});
@@ -5776,9 +5862,11 @@ merge_recipe_id, content_blueprint_id</pre>
         const finalClassifications = [];
         let offset = 0;
         for (let batch = 1; batch <= 200; batch += 1) {
+            assertAiAgentNotStopped();
             setAiAgentChatStatus(`Batch ${batch}: retrieving users ${offset + 1}-${offset + perAccount} from selected account(s)...`);
             renderAiAgentState('loading', {message: `Batch ${batch}: retrieving account users`, detail: `${perAccount} user(s) from each selected Workspace account.`});
             const senders = await retrieveAutomatedAccountBatch(accountIds, perAccount, offset);
+            assertAiAgentNotStopped();
             if (!senders.length) break;
             setAiAgentChatStatus(`Batch ${batch}: testing ${senders.length} selected user(s)...`);
             renderAiAgentState('loading', {message: `Batch ${batch}: running test`, detail: `${senders.length} user(s) selected from account tabs.`});
@@ -5800,19 +5888,11 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     async function startAutomatedAiAgent() {
-        const button = document.getElementById('aiAgentStartButton');
-        const chatButton = document.getElementById('aiAgentChatStartButton');
         const status = document.getElementById('automatedStatusText');
         if (!II_AI_ENABLED) { renderAiAgentState('error', {message: iiAiDisabledHint()}); return; }
         try {
-            if (button) {
-                button.disabled = true;
-                button.innerHTML = '<span class="ii-spinner" aria-hidden="true"></span> Agent running';
-            }
-            if (chatButton) {
-                chatButton.disabled = true;
-                chatButton.innerHTML = '<span class="ii-spinner" aria-hidden="true"></span> Agent running';
-            }
+            iiState.aiAgentStopRequested = false;
+            setAiAgentRunning(true);
             if (document.getElementById('aiAgentChatDrawer')?.classList.contains('open')) {
                 const promptPaneActive = document.getElementById('aiAgentPromptPane')?.classList.contains('active');
                 if (promptPaneActive && (document.getElementById('aiAgentPromptInput')?.value || '').trim()) {
@@ -5821,11 +5901,13 @@ merge_recipe_id, content_blueprint_id</pre>
                     await applyAiAgentSetupToPage();
                 }
             }
+            assertAiAgentNotStopped();
             const selectedListId = document.getElementById('automatedWorkspaceListSelect')?.value || '';
             const perAccountRaw = (document.getElementById('automatedUsersPerAccountInput')?.value || '').trim();
             const perAccount = perAccountRaw ? Math.max(1, parseInt(perAccountRaw, 10) || 1) : 0;
             const runScope = document.getElementById('aiAgentRunScope')?.value || 'one';
             await ensureAiAgentWorkspaceSelection(runScope, perAccount);
+            assertAiAgentNotStopped();
             const config = collectAutomatedTestPayload('AI Agent');
             const listId = document.getElementById('automatedWorkspaceListSelect')?.value || '';
             if (runScope === 'all' && listId && perAccount) {
@@ -5841,6 +5923,7 @@ merge_recipe_id, content_blueprint_id</pre>
             renderAiAgentState('loading', {message: 'Step 1/5: starting configured test', detail: 'Using the selected queue, list/account source, users-per-account value, inboxes, and thresholds.'});
             if (status) status.textContent = 'AI Test Agent started the configured automated test.';
             const firstRun = await createAutomatedTestBatch(config.payload);
+            assertAiAgentNotStopped();
             const firstSenderContext = firstRun.senders || config.selectedSenders;
             iiState.automatedSelectedTestId = firstRun.test_id;
             document.getElementById('automatedManualTestIdInput').value = firstRun.test_id;
@@ -5848,12 +5931,14 @@ merge_recipe_id, content_blueprint_id</pre>
 
             setAiAgentChatStatus(`Step 2/5: syncing first-run IMAP results for ${firstRun.test_id}...`);
             renderAiAgentState('loading', {message: 'Step 2/5: syncing first-run IMAP results', detail: firstRun.test_id});
-            await runAutomatedSyncJob(firstRun.test_id, {sync_mode: 'recent', recent_limit: 200, date_range: document.getElementById('automatedDateFilter')?.value || '2d'});
+            await runAutomatedSyncJob(firstRun.test_id, {sync_mode: 'targeted', recent_limit: 60, targeted_only: true, skip_deep_scan: true, date_range: document.getElementById('automatedDateFilter')?.value || '2d'});
+            assertAiAgentNotStopped();
             await viewAutomatedEmailTest(firstRun.test_id);
 
             setAiAgentChatStatus('Step 3/5: classifying inbox, spam, and grey users...');
             renderAiAgentState('loading', {message: 'Step 3/5: classifying inbox, spam, and grey users', detail: firstRun.test_id});
             const firstClassification = await classifyAutomatedAgentTest(firstRun.test_id, firstSenderContext);
+            assertAiAgentNotStopped();
             const autoRename = document.getElementById('aiAgentAutoRenameGrey')?.checked !== false;
             const greyUsers = ((firstClassification.lists || {}).grey_users || []).filter((user) => user.service_account_id);
             const agentResult = {first: {test_id: firstRun.test_id, classification: firstClassification}, name_changes: {changed: [], failed: []}, retry: null};
@@ -5862,6 +5947,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 setAiAgentChatStatus(`Step 4/5: changing ${greyUsers.length} grey-user name(s)...`);
                 renderAiAgentState('loading', {message: 'Step 4/5: changing grey-user names', detail: `${greyUsers.length} grey user(s) will be updated before retest.`});
                 agentResult.name_changes = await changeAiAgentGreyNames(greyUsers);
+                assertAiAgentNotStopped();
                 const changedEmails = new Set((agentResult.name_changes.changed || []).map((item) => item.email));
                 const retrySenders = greyUsers
                     .filter((user) => changedEmails.has(user.email))
@@ -5871,7 +5957,9 @@ merge_recipe_id, content_blueprint_id</pre>
                     renderAiAgentState('loading', {message: 'Step 5/5: retesting changed grey users', detail: `${retrySenders.length} changed user(s) selected for retry.`});
                     const retryPayload = {...config.payload, senders: retrySenders, service_account_ids: [], max_per_account: '', name: `AI Agent Retest: ${new Date().toLocaleString()}`};
                     const retryRun = await createAutomatedTestBatch(retryPayload);
-                    await runAutomatedSyncJob(retryRun.test_id, {sync_mode: 'recent', recent_limit: 200, date_range: document.getElementById('automatedDateFilter')?.value || '2d'});
+                    assertAiAgentNotStopped();
+                    await runAutomatedSyncJob(retryRun.test_id, {sync_mode: 'targeted', recent_limit: 60, targeted_only: true, skip_deep_scan: true, date_range: document.getElementById('automatedDateFilter')?.value || '2d'});
+                    assertAiAgentNotStopped();
                     await viewAutomatedEmailTest(retryRun.test_id);
                     agentResult.retry = {test_id: retryRun.test_id, classification: await classifyAutomatedAgentTest(retryRun.test_id, retryRun.senders || retrySenders)};
                 }
@@ -5883,14 +5971,7 @@ merge_recipe_id, content_blueprint_id</pre>
             setAiAgentChatStatus(`Agent stopped: ${err.message}`, 'error');
             if (status) status.textContent = `AI Test Agent stopped: ${err.message}`;
         } finally {
-            if (button) {
-                button.disabled = false;
-                button.innerHTML = '<i class="fas fa-play"></i> Start AI Agent';
-            }
-            if (chatButton) {
-                chatButton.disabled = false;
-                chatButton.innerHTML = '<i class="fas fa-play"></i> Start AI Agent';
-            }
+            setAiAgentRunning(false);
         }
     }
 
@@ -7448,7 +7529,7 @@ merge_recipe_id, content_blueprint_id</pre>
         try {
             setUserInboxSyncing(true, 'Syncing recent IMAP messages...');
             const dateRange = document.getElementById('userInboxDateFilter')?.value || '2d';
-            const pollPayload = {sync_mode: 'recent', recent_limit: 200, date_range: dateRange};
+            const pollPayload = {sync_mode: 'targeted', recent_limit: 60, targeted_only: true, skip_deep_scan: true, date_range: dateRange};
             const pollData = await runAutomatedSyncJob(testId, pollPayload);
             const data = await iiFetch(`/api/inbox-intelligence/tests/${testId}`);
             const rows = data.test.messages || [];
@@ -7510,7 +7591,7 @@ merge_recipe_id, content_blueprint_id</pre>
 
     async function pollDeliverabilityTest(testId) {
         const dateRange = document.getElementById('automatedDateFilter')?.value || '2d';
-        await runAutomatedSyncJob(testId, {sync_mode: 'recent', recent_limit: 200, date_range: dateRange});
+        await runAutomatedSyncJob(testId, {sync_mode: 'targeted', recent_limit: 60, targeted_only: true, skip_deep_scan: true, date_range: dateRange});
         await loadTests();
         await loadTestDetail(testId);
     }
