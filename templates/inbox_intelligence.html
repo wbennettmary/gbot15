@@ -146,6 +146,11 @@
         grid-template-columns: 280px minmax(360px, 1fr) 360px;
     }
 
+    .ii-mailbox {
+        grid-template-columns: 300px minmax(0, 1fr);
+        align-items: start;
+    }
+
     .ii-layout-3 > *,
     .ii-card,
     .ii-panel,
@@ -298,9 +303,7 @@
         font-size: 18px;
     }
 
-    .ii-mailbox {
-        min-height: 640px;
-    }
+    .ii-mailbox { min-height: 640px; }
 
     .ii-folder {
         display: flex;
@@ -342,9 +345,7 @@
         word-break: break-word;
     }
 
-    .ii-detail-text,
-    #messageDetail,
-    #messageHeaders {
+    .ii-detail-text {
         max-width: 100%;
         white-space: pre-wrap;
         overflow-wrap: anywhere;
@@ -467,6 +468,15 @@
         display: block;
         font-size: 20px;
         color: #0f172a;
+    }
+
+    #automatedSummaryCards .ii-result-pill {
+        display: grid;
+        gap: 4px;
+        min-height: 84px;
+        align-content: center;
+        border-color: #dbeafe;
+        background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
     }
 
     .ii-template-card-grid {
@@ -631,7 +641,7 @@
     .ii-message-grid {
         display: grid;
         gap: 10px;
-        max-height: 640px;
+        max-height: 720px;
         overflow-y: auto;
         padding-right: 4px;
     }
@@ -898,8 +908,9 @@
 
     .ii-analytics-copy-grid {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
         gap: 10px;
+        align-items: stretch;
     }
 
     .ii-copy-stat-button {
@@ -909,6 +920,10 @@
         min-height: 76px;
         align-content: center;
         background: #fff;
+        border-color: #bfdbfe;
+        color: #0f172a;
+        white-space: normal;
+        line-height: 1.25;
     }
 
     .ii-copy-stat-button strong {
@@ -1346,7 +1361,7 @@
     }
 
     .ii-pro-textarea {
-        min-height: 112px;
+        min-height: 180px;
         border-radius: var(--ii-radius-sm);
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
         line-height: 1.5;
@@ -1354,7 +1369,7 @@
     }
 
     .ii-pro-body-input {
-        min-height: 112px;
+        min-height: 280px;
         border-radius: 0 0 var(--ii-radius-sm) var(--ii-radius-sm);
         font-family: Inter, system-ui, -apple-system, sans-serif;
         font-size: 13px;
@@ -1472,7 +1487,7 @@
 
     .ii-pro-summary-grid {
         display: grid;
-        grid-template-columns: minmax(360px, 0.8fr) minmax(460px, 1.2fr);
+        grid-template-columns: 1fr;
         gap: 10px;
         margin-top: 0;
     }
@@ -1581,7 +1596,7 @@
     .ii-floating-command-stack {
         position: fixed;
         right: 22px;
-        bottom: 22px;
+        bottom: 132px;
         z-index: 1040;
         display: grid;
         gap: 10px;
@@ -2078,7 +2093,7 @@
         .ii-pro-topbar { grid-template-columns: 1fr; }
         .ii-pro-stepper { grid-template-columns: 1fr; }
         .ii-pro-summary-split { grid-template-columns: 1fr; }
-        .ii-floating-command-stack { right: 12px; bottom: 12px; width: 150px; }
+        .ii-floating-command-stack { right: 12px; bottom: 92px; width: 150px; }
         .ii-floating-action { padding: 10px 12px; border-radius: 14px; }
         .ii-agent-chat-panel { right: 12px; bottom: 118px; width: calc(100vw - 24px); max-height: calc(100vh - 140px); }
         .ii-template-actions .ii-btn { flex-basis: calc(50% - 4px); }
@@ -2232,6 +2247,8 @@
                             <div class="ii-form-grid">
                                 <div class="ii-field"><label>Provider</label><select class="ii-select" id="imapProviderInput"><option value="gmail">Gmail</option><option value="google workspace">Google Workspace</option><option value="outlook">Outlook</option><option value="hotmail">Hotmail</option><option value="microsoft 365">Microsoft 365</option><option value="yahoo">Yahoo</option><option value="generic">Generic IMAP</option></select></div>
                                 <div class="ii-field"><label>Email address</label><input class="ii-input" id="imapEmailInput" type="email" placeholder="inbox@example.com" required></div>
+                                <div class="ii-field"><label>IMAP type</label><select class="ii-select" id="imapTypeInput"><option value="both">Template source + analytics inbox</option><option value="template_source">Template source inbox</option><option value="receiving_analytics">Receiving analytics inbox</option></select></div>
+                                <div class="ii-field"><label>Owner</label><input class="ii-input" id="imapOwnerInput" value="{{ user }}" placeholder="Logged user or owner email"></div>
                                 <div class="ii-field"><label>IMAP hostname</label><input class="ii-input" id="imapHostInput" placeholder="imap.example.com"></div>
                                 <div class="ii-field"><label>Port</label><input class="ii-input" id="imapPortInput" type="number" value="993"></div>
                                 <div class="ii-field"><label>TLS/SSL</label><select class="ii-select" id="imapTlsInput"><option value="true">Enabled</option><option value="false">Disabled</option></select></div>
@@ -2325,23 +2342,6 @@
                     <p class="ii-muted mb-0">Connect an inbox, select the account in the sidebar, then click <strong>Sync Emails</strong>.</p>
                 </div>
             </main>
-            <aside class="ii-panel">
-                <h3>Email Detail</h3>
-                <div class="ii-preview-frame" id="messageDetail">
-                    <div class="text-center py-4">
-                        <i class="fas fa-shield-halved fa-2x text-muted mb-3"></i>
-                        <h4>Select a message</h4>
-                        <p class="ii-muted mb-0">Content, headers, links, images, and structure analysis appear here.</p>
-                    </div>
-                </div>
-                <div class="ii-row ii-message-detail-actions mt-3">
-                    <button class="ii-btn ii-btn-primary" type="button" id="selectCurrentMessageBtn" onclick="toggleCurrentMessageTemplateSource()" disabled><i class="fas fa-check-square"></i> Select For Queue</button>
-                    <button class="ii-btn" type="button" id="markUnreadBtn" onclick="toggleCurrentMessageRead()" disabled><i class="fas fa-envelope"></i> Mark Unread</button>
-                </div>
-                <h4 class="mt-3">Structure</h4>
-                <div class="ii-row" id="messageStructure"><span class="ii-chip gray">No message selected</span></div>
-                <details class="mt-3"><summary>Headers</summary><pre class="ii-muted mt-2" id="messageHeaders">No headers loaded.</pre></details>
-            </aside>
         </div>
     </section>
 
@@ -2461,7 +2461,6 @@ The NightOwl Ranch Team</textarea>
                         </div>
                     </div>
                     <div class="ii-row flex-wrap align-items-center mt-3">
-                        <button class="ii-btn" type="button" onclick="aiValidateAutomatedPlaceholders()"><i class="fas fa-list-check"></i> Validate placeholders</button>
                         <span class="ii-muted" id="automatedAiStatus">Template editing is manual. The AI agent runs the test, reads IMAP results, fixes grey users, and retests.</span>
                     </div>
                     <div id="automatedAiSuggestions" style="display:none;"></div>
@@ -3415,6 +3414,7 @@ merge_recipe_id, content_blueprint_id</pre>
         serviceAccounts: [],
         activeMessageId: null,
         selectedMessageIds: new Set(),
+        inboxExplorerRefreshTimer: null,
         selectedTemplateId: null,
         selectedTemplateIds: new Set(),
         userInboxTestId: null,
@@ -3427,6 +3427,9 @@ merge_recipe_id, content_blueprint_id</pre>
         automatedQueueTotal: 0,
         automatedQueuePage: 1,
         automatedSelectedSourceIds: new Set(),
+        automatedActiveSourceTab: 'list',
+        automatedWorkspaceScope: null,
+        automatedListRetrieveTimer: null,
         automatedTests: [],
         automatedSelectedTestId: null,
         automatedPollTimers: {},
@@ -3919,6 +3922,8 @@ merge_recipe_id, content_blueprint_id</pre>
                     </div>
                     <div class="ii-muted" style="font-size:0.85em">${escapeHtml(account.provider)} &middot; ${escapeHtml(account.imap_host)}:${account.imap_port}</div>
                     <div class="ii-row mt-1" style="flex-wrap:wrap;gap:4px">
+                        <span class="ii-chip blue" style="font-size:0.75em">${escapeHtml(account.account_type || 'both')}</span>
+                        <span class="ii-chip gray" style="font-size:0.75em">Owner: ${escapeHtml(account.owner || 'current user')}</span>
                         <span class="ii-chip gray" style="font-size:0.75em">INBOX: ${account.inbox_count || 0}</span>
                         <span class="ii-chip gray" style="font-size:0.75em">Spam: ${account.spam_count || 0}</span>
                         <span class="ii-chip gray" style="font-size:0.75em">Total: ${account.message_count || 0}</span>
@@ -3996,7 +4001,6 @@ merge_recipe_id, content_blueprint_id</pre>
         const shouldSelect = !iiState.selectedMessageIds.has(iiState.activeMessageId);
         toggleMessageSelection(iiState.activeMessageId, shouldSelect);
         renderInboxMessagesList();
-        loadMessageDetail(iiState.activeMessageId);
     }
 
     function selectAllInboxSources(checked) {
@@ -4013,7 +4017,11 @@ merge_recipe_id, content_blueprint_id</pre>
 
     function renderMessageAccountFilter() {
         const select = document.getElementById('messageAccountFilter');
-        if (select) select.innerHTML = '<option value="">All accounts</option>' + iiState.imapAccounts.map((account) => `<option value="${account.id}">${escapeHtml(account.email)}</option>`).join('');
+        if (select) {
+            const current = select.value;
+            select.innerHTML = '<option value="">All accounts</option>' + iiState.imapAccounts.map((account) => `<option value="${account.id}">${escapeHtml(account.email)}</option>`).join('');
+            if (current && Array.from(select.options).some((option) => option.value === current)) select.value = current;
+        }
         renderExplorerAccountCheckboxes();
     }
 
@@ -4078,6 +4086,8 @@ merge_recipe_id, content_blueprint_id</pre>
     async function loadImapAccounts() {
         const data = await iiFetch('/api/inbox-intelligence/imap-accounts');
         iiState.imapAccounts = data.accounts || [];
+        const validIds = new Set(iiState.imapAccounts.map((account) => account.id));
+        iiState.selectedInboxIds = new Set([...iiState.selectedInboxIds].filter((id) => validIds.has(id)));
         iiState.imapAccounts.forEach((account) => iiState.selectedInboxIds.add(account.id));
         iiState.userInboxRecipients = iiState.userInboxRecipients.filter((recipient) => recipient.source !== 'imap');
         iiState.imapAccounts.forEach((account) => {
@@ -4139,6 +4149,8 @@ merge_recipe_id, content_blueprint_id</pre>
                 tls_enabled: document.getElementById('imapTlsInput').value === 'true',
                 username: document.getElementById('imapUsernameInput').value || document.getElementById('imapEmailInput').value,
                 password: document.getElementById('imapPasswordInput').value,
+                account_type: document.getElementById('imapTypeInput')?.value || 'both',
+                owner: document.getElementById('imapOwnerInput')?.value || '',
                 test_connection: true,
                 sync_limit: 25
             };
@@ -4150,6 +4162,7 @@ merge_recipe_id, content_blueprint_id</pre>
             status.textContent = data.message || 'Inbox saved.';
             document.getElementById('imapPasswordInput').value = '';
             await loadImapAccounts();
+            await loadExplorerMessages();
         } catch (err) {
             status.textContent = err.message;
         }
@@ -4186,6 +4199,7 @@ merge_recipe_id, content_blueprint_id</pre>
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({enabled})
         });
+        await loadImapAccounts();
     }
 
     async function syncExplorerAccounts() {
@@ -4230,6 +4244,8 @@ merge_recipe_id, content_blueprint_id</pre>
         try {
             await iiFetch(`/api/inbox-intelligence/imap-accounts/${id}`, {method: 'DELETE'});
             iiState.selectedInboxIds.delete(id);
+            iiState.selectedMessageIds.clear();
+            iiState.activeMessageId = null;
             await loadImapAccounts();
         } catch (err) {
             alert('Delete failed: ' + err.message);
@@ -4248,8 +4264,20 @@ merge_recipe_id, content_blueprint_id</pre>
         if (folder) params.set('folder', folder);
         const data = await iiFetch('/api/inbox-intelligence/messages?' + params.toString());
         iiState.messages = data.messages || [];
+        if (iiState.activeMessageId && !iiState.messages.some((message) => message.id === iiState.activeMessageId)) {
+            iiState.activeMessageId = null;
+        }
         renderInboxMessagesList();
         loadExplorerFolders(accountId || undefined);
+    }
+
+    function startInboxExplorerAutoRefresh() {
+        if (iiState.inboxExplorerRefreshTimer) return;
+        iiState.inboxExplorerRefreshTimer = window.setInterval(() => {
+            const explorerVisible = document.getElementById('explorer')?.classList.contains('active');
+            if (!explorerVisible) return;
+            Promise.allSettled([loadImapAccounts(), loadExplorerMessages()]).catch((err) => console.error(err));
+        }, 30000);
     }
 
     function renderInboxMessagesList() {
@@ -4269,6 +4297,7 @@ merge_recipe_id, content_blueprint_id</pre>
         list.innerHTML = iiState.messages.map((m) => {
             const unreadClass = m.is_read === false ? ' unread' : '';
             const unreadDot = m.is_read === false ? '<span class="ii-unread-dot" title="Unread"></span>' : '';
+            const account = iiState.imapAccounts.find((item) => item.id === m.imap_account_id);
             return `<article class="ii-message-card${unreadClass} ${iiState.activeMessageId === m.id ? 'active' : ''}" onclick="loadMessageDetail(${m.id})">
                 <div class="ii-row justify-content-between">
                     <label class="ii-user-line" onclick="event.stopPropagation()">
@@ -4279,6 +4308,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 </div>
                 <div class="ii-message-meta">
                     <span class="ii-chip blue">${escapeHtml(m.provider || 'IMAP')}</span>
+                    <span class="ii-chip gray">${escapeHtml(account?.email || 'account')}</span>
                     <span class="ii-chip gray">${escapeHtml(m.sender_domain || 'unknown')}</span>
                     <span class="ii-chip gray">${escapeHtml(m.folder || '')}</span>
                     ${m.has_attachments ? '<span class="ii-chip yellow">attachment</span>' : ''}
@@ -4286,6 +4316,10 @@ merge_recipe_id, content_blueprint_id</pre>
                 </div>
                 <div class="ii-muted ii-email-text">${escapeHtml(m.sender || 'Unknown')}</div>
                 <div class="ii-message-preview">${escapeHtml(m.preview || '')}</div>
+                <div class="ii-row justify-content-end" onclick="event.stopPropagation()">
+                    <button class="ii-btn" type="button" onclick="toggleMessageSelection(${m.id}, !iiState.selectedMessageIds.has(${m.id})); renderInboxMessagesList();"><i class="fas fa-layer-group"></i> ${iiState.selectedMessageIds.has(m.id) ? 'Remove from Queue' : 'Select for Queue'}</button>
+                    <button class="ii-btn" type="button" onclick="setMessageRead(${m.id}, ${m.is_read === false ? 'true' : 'false'})"><i class="fas ${m.is_read === false ? 'fa-envelope-open-text' : 'fa-envelope'}"></i> ${m.is_read === false ? 'Mark Read' : 'Mark Unread'}</button>
+                </div>
             </article>`;
         }).join('');
         const statusEl = document.getElementById('explorerMessageStatus');
@@ -4294,8 +4328,8 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     async function loadMessageDetail(id) {
-        const data = await iiFetch(`/api/inbox-intelligence/messages/${id}`);
-        const m = data.message;
+        const m = iiState.messages.find((message) => message.id === id);
+        if (!m) return;
         iiState.activeMessageId = id;
         if (m.is_read === false) {
             try {
@@ -4309,28 +4343,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 if (msg) msg.is_read = true;
             } catch (err) { /* non-fatal */ }
         }
-        const bodyText = (m.plain_text || m.preview || 'No plain-text content synchronized.').slice(0, 12000);
-        document.getElementById('messageDetail').innerHTML = `<div class="ii-muted">From ${escapeHtml(m.sender || '')}</div>
-            <div class="ii-muted">To ${escapeHtml(m.recipient || '')}</div>
-            <h4>${escapeHtml(m.subject || '(no subject)')}</h4>
-            <pre class="ii-detail-text ii-preview-frame mt-2">${escapeHtml(bodyText)}${(m.plain_text || '').length > 12000 ? '\n\n[Message body truncated for faster preview.]' : ''}</pre>`;
-        const btn = document.getElementById('selectCurrentMessageBtn');
-        if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = iiState.selectedMessageIds.has(id) ? '<i class="fas fa-square-check"></i> Selected For Queue' : '<i class="fas fa-check-square"></i> Select For Queue';
-        }
-        const markBtn = document.getElementById('markUnreadBtn');
-        if (markBtn) {
-            markBtn.disabled = false;
-            markBtn.innerHTML = m.is_read ? '<i class="fas fa-envelope"></i> Mark Unread' : '<i class="fas fa-envelope-open-text"></i> Mark Read';
-        }
         renderInboxMessagesList();
-        const html = m.html_content || '';
-        const links = (html.match(/href=/gi) || []).length;
-        const images = (html.match(/<img/gi) || []).length;
-        const ctas = (html.match(/<a/gi) || []).length;
-        document.getElementById('messageStructure').innerHTML = `<span class="ii-chip blue">${ctas} CTA/link elements</span><span class="ii-chip gray">${links} href links</span><span class="ii-chip gray">${images} images</span>`;
-        document.getElementById('messageHeaders').textContent = JSON.stringify(m.headers || {}, null, 2);
     }
 
     async function setMessageRead(id, read) {
@@ -4350,11 +4363,6 @@ merge_recipe_id, content_blueprint_id</pre>
         if (!m) return;
         await setMessageRead(m.id, m.is_read === false ? true : false);
         const msg = iiState.messages.find((x) => x.id === m.id);
-        const btn = document.getElementById('markUnreadBtn');
-        if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = msg.is_read ? '<i class="fas fa-envelope"></i> Mark Unread' : '<i class="fas fa-envelope-open-text"></i> Mark Read';
-        }
     }
 
     async function createTemplatesFromSelectedMessages() {
@@ -4784,6 +4792,10 @@ merge_recipe_id, content_blueprint_id</pre>
     function switchAutomatedWorkspaceSourceTab(tab) {
         const listPane = document.getElementById('automatedListSourcePane');
         const manualPane = document.getElementById('automatedManualSourcePane');
+        if (iiState.automatedActiveSourceTab !== tab) {
+            clearAutomatedWorkspaceSelection();
+            iiState.automatedActiveSourceTab = tab;
+        }
         document.querySelectorAll('[data-auto-source-tab]').forEach((btn) => btn.classList.toggle('active', btn.dataset.autoSourceTab === tab));
         if (listPane) listPane.style.display = tab === 'list' ? '' : 'none';
         if (manualPane) manualPane.style.display = tab === 'manual' ? '' : 'none';
@@ -4791,6 +4803,18 @@ merge_recipe_id, content_blueprint_id</pre>
         if (status) status.textContent = tab === 'list'
             ? 'Select a List Management source, set Users per account, then Retrieve List.'
             : 'Search saved Workspace service accounts, retrieve users, then apply Users per account.';
+    }
+
+    function clearAutomatedWorkspaceSelection() {
+        iiState.selectedServiceAccountIds = new Set();
+        iiState.selectedSenderEmails = new Set();
+        iiState.userInboxListAccounts = [];
+        iiState.userInboxListAccountOnly = false;
+        iiState.selectedUserInboxListAccountIds = new Set();
+        iiState.automatedWorkspaceScope = null;
+        renderAutomatedServiceAccountSelector();
+        renderAutomatedWorkspaceUsers();
+        updateAutomatedSummary();
     }
 
     function setAiAgentChatStatus(message, tone = 'info') {
@@ -4894,9 +4918,8 @@ merge_recipe_id, content_blueprint_id</pre>
             const firstList = listIds[0];
             if (select && Array.from(select.options).some((option) => option.value === firstList)) {
                 select.value = firstList;
-                mirrorAutomatedListSelection();
+                await mirrorAutomatedListSelection();
                 messages.push(`List ${firstList} selected${listIds.length > 1 ? `; queued note includes ${listIds.slice(1).join(', ')} for follow-up runs` : ''}.`);
-                await retrieveAutomatedWorkspaceListUsers();
             } else {
                 messages.push(`List ${firstList} was not found in the loaded List Management options.`);
             }
@@ -6327,16 +6350,23 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     async function searchAutomatedWorkspaceAccounts() {
+        switchAutomatedWorkspaceSourceTab('manual');
+        clearAutomatedWorkspaceSelection();
         const source = document.getElementById('automatedWorkspaceAccountSearchInput');
         const shared = document.getElementById('workspaceAccountSearchInput');
         if (shared && source) shared.value = source.value;
         await searchWorkspaceAccounts();
     }
 
-    function mirrorAutomatedListSelection() {
+    async function mirrorAutomatedListSelection() {
         const shared = document.getElementById('userInboxWorkspaceListSelect');
         const autoSelect = document.getElementById('automatedWorkspaceListSelect');
         if (shared && autoSelect) shared.value = autoSelect.value;
+        switchAutomatedWorkspaceSourceTab('list');
+        clearAutomatedWorkspaceSelection();
+        if (autoSelect?.value) {
+            await retrieveAutomatedWorkspaceListUsers();
+        }
     }
 
     async function retrieveAutomatedWorkspaceListUsers() {
@@ -6349,6 +6379,7 @@ merge_recipe_id, content_blueprint_id</pre>
             return;
         }
         const accountsOnly = !rawLimit;
+        iiState.automatedWorkspaceScope = {type: 'list', id: listId};
         if (status) status.textContent = accountsOnly
             ? 'Retrieving list account cards. Set Users per account to retrieve sender users.'
             : `Retrieving ${maxPerAccount} user(s) per list account...`;
@@ -6401,6 +6432,13 @@ merge_recipe_id, content_blueprint_id</pre>
     function applyAutomatedUsersPerAccount() {
         const raw = (document.getElementById('automatedUsersPerAccountInput')?.value || '').trim();
         const perAccount = raw ? Math.max(1, parseInt(raw, 10) || 1) : null;
+        const listId = document.getElementById('automatedWorkspaceListSelect')?.value || '';
+        if (iiState.automatedActiveSourceTab === 'list' && listId) {
+            window.clearTimeout(iiState.automatedListRetrieveTimer);
+            iiState.automatedListRetrieveTimer = window.setTimeout(() => {
+                retrieveAutomatedWorkspaceListUsers();
+            }, 350);
+        }
         const selectable = iiState.workspaceSenders.filter((sender) => sender.service_account_id && !isAdminWorkspaceSender(sender));
         const status = document.getElementById('automatedWorkspaceStatus');
         if (selectable.length) {
@@ -8010,6 +8048,7 @@ merge_recipe_id, content_blueprint_id</pre>
             loadTests(),
             loadWorkspaceLists()
         ]).catch((err) => console.error(err));
+        startInboxExplorerAutoRefresh();
         renderUserInboxSenderSelector();
     });
 </script>

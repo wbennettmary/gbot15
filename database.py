@@ -396,6 +396,8 @@ class InboxImapAccount(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     provider = db.Column(db.String(80), nullable=False, default='generic')
     email = db.Column(db.String(255), unique=True, nullable=False)
+    account_type = db.Column(db.String(50), nullable=False, default='both')
+    owner = db.Column(db.String(255), nullable=True, index=True)
     imap_host = db.Column(db.String(255), nullable=False)
     imap_port = db.Column(db.Integer, default=993)
     tls_enabled = db.Column(db.Boolean, default=True)
