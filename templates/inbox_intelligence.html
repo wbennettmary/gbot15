@@ -2387,16 +2387,13 @@ The NightOwl Ranch Team</textarea>
                     <!-- User Inbox Analytics Panel -->
                     <div class="ii-analytics-panel active" id="analyticsPanelInbox">
                         <div class="ii-result-summary" id="automatedAnalyticsSummary">
-                            <div class="ii-result-pill"><span class="ii-muted">Users</span><strong>0</strong></div>
+                            <div class="ii-result-pill"><span class="ii-muted">Messages</span><strong>0</strong></div>
                             <div class="ii-result-pill"><span class="ii-muted">Inbox</span><strong>0</strong></div>
                             <div class="ii-result-pill"><span class="ii-muted">Spam</span><strong>0</strong></div>
                             <div class="ii-result-pill"><span class="ii-muted">Missing</span><strong>0</strong></div>
                         </div>
                         <div id="autoAnalyticsCards" class="ii-analytics-dashboard mt-3"></div>
-                        <div id="autoProviderSummary" class="ii-auto-card mt-3" style="display:none;"></div>
-                        <div id="autoDomainActions" class="ii-auto-card mt-3" style="display:none;"></div>
-                        <div id="autoUserActions" class="ii-auto-card mt-3" style="display:none;"></div>
-                        <div id="autoSpamInsights" class="ii-auto-card mt-3" style="display:none;"></div>
+
                     </div>
                     <!-- AI Optimization Results Panel -->
                     <div class="ii-analytics-panel" id="analyticsPanelAI">
@@ -4361,7 +4358,7 @@ Here is a concise update for your account. Reply to this email if you have any q
     function renderAutomatedInboxAnalytics(test) {
         const rows = test?.messages || iiState.automatedMessages || [];
         iiState.automatedMessages = rows;
-        renderAnalyticsSummary('automatedAnalyticsSummary', rows, 'Users');
+        renderAnalyticsSummary('automatedAnalyticsSummary', rows, 'Messages');
         renderAutomatedProAnalytics(rows, test || {});
         const status = document.getElementById('automatedAnalyticsStatus');
         if (status) {
@@ -4374,16 +4371,6 @@ Here is a concise update for your account. Reply to this email if you have any q
 
     function renderAutomatedProAnalytics(rows, test) {
         const cards = document.getElementById('autoAnalyticsCards');
-        const provider = document.getElementById('autoProviderSummary');
-        const domain = document.getElementById('autoDomainActions');
-        const user = document.getElementById('autoUserActions');
-        const spam = document.getElementById('autoSpamInsights');
-        [provider, domain, user, spam].forEach((el) => {
-            if (el) {
-                el.style.display = 'none';
-                el.innerHTML = '';
-            }
-        });
         if (!cards) return;
         if (!rows.length) {
             cards.className = 'ii-analytics-dashboard mt-3';
@@ -4472,35 +4459,6 @@ Here is a concise update for your account. Reply to this email if you have any q
                     </div>
                 </div>
             </div>`;
-    }
-
-    function renderAutomatedEmailAnalytics(messages, test) {
-        const autoProviderOpts = {el: 'autoProviderSummary'};
-        const autoDomainOpts = {el: 'autoDomainActions', copyBuckets: iiState.automatedCopyBuckets};
-        const autoUserOpts = {el: 'autoUserActions', copyBuckets: iiState.automatedCopyBuckets};
-        const autoSpamOpts = {el: 'autoSpamInsights'};
-        const autoCardOpts = {el: 'autoAnalyticsCards', copyBuckets: iiState.automatedCopyBuckets, copyFn: 'copyAutomatedBucket'};
-        if (!messages.length) {
-        ['autoProviderSummary', 'autoDomainActions', 'autoUserActions', 'autoSpamInsights', 'autoAnalyticsCards'].forEach((id) => {
-                const e = document.getElementById(id);
-                if (e) { e.style.display = ''; e.innerHTML = '<div class="ii-panel ii-muted">No per-recipient messages found. Sync to see analytics.</div>'; }
-            });
-            const cardsEl = document.getElementById(autoCardOpts.el);
-            if (cardsEl) {
-                cardsEl.className = 'ii-analytics-dashboard';
-                cardsEl.innerHTML = '<div class="ii-analytics-card ii-muted">No per-recipient messages found. Sync to see analytics.</div>';
-            }
-            return;
-        }
-        renderUserInboxAnalyticsCards(messages, test.test_id, autoCardOpts);
-        renderUserInboxProviderSummary(messages, autoProviderOpts);
-        renderUserInboxDomainActions(messages, autoDomainOpts);
-        renderUserInboxUserActions(messages, autoUserOpts);
-        renderUserInboxSpamInsights(messages, autoSpamOpts);
-        ['autoProviderSummary', 'autoDomainActions', 'autoUserActions', 'autoSpamInsights'].forEach((id) => {
-            const e = document.getElementById(id);
-            if (e && e.innerHTML.trim()) e.style.display = '';
-        });
     }
 
     async function searchWorkspaceSenders() {
