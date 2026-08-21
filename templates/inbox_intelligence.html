@@ -2203,14 +2203,8 @@
                     </div>
                 </div>
                 <div class="ii-pro-card-body">
-                    <div class="ii-field mb-3">
-                        <label>Template to use</label>
-                        <select class="ii-select" id="automatedTemplateSelect" onchange="applyAutomatedTemplatePreset()">
-                            <option value="">Queued inbox email body, unless custom body is filled</option>
-                            <option value="launch">August Campaign - Product Launch</option>
-                            <option value="short">Short direct announcement</option>
-                            <option value="text">Plain-text friendly variant</option>
-                        </select>
+                    <div class="ii-row justify-content-between mb-3">
+                        <span class="ii-muted" id="automatedTemplateSource">Select a single queued email to load its header and body.</span>
                     </div>
                     <div class="ii-message-setup-grid">
                         <div>
@@ -3159,7 +3153,7 @@ merge_recipe_id, content_blueprint_id</pre>
         automatedPollTimers: {},
         automatedCopyBuckets: {inboxUsers: [], inboxDomains: [], spamUsers: [], spamDomains: []},
         automatedMessages: [],
-        automatedDraftTemplate: '',
+
         selectedResultsTest: null,
         tests: []
     };
@@ -3254,85 +3248,8 @@ merge_recipe_id, content_blueprint_id</pre>
         updateAutomatedMessageSetup();
     }
 
-    function renderAutomatedTemplateSelector() {
-        const select = document.getElementById('automatedTemplateSelect');
-        if (!select) return;
-        const current = select.value || iiState.automatedDraftTemplate || '';
-        const userOptions = iiState.userInboxTemplates.map((template) => `<option value="user:${template.id}">${escapeHtml(template.name || template.subject || 'User Inbox Template')}</option>`).join('');
-        const staticOptions = iiState.staticTemplates.map((template) => `<option value="static:${template.id}">${escapeHtml(template.name || 'Static Template')}</option>`).join('');
-        select.innerHTML = `
-            <option value="">Queued inbox email body, unless custom body is filled</option>
-            <option value="launch">August Campaign - Product Launch</option>
-            <option value="short">Short direct announcement</option>
-            <option value="text">Plain-text friendly variant</option>
-            ${userOptions ? `<optgroup label="Saved User Inbox Templates">${userOptions}</optgroup>` : ''}
-            ${staticOptions ? `<optgroup label="Static Template Library">${staticOptions}</optgroup>` : ''}`;
-        if ([...select.options].some((option) => option.value === current)) {
-            select.value = current;
-            iiState.automatedDraftTemplate = current;
-        }
-    }
-
-    async function applyAutomatedTemplatePreset() {
-        const preset = document.getElementById('automatedTemplateSelect')?.value || '';
-        const title = document.getElementById('automatedCampaignTitle');
-        const body = document.getElementById('automatedBodyInput');
-        const header = document.getElementById('automatedHeaderInput');
-        if (preset.startsWith('user:')) {
-            const id = Number(preset.split(':')[1]);
-            const template = iiState.userInboxTemplates.find((item) => item.id === id);
-            if (template) {
-                if (title) title.textContent = template.name || template.subject || 'User Inbox Template';
-                if (header) header.value = template.custom_headers || `Date: [date]\nTo: [to]\nFrom: [from]\nMessage-ID: <custom-[test_id]@example.com>\nSubject: ${template.subject || '[subject]'}`;
-                if (body) body.value = template.html_content || template.plain_text || '';
-                const mode = document.getElementById('automatedBodyMode');
-                if (mode) mode.value = template.html_content ? 'html' : 'text';
-            }
-        } else if (preset.startsWith('static:')) {
-            const id = Number(preset.split(':')[1]);
-            try {
-                const data = await iiFetch(`/api/inbox-intelligence/static-templates/${id}`);
-                const template = data.template || {};
-                if (title) title.textContent = template.name || 'Static Template';
-                if (header) header.value = `Date: [date]\nTo: [to]\nFrom: [from]\nMessage-ID: <custom-[test_id]@example.com>\nSubject: ${template.name || '[subject]'}`;
-                if (body) body.value = template.html_content || template.plain_text || '';
-                const mode = document.getElementById('automatedBodyMode');
-                if (mode) mode.value = template.html_content ? 'html' : 'text';
-            } catch (err) {
-                const status = document.getElementById('automatedStatusText');
-                if (status) status.textContent = `Could not load selected template: ${err.message}`;
-            }
-        } else if (preset === 'launch') {
-            if (title) title.textContent = 'August Campaign - Product Launch';
-            if (header) header.value = `Date: [date]\nTo: [to]\nFrom: [from]\nMessage-ID: <custom-[test_id]@example.com>\nSubject: August Campaign - Product Launch`;
-            if (body) body.value = `Hi there,
-
-We are excited to announce the launch of our new product. It is faster, smarter, and built to help you achieve more in less time.
-
-Learn more and get started today.
-
-The NightOwl Ranch Team`;
-        } else if (preset === 'short') {
-            if (title) title.textContent = 'Short Direct Announcement';
-            if (header) header.value = `Date: [date]\nTo: [to]\nFrom: [from]\nMessage-ID: <custom-[test_id]@example.com>\nSubject: Short Direct Announcement`;
-            if (body) body.value = `Hi there,
-
-A quick update is ready for you. Review the details and get started today.`;
-        } else if (preset === 'text') {
-            if (title) title.textContent = 'Plain Text Variant';
-            if (header) header.value = `Date: [date]\nTo: [to]\nFrom: [from]\nMessage-ID: <custom-[test_id]@example.com>\nSubject: Plain Text Variant`;
-            const mode = document.getElementById('automatedBodyMode');
-            if (mode) mode.value = 'text';
-            if (body) body.value = `Hi there,
-
-Here is a concise update for your account. Reply to this email if you have any questions.`;
-        }
-        updateAutomatedMessageSetup();
-    }
-
     function saveAutomatedDraft() {
         const draft = {
-            template: document.getElementById('automatedTemplateSelect')?.value || '',
             headers: document.getElementById('automatedHeaderInput')?.value || '',
             body: document.getElementById('automatedBodyInput')?.value || '',
             bodyMode: document.getElementById('automatedBodyMode')?.value || 'html'
@@ -3345,8 +3262,6 @@ Here is a concise update for your account. Reply to this email if you have any q
     function loadAutomatedDraft() {
         try {
             const draft = JSON.parse(localStorage.getItem('ii_automated_message_draft') || '{}');
-            iiState.automatedDraftTemplate = draft.template || '';
-            if (draft.template && document.getElementById('automatedTemplateSelect')) document.getElementById('automatedTemplateSelect').value = draft.template;
             if (draft.headers && document.getElementById('automatedHeaderInput')) document.getElementById('automatedHeaderInput').value = draft.headers;
             if (draft.body && document.getElementById('automatedBodyInput')) document.getElementById('automatedBodyInput').value = draft.body;
             if (draft.bodyMode && document.getElementById('automatedBodyMode')) document.getElementById('automatedBodyMode').value = draft.bodyMode;
@@ -3960,6 +3875,7 @@ Here is a concise update for your account. Reply to this email if you have any q
         else iiState.automatedSelectedSourceIds.delete(id);
         renderAutomatedQueue();
         updateAutomatedSummary();
+        syncMessageSetupFromQueue();
     }
 
     function selectAutomatedQueuePage(checked) {
@@ -3969,12 +3885,52 @@ Here is a concise update for your account. Reply to this email if you have any q
         });
         renderAutomatedQueue();
         updateAutomatedSummary();
+        syncMessageSetupFromQueue();
     }
 
     function clearAutomatedQueueSelection() {
         iiState.automatedSelectedSourceIds = new Set();
         renderAutomatedQueue();
         updateAutomatedSummary();
+        syncMessageSetupFromQueue();
+    }
+
+    function syncMessageSetupFromQueue() {
+        const header = document.getElementById('automatedHeaderInput');
+        const body = document.getElementById('automatedBodyInput');
+        const templateLabel = document.getElementById('automatedTemplateSource');
+        const mode = document.getElementById('automatedBodyMode');
+        if (iiState.automatedSelectedSourceIds.size !== 1) {
+            if (templateLabel) templateLabel.textContent = iiState.automatedSelectedSourceIds.size === 0
+                ? 'Select a single queued email to load its header and body.'
+                : 'Multiple emails selected. Select exactly one to load its content.';
+            return;
+        }
+        const selectedId = [...iiState.automatedSelectedSourceIds][0];
+        const source = iiState.automatedQueue.find((s) => s.id === selectedId);
+        if (!source) return;
+        if (header) {
+            header.value = [
+                `Date: [date]`,
+                `To: [to]`,
+                `From: ${source.source_sender || '[from]'}`,
+                `Message-ID: <custom-[test_id]@example.com>`,
+                `Subject: ${source.original_subject || '[subject]'}`
+            ].join('\n');
+        }
+        if (body) {
+            const html = source.html_snapshot || '';
+            const text = source.text_snapshot || '';
+            if (html) {
+                body.value = html;
+                if (mode) mode.value = 'html';
+            } else {
+                body.value = text || '';
+                if (mode) mode.value = 'text';
+            }
+        }
+        if (templateLabel) templateLabel.textContent = `Loaded: ${source.original_subject || 'Untitled'} (${source.source_sender || 'Unknown sender'})`;
+        updateAutomatedMessageSetup();
     }
 
     async function deleteSelectedAutomatedQueue() {
@@ -4644,7 +4600,6 @@ Here is a concise update for your account. Reply to this email if you have any q
         const data = await iiFetch('/api/inbox-intelligence/static-templates');
         iiState.staticTemplates = data.templates || [];
         renderStaticTemplates();
-        renderAutomatedTemplateSelector();
     }
 
     async function loadTemplateAiPrompt() {
@@ -4704,7 +4659,6 @@ Here is a concise update for your account. Reply to this email if you have any q
     async function loadUserInboxTemplates() {
         const data = await iiFetch('/api/inbox-intelligence/user-inbox-templates');
         iiState.userInboxTemplates = data.templates || [];
-        renderAutomatedTemplateSelector();
         if (iiState.userInboxTemplatePage * 4 >= iiState.userInboxTemplates.length) {
             iiState.userInboxTemplatePage = 0;
         }

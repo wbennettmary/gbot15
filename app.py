@@ -1912,6 +1912,8 @@ def _serialize_test_email_source(source):
         'source_sender': source.source_sender,
         'source_sender_domain': source.source_sender_domain,
         'original_subject': source.original_subject,
+        'html_snapshot': source.html_snapshot,
+        'text_snapshot': source.text_snapshot,
         'preview_snapshot': source.preview_snapshot,
         'source_folder': source.source_folder,
         'source_provider': source.source_provider,
