@@ -1173,9 +1173,9 @@ def list_management():
 @permission_required('inbox_intelligence')
 def inbox_intelligence():
     """Inbox Intelligence workspace for mailbox analysis and controlled deliverability testing."""
-    from services.inbox_ai_gateway import ai_enabled
+    inbox_ai_enabled = (os.environ.get('INBOX_AI_ENABLED') or '1').strip().lower() not in ('0', 'false', 'no', 'off')
     return render_template('inbox_intelligence.html', user=session.get('user'), role=session.get('role'),
-                           inbox_ai_enabled=ai_enabled())
+                           inbox_ai_enabled=inbox_ai_enabled)
 
 INBOX_PROVIDER_DEFAULTS = {
     'gmail': ('imap.gmail.com', 993),
