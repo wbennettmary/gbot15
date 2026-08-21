@@ -2317,6 +2317,7 @@
                                 <div class="ii-field"><label>Email address</label><input class="ii-input" id="imapEmailInput" type="email" placeholder="inbox@example.com" required></div>
                                 <div class="ii-field"><label>IMAP type</label><select class="ii-select" id="imapTypeInput"><option value="both">Both</option><option value="concurrent">Concurrent - template source</option><option value="test">Test - send and analytics</option></select></div>
                                 <div class="ii-field"><label>Owner</label><input class="ii-input" id="imapOwnerInput" value="{{ user }}" placeholder="Logged user or owner email"></div>
+                                <div class="ii-field"><label>Account status</label><select class="ii-select" id="imapEnabledInput"><option value="true">Enabled</option><option value="false">Disabled</option></select></div>
                                 <div class="ii-field"><label>IMAP hostname</label><input class="ii-input" id="imapHostInput" placeholder="imap.example.com"></div>
                                 <div class="ii-field"><label>Port</label><input class="ii-input" id="imapPortInput" type="number" value="993"></div>
                                 <div class="ii-field"><label>TLS/SSL</label><select class="ii-select" id="imapTlsInput"><option value="true">Enabled</option><option value="false">Disabled</option></select></div>
@@ -2672,6 +2673,7 @@ The NightOwl Ranch Team</textarea>
                     <div class="ii-analytics-tabs" style="padding: 0 18px;">
                         <button class="ii-analytics-tab active" type="button" onclick="switchAnalyticsTab('inbox')"><i class="fas fa-inbox"></i> User Inbox Analytics</button>
                         <button class="ii-analytics-tab" type="button" onclick="switchAnalyticsTab('ai')"><i class="fas fa-comments"></i> AI Test Agent</button>
+                        <button class="ii-analytics-tab" type="button" onclick="switchAnalyticsTab('agentResults')"><i class="fas fa-list-check"></i> Agent Results</button>
                     </div>
                 </div>
                 <div class="ii-pro-card-body">
@@ -2698,15 +2700,22 @@ The NightOwl Ranch Team</textarea>
                         <div class="ii-form-grid mb-3">
                             <div class="ii-card"><span class="ii-muted">List source</span><strong id="aiAgentListConfig">Manual selection</strong></div>
                             <div class="ii-card"><span class="ii-muted">Users per execution</span><strong id="aiAgentUsersConfig">All selected users</strong></div>
+                            <div class="ii-card"><span class="ii-muted">Run scope</span><select class="ii-select mt-1" id="aiAgentRunScope" onchange="refreshAiAgentConfigLabels()"><option value="one">One test only</option><option value="all">Continue until all users are tested</option></select></div>
                             <div class="ii-card"><span class="ii-muted">Grey-user action</span><label class="mb-0"><input type="checkbox" id="aiAgentAutoRenameGrey" checked> Change names automatically</label></div>
-                            <div class="ii-card"><span class="ii-muted">Retest</span><strong>Grey users after name change</strong></div>
                         </div>
+                        <div class="ii-ai-placeholder">
+                            <i class="fas fa-comments"></i>
+                            <h4>Ready to run the configured process</h4>
+                            <p>Use the selected/prompted template, list or accounts, users-per-test value, receiving inboxes, and grey-user action. Results are stored in the Agent Results tab.</p>
+                            <span class="ii-chip blue" id="analyticsAiEnabledChip">Agent ready</span>
+                        </div>
+                    </div>
+                    <div class="ii-analytics-panel" id="analyticsPanelAgentResults">
                         <div id="automatedAiResultsPanel">
                             <div class="ii-ai-placeholder">
-                                <i class="fas fa-comments"></i>
-                                <h4>Ready to run the configured process</h4>
-                                <p>Use the current Test Queue, Workspace Sources, users-per-account value, receiving inboxes, and thresholds. The agent will execute each step visibly.</p>
-                                <span class="ii-chip blue" id="analyticsAiEnabledChip">Agent ready</span>
+                                <i class="fas fa-list-check"></i>
+                                <h4>No agent result stored yet</h4>
+                                <p>Start the AI Test Agent. Inbox users, spam users, grey users, name changes, and copy-ready lists will appear here.</p>
                             </div>
                         </div>
                     </div>
@@ -2748,6 +2757,13 @@ The NightOwl Ranch Team</textarea>
                                 <div class="ii-field">
                                     <label>Receiving email</label>
                                     <input class="ii-input" id="aiAgentRecipientEmailInput" placeholder="email@email.com">
+                                </div>
+                                <div class="ii-field" style="grid-column: 1 / -1;">
+                                    <label>Run scope</label>
+                                    <select class="ii-select" id="aiAgentSetupRunScope">
+                                        <option value="one">One test only</option>
+                                        <option value="all">Continue until all users are tested</option>
+                                    </select>
                                 </div>
                                 <div class="ii-field" style="grid-column: 1 / -1;">
                                     <label class="mb-0"><input type="checkbox" id="aiAgentSetupGreyAction" checked> Handle grey-user action automatically</label>
@@ -3449,6 +3465,7 @@ merge_recipe_id, content_blueprint_id</pre>
 
 <script>
     const II_AI_ENABLED = '{{ "1" if inbox_ai_enabled else "0" }}' === '1';
+    const II_CURRENT_ROLE = '{{ role or "" }}';
 
     function iiAiDisabledHint() {
         return 'AI features are disabled by the INBOX_AI_ENABLED setting.';
@@ -3487,6 +3504,7 @@ merge_recipe_id, content_blueprint_id</pre>
         userInboxCopyBuckets: {inboxDomains: [], spamDomains: [], inboxUsers: [], spamUsers: [], greyDomainNameChangeUsers: []},
         serviceAccounts: [],
         activeMessageId: null,
+        explorerRefreshToken: 0,
         selectedMessageIds: new Set(),
         inboxExplorerRefreshTimer: null,
         selectedTemplateId: null,
@@ -3512,6 +3530,7 @@ merge_recipe_id, content_blueprint_id</pre>
         automatedAiResultAnalysis: null,
         automatedAiResultTestId: null,
         automatedAgentRun: null,
+        automatedAgentResults: [],
         automatedMessages: [],
         automatedAiSuggestions: [],
         automatedAiSelectedIndex: 0,
@@ -3989,15 +4008,21 @@ merge_recipe_id, content_blueprint_id</pre>
             const errorHtml = account.last_error ? `<div class="ii-inbox-error" id="inboxError${account.id}" style="display:none;cursor:pointer" onclick="document.getElementById('inboxErrorDetail${account.id}').classList.toggle('d-none')"><div class="text-danger" style="word-break:break-all">${escapeHtml(account.last_error)}</div></div><button class="ii-btn" type="button" style="font-size:0.75em;color:#f87171" title="${escapeHtml(account.last_error).replace(/"/g, '&quot;')}" onclick="document.getElementById('inboxError${account.id}').style.display = document.getElementById('inboxError${account.id}').style.display === 'none' ? 'block' : 'none'"><i class="fas fa-triangle-exclamation"></i> Error</button>` : '';
             const timeAgo = account.last_synced_at ? _timeAgo(new Date(account.last_synced_at)) : 'Never';
             const type = normalizeImapAccountType(account.account_type);
+            const enabled = account.is_enabled !== false;
+            const disabledClass = enabled ? '' : ' opacity-75';
+            const ownerControl = II_CURRENT_ROLE === 'admin'
+                ? `<input class="ii-input" style="width:210px;max-width:100%;padding:5px 8px;font-size:12px" value="${escapeHtml(account.owner || '')}" placeholder="Owner email" onchange="updateImapAccountSettings(${account.id}, {owner: this.value})" title="Owner">`
+                : `<span class="ii-chip gray" style="font-size:0.75em">Owner: ${escapeHtml(account.owner || 'current user')}</span>`;
             return `
-            <div class="ii-inbox-card">
+            <div class="ii-inbox-card${disabledClass}">
                 <div class="ii-provider"><i class="fas fa-inbox"></i></div>
                 <div style="flex:1;min-width:0">
                     <div class="d-flex align-items-center gap-2">
                         <strong>${escapeHtml(account.email)}</strong>
                         <span class="ii-chip ${statusClass}">${escapeHtml(account.connection_status || 'configured')}</span>
+                        <span class="ii-chip ${enabled ? 'green' : 'gray'}">${enabled ? 'Enabled' : 'Disabled'}</span>
                         <label class="ii-toggle-label" style="font-size:0.8em;margin-left:auto;cursor:pointer" title="Auto-sync every 15 minutes">
-                            <input type="checkbox" ${account.auto_sync_enabled ? 'checked' : ''} onchange="toggleAccountAutoSync(${account.id}, this.checked)" style="margin-right:4px"> auto-sync
+                            <input type="checkbox" ${account.auto_sync_enabled ? 'checked' : ''} ${enabled ? '' : 'disabled'} onchange="toggleAccountAutoSync(${account.id}, this.checked)" style="margin-right:4px"> auto-sync
                         </label>
                     </div>
                     <div class="ii-muted" style="font-size:0.85em">${escapeHtml(account.provider)} &middot; ${escapeHtml(account.imap_host)}:${account.imap_port}</div>
@@ -4007,7 +4032,11 @@ merge_recipe_id, content_blueprint_id</pre>
                             <option value="concurrent" ${type === 'concurrent' ? 'selected' : ''}>Concurrent - template source</option>
                             <option value="test" ${type === 'test' ? 'selected' : ''}>Test - send and analytics</option>
                         </select>
-                        <span class="ii-chip gray" style="font-size:0.75em">Owner: ${escapeHtml(account.owner || 'current user')}</span>
+                        <select class="ii-select" style="width:120px;max-width:100%;padding:5px 8px;font-size:12px" onchange="updateImapAccountSettings(${account.id}, {is_enabled: this.value === 'true'})" title="Enable or disable account">
+                            <option value="true" ${enabled ? 'selected' : ''}>Enabled</option>
+                            <option value="false" ${!enabled ? 'selected' : ''}>Disabled</option>
+                        </select>
+                        ${ownerControl}
                         <span class="ii-chip gray" style="font-size:0.75em">INBOX: ${account.inbox_count || 0}</span>
                         <span class="ii-chip gray" style="font-size:0.75em">Spam: ${account.spam_count || 0}</span>
                         <span class="ii-chip gray" style="font-size:0.75em">Total: ${account.message_count || 0}</span>
@@ -4017,7 +4046,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 </div>
                 <div class="ii-actions">
                     <button class="ii-btn" type="button" title="Test connection" onclick="testImapConnection(${account.id})"><i class="fas fa-plug"></i></button>
-                    <button class="ii-btn" type="button" title="Sync now" onclick="syncImapAccount(${account.id})"><i class="fas fa-rotate"></i></button>
+                    <button class="ii-btn" type="button" title="Sync now" ${enabled ? '' : 'disabled'} onclick="syncImapAccount(${account.id})"><i class="fas fa-rotate"></i></button>
                     <button class="ii-btn" type="button" title="Remove" onclick="deleteImapAccount(${account.id})"><i class="fas fa-trash"></i></button>
                 </div>
             </div>`;
@@ -4039,7 +4068,11 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     function isReceivingImapAccount(account) {
-        return ['both', 'test'].includes(normalizeImapAccountType(account?.account_type));
+        return account?.is_enabled !== false && ['both', 'test'].includes(normalizeImapAccountType(account?.account_type));
+    }
+
+    function isEnabledImapAccount(account) {
+        return account?.is_enabled !== false;
     }
 
     async function updateImapAccountType(id, accountType) {
@@ -4059,6 +4092,25 @@ merge_recipe_id, content_blueprint_id</pre>
         }
     }
 
+    async function updateImapAccountSettings(id, settings) {
+        try {
+            await iiFetch(`/api/inbox-intelligence/imap-accounts/${id}/settings`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(settings || {})
+            });
+            if (settings && settings.is_enabled === false) {
+                iiState.selectedInboxIds.delete(id);
+            }
+            await refreshInboxExplorer();
+        } catch (err) {
+            alert('Account update failed: ' + err.message);
+            await loadImapAccounts({refreshExplorer: false});
+            renderInboxSourceSelector();
+            renderMessageAccountFilter();
+        }
+    }
+
     function _timeAgo(date) {
         const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
         if (seconds < 60) return 'just now';
@@ -4074,7 +4126,7 @@ merge_recipe_id, content_blueprint_id</pre>
         const accounts = iiState.imapAccounts.filter((account) => {
             const matchesSearch = !search || account.email.toLowerCase().includes(search) || account.provider.toLowerCase().includes(search);
             const matchesProvider = !provider || account.provider === provider;
-            return matchesSearch && matchesProvider;
+            return isEnabledImapAccount(account) && matchesSearch && matchesProvider;
         });
         if (!accounts.length) {
             container.innerHTML = '<p class="ii-muted mb-0">No connected inboxes match the current filters.</p>';
@@ -4123,7 +4175,7 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     function selectAllInboxSources(checked) {
-        iiState.imapAccounts.forEach((account) => {
+        iiState.imapAccounts.filter(isEnabledImapAccount).forEach((account) => {
             if (checked) iiState.selectedInboxIds.add(account.id);
             else iiState.selectedInboxIds.delete(account.id);
         });
@@ -4138,7 +4190,8 @@ merge_recipe_id, content_blueprint_id</pre>
         const select = document.getElementById('messageAccountFilter');
         if (select) {
             const current = select.value;
-            select.innerHTML = '<option value="">All accounts</option>' + iiState.imapAccounts.map((account) => `<option value="${account.id}">${escapeHtml(account.email)}</option>`).join('');
+            const accounts = iiState.imapAccounts.filter(isEnabledImapAccount);
+            select.innerHTML = '<option value="">All enabled accounts</option>' + accounts.map((account) => `<option value="${account.id}">${escapeHtml(account.email)}</option>`).join('');
             if (current && Array.from(select.options).some((option) => option.value === current)) select.value = current;
         }
         renderExplorerAccountCheckboxes();
@@ -4147,21 +4200,25 @@ merge_recipe_id, content_blueprint_id</pre>
     function renderExplorerAccountCheckboxes() {
         const el = document.getElementById('explorerAccountCheckboxes');
         if (!el) return;
-        if (!iiState.imapAccounts.length) {
+        const accounts = iiState.imapAccounts.filter(isEnabledImapAccount);
+        if (!accounts.length) {
             el.innerHTML = '<p class="ii-muted" style="font-size:0.8em">No accounts connected.</p>';
             return;
         }
-        el.innerHTML = iiState.imapAccounts.map((account) => `
+        el.innerHTML = accounts.map((account) => `
             <label class="d-block mb-1 ii-muted" style="font-size:0.8em">
                 <input type="checkbox" checked class="explorer-account-check" value="${account.id}">
                 ${escapeHtml(account.email)}
             </label>`).join('');
     }
 
-    async function loadExplorerFolders(accountId) {
+    async function loadExplorerFolders(accountId, refreshToken = iiState.explorerRefreshToken) {
         try {
-            const params = accountId ? `?account_id=${accountId}` : '';
-            const data = await iiFetch('/api/inbox-intelligence/explorer/folders' + params);
+            const params = new URLSearchParams();
+            params.set('_', refreshToken || Date.now().toString());
+            if (accountId) params.set('account_id', accountId);
+            const data = await iiFetch('/api/inbox-intelligence/explorer/folders?' + params.toString());
+            if (refreshToken !== iiState.explorerRefreshToken) return;
             const folderList = document.getElementById('folderList');
             if (!folderList) return;
             const accounts = data.accounts || [];
@@ -4202,14 +4259,15 @@ merge_recipe_id, content_blueprint_id</pre>
         loadExplorerMessages();
     }
 
-    async function loadImapAccounts() {
-        const data = await iiFetch('/api/inbox-intelligence/imap-accounts');
+    async function loadImapAccounts(options = {}) {
+        const data = await iiFetch('/api/inbox-intelligence/imap-accounts?_=' + (iiState.explorerRefreshToken || Date.now()));
         iiState.imapAccounts = data.accounts || [];
-        const validIds = new Set(iiState.imapAccounts.map((account) => account.id));
+        const enabledAccounts = iiState.imapAccounts.filter(isEnabledImapAccount);
+        const validIds = new Set(enabledAccounts.map((account) => account.id));
         iiState.selectedInboxIds = new Set([...iiState.selectedInboxIds].filter((id) => validIds.has(id)));
-        iiState.imapAccounts.forEach((account) => iiState.selectedInboxIds.add(account.id));
+        enabledAccounts.forEach((account) => iiState.selectedInboxIds.add(account.id));
         iiState.userInboxRecipients = iiState.userInboxRecipients.filter((recipient) => recipient.source !== 'imap');
-        iiState.imapAccounts.forEach((account) => {
+        enabledAccounts.forEach((account) => {
             if (iiState.userInboxHiddenImapRecipients.has(account.email.toLowerCase())) return;
             iiState.userInboxRecipients.push({email: account.email.toLowerCase(), source: 'imap', imap_account_id: account.id});
         });
@@ -4221,7 +4279,9 @@ merge_recipe_id, content_blueprint_id</pre>
         renderAutomatedInboxSelector();
         syncRecipientInputFromSelectedInboxes();
         updateAutomatedSummary();
-        await Promise.allSettled([loadExplorerFolders(), loadExplorerMessages()]);
+        if (options.refreshExplorer !== false) {
+            await Promise.allSettled([loadExplorerFolders(), loadExplorerMessages()]);
+        }
     }
 
     function toggleAddInboxForm() {
@@ -4268,6 +4328,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 password: document.getElementById('imapPasswordInput').value,
                 account_type: document.getElementById('imapTypeInput')?.value || 'both',
                 owner: document.getElementById('imapOwnerInput')?.value || '',
+                is_enabled: document.getElementById('imapEnabledInput')?.value !== 'false',
                 test_connection: true,
                 sync_limit: 25
             };
@@ -4278,8 +4339,7 @@ merge_recipe_id, content_blueprint_id</pre>
             });
             status.textContent = data.message || 'Inbox saved.';
             document.getElementById('imapPasswordInput').value = '';
-            await loadImapAccounts();
-            await loadExplorerMessages();
+            await refreshInboxExplorer();
         } catch (err) {
             status.textContent = err.message;
         }
@@ -4365,9 +4425,14 @@ merge_recipe_id, content_blueprint_id</pre>
         }
     }
 
-    async function loadExplorerMessages() {
+    function formatGmtDate(value) {
+        if (!value) return '';
+        return new Date(value).toLocaleString('en-GB', {timeZone: 'UTC', hour12: false}) + ' GMT';
+    }
+
+    async function loadExplorerMessages(refreshToken = iiState.explorerRefreshToken) {
         const params = new URLSearchParams({limit: 200});
-        params.set('_', Date.now().toString());
+        params.set('_', refreshToken || Date.now().toString());
         const accountId = document.getElementById('messageAccountFilter')?.value;
         const search = document.getElementById('messageSearchInput')?.value;
         const dateRange = document.getElementById('messageDateFilter')?.value;
@@ -4377,19 +4442,20 @@ merge_recipe_id, content_blueprint_id</pre>
         if (dateRange) params.set('date_range', dateRange);
         if (folder) params.set('folder', folder);
         const data = await iiFetch('/api/inbox-intelligence/messages?' + params.toString());
+        if (refreshToken !== iiState.explorerRefreshToken) return;
         iiState.messages = data.messages || [];
         if (iiState.activeMessageId && !iiState.messages.some((message) => message.id === iiState.activeMessageId)) {
             iiState.activeMessageId = null;
         }
         renderInboxMessagesList();
-        loadExplorerFolders(accountId || undefined);
     }
 
     async function refreshInboxExplorer() {
-        await loadImapAccounts();
+        iiState.explorerRefreshToken = Date.now();
+        await loadImapAccounts({refreshExplorer: false});
         await Promise.allSettled([
-            loadExplorerFolders(document.getElementById('messageAccountFilter')?.value || undefined),
-            loadExplorerMessages()
+            loadExplorerFolders(document.getElementById('messageAccountFilter')?.value || undefined, iiState.explorerRefreshToken),
+            loadExplorerMessages(iiState.explorerRefreshToken)
         ]);
     }
 
@@ -4398,7 +4464,7 @@ merge_recipe_id, content_blueprint_id</pre>
         iiState.inboxExplorerRefreshTimer = window.setInterval(() => {
             const explorerVisible = document.getElementById('explorer')?.classList.contains('active');
             if (!explorerVisible) return;
-            Promise.allSettled([loadImapAccounts(), loadExplorerMessages()]).catch((err) => console.error(err));
+            refreshInboxExplorer().catch((err) => console.error(err));
         }, 30000);
     }
 
@@ -4426,7 +4492,7 @@ merge_recipe_id, content_blueprint_id</pre>
                         <input type="checkbox" ${iiState.selectedMessageIds.has(m.id) ? 'checked' : ''} onchange="toggleMessageSelection(${m.id}, this.checked)">
                         ${unreadDot}<strong>${escapeHtml(m.subject || '(no subject)')}</strong>
                     </label>
-                    <span class="ii-muted">${m.received_at ? new Date(m.received_at).toLocaleString() : ''}</span>
+                    <span class="ii-muted">${formatGmtDate(m.received_at)}</span>
                 </div>
                 <div class="ii-message-meta">
                     <span class="ii-chip blue">${escapeHtml(m.provider || 'IMAP')}</span>
@@ -4814,8 +4880,9 @@ merge_recipe_id, content_blueprint_id</pre>
         }
         if (usersLabel) {
             const selectedUsers = currentUsers ?? [...iiState.selectedSenderEmails].length;
+            const scope = document.getElementById('aiAgentRunScope')?.value || 'one';
             usersLabel.textContent = perAccountRaw
-                ? `${perAccountRaw} user(s) per account`
+                ? `${perAccountRaw} user(s) per account · ${scope === 'all' ? 'continue all' : 'one test'}`
                 : `${selectedUsers || 'All'} selected user(s)`;
         }
     }
@@ -4907,6 +4974,9 @@ merge_recipe_id, content_blueprint_id</pre>
         if (tab === 'ai') {
             document.querySelectorAll('.ii-analytics-tab')[1]?.classList.add('active');
             document.getElementById('analyticsPanelAI')?.classList.add('active');
+        } else if (tab === 'agentResults') {
+            document.querySelectorAll('.ii-analytics-tab')[2]?.classList.add('active');
+            document.getElementById('analyticsPanelAgentResults')?.classList.add('active');
         } else {
             document.querySelectorAll('.ii-analytics-tab')[0]?.classList.add('active');
             document.getElementById('analyticsPanelInbox')?.classList.add('active');
@@ -4982,9 +5052,9 @@ merge_recipe_id, content_blueprint_id</pre>
     function parseAiAgentPrompt(prompt) {
         const text = String(prompt || '').toLowerCase();
         const listIds = [];
-        const listMatch = text.match(/lists?\s+([0-9,\sand]+)/i);
+        const listMatch = String(prompt || '').match(/lists?\s+([a-z0-9_,\-\sand]+)/i);
         if (listMatch) {
-            (listMatch[1].match(/\d+/g) || []).forEach((id) => {
+            (listMatch[1].match(/[a-z0-9_-]+/gi) || []).filter((token) => !['and', 'using', 'use', 'users', 'user'].includes(token.toLowerCase())).forEach((id) => {
                 if (!listIds.includes(id)) listIds.push(id);
             });
         }
@@ -4994,6 +5064,7 @@ merge_recipe_id, content_blueprint_id</pre>
             listIds,
             usersEach: usersMatch ? usersMatch[1] : '',
             recipientEmail: emailMatch ? emailMatch[0].toLowerCase() : '',
+            runScope: /(all|entire|continue|until|finish|every|whole)/i.test(prompt || '') ? 'all' : 'one',
             greyAction: /without\s+(grey|gray)|disable\s+(grey|gray)|no\s+(grey|gray)/i.test(prompt || '')
                 ? false
                 : /grey|gray|name/i.test(prompt || ''),
@@ -5006,9 +5077,21 @@ merge_recipe_id, content_blueprint_id</pre>
         document.getElementById('aiAgentListIdsInput').value = parsed.listIds.join(', ');
         document.getElementById('aiAgentUsersEachInput').value = parsed.usersEach || '';
         document.getElementById('aiAgentRecipientEmailInput').value = parsed.recipientEmail || '';
+        document.getElementById('aiAgentSetupRunScope').value = parsed.runScope || 'one';
         document.getElementById('aiAgentSetupGreyAction').checked = parsed.greyAction;
         switchAiAgentChatTab('setup');
         return applyAiAgentSetupToPage();
+    }
+
+    function findAutomatedWorkspaceListOption(token) {
+        const select = document.getElementById('automatedWorkspaceListSelect');
+        if (!select || !token) return null;
+        const needle = String(token).trim().toLowerCase();
+        return Array.from(select.options).find((option) => {
+            const value = String(option.value || '').toLowerCase();
+            const text = String(option.textContent || '').toLowerCase();
+            return value === needle || text.includes(needle);
+        }) || null;
     }
 
     function selectAutomatedRecipientByEmail(email) {
@@ -5027,10 +5110,11 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     async function applyAiAgentSetupToPage() {
-        const listIds = (document.getElementById('aiAgentListIdsInput')?.value || '').match(/\d+/g) || [];
+        const listIds = (document.getElementById('aiAgentListIdsInput')?.value || '').match(/[a-z0-9_-]+/gi) || [];
         const usersEach = (document.getElementById('aiAgentUsersEachInput')?.value || '').trim();
         const recipient = (document.getElementById('aiAgentRecipientEmailInput')?.value || '').trim().toLowerCase();
         const grey = document.getElementById('aiAgentSetupGreyAction')?.checked !== false;
+        const scope = document.getElementById('aiAgentSetupRunScope')?.value || 'one';
         const perAccount = document.getElementById('automatedUsersPerAccountInput');
         if (perAccount && usersEach) {
             perAccount.value = usersEach;
@@ -5038,14 +5122,17 @@ merge_recipe_id, content_blueprint_id</pre>
         }
         const greyBox = document.getElementById('aiAgentAutoRenameGrey');
         if (greyBox) greyBox.checked = grey;
+        const scopeBox = document.getElementById('aiAgentRunScope');
+        if (scopeBox) scopeBox.value = scope;
         let messages = [];
         if (listIds.length) {
             const select = document.getElementById('automatedWorkspaceListSelect');
             const firstList = listIds[0];
-            if (select && Array.from(select.options).some((option) => option.value === firstList)) {
-                select.value = firstList;
+            const option = findAutomatedWorkspaceListOption(firstList);
+            if (select && option) {
+                select.value = option.value;
                 await mirrorAutomatedListSelection();
-                messages.push(`List ${firstList} selected${listIds.length > 1 ? `; queued note includes ${listIds.slice(1).join(', ')} for follow-up runs` : ''}.`);
+                messages.push(`List ${option.textContent.trim()} selected${listIds.length > 1 ? `; queued note includes ${listIds.slice(1).join(', ')} for follow-up runs` : ''}.`);
             } else {
                 messages.push(`List ${firstList} was not found in the loaded List Management options.`);
             }
@@ -5182,8 +5269,9 @@ merge_recipe_id, content_blueprint_id</pre>
             if (runStatus) runStatus.textContent = test.status || 'Updated';
             if (status) status.textContent = `${test.test_id || testId}: ${test.status || 'updated'} · ${observed} observed placement(s) across ${rows.length} sent message(s). IMAP/database ${diagText}.`;
             const syncLabel = document.getElementById('automatedLastSync');
-            if (syncLabel) syncLabel.textContent = `Last sync: ${new Date().toLocaleTimeString()}`;
+            if (syncLabel) syncLabel.textContent = `Last sync: ${formatGmtDate(new Date().toISOString())}`;
             await loadAutomatedTests(false);
+            await refreshInboxExplorer();
             if (keepWatching && automatedTestIsActive(test.status)) scheduleAutomatedPoll(test.test_id || testId);
         } catch (err) {
             if (status) status.textContent = `Automated test sync failed: ${err.message}`;
@@ -5457,6 +5545,7 @@ merge_recipe_id, content_blueprint_id</pre>
         const lists = finalClass.lists || {};
         const totals = finalClass.totals || {};
         iiState.automatedAgentRun = payload;
+        if (!payload.fromStorage) storeAiAgentResult(payload);
         panel.innerHTML = `
             <div class="ii-ai-output">
                 <div class="ii-row justify-content-between mb-2">
@@ -5489,6 +5578,34 @@ merge_recipe_id, content_blueprint_id</pre>
                     </div>
                 </div>
             </div>`;
+        if (!payload.fromStorage) switchAnalyticsTab('agentResults');
+    }
+
+    function storeAiAgentResult(payload) {
+        if (!payload || !payload.first) return;
+        const entry = {
+            stored_at: new Date().toISOString(),
+            first: payload.first,
+            retry: payload.retry || null,
+            batches: payload.batches || [],
+            name_changes: payload.name_changes || {changed: [], failed: []},
+        };
+        const key = entry.retry?.test_id || entry.first?.test_id || `agent-${Date.now()}`;
+        iiState.automatedAgentResults = [entry, ...(iiState.automatedAgentResults || []).filter((item) => (item.retry?.test_id || item.first?.test_id) !== key)].slice(0, 20);
+        try {
+            localStorage.setItem('ii_automated_agent_results', JSON.stringify(iiState.automatedAgentResults));
+        } catch (err) { /* storage is best-effort */ }
+    }
+
+    function loadStoredAiAgentResults() {
+        try {
+            iiState.automatedAgentResults = JSON.parse(localStorage.getItem('ii_automated_agent_results') || '[]');
+        } catch (err) {
+            iiState.automatedAgentResults = [];
+        }
+        if (!iiState.automatedAgentRun && iiState.automatedAgentResults.length) {
+            renderAiAgentState('complete', {...iiState.automatedAgentResults[0], fromStorage: true});
+        }
     }
 
     async function classifyAutomatedAgentTest(testId, senderContext) {
@@ -5514,12 +5631,64 @@ merge_recipe_id, content_blueprint_id</pre>
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
                 list_id: listId,
-                max_per_account: perAccount,
+                max_per_account: perAccount || 0,
                 offset_per_account: offsetPerAccount,
                 accounts_only: false
             })
         });
         return (data.senders || []).filter((sender) => sender.service_account_id && !isAdminWorkspaceSender(sender));
+    }
+
+    async function retrieveAutomatedAccountBatch(accountIds, perAccount, offsetPerAccount) {
+        const data = await iiFetch('/api/inbox-intelligence/workspace-senders/retrieve', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                service_account_ids: accountIds,
+                max_per_account: perAccount || 0,
+                offset_per_account: offsetPerAccount || 0
+            })
+        });
+        return (data.senders || []).filter((sender) => sender.service_account_id && !isAdminWorkspaceSender(sender));
+    }
+
+    function mergeAndSelectAutomatedSenders(senders) {
+        const byEmail = {};
+        iiState.workspaceSenders.forEach((sender) => { byEmail[sender.email] = sender; });
+        (senders || []).forEach((sender) => {
+            if (!sender.email || !sender.service_account_id || isAdminWorkspaceSender(sender)) return;
+            byEmail[sender.email] = sender;
+            iiState.selectedSenderEmails.add(sender.email);
+        });
+        iiState.workspaceSenders = Object.values(byEmail).sort((a, b) => a.email.localeCompare(b.email));
+        renderWorkspaceSenders();
+        renderTestSenderSelector();
+        renderUserInboxSenderSelector();
+        renderAutomatedServiceAccountSelector();
+        renderAutomatedWorkspaceUsers();
+        updateAutomatedSummary();
+    }
+
+    async function ensureAiAgentWorkspaceSelection(scope, perAccount) {
+        const listId = document.getElementById('automatedWorkspaceListSelect')?.value || '';
+        if (selectedAutomatedSenderPayload().length) return;
+        if (listId) {
+            if (perAccount) {
+                setAiAgentChatStatus(`Fetching ${perAccount} user(s) per account from selected list...`);
+                const senders = await retrieveAutomatedListBatch(listId, perAccount, 0);
+                mergeAndSelectAutomatedSenders(senders);
+                if (!senders.length) throw new Error('The selected list did not return non-admin Workspace users.');
+                return;
+            }
+            setAiAgentChatStatus('Fetching selected list account tabs for all-user execution...');
+            await retrieveAutomatedWorkspaceListUsers();
+            if (!iiState.selectedUserInboxListAccountIds.size && !selectedAutomatedSenderPayload().length) {
+                throw new Error('The selected list did not return usable Workspace accounts or users.');
+            }
+            return;
+        }
+        if (iiState.selectedServiceAccountIds.size || iiState.selectedUserInboxListAccountIds.size) return;
+        throw new Error('Select a List Management source or Workspace account. The agent will fetch the users automatically after that.');
     }
 
     function mergeAgentClassifications(classifications) {
@@ -5602,6 +5771,34 @@ merge_recipe_id, content_blueprint_id</pre>
         setAiAgentChatStatus(`AI Test Agent completed ${batches.length} batch(es). Final lists are ready to copy.`, 'success');
     }
 
+    async function startAutomatedAiAgentAccountsBatched(config, accountIds, perAccount) {
+        const batches = [];
+        const finalClassifications = [];
+        let offset = 0;
+        for (let batch = 1; batch <= 200; batch += 1) {
+            setAiAgentChatStatus(`Batch ${batch}: retrieving users ${offset + 1}-${offset + perAccount} from selected account(s)...`);
+            renderAiAgentState('loading', {message: `Batch ${batch}: retrieving account users`, detail: `${perAccount} user(s) from each selected Workspace account.`});
+            const senders = await retrieveAutomatedAccountBatch(accountIds, perAccount, offset);
+            if (!senders.length) break;
+            setAiAgentChatStatus(`Batch ${batch}: testing ${senders.length} selected user(s)...`);
+            renderAiAgentState('loading', {message: `Batch ${batch}: running test`, detail: `${senders.length} user(s) selected from account tabs.`});
+            const cycle = await runAiAgentCycle(config, senders, `AI Agent Account Batch ${batch}: ${new Date().toLocaleString()}`);
+            batches.push(cycle);
+            finalClassifications.push(cycle.retry?.classification || cycle.classification);
+            offset += perAccount;
+            if (senders.length < perAccount) break;
+        }
+        if (!batches.length) throw new Error('No users were available in the selected Workspace accounts.');
+        const combined = mergeAgentClassifications(finalClassifications);
+        const nameChanges = {changed: [], failed: []};
+        batches.forEach((batch) => {
+            nameChanges.changed.push(...(batch.name_changes?.changed || []));
+            nameChanges.failed.push(...(batch.name_changes?.failed || []));
+        });
+        renderAiAgentState('complete', {batches, first: {test_id: batches[0].test_id, classification: combined}, name_changes: nameChanges, retry: null});
+        setAiAgentChatStatus(`AI Test Agent completed ${batches.length} account batch(es). Final lists are ready to copy.`, 'success');
+    }
+
     async function startAutomatedAiAgent() {
         const button = document.getElementById('aiAgentStartButton');
         const chatButton = document.getElementById('aiAgentChatStartButton');
@@ -5625,16 +5822,19 @@ merge_recipe_id, content_blueprint_id</pre>
                 }
             }
             const selectedListId = document.getElementById('automatedWorkspaceListSelect')?.value || '';
-            if (selectedListId && !iiState.selectedSenderEmails.size && !iiState.selectedUserInboxListAccountIds.size) {
-                setAiAgentChatStatus('Retrieving selected List Management users before starting the agent...');
-                await retrieveAutomatedWorkspaceListUsers();
-            }
-            const config = collectAutomatedTestPayload('AI Agent');
-            const listId = document.getElementById('automatedWorkspaceListSelect')?.value || '';
             const perAccountRaw = (document.getElementById('automatedUsersPerAccountInput')?.value || '').trim();
             const perAccount = perAccountRaw ? Math.max(1, parseInt(perAccountRaw, 10) || 1) : 0;
-            if (listId && perAccount) {
+            const runScope = document.getElementById('aiAgentRunScope')?.value || 'one';
+            await ensureAiAgentWorkspaceSelection(runScope, perAccount);
+            const config = collectAutomatedTestPayload('AI Agent');
+            const listId = document.getElementById('automatedWorkspaceListSelect')?.value || '';
+            if (runScope === 'all' && listId && perAccount) {
                 await startAutomatedAiAgentBatched(config, listId, perAccount);
+                return;
+            }
+            const accountIds = automatedServiceAccountPayload(config.selectedSenders);
+            if (runScope === 'all' && accountIds.length && perAccount) {
+                await startAutomatedAiAgentAccountsBatched(config, accountIds, perAccount);
                 return;
             }
             setAiAgentChatStatus('Step 1/5: starting configured test...');
@@ -7259,11 +7459,12 @@ merge_recipe_id, content_blueprint_id</pre>
             renderUserInboxUserActions(rows);
             renderUserInboxSpamInsights(rows);
             const summary = matrixSummary(rows);
-            if (syncLabel) syncLabel.textContent = `Last sync: ${new Date().toLocaleTimeString()}`;
+            if (syncLabel) syncLabel.textContent = `Last sync: ${formatGmtDate(new Date().toISOString())}`;
             const syncWarning = pollData.sync_errors?.length ? ` IMAP warnings: ${pollData.sync_errors.slice(0, 2).join(' | ')}` : '';
             const diagnostic = pollData.diagnostic ? ` Sync fetched ${pollData.diagnostic.headers_fetched || 0} IMAP message(s), matched ${pollData.diagnostic.matched_rows || 0} of ${pollData.diagnostic.checked_rows || 0} observations, pruned ${pollData.diagnostic.deleted_old_messages || 0} old synced message(s).` : '';
             if (status) status.textContent = userInboxStatusText(data.test, summary, `${diagnostic}${syncWarning}`);
             await loadTests();
+            await refreshInboxExplorer();
         } catch (err) {
             if (status) status.textContent = `Could not sync analytics: ${err.message}`;
             const cards = document.getElementById('userInboxAnalyticsCards');
@@ -7342,7 +7543,7 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     function formatResultDate(value) {
-        return value ? new Date(value).toLocaleString() : '';
+        return formatGmtDate(value);
     }
 
     function testTotals(tests = iiState.tests) {
@@ -8238,6 +8439,7 @@ merge_recipe_id, content_blueprint_id</pre>
             loadTests(),
             loadWorkspaceLists()
         ]).catch((err) => console.error(err));
+        loadStoredAiAgentResults();
         startInboxExplorerAutoRefresh();
         renderUserInboxSenderSelector();
     });

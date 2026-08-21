@@ -404,6 +404,7 @@ class InboxImapAccount(db.Model):
     username = db.Column(db.String(255), nullable=False)
     encrypted_password = db.Column(db.Text, nullable=False)
     connection_status = db.Column(db.String(50), default='configured')
+    is_enabled = db.Column(db.Boolean, default=True)
     auto_sync_enabled = db.Column(db.Boolean, default=True)
     last_synced_at = db.Column(db.DateTime, nullable=True)
     last_error = db.Column(db.Text, nullable=True)
