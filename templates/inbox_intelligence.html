@@ -512,6 +512,11 @@
         gap: 14px;
     }
 
+    .ii-source-grid > .ii-card {
+        min-width: 0;
+        overflow: hidden;
+    }
+
     .ii-source-card {
         min-width: 0;
     }
@@ -522,8 +527,8 @@
 
     .ii-source-card .ii-input,
     .ii-source-card .ii-select {
-        min-width: 240px;
-        flex: 1 1 280px;
+        min-width: 0;
+        flex: 1 1 200px;
     }
 
     .ii-user-grid {
@@ -1306,6 +1311,31 @@
         .ii-analytics-copy-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
 
+    @media (max-width: 900px) {
+        .ii-template-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .ii-auto-top-actions { grid-template-columns: 1fr; }
+        #userInboxTest .ii-form-grid { grid-template-columns: 1fr; }
+        #userInboxTest .ii-form-grid > .ii-field[style*="grid-column: 1 / -1"] { grid-column: 1 / -1; }
+        #userInboxTest .ii-row { flex-wrap: wrap; }
+        #userInboxTest .ii-source-card .ii-row { flex-direction: column; align-items: stretch; }
+        #userInboxTest .ii-source-card .ii-row .ii-input,
+        #userInboxTest .ii-source-card .ii-row .ii-select { max-width: none; width: 100%; min-width: 0; }
+        #userInboxTest .ii-row.justify-content-between { flex-direction: column; align-items: flex-start; gap: 10px; }
+        #userInboxTest .ii-row.justify-content-between > .ii-row { width: 100%; }
+        #userInboxTest .ii-analytics-dashboard { grid-template-columns: 1fr; }
+        .ii-insight-grid { grid-template-columns: 1fr; }
+        .ii-stepper { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+        .ii-account-tabs { gap: 8px; }
+        .ii-account-tab { min-width: 0; max-width: none; flex: 1 1 200px; }
+        .ii-rate-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        #userInboxTest .ii-result-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .ii-kpis { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
+        .ii-integrity-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .ii-compact-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .ii-analytics-copy-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .ii-suggestion-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
     @media (max-width: 720px) {
         .ii-hero { align-items: flex-start; flex-direction: column; }
         .ii-kpis,
@@ -1341,6 +1371,42 @@
         .ii-template-actions .ii-btn { flex-basis: calc(50% - 4px); }
         .ii-analytics-row { grid-template-columns: 1fr; }
         .ii-account-tab { max-width: none; width: 100%; }
+        .ii-stepper { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+        .ii-insight-grid { grid-template-columns: 1fr; }
+        .ii-auto-builder { grid-template-columns: 1fr; }
+        .ii-auto-summary-row { grid-template-columns: 1fr; }
+        .ii-rate-row { grid-template-columns: 1fr; }
+        #userInboxTest .ii-row.justify-content-between { flex-direction: column; align-items: flex-start; }
+        #userInboxTest .ii-row { gap: 8px; }
+        #userInboxTest .ii-panel > .ii-row .ii-btn,
+        #userInboxTest .ii-panel > .ii-row .ii-input,
+        #userInboxTest .ii-panel > .ii-row .ii-select { width: 100%; max-width: none !important; }
+        #userInboxTest .ii-result-summary { grid-template-columns: 1fr 1fr; }
+        .ii-studio-shell { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 480px) {
+        .ii-shell { padding: 4px 2px 24px; }
+        .ii-hero { padding: 16px; }
+        .ii-title { font-size: 20px; }
+        .ii-panel { padding: 12px; }
+        .ii-tabs { gap: 6px; padding: 6px; }
+        .ii-tab { padding: 7px 10px; font-size: 12px; }
+        .ii-btn { padding: 8px 10px; font-size: 12px; }
+        .ii-template-card-grid { grid-template-columns: 1fr; }
+        .ii-stepper { grid-template-columns: 1fr; }
+        .ii-stepper .ii-step { min-height: auto; }
+        #userInboxTest .ii-result-summary { grid-template-columns: 1fr 1fr; gap: 8px; }
+        .ii-kpis { grid-template-columns: 1fr; }
+        .ii-integrity-grid { grid-template-columns: 1fr; }
+        .ii-compact-stat-grid { grid-template-columns: 1fr; }
+        .ii-analytics-copy-grid { grid-template-columns: 1fr; }
+        .ii-suggestion-grid { grid-template-columns: 1fr; }
+        .ii-chart { height: 200px; gap: 6px; }
+        .ii-inbox-card { grid-template-columns: 36px 1fr; }
+        .ii-inbox-card .ii-actions { grid-column: 1 / -1; justify-content: flex-end; }
+        .ii-message-detail-actions { flex-direction: column; }
+        .ii-message-detail-actions .ii-btn { width: 100%; }
     }
 </style>
 
@@ -2165,8 +2231,8 @@ merge_recipe_id, content_blueprint_id</pre>
                     <div class="ii-field" style="grid-column: 1 / -1;">
                         <label>Recipient inbox</label>
                         <div class="ii-row">
-                            <select class="ii-select" id="userInboxRecipientSelect" style="max-width: 420px;" onchange="updateUserInboxDiagnostics()"><option value="">Load or add a recipient</option></select>
-                            <input class="ii-input" id="userInboxRecipientEmailInput" type="email" style="max-width: 340px;" placeholder="external-or-imap@example.com">
+                            <select class="ii-select" id="userInboxRecipientSelect" onchange="updateUserInboxDiagnostics()"><option value="">Load or add a recipient</option></select>
+                            <input class="ii-input" id="userInboxRecipientEmailInput" type="email" placeholder="external-or-imap@example.com">
                             <button class="ii-btn" type="button" onclick="saveUserInboxRecipient()"><i class="fas fa-plus"></i> Add / Update</button>
                             <button class="ii-btn" type="button" onclick="deleteUserInboxRecipient()"><i class="fas fa-trash"></i> Delete</button>
                         </div>
@@ -2195,7 +2261,7 @@ merge_recipe_id, content_blueprint_id</pre>
                     <div class="ii-card ii-source-card">
                         <h4>Manual Account Lookup</h4>
                         <div class="ii-row mt-2">
-                            <input class="ii-input" id="userInboxWorkspaceAccountSearchInput" style="max-width: 420px;" placeholder="Search service account name, admin email, or client email">
+                            <input class="ii-input" id="userInboxWorkspaceAccountSearchInput" placeholder="Search service account name, admin email, or client email">
                             <button class="ii-btn" type="button" onclick="searchUserInboxWorkspaceAccounts()"><i class="fas fa-search"></i> Search</button>
                             <button class="ii-btn ii-btn-primary" type="button" onclick="retrieveWorkspaceUsers()"><i class="fas fa-users-gear"></i> Retrieve Users</button>
                         </div>
@@ -2204,8 +2270,8 @@ merge_recipe_id, content_blueprint_id</pre>
                     <div class="ii-card ii-source-card">
                         <h4>List Management Source</h4>
                         <div class="ii-row mt-2">
-                            <select class="ii-select" id="userInboxWorkspaceListSelect" style="max-width: 420px;" onchange="mirrorUserInboxListSelection()"><option value="">Loading lists...</option></select>
-                            <input class="ii-input" id="userInboxUsersPerAccountInput" type="number" min="1" style="max-width: 190px;" title="Users per account" placeholder="Blank = all users">
+                            <select class="ii-select" id="userInboxWorkspaceListSelect" onchange="mirrorUserInboxListSelection()"><option value="">Loading lists...</option></select>
+                            <input class="ii-input" id="userInboxUsersPerAccountInput" type="number" min="1" title="Users per account" placeholder="Blank = all users" style="max-width: 160px;">
                             <button class="ii-btn" type="button" onclick="loadWorkspaceLists()"><i class="fas fa-arrows-rotate"></i> Refresh</button>
                             <button class="ii-btn ii-btn-primary" type="button" onclick="retrieveUserInboxWorkspaceListUsers()"><i class="fas fa-list-check"></i> Retrieve List Users</button>
                         </div>
@@ -2222,11 +2288,11 @@ merge_recipe_id, content_blueprint_id</pre>
                         <p class="ii-muted mb-0">Live placement, user health, and domain decisions from the latest synced user inbox test.</p>
                     </div>
                     <div class="ii-row">
-                        <div class="ii-field mb-0" style="max-width: 260px;">
+                        <div class="ii-field mb-0">
                             <label>Test ID to sync</label>
                             <input class="ii-input" id="userInboxManualTestIdInput" placeholder="DLV-82436339">
                         </div>
-                        <select class="ii-select" id="userInboxDateFilter" style="width:140px">
+                        <select class="ii-select" id="userInboxDateFilter">
                             <option value="24h">Last 24h</option>
                             <option value="2d" selected>Last 2 days</option>
                             <option value="7d">Last 7 days</option>
