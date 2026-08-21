@@ -2393,7 +2393,7 @@ The NightOwl Ranch Team</textarea>
                     </div>
                     <div class="ii-analytics-tabs" style="padding: 0 18px;">
                         <button class="ii-analytics-tab active" type="button" onclick="switchAnalyticsTab('inbox')"><i class="fas fa-inbox"></i> User Inbox Analytics</button>
-                        <button class="ii-analytics-tab" type="button" onclick="switchAnalyticsTab('ai')"><i class="fas fa-robot"></i> AI Optimization <span class="ii-chip gray">Coming Soon</span></button>
+                        <button class="ii-analytics-tab" type="button" onclick="switchAnalyticsTab('ai')"><i class="fas fa-robot"></i> AI Optimization</button>
                     </div>
                 </div>
                 <div class="ii-pro-card-body">
@@ -2410,11 +2410,20 @@ The NightOwl Ranch Team</textarea>
                     </div>
                     <!-- AI Optimization Results Panel -->
                     <div class="ii-analytics-panel" id="analyticsPanelAI">
-                        <div class="ii-ai-placeholder">
-                            <i class="fas fa-wand-magic-sparkles"></i>
-                            <h4>AI Optimization Engine</h4>
-                            <p>After an automated test completes, the AI agent will analyze deliverability patterns, domain health signals, and provider behavior to generate actionable optimization recommendations for your next send.</p>
-                            <span class="ii-chip blue">Available after test results are synced</span>
+                        <div class="ii-row justify-content-between mb-3">
+                            <div>
+                                <h4>AI Optimization</h4>
+                                <p class="ii-muted mb-0">Diagnosis, retry planning, and copy-ready lists from the selected automated test.</p>
+                            </div>
+                            <button class="ii-btn ii-btn-primary" type="button" onclick="analyzeAutomatedResultsWithAi()"><i class="fas fa-wand-magic-sparkles"></i> Analyze results</button>
+                        </div>
+                        <div id="automatedAiResultsPanel">
+                            <div class="ii-ai-placeholder">
+                                <i class="fas fa-wand-magic-sparkles"></i>
+                                <h4>Select a completed or synced test</h4>
+                                <p>AI analysis uses the same message rows shown in User Inbox Analytics. It cannot change verdicts, send retries, or mutate users/domains.</p>
+                                <span class="ii-chip blue">Read-only recommendations</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -3171,6 +3180,9 @@ merge_recipe_id, content_blueprint_id</pre>
         automatedSelectedTestId: null,
         automatedPollTimers: {},
         automatedCopyBuckets: {inboxUsers: [], inboxDomains: [], spamUsers: [], spamDomains: [], greyDomainNameChangeUsers: []},
+        automatedAiResultCopyBuckets: {inbox_users: [], spam_users: [], inbox_domains: [], spam_domains: []},
+        automatedAiResultAnalysis: null,
+        automatedAiResultTestId: null,
         automatedMessages: [],
         automatedAiSuggestions: [],
         automatedAiSelectedIndex: 0,
@@ -4628,8 +4640,15 @@ merge_recipe_id, content_blueprint_id</pre>
     function renderAutomatedInboxAnalytics(test) {
         const rows = test?.messages || iiState.automatedMessages || [];
         iiState.automatedMessages = rows;
+        const currentTestId = test?.test_id || iiState.automatedSelectedTestId || '';
+        if (iiState.automatedAiResultTestId && iiState.automatedAiResultTestId !== currentTestId) {
+            iiState.automatedAiResultAnalysis = null;
+            iiState.automatedAiResultTestId = null;
+            iiState.automatedAiResultCopyBuckets = {inbox_users: [], spam_users: [], inbox_domains: [], spam_domains: []};
+        }
         renderAnalyticsSummary('automatedAnalyticsSummary', rows, 'Messages');
         renderAutomatedProAnalytics(rows, test || {});
+        renderAutomatedAiResultsState();
         const status = document.getElementById('automatedAnalyticsStatus');
         if (status) {
             const summary = matrixSummary(rows);
@@ -4637,6 +4656,106 @@ merge_recipe_id, content_blueprint_id</pre>
                 ? `${test?.test_id || iiState.automatedSelectedTestId}: ${summary.inbox} inbox, ${summary.spam} spam, ${summary.pending + summary.failed} missing.`
                 : 'No message rows found yet. Sync after delivery has had time to complete.';
         }
+    }
+
+    function renderAutomatedAiResultsState(state = 'idle', payload = {}) {
+        const panel = document.getElementById('automatedAiResultsPanel');
+        if (!panel) return;
+        const testId = iiState.automatedSelectedTestId || document.getElementById('automatedManualTestIdInput')?.value || '';
+        if (state === 'loading') {
+            panel.innerHTML = '<div class="ii-card ii-muted"><i class="fas fa-spinner fa-spin"></i> Analyzing selected test results...</div>';
+            return;
+        }
+        if (state === 'error') {
+            panel.innerHTML = `<div class="ii-card text-danger">${escapeHtml(payload.message || 'AI result analysis failed.')}</div>`;
+            return;
+        }
+        const analysis = payload.analysis || iiState.automatedAiResultAnalysis;
+        if (!analysis) {
+            panel.innerHTML = `<div class="ii-ai-placeholder">
+                <i class="fas fa-wand-magic-sparkles"></i>
+                <h4>${testId ? 'AI analysis ready to run' : 'Select a completed or synced test'}</h4>
+                <p>AI analysis uses the same message rows shown in User Inbox Analytics. It cannot change verdicts, send retries, or mutate users/domains.</p>
+                <span class="ii-chip blue">Read-only recommendations</span>
+            </div>`;
+            return;
+        }
+        const facts = payload.facts || {};
+        const copyLists = analysis.copy_lists || {};
+        iiState.automatedAiResultCopyBuckets = {
+            inbox_users: copyLists.inbox_users || [],
+            spam_users: copyLists.spam_users || [],
+            inbox_domains: copyLists.inbox_domains || [],
+            spam_domains: copyLists.spam_domains || []
+        };
+        const diagnosis = Array.isArray(analysis.diagnosis) ? analysis.diagnosis : [analysis.diagnosis].filter(Boolean);
+        const nextSteps = analysis.next_steps || [];
+        const retry = analysis.retry_plan || {};
+        const provider = payload.provider === 'openrouter' && payload.model ? payload.model : (payload.provider || 'local checks');
+        panel.innerHTML = `
+            <div class="ii-analytics-dashboard">
+                <div class="ii-analytics-card">
+                    <div class="ii-analytics-panel-head">
+                        <div><h4>Diagnosis</h4><span class="ii-muted">${escapeHtml(testId || facts.test_id || '')}</span></div>
+                        <span class="ii-chip blue">${escapeHtml(provider)}</span>
+                    </div>
+                    <p>${escapeHtml(analysis.summary || 'No summary returned.')}</p>
+                    <div class="ii-insight-card">
+                        ${diagnosis.length ? diagnosis.map((item) => `<div class="ii-muted mb-1">${escapeHtml(item)}</div>`).join('') : '<div class="ii-muted">No diagnosis items returned.</div>'}
+                    </div>
+                </div>
+                <div class="ii-analytics-card">
+                    <div class="ii-analytics-panel-head">
+                        <div><h4>Copy-ready Lists</h4><span class="ii-muted">Manual use only</span></div>
+                        <span class="ii-chip ${retry.recommended ? 'yellow' : 'green'}">${retry.recommended ? 'Retry review' : 'No retry needed'}</span>
+                    </div>
+                    <div class="ii-analytics-copy-grid">
+                        <button class="ii-btn ii-copy-stat-button" type="button" onclick="copyAutomatedAiResultBucket('inbox_users')"><strong>${iiState.automatedAiResultCopyBuckets.inbox_users.length}</strong><span>Inbox users</span></button>
+                        <button class="ii-btn ii-copy-stat-button" type="button" onclick="copyAutomatedAiResultBucket('spam_users')"><strong>${iiState.automatedAiResultCopyBuckets.spam_users.length}</strong><span>Spam users</span></button>
+                        <button class="ii-btn ii-copy-stat-button" type="button" onclick="copyAutomatedAiResultBucket('inbox_domains')"><strong>${iiState.automatedAiResultCopyBuckets.inbox_domains.length}</strong><span>Inbox domains</span></button>
+                        <button class="ii-btn ii-copy-stat-button" type="button" onclick="copyAutomatedAiResultBucket('spam_domains')"><strong>${iiState.automatedAiResultCopyBuckets.spam_domains.length}</strong><span>Spam domains</span></button>
+                    </div>
+                    ${nextSteps.length ? `<h4 class="mt-3">Next steps</h4><ul class="ii-muted mb-0">${nextSteps.map((step) => `<li>${escapeHtml(step)}</li>`).join('')}</ul>` : ''}
+                    ${(retry.steps || []).length ? `<h4 class="mt-3">Retry plan</h4><ul class="ii-muted mb-0">${retry.steps.map((step) => `<li>${escapeHtml(step)}</li>`).join('')}</ul>` : ''}
+                    ${(retry.warnings || []).length ? `<div class="ii-muted mt-2">${retry.warnings.map((warning) => escapeHtml(warning)).join(' ')}</div>` : ''}
+                </div>
+            </div>`;
+    }
+
+    async function analyzeAutomatedResultsWithAi() {
+        const testId = iiState.automatedSelectedTestId || document.getElementById('automatedManualTestIdInput')?.value || '';
+        if (!testId) {
+            renderAutomatedAiResultsState('error', {message: 'Select an automated test first.'});
+            return;
+        }
+        renderAutomatedAiResultsState('loading');
+        try {
+            const data = await iiFetch('/api/inbox-intelligence/ai/analyze-results', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({test_id: testId})
+            });
+            iiState.automatedAiResultAnalysis = data.analysis || null;
+            iiState.automatedAiResultTestId = testId;
+            renderAutomatedAiResultsState('complete', data);
+            const status = document.getElementById('automatedAnalyticsStatus');
+            if (status) status.textContent = data.message || `AI optimization analysis ready for ${testId}.`;
+        } catch (err) {
+            renderAutomatedAiResultsState('error', {message: err.message});
+        }
+    }
+
+    async function copyAutomatedAiResultBucket(bucketName) {
+        const values = (iiState.automatedAiResultCopyBuckets[bucketName] || [])
+            .map((value) => String(value || '').trim())
+            .filter(Boolean);
+        const statusText = document.getElementById('automatedStatusText');
+        if (!values.length) {
+            if (statusText) statusText.textContent = `Nothing to copy for ${bucketName}. Run AI analysis after sync.`;
+            return;
+        }
+        await copyTextToClipboard(`${values.join('\r\n')}\r\n`);
+        if (statusText) statusText.textContent = `Copied ${values.length} AI analysis item(s).`;
     }
 
     function renderAutomatedProAnalytics(rows, test) {

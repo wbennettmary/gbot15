@@ -3994,6 +3994,137 @@ def api_inbox_ai_explain_readiness():
         response['job_id'] = ai_job.job_id
     return jsonify(response)
 
+@app.route('/api/inbox-intelligence/ai/analyze-results', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_ai_analyze_results():
+    data = request.get_json(silent=True) or {}
+    test_id = str(data.get('test_id') or '').strip()
+    if not test_id:
+        return jsonify({'success': False, 'error': 'test_id is required'}), 400
+    test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
+    if not test:
+        return jsonify({'success': False, 'error': 'AI result analysis test not found'}), 404
+    messages = InboxDeliverabilityMessage.query.filter_by(test_id=test_id).order_by(InboxDeliverabilityMessage.id.asc()).all()
+    if not messages:
+        return jsonify({'success': False, 'error': 'No message rows found for this test yet. Sync results first.'}), 400
+
+    def _placement(row):
+        return (row.placement or row.status or '').upper()
+
+    sender_stats = {}
+    domain_stats = {}
+    provider_stats = {}
+    error_samples = []
+    for row in messages:
+        sender = (row.workspace_sender or '').strip().lower()
+        domain = sender.split('@')[-1] if '@' in sender else ''
+        recipient = (row.recipient or '').strip().lower()
+        provider = recipient.split('@')[-1] if '@' in recipient else 'unknown'
+        placement = _placement(row)
+        for bucket, key in ((sender_stats, sender), (domain_stats, domain), (provider_stats, provider)):
+            if not key:
+                continue
+            bucket.setdefault(key, {'total': 0, 'inbox': 0, 'spam': 0, 'pending': 0, 'failed': 0})
+            bucket[key]['total'] += 1
+            if placement == 'INBOX':
+                bucket[key]['inbox'] += 1
+            elif placement == 'SPAM':
+                bucket[key]['spam'] += 1
+            elif placement == 'FAILED':
+                bucket[key]['failed'] += 1
+            else:
+                bucket[key]['pending'] += 1
+        if row.error_message and len(error_samples) < 5:
+            error_samples.append(str(row.error_message)[:240])
+
+    total = len(messages)
+    inbox_count = sum(1 for row in messages if _placement(row) == 'INBOX')
+    spam_count = sum(1 for row in messages if _placement(row) == 'SPAM')
+    failed_count = sum(1 for row in messages if _placement(row) == 'FAILED')
+    pending_count = max(0, total - inbox_count - spam_count - failed_count)
+
+    def _rate_items(stats, key_name, predicate, limit=8):
+        items = []
+        for key, value in stats.items():
+            total_value = max(1, value.get('total') or 0)
+            item = {
+                key_name: key,
+                'total': value.get('total') or 0,
+                'inbox': value.get('inbox') or 0,
+                'spam': value.get('spam') or 0,
+                'pending': value.get('pending') or 0,
+                'failed': value.get('failed') or 0,
+                'inbox_pct': round(((value.get('inbox') or 0) / total_value) * 100),
+                'spam_pct': round(((value.get('spam') or 0) / total_value) * 100),
+            }
+            if predicate(item):
+                items.append(item)
+        return sorted(items, key=lambda item: (item.get('spam_pct', 0), item.get('spam', 0), item.get('total', 0)), reverse=True)[:limit]
+
+    facts = {
+        'test_id': test.test_id,
+        'status': test.status,
+        'total_messages': total,
+        'inbox_count': inbox_count,
+        'spam_count': spam_count,
+        'pending_count': pending_count,
+        'failed_count': failed_count,
+        'inbox_pct': round((inbox_count / total) * 100) if total else 0,
+        'spam_pct': round((spam_count / total) * 100) if total else 0,
+        'missing_pct': round(((pending_count + failed_count) / total) * 100) if total else 0,
+        'best_senders': _rate_items(sender_stats, 'sender', lambda item: item['inbox'] > 0 and item['spam'] == 0),
+        'worst_senders': _rate_items(sender_stats, 'sender', lambda item: item['spam'] > 0),
+        'healthy_domains': _rate_items(domain_stats, 'domain', lambda item: item['inbox'] > 0 and item['spam'] == 0),
+        'spam_heavy_domains': _rate_items(domain_stats, 'domain', lambda item: item['spam'] > 0),
+        'provider_mix': _rate_items(provider_stats, 'provider', lambda item: item['total'] > 0, limit=12),
+        'error_samples': error_samples,
+    }
+    valid_senders = sorted(sender_stats.keys())
+    valid_domains = sorted(domain_stats.keys())
+
+    from services.inbox_ai_gateway import generate_result_analysis
+    from services.inbox_ai_persistence import (
+        JOB_TYPE_RESULT_ANALYSIS,
+        SUGGESTION_TYPE_RESULT_ACTION,
+        persist_suggestions,
+    )
+    ai_job, error_response = _start_optional_ai_job(
+        {**data, 'test_id': test_id},
+        JOB_TYPE_RESULT_ANALYSIS,
+        input_summary={'test_id': test_id, 'total_messages': total, 'inbox': inbox_count, 'spam': spam_count},
+    )
+    if error_response:
+        return error_response
+    result = generate_result_analysis(
+        {'facts': facts, 'valid_senders': valid_senders, 'valid_domains': valid_domains},
+        decrypt_secret=_unprotect_secret,
+        job_id=ai_job.job_id if ai_job else None,
+        referer=request.host_url.rstrip('/'),
+    )
+    analysis = result.data.get('analysis') or {}
+    response = {'success': True, 'provider': result.provider, 'facts': facts, 'analysis': analysis}
+    if result.model and result.provider == 'openrouter':
+        response['model'] = result.model
+    if result.message:
+        response['message'] = result.message
+    if ai_job:
+        next_steps = analysis.get('next_steps') or []
+        suggestions = [{'text': step, 'rationale': 'AI result analysis next step'} for step in next_steps[:12]]
+        persisted = _finalize_ai_job(
+            ai_job,
+            result,
+            suggestions=suggestions,
+            persist_fn=lambda job, items: persist_suggestions(job, items, suggestion_type=SUGGESTION_TYPE_RESULT_ACTION, target_region='analytics'),
+            region='analytics',
+            audit_event='result_analysis_generated',
+            output_override={'analysis': analysis, 'facts': facts},
+        )
+        response['job_id'] = ai_job.job_id
+        if suggestions:
+            response['suggestions_persisted'] = persisted
+    return jsonify(response)
+
 def _detect_template_regions(html_content):
     html_content = html_content or ''
     regions = []
