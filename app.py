@@ -2153,15 +2153,8 @@ def api_inbox_test_email_sources():
         sources = TestEmailSource.query.filter(TestEmailSource.id.in_(source_ids)).all()
         deleted = 0
         for source in sources:
-            in_active_test = InboxDeliverabilityMessage.query.filter(
-                InboxDeliverabilityMessage.source_email_id == source.id,
-                InboxDeliverabilityMessage.status.in_(['QUEUED', 'WAITING_FOR_DELIVERY'])
-            ).first()
-            if in_active_test:
-                source.status = 'ARCHIVED'
-            else:
-                InboxDeliverabilityMessage.query.filter_by(source_email_id=source.id).delete(synchronize_session=False)
-                db.session.delete(source)
+            InboxDeliverabilityMessage.query.filter_by(source_email_id=source.id).delete(synchronize_session=False)
+            db.session.delete(source)
             deleted += 1
         db.session.commit()
         return jsonify({'success': True, 'deleted': deleted, 'message': f'Deleted {deleted} queued template(s).'})
@@ -2202,7 +2195,7 @@ def api_inbox_test_email_sources():
         db.session.commit()
         return jsonify({'success': True, 'created': created, 'count': len(messages), 'message': f'Added {len(messages)} email(s) to Automated Email Tests queue.'})
 
-    q = TestEmailSource.query
+    q = TestEmailSource.query.filter(TestEmailSource.status != 'ARCHIVED')
     search = (request.args.get('search') or '').strip()
     status_filter = (request.args.get('status') or '').strip()
     try:

@@ -1329,9 +1329,16 @@
 
     .ii-message-setup-grid {
         display: grid;
-        grid-template-columns: minmax(320px, 0.75fr) minmax(560px, 1.25fr);
+        grid-template-columns: 1fr;
         gap: 14px;
         align-items: stretch;
+    }
+
+    .ii-header-editor-wrap {
+        display: grid;
+        grid-template-columns: minmax(280px, 0.9fr) minmax(280px, 1.1fr);
+        gap: 14px;
+        align-items: start;
     }
 
     .ii-pro-toolbar {
@@ -1362,8 +1369,8 @@
     }
 
     .ii-pro-textarea {
-        min-height: 230px;
-        height: 100%;
+        min-height: 170px;
+        height: 170px;
         border-radius: var(--ii-radius-sm);
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
         line-height: 1.5;
@@ -1371,14 +1378,22 @@
     }
 
     .ii-pro-body-input {
-        min-height: 460px;
-        height: 460px;
+        min-height: 620px;
+        height: 620px;
         border-radius: 0 0 var(--ii-radius-sm) var(--ii-radius-sm);
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        font-size: 13px;
-        line-height: 1.55;
+        font-size: 14px;
+        line-height: 1.65;
         white-space: pre;
         overflow: auto;
+        tab-size: 2;
+    }
+
+    .ii-pro-body-input:focus,
+    .ii-pro-textarea:focus {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+        outline: none;
     }
 
     .ii-sync-status-grid {
@@ -2143,6 +2158,7 @@
         .ii-pro-topbar { grid-template-columns: 1fr; }
         .ii-pro-stepper { grid-template-columns: 1fr; }
         .ii-pro-summary-split { grid-template-columns: 1fr; }
+        .ii-header-editor-wrap { grid-template-columns: 1fr; }
         .ii-floating-command-stack { right: 12px; bottom: 92px; width: 150px; }
         .ii-floating-action { padding: 10px 12px; border-radius: 14px; }
         .ii-agent-chat-panel { right: 12px; bottom: 118px; width: calc(100vw - 24px); max-height: calc(100vh - 140px); }
@@ -2472,7 +2488,7 @@
                         <span class="ii-muted" id="automatedTemplateSource">Write a manual header/body, or select one queued email to load its content.</span>
                     </div>
                     <div class="ii-message-setup-grid">
-                        <div>
+                        <div class="ii-header-editor-wrap">
                             <div class="ii-field">
                                 <label>Custom Header <i class="fas fa-circle-info text-primary"></i></label>
                                 <textarea class="ii-input ii-textarea ii-pro-textarea" id="automatedHeaderInput" oninput="updateAutomatedMessageSetup()" placeholder="Date: [date]&#10;To: [to]&#10;From: [from]&#10;Message-ID: &lt;custom-[test_id]@example.com&gt;&#10;Subject: [subject]">Date: [date]
@@ -2481,35 +2497,38 @@ From: [from]
 Message-ID: &lt;custom-[test_id]@example.com&gt;
 Subject: [subject]</textarea>
                             </div>
-                            <div class="ii-row justify-content-between mt-2">
-                                <span class="ii-muted">Supported placeholders: [date], [to], [from], [subject], [test_id], [message_id].</span>
-                                <span class="ii-chip green" id="automatedHeaderStatus">Valid</span>
-                                <span class="ii-muted" id="automatedHeaderCount">5 lines</span>
+                            <div class="ii-card">
+                                <h4>Header status</h4>
+                                <div class="ii-row flex-wrap mb-2">
+                                    <span class="ii-chip green" id="automatedHeaderStatus">Valid</span>
+                                    <span class="ii-muted" id="automatedHeaderCount">5 lines</span>
+                                </div>
+                                <div class="ii-muted">Supported placeholders: [date], [to], [from], [subject], [test_id], [message_id].</div>
                             </div>
                         </div>
-                        <div>
-                            <div class="ii-field">
-                                <label>Custom Body <i class="fas fa-circle-info text-primary"></i></label>
-                                <div class="ii-pro-toolbar">
-                                    <select class="ii-select" style="width: 130px; padding: 6px 8px;" id="automatedBodyMode"><option value="html">Paragraph</option><option value="text">Plain text</option></select>
-                                    <button class="ii-btn" type="button" onclick="wrapAutomatedBodySelection('strong')"><i class="fas fa-bold"></i></button>
-                                    <button class="ii-btn" type="button" onclick="wrapAutomatedBodySelection('em')"><i class="fas fa-italic"></i></button>
-                                    <button class="ii-btn" type="button" onclick="wrapAutomatedBodySelection('u')"><i class="fas fa-underline"></i></button>
-                                    <button class="ii-btn" type="button" onclick="insertAutomatedBodyText('<br>')"><i class="fas fa-turn-down"></i></button>
-                                    <button class="ii-btn ms-auto" type="button" onclick="clearAutomatedBody()"><i class="fas fa-rotate-left"></i></button>
+                        <div class="ii-field">
+                            <div class="ii-row justify-content-between mb-2">
+                                <label class="mb-0">Custom Body <i class="fas fa-circle-info text-primary"></i></label>
+                                <div class="ii-row">
+                                    <span class="ii-muted" id="automatedBodyCount">0 chars</span>
+                                    <span class="ii-chip green" id="automatedBodyStatus">Ready</span>
                                 </div>
-                                <textarea class="ii-input ii-textarea ii-pro-body-input" id="automatedBodyInput" oninput="updateAutomatedMessageSetup()" placeholder="Leave blank to send the selected queued email source body.">Hi there,
+                            </div>
+                            <div class="ii-pro-toolbar">
+                                <select class="ii-select" style="width: 130px; padding: 6px 8px;" id="automatedBodyMode"><option value="html">HTML</option><option value="text">Plain text</option></select>
+                                <button class="ii-btn" type="button" onclick="wrapAutomatedBodySelection('strong')"><i class="fas fa-bold"></i></button>
+                                <button class="ii-btn" type="button" onclick="wrapAutomatedBodySelection('em')"><i class="fas fa-italic"></i></button>
+                                <button class="ii-btn" type="button" onclick="wrapAutomatedBodySelection('u')"><i class="fas fa-underline"></i></button>
+                                <button class="ii-btn" type="button" onclick="insertAutomatedBodyText('<br>')"><i class="fas fa-turn-down"></i></button>
+                                <button class="ii-btn ms-auto" type="button" onclick="clearAutomatedBody()"><i class="fas fa-rotate-left"></i></button>
+                            </div>
+                            <textarea class="ii-input ii-textarea ii-pro-body-input" id="automatedBodyInput" spellcheck="false" wrap="off" oninput="updateAutomatedMessageSetup()" placeholder="Paste or edit the full HTML/plain-text body here.">Hi there,
 
 We're excited to announce the launch of our new product. It's faster, smarter, and built to help you achieve more in less time.
 
 Learn more and get started today.
 
 The NightOwl Ranch Team</textarea>
-                            </div>
-                            <div class="ii-row justify-content-end mt-2">
-                                <span class="ii-muted" id="automatedBodyCount">0 / 5,000</span>
-                                <span class="ii-chip green" id="automatedBodyStatus">Ready</span>
-                            </div>
                         </div>
                     </div>
                     <div class="ii-row flex-wrap align-items-center mt-3">
@@ -3537,10 +3556,11 @@ merge_recipe_id, content_blueprint_id</pre>
         }
         if (headerCount) headerCount.textContent = `${headerLines} line${headerLines === 1 ? '' : 's'}`;
         if (bodyStatus) {
-            bodyStatus.className = `ii-chip ${body.trim() ? 'green' : 'gray'}`;
-            bodyStatus.textContent = body.trim() ? 'Ready' : 'Using queued source body';
+            const large = body.length > 25000;
+            bodyStatus.className = `ii-chip ${body.trim() ? (large ? 'yellow' : 'green') : 'gray'}`;
+            bodyStatus.textContent = body.trim() ? (large ? 'Large HTML' : 'Ready') : 'Using queued source body';
         }
-        if (bodyCount) bodyCount.textContent = `${body.length.toLocaleString()} / 5,000`;
+        if (bodyCount) bodyCount.textContent = `${body.length.toLocaleString()} chars`;
         if (typeof updateAutomatedSummary === 'function') updateAutomatedSummary();
     }
 
