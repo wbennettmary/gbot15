@@ -2707,6 +2707,16 @@ The NightOwl Ranch Team</textarea>
                             <div class="ii-card"><span class="ii-muted">Users per execution</span><strong id="aiAgentUsersConfig">All selected users</strong></div>
                             <div class="ii-card"><span class="ii-muted">Run scope</span><select class="ii-select mt-1" id="aiAgentRunScope" onchange="refreshAiAgentConfigLabels()"><option value="one">One test only</option><option value="all">Continue until all users are tested</option></select></div>
                             <div class="ii-card"><span class="ii-muted">Grey-user action</span><label class="mb-0"><input type="checkbox" id="aiAgentAutoRenameGrey" checked> Change names automatically</label></div>
+                            <div class="ii-card" style="grid-column: 1 / -1;">
+                                <div class="ii-row justify-content-between">
+                                    <div class="ii-field mb-0" style="flex: 1 1 320px;">
+                                        <label>Existing/manual test ID</label>
+                                        <input class="ii-input" id="aiAgentSourceTestIdInput" placeholder="DLV-1234ABCD or AT-1234ABCD">
+                                    </div>
+                                    <button class="ii-btn ii-btn-primary" type="button" id="aiAgentManualStartButton" onclick="startAiAgentFromManualTest()"><i class="fas fa-list-check"></i> Run from existing test</button>
+                                </div>
+                                <div class="ii-muted mt-2">Uses the selected test results as the first run, changes grey-user names, then retests only those changed users with the same template.</div>
+                            </div>
                         </div>
                         <div class="ii-ai-placeholder">
                             <i class="fas fa-comments"></i>
@@ -2755,6 +2765,10 @@ The NightOwl Ranch Team</textarea>
                                     <label>List number(s)</label>
                                     <input class="ii-input" id="aiAgentListIdsInput" placeholder="40, 25">
                                 </div>
+                                <div class="ii-field" style="grid-column: 1 / -1;">
+                                    <label>Existing/manual test ID</label>
+                                    <input class="ii-input" id="aiAgentSetupSourceTestIdInput" placeholder="DLV-1234ABCD or AT-1234ABCD">
+                                </div>
                                 <div class="ii-field">
                                     <label>Users each test</label>
                                     <input class="ii-input" id="aiAgentUsersEachInput" type="number" min="1" placeholder="3">
@@ -2777,6 +2791,7 @@ The NightOwl Ranch Team</textarea>
                     <div class="ii-agent-chat-foot">
                         <button class="ii-btn" type="button" onclick="closeAiAgentChat()">Close</button>
                         <button class="ii-btn" type="button" id="aiAgentChatStopButton" onclick="stopAutomatedAiAgent()" disabled><i class="fas fa-stop"></i> Stop</button>
+                        <button class="ii-btn" type="button" id="aiAgentChatManualStartButton" onclick="startAiAgentFromChatManual()"><i class="fas fa-list-check"></i> Existing test</button>
                         <button class="ii-btn ii-btn-primary" type="button" id="aiAgentChatStartButton" data-ii-ai="1" onclick="startAiAgentFromChat()"><i class="fas fa-play"></i> Start AI Agent</button>
                     </div>
                 </div>
@@ -4965,11 +4980,85 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     async function createAutomatedTestBatch(payload) {
-        return iiFetch('/api/inbox-intelligence/automated-tests', {
+        const data = await iiFetch('/api/inbox-intelligence/automated-tests', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(payload)
         });
+        cacheTestSenderContext(data.test_id, data.senders || payload.senders || []);
+        return data;
+    }
+
+    async function createDeliverabilityRetestBatch(sourceTest, senders, label) {
+        const inboxIds = Array.from(new Set((sourceTest.messages || [])
+            .map((row) => Number(row.imap_account_id || 0))
+            .filter((value) => value > 0)));
+        if (!inboxIds.length) {
+            throw new Error('The selected test does not have connected IMAP recipients to retest.');
+        }
+        const payload = {
+            senders,
+            inbox_account_ids: inboxIds,
+            subject: sourceTest.subject || 'Grey-user retest',
+            html_body: sourceTest.html_body || '',
+            text_body: sourceTest.text_body || '',
+            custom_headers: sourceTest.custom_headers || '',
+            name: label,
+            async_send: true,
+        };
+        const data = await iiFetch('/api/inbox-intelligence/tests', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        cacheTestSenderContext(data.test_id, senders);
+        return {...data, senders};
+    }
+
+    function cacheTestSenderContext(testId, senders) {
+        if (!testId || !Array.isArray(senders) || !senders.length) return;
+        const clean = senders
+            .filter((sender) => sender && sender.email && sender.service_account_id)
+            .map((sender) => ({
+                email: String(sender.email || '').toLowerCase(),
+                name: sender.name || '',
+                service_account_id: sender.service_account_id,
+            }));
+        if (!clean.length) return;
+        try {
+            localStorage.setItem(`ii_test_sender_context_${testId}`, JSON.stringify(clean));
+        } catch (err) { /* storage is best-effort */ }
+    }
+
+    function cachedTestSenderContext(testId) {
+        if (!testId) return [];
+        try {
+            return JSON.parse(localStorage.getItem(`ii_test_sender_context_${testId}`) || '[]');
+        } catch (err) {
+            return [];
+        }
+    }
+
+    function senderContextForTest(test) {
+        const byEmail = {};
+        const add = (sender) => {
+            if (!sender || !sender.email) return;
+            const email = String(sender.email || '').toLowerCase();
+            if (!email) return;
+            byEmail[email] = {
+                email,
+                name: sender.name || byEmail[email]?.name || '',
+                service_account_id: sender.service_account_id || byEmail[email]?.service_account_id || null,
+            };
+        };
+        cachedTestSenderContext(test?.test_id).forEach(add);
+        (iiState.workspaceSenders || []).forEach(add);
+        selectedAutomatedSenderPayload().forEach(add);
+        const seen = new Set();
+        return (test?.messages || [])
+            .map((row) => String(row.sender || '').toLowerCase())
+            .filter((email) => email && !seen.has(email) && seen.add(email))
+            .map((email) => byEmail[email] || {email, name: '', service_account_id: null});
     }
 
     function switchAnalyticsTab(tab) {
@@ -5066,8 +5155,10 @@ merge_recipe_id, content_blueprint_id</pre>
         }
         const usersMatch = text.match(/(\d+)\s+users?/i);
         const emailMatch = String(prompt || '').match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+        const sourceTestMatch = String(prompt || '').match(/\b(?:AT|DLV)-[A-Z0-9]+\b/i);
         return {
             listIds,
+            sourceTestId: sourceTestMatch ? sourceTestMatch[0].toUpperCase() : '',
             usersEach: usersMatch ? usersMatch[1] : '',
             recipientEmail: emailMatch ? emailMatch[0].toLowerCase() : '',
             runScope: /(all|entire|continue|until|finish|every|whole)/i.test(prompt || '') ? 'all' : 'one',
@@ -5081,6 +5172,9 @@ merge_recipe_id, content_blueprint_id</pre>
         const prompt = document.getElementById('aiAgentPromptInput')?.value || '';
         const parsed = parseAiAgentPrompt(prompt);
         document.getElementById('aiAgentListIdsInput').value = parsed.listIds.join(', ');
+        document.getElementById('aiAgentSetupSourceTestIdInput').value = parsed.sourceTestId || '';
+        const sourceInput = document.getElementById('aiAgentSourceTestIdInput');
+        if (sourceInput && parsed.sourceTestId) sourceInput.value = parsed.sourceTestId;
         document.getElementById('aiAgentUsersEachInput').value = parsed.usersEach || '';
         document.getElementById('aiAgentRecipientEmailInput').value = parsed.recipientEmail || '';
         const continueBox = document.getElementById('aiAgentSetupContinueAll');
@@ -5122,8 +5216,49 @@ merge_recipe_id, content_blueprint_id</pre>
         return matched;
     }
 
+    function firstReceivingInboxAccount() {
+        return (iiState.imapAccounts || []).find(isReceivingImapAccount) || null;
+    }
+
+    function ensureFirstReceivingInboxSelected() {
+        if (iiState.selectedInboxIds?.size) return null;
+        const account = firstReceivingInboxAccount();
+        if (!account) return null;
+        iiState.selectedInboxIds.add(account.id);
+        renderTestInboxSelector();
+        syncRecipientInputFromSelectedInboxes();
+        renderAutomatedInboxSelector();
+        updateAutomatedSummary();
+        return account;
+    }
+
+    async function ensureFirstAutomatedQueueSourceSelected() {
+        if (iiState.automatedSelectedSourceIds?.size) return null;
+        if (!iiState.automatedQueue.length) {
+            await loadAutomatedQueue(1);
+        }
+        const source = iiState.automatedQueue[0] || null;
+        if (!source) return null;
+        iiState.automatedSelectedSourceIds = new Set([source.id]);
+        renderAutomatedQueue();
+        syncMessageSetupFromQueue();
+        updateAutomatedSummary();
+        return source;
+    }
+
+    async function applyAiAgentExecutionDefaults() {
+        const defaults = [];
+        const source = await ensureFirstAutomatedQueueSourceSelected();
+        if (source) defaults.push(`Template ${source.original_subject || source.id} selected from the first queue item.`);
+        const inbox = ensureFirstReceivingInboxSelected();
+        if (inbox) defaults.push(`Receiving inbox ${inbox.email} selected.`);
+        if (defaults.length) setAiAgentChatStatus(defaults.join(' '));
+        return defaults;
+    }
+
     async function applyAiAgentSetupToPage() {
         const listIds = (document.getElementById('aiAgentListIdsInput')?.value || '').match(/[a-z0-9_-]+/gi) || [];
+        const sourceTestId = normalizeAutomatedTestId(document.getElementById('aiAgentSetupSourceTestIdInput')?.value || '');
         const usersEach = (document.getElementById('aiAgentUsersEachInput')?.value || '').trim();
         const recipient = (document.getElementById('aiAgentRecipientEmailInput')?.value || '').trim().toLowerCase();
         const grey = document.getElementById('aiAgentSetupGreyAction')?.checked !== false;
@@ -5137,7 +5272,12 @@ merge_recipe_id, content_blueprint_id</pre>
         if (greyBox) greyBox.checked = grey;
         const scopeBox = document.getElementById('aiAgentRunScope');
         if (scopeBox) scopeBox.value = scope;
+        const sourceInput = document.getElementById('aiAgentSourceTestIdInput');
+        if (sourceInput) sourceInput.value = sourceTestId;
         let messages = [];
+        if (sourceTestId) {
+            messages.push(`Existing test ${sourceTestId} selected for grey-user processing.`);
+        }
         if (listIds.length) {
             const select = document.getElementById('automatedWorkspaceListSelect');
             const firstList = listIds[0];
@@ -5154,6 +5294,9 @@ merge_recipe_id, content_blueprint_id</pre>
             messages.push(selectAutomatedRecipientByEmail(recipient)
                 ? `Receiving inbox locked to ${recipient}.`
                 : `Receiving inbox ${recipient} is not connected on this page.`);
+        } else if (ensureFirstReceivingInboxSelected()) {
+            const inbox = firstReceivingInboxAccount();
+            messages.push(`Receiving inbox defaults to ${inbox?.email || 'the first connected inbox'}.`);
         }
         refreshAiAgentConfigLabels();
         setAiAgentChatStatus(messages.join(' ') || 'Setup applied to the current test page.');
@@ -5166,7 +5309,22 @@ merge_recipe_id, content_blueprint_id</pre>
         } else {
             await applyAiAgentSetupToPage();
         }
+        const sourceTestId = normalizeAutomatedTestId(document.getElementById('aiAgentSourceTestIdInput')?.value || '');
+        if (sourceTestId) {
+            await startAiAgentFromManualTest(sourceTestId);
+            return;
+        }
         await startAutomatedAiAgent();
+    }
+
+    async function startAiAgentFromChatManual() {
+        const promptPaneActive = document.getElementById('aiAgentPromptPane')?.classList.contains('active');
+        if (promptPaneActive && (document.getElementById('aiAgentPromptInput')?.value || '').trim()) {
+            await applyAiAgentPrompt();
+        } else {
+            await applyAiAgentSetupToPage();
+        }
+        await startAiAgentFromManualTest();
     }
 
     async function runAutomatedEmailTest() {
@@ -5203,7 +5361,7 @@ merge_recipe_id, content_blueprint_id</pre>
 
     function normalizeAutomatedTestId(value) {
         const text = String(value || '').trim().toUpperCase();
-        const match = text.match(/^(AT-[A-Z0-9]+)(?:-[0-9]+)?(?:-[A-Z0-9]+)?/);
+        const match = text.match(/^((?:AT|DLV)-[A-Z0-9]+)(?:-[0-9]+)?(?:-[A-Z0-9]+)?/);
         return match ? match[1] : text;
     }
 
@@ -5304,6 +5462,10 @@ merge_recipe_id, content_blueprint_id</pre>
             iiState.automatedSelectedTestId = test.test_id || testId;
             const manualInput = document.getElementById('automatedManualTestIdInput');
             if (manualInput) manualInput.value = iiState.automatedSelectedTestId;
+            const agentSourceInput = document.getElementById('aiAgentSourceTestIdInput');
+            if (agentSourceInput && !agentSourceInput.value) agentSourceInput.value = iiState.automatedSelectedTestId;
+            const setupSourceInput = document.getElementById('aiAgentSetupSourceTestIdInput');
+            if (setupSourceInput && !setupSourceInput.value) setupSourceInput.value = iiState.automatedSelectedTestId;
             localStorage.setItem('ii_automated_last_test_id', iiState.automatedSelectedTestId);
             iiState.automatedMessages = test.messages || [];
             const existing = iiState.automatedTests.findIndex((item) => item.test_id === iiState.automatedSelectedTestId);
@@ -5701,13 +5863,14 @@ merge_recipe_id, content_blueprint_id</pre>
             ...(finalClass.totals || {})
         };
         const batchCount = (payload.batches || []).length || 1;
+        const resultTitle = payload.source_mode === 'existing_test' ? 'Existing Test Agent completed' : 'AI Test Agent completed';
         const noObservedData = !Number(totals.messages || 0) && !(lists.inbox_users || []).length && !(lists.spam_users || []).length && !(lists.grey_users || []).length;
         iiState.automatedAgentRun = payload;
         if (!payload.fromStorage) storeAiAgentResult(payload);
         panel.innerHTML = `
             <div class="ii-ai-output">
                 <div class="ii-row justify-content-between mb-2">
-                    <div><strong>AI Test Agent completed</strong><div class="ii-muted">First run ${escapeHtml(first.test_id || '-')} ${retry ? `-> retry ${escapeHtml(retry.test_id || '-')}` : ''} · ${batchCount} execution(s)</div></div>
+                    <div><strong>${escapeHtml(resultTitle)}</strong><div class="ii-muted">First run ${escapeHtml(first.test_id || '-')} ${retry ? `-> retry ${escapeHtml(retry.test_id || '-')}` : ''} · ${batchCount} execution(s)</div></div>
                     <span class="ii-chip ${noObservedData ? 'yellow' : 'green'}">${totals.inbox || 0} inbox / ${totals.spam || 0} spam / ${totals.pending || 0} waiting</span>
                 </div>
                 ${noObservedData ? '<div class="ii-card mb-3"><strong>No observed placement data yet</strong><div class="ii-muted mt-1">The agent created/synced the test, but no inbox/spam rows were classified. Check that the Receiving email is the connected IMAP inbox you intended, then press Sync fresh data for the created test ID.</div></div>' : ''}
@@ -5746,6 +5909,7 @@ merge_recipe_id, content_blueprint_id</pre>
         if (!payload || !payload.first) return;
         const entry = {
             stored_at: new Date().toISOString(),
+            source_mode: payload.source_mode || null,
             first: payload.first,
             retry: payload.retry || null,
             batches: payload.batches || [],
@@ -5810,6 +5974,8 @@ merge_recipe_id, content_blueprint_id</pre>
         iiState.aiAgentRunning = isRunning;
         const startButton = document.getElementById('aiAgentStartButton');
         const chatStartButton = document.getElementById('aiAgentChatStartButton');
+        const manualStartButton = document.getElementById('aiAgentManualStartButton');
+        const chatManualStartButton = document.getElementById('aiAgentChatManualStartButton');
         const stopButton = document.getElementById('aiAgentStopButton');
         const chatStopButton = document.getElementById('aiAgentChatStopButton');
         if (startButton) {
@@ -5819,6 +5985,14 @@ merge_recipe_id, content_blueprint_id</pre>
         if (chatStartButton) {
             chatStartButton.disabled = isRunning;
             chatStartButton.innerHTML = isRunning ? '<span class="ii-spinner" aria-hidden="true"></span> Agent running' : '<i class="fas fa-play"></i> Start AI Agent';
+        }
+        if (manualStartButton) {
+            manualStartButton.disabled = isRunning;
+            manualStartButton.innerHTML = isRunning ? '<span class="ii-spinner" aria-hidden="true"></span> Agent running' : '<i class="fas fa-list-check"></i> Run from existing test';
+        }
+        if (chatManualStartButton) {
+            chatManualStartButton.disabled = isRunning;
+            chatManualStartButton.innerHTML = isRunning ? '<span class="ii-spinner" aria-hidden="true"></span> Agent running' : '<i class="fas fa-list-check"></i> Existing test';
         }
         if (stopButton) stopButton.disabled = !isRunning;
         if (chatStopButton) chatStopButton.disabled = !isRunning;
@@ -6037,6 +6211,8 @@ merge_recipe_id, content_blueprint_id</pre>
             const runScope = document.getElementById('aiAgentRunScope')?.value || 'one';
             await ensureAiAgentWorkspaceSelection(runScope, perAccount);
             assertAiAgentNotStopped();
+            await applyAiAgentExecutionDefaults();
+            assertAiAgentNotStopped();
             const config = collectAutomatedTestPayload('AI Agent');
             const listId = document.getElementById('automatedWorkspaceListSelect')?.value || '';
             if (runScope === 'all' && listId && perAccount) {
@@ -6095,6 +6271,92 @@ merge_recipe_id, content_blueprint_id</pre>
             }
             renderAiAgentState('complete', agentResult);
             setAiAgentChatStatus('AI Test Agent completed. Final lists are ready to copy.', 'success');
+        } catch (err) {
+            renderAiAgentState('error', {message: err.message});
+            setAiAgentChatStatus(`Agent stopped: ${err.message}`, 'error');
+            if (status) status.textContent = `AI Test Agent stopped: ${err.message}`;
+        } finally {
+            setAiAgentRunning(false);
+        }
+    }
+
+    async function startAiAgentFromManualTest(sourceTestIdOverride = '') {
+        const status = document.getElementById('automatedStatusText');
+        if (!II_AI_ENABLED) { renderAiAgentState('error', {message: iiAiDisabledHint()}); return; }
+        const sourceTestId = normalizeAutomatedTestId(sourceTestIdOverride || document.getElementById('aiAgentSourceTestIdInput')?.value || document.getElementById('automatedManualTestIdInput')?.value || '');
+        if (!sourceTestId) {
+            renderAiAgentState('error', {message: 'Type or select an existing test ID first.'});
+            return;
+        }
+        try {
+            iiState.aiAgentStopRequested = false;
+            setAiAgentRunning(true);
+            const sourceInput = document.getElementById('aiAgentSourceTestIdInput');
+            if (sourceInput) sourceInput.value = sourceTestId;
+            const setupSourceInput = document.getElementById('aiAgentSetupSourceTestIdInput');
+            if (setupSourceInput) setupSourceInput.value = sourceTestId;
+            setAiAgentChatStatus(`Loading existing test ${sourceTestId}...`);
+            renderAiAgentState('loading', {message: 'Loading existing test results', detail: sourceTestId});
+            if (status) status.textContent = `AI Test Agent is reading existing test ${sourceTestId}.`;
+
+            await syncAutomatedTestUntilComplete(sourceTestId, aiAgentSyncOptions());
+            assertAiAgentNotStopped();
+            const sourceTest = await fetchAutomatedTestDetail(sourceTestId, true);
+            const senderContext = senderContextForTest(sourceTest);
+            cacheTestSenderContext(sourceTestId, senderContext);
+
+            setAiAgentChatStatus('Classifying grey users from existing test...');
+            renderAiAgentState('loading', {message: 'Classifying grey users from existing test', detail: sourceTestId});
+            const firstClassification = await classifyAutomatedAgentTest(sourceTestId, senderContext);
+            assertAiAgentNotStopped();
+
+            const allGreyUsers = ((firstClassification.lists || {}).grey_users || []);
+            const greyUsers = allGreyUsers.filter((user) => user.service_account_id);
+            const missingGreyUsers = allGreyUsers.filter((user) => !user.service_account_id);
+            const agentResult = {
+                source_mode: 'existing_test',
+                first: {test_id: sourceTestId, classification: firstClassification},
+                name_changes: {changed: [], failed: []},
+                retry: null,
+            };
+            if (!allGreyUsers.length) {
+                renderAiAgentState('complete', agentResult);
+                setAiAgentChatStatus(`No grey users found in ${sourceTestId}.`, 'success');
+                return;
+            }
+            if (missingGreyUsers.length) {
+                throw new Error(`Found ${missingGreyUsers.length} grey user(s), but their Workspace service account is not loaded. Retrieve those Workspace users/account tabs first, then run from this existing test again.`);
+            }
+
+            setAiAgentChatStatus(`Changing ${greyUsers.length} grey-user name(s) from ${sourceTestId}...`);
+            renderAiAgentState('loading', {message: 'Changing grey-user names', detail: `${greyUsers.length} grey user(s) found in ${sourceTestId}.`});
+            agentResult.name_changes = await changeAiAgentGreyNames(greyUsers);
+            assertAiAgentNotStopped();
+
+            const changedEmails = new Set((agentResult.name_changes.changed || []).map((item) => String(item.email || '').toLowerCase()));
+            const retrySenders = greyUsers
+                .filter((user) => changedEmails.has(String(user.email || '').toLowerCase()))
+                .map((user) => ({
+                    email: user.email,
+                    name: (agentResult.name_changes.changed || []).find((item) => String(item.email || '').toLowerCase() === String(user.email || '').toLowerCase())?.new_name || user.name || '',
+                    service_account_id: user.service_account_id,
+                }));
+            if (!retrySenders.length) {
+                renderAiAgentState('complete', agentResult);
+                setAiAgentChatStatus('Grey users were detected, but no names were changed for retest.', 'error');
+                return;
+            }
+
+            setAiAgentChatStatus(`Retesting ${retrySenders.length} changed grey user(s) with the same template...`);
+            renderAiAgentState('loading', {message: 'Creating grey-user retest', detail: `Template and receiving inboxes copied from ${sourceTestId}.`});
+            const retryRun = await createDeliverabilityRetestBatch(sourceTest, retrySenders, `AI Agent Existing Test Retest: ${sourceTestId}`);
+            assertAiAgentNotStopped();
+            await syncAutomatedTestUntilComplete(retryRun.test_id, aiAgentSyncOptions());
+            assertAiAgentNotStopped();
+            await viewAutomatedEmailTest(retryRun.test_id);
+            agentResult.retry = {test_id: retryRun.test_id, classification: await classifyAutomatedAgentTest(retryRun.test_id, retryRun.senders || retrySenders)};
+            renderAiAgentState('complete', agentResult);
+            setAiAgentChatStatus(`Existing-test agent completed. Retest ${retryRun.test_id} is ready.`, 'success');
         } catch (err) {
             renderAiAgentState('error', {message: err.message});
             setAiAgentChatStatus(`Agent stopped: ${err.message}`, 'error');
