@@ -1049,10 +1049,15 @@
 
     .ii-auto-card {
         background: #fff;
-        border: 1px solid #dbe4ef;
-        border-radius: 8px;
+        border: 1px solid var(--ii-line, #e2e8f0);
+        border-radius: var(--ii-radius-sm, 8px);
         padding: 18px;
-        box-shadow: 0 10px 26px rgba(15, 23, 42, 0.045);
+        box-shadow: var(--ii-shadow-sm, 0 1px 3px rgba(15, 23, 42, 0.06));
+        transition: box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+
+    .ii-auto-card:hover {
+        box-shadow: var(--ii-shadow-md, 0 4px 16px rgba(15, 23, 42, 0.08));
     }
 
     #automatedTests .ii-stepper {
@@ -1104,13 +1109,30 @@
 
     .ii-pro-shell {
         --ii-blue: #2563eb;
+        --ii-blue-light: #3b82f6;
         --ii-blue-soft: #eff6ff;
-        --ii-line: #d7e1f2;
-        --ii-ink: #17213a;
-        --ii-soft: #f8fbff;
-        background: #fbfdff;
-        border-radius: 8px;
+        --ii-blue-border: #bfdbfe;
+        --ii-line: #e2e8f0;
+        --ii-line-light: #f1f5f9;
+        --ii-ink: #0f172a;
+        --ii-ink-secondary: #334155;
+        --ii-muted: #64748b;
+        --ii-soft: #f8fafc;
+        --ii-green: #16a34a;
+        --ii-green-bg: #f0fdf4;
+        --ii-red: #ef4444;
+        --ii-red-bg: #fef2f2;
+        --ii-orange: #f59e0b;
+        --ii-orange-bg: #fffbeb;
+        --ii-radius: 12px;
+        --ii-radius-sm: 8px;
+        --ii-shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06);
+        --ii-shadow-md: 0 4px 16px rgba(15, 23, 42, 0.08);
+        --ii-shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.1);
+        background: var(--ii-soft);
+        border-radius: var(--ii-radius);
         color: var(--ii-ink);
+        padding: 4px;
     }
 
     .ii-pro-topbar {
@@ -1118,12 +1140,12 @@
         grid-template-columns: minmax(0, 1fr) auto;
         gap: 16px;
         align-items: center;
-        min-height: 48px;
-        padding: 10px 14px;
+        min-height: 52px;
+        padding: 12px 18px;
         border: 1px solid var(--ii-line);
-        border-radius: 8px;
+        border-radius: var(--ii-radius);
         background: #fff;
-        box-shadow: 0 10px 24px rgba(37, 99, 235, 0.04);
+        box-shadow: var(--ii-shadow-sm);
     }
 
     .ii-pro-brand {
@@ -1134,107 +1156,133 @@
     }
 
     .ii-brand-mark {
-        width: 30px;
-        height: 30px;
-        border-radius: 8px;
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
         display: grid;
         place-items: center;
-        background: #2563eb;
+        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
         color: #fff;
-        box-shadow: 0 8px 18px rgba(37, 99, 235, 0.24);
+        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+        flex-shrink: 0;
     }
 
     .ii-pro-crumb {
         display: flex;
         align-items: center;
-        gap: 9px;
+        gap: 8px;
         flex-wrap: wrap;
         font-size: 13px;
-        font-weight: 650;
+        font-weight: 600;
+        letter-spacing: -0.01em;
     }
 
     .ii-pro-crumb span {
-        color: #64748b;
+        color: var(--ii-muted);
+        font-weight: 400;
     }
 
     .ii-pro-crumb strong {
-        color: #111827;
+        color: var(--ii-ink);
+        font-weight: 650;
     }
 
     .ii-pro-stepper {
         display: grid;
         grid-template-columns: repeat(5, minmax(0, 1fr));
         gap: 0;
-        align-items: center;
-        padding: 18px 8px;
+        align-items: flex-start;
+        padding: 20px 12px 16px;
+        position: relative;
     }
 
     .ii-pro-step {
-        display: grid;
-        grid-template-columns: 34px minmax(0, 1fr);
-        gap: 10px;
+        display: flex;
+        flex-direction: column;
         align-items: center;
+        text-align: center;
+        gap: 8px;
         position: relative;
-        min-height: 42px;
+        min-height: 52px;
+        padding: 0 4px;
     }
 
     .ii-pro-step:not(:last-child)::after {
         content: "";
         position: absolute;
-        left: calc(34px + 100px);
-        right: 12px;
-        top: 50%;
-        border-top: 1px dashed #b8c7dd;
+        left: calc(50% + 18px);
+        right: calc(-50% + 18px);
+        top: 15px;
+        border-top: 2px dashed #cbd5e1;
+        z-index: 0;
+    }
+
+    .ii-pro-step.done:not(:last-child)::after {
+        border-top-color: var(--ii-green);
     }
 
     .ii-pro-step span {
-        width: 30px;
-        height: 30px;
-        border-radius: 999px;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
         display: grid;
         place-items: center;
-        border: 1px solid #cbd5e1;
-        color: #334155;
+        border: 2px solid #e2e8f0;
+        color: var(--ii-muted);
         background: #fff;
-        font-weight: 800;
+        font-weight: 700;
+        font-size: 13px;
         z-index: 1;
+        transition: all 0.2s ease;
     }
 
     .ii-pro-step.done span {
-        border-color: #16a34a;
-        background: #16a34a;
+        border-color: var(--ii-green);
+        background: var(--ii-green);
         color: #fff;
+        box-shadow: 0 2px 8px rgba(22, 163, 74, 0.25);
     }
 
     .ii-pro-step.active span {
-        border-color: #2563eb;
-        background: #2563eb;
+        border-color: var(--ii-blue);
+        background: var(--ii-blue);
         color: #fff;
-        box-shadow: 0 8px 20px rgba(37, 99, 235, 0.18);
+        box-shadow: 0 4px 14px rgba(37, 99, 235, 0.3);
     }
 
     .ii-pro-step strong {
-        font-size: 12px;
-        color: #111827;
+        font-size: 11.5px;
+        color: var(--ii-ink-secondary);
         white-space: nowrap;
+        font-weight: 650;
     }
 
     .ii-pro-step small {
-        color: #64748b;
-        font-size: 11px;
+        color: var(--ii-muted);
+        font-size: 10.5px;
+        font-weight: 500;
     }
 
     .ii-pro-card {
         background: #fff;
         border: 1px solid var(--ii-line);
-        border-radius: 8px;
-        box-shadow: 0 8px 22px rgba(15, 23, 42, 0.035);
+        border-radius: var(--ii-radius);
+        box-shadow: var(--ii-shadow-sm);
         min-width: 0;
+        transition: box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+
+    .ii-pro-card:hover {
+        box-shadow: var(--ii-shadow-md);
     }
 
     .ii-pro-card-accent {
-        border-color: #8fb3ff;
-        box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.12), 0 10px 24px rgba(37, 99, 235, 0.06);
+        border-color: var(--ii-blue-border);
+        box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.08), var(--ii-shadow-sm);
+    }
+
+    .ii-pro-card-accent:hover {
+        box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.15), var(--ii-shadow-md);
     }
 
     .ii-pro-card-head {
@@ -1242,100 +1290,139 @@
         justify-content: space-between;
         align-items: center;
         gap: 12px;
-        padding: 12px 14px;
-        border-bottom: 1px solid #e2e8f0;
+        padding: 14px 18px;
+        border-bottom: 1px solid var(--ii-line);
+        background: var(--ii-soft);
+        border-radius: var(--ii-radius) var(--ii-radius) 0 0;
     }
 
     .ii-pro-card-head h3,
     .ii-pro-card-head h4 {
         margin: 0;
-        font-size: 15px;
-        font-weight: 780;
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--ii-ink);
+        letter-spacing: -0.01em;
     }
 
     .ii-pro-card-body {
-        padding: 12px 14px;
+        padding: 16px 18px;
     }
 
     .ii-message-setup-grid {
         display: grid;
-        grid-template-columns: minmax(360px, 1fr) minmax(360px, 1fr);
-        gap: 14px;
+        grid-template-columns: minmax(380px, 1fr) minmax(380px, 1fr);
+        gap: 16px;
     }
 
     .ii-pro-toolbar {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 6px;
         flex-wrap: wrap;
         padding: 8px 10px;
-        border: 1px solid #dbe4ef;
+        border: 1px solid var(--ii-line);
         border-bottom: 0;
-        border-radius: 8px 8px 0 0;
-        background: #f8fafc;
-        color: #475569;
+        border-radius: var(--ii-radius-sm) var(--ii-radius-sm) 0 0;
+        background: var(--ii-soft);
+        color: var(--ii-muted);
         font-size: 12px;
     }
 
+    .ii-pro-toolbar .ii-btn {
+        padding: 5px 8px;
+        border: 1px solid transparent;
+        border-radius: 6px;
+        font-size: 12px;
+        min-height: auto;
+    }
+
+    .ii-pro-toolbar .ii-btn:hover {
+        background: #e2e8f0;
+        border-color: #cbd5e1;
+    }
+
     .ii-pro-textarea {
-        min-height: 124px;
-        border-radius: 8px;
+        min-height: 132px;
+        border-radius: var(--ii-radius-sm);
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        line-height: 1.48;
+        line-height: 1.5;
+        font-size: 12.5px;
     }
 
     .ii-pro-body-input {
-        min-height: 124px;
-        border-radius: 0 0 8px 8px;
-        font-family: Inter, system-ui, sans-serif;
+        min-height: 132px;
+        border-radius: 0 0 var(--ii-radius-sm) var(--ii-radius-sm);
+        font-family: Inter, system-ui, -apple-system, sans-serif;
+        font-size: 13px;
+        line-height: 1.55;
     }
 
     .ii-two-col-pro {
         display: grid;
         grid-template-columns: minmax(420px, 1.05fr) minmax(420px, 0.95fr);
-        gap: 12px;
-        margin-top: 12px;
+        gap: 14px;
+        margin-top: 14px;
     }
 
     .ii-pro-compact-table {
         width: 100%;
-        border-collapse: collapse;
+        border-collapse: separate;
+        border-spacing: 0;
         font-size: 12px;
     }
 
     .ii-pro-compact-table th,
     .ii-pro-compact-table td {
-        padding: 9px 10px;
-        border-bottom: 1px solid #edf2f7;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--ii-line-light);
         vertical-align: middle;
     }
 
     .ii-pro-compact-table th {
-        color: #64748b;
+        color: var(--ii-muted);
         font-size: 11px;
-        font-weight: 760;
-        background: #fbfdff;
+        font-weight: 650;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        background: var(--ii-soft);
+        position: sticky;
+        top: 0;
+    }
+
+    .ii-pro-compact-table th:first-child { border-radius: var(--ii-radius-sm) 0 0 0; }
+    .ii-pro-compact-table th:last-child { border-radius: 0 var(--ii-radius-sm) 0 0; }
+
+    .ii-pro-compact-table tr:hover td {
+        background: var(--ii-blue-soft);
     }
 
     .ii-pro-tabs {
         display: flex;
-        gap: 18px;
-        border-bottom: 1px solid #e2e8f0;
-        margin-bottom: 10px;
+        gap: 0;
+        border-bottom: 2px solid var(--ii-line);
+        margin-bottom: 14px;
     }
 
     .ii-pro-tab {
         border: 0;
         background: transparent;
-        color: #64748b;
-        padding: 0 0 9px;
-        font-size: 12px;
-        font-weight: 760;
+        color: var(--ii-muted);
+        padding: 0 14px 10px;
+        font-size: 12.5px;
+        font-weight: 650;
+        cursor: pointer;
+        transition: color 0.15s ease;
+    }
+
+    .ii-pro-tab:hover {
+        color: var(--ii-ink-secondary);
     }
 
     .ii-pro-tab.active {
-        color: #2563eb;
-        box-shadow: inset 0 -2px 0 #2563eb;
+        color: var(--ii-blue);
+        box-shadow: inset 0 -2px 0 var(--ii-blue);
+        font-weight: 700;
     }
 
     .ii-pro-source-row {
@@ -1343,17 +1430,22 @@
         grid-template-columns: 1fr auto;
         gap: 10px;
         align-items: center;
-        padding: 9px 10px;
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        background: #fbfdff;
+        padding: 10px 12px;
+        border: 1px solid var(--ii-line);
+        border-radius: var(--ii-radius-sm);
+        background: var(--ii-soft);
         margin-bottom: 8px;
+        transition: border-color 0.15s ease;
+    }
+
+    .ii-pro-source-row:hover {
+        border-color: var(--ii-blue-border);
     }
 
     .ii-pro-user-list {
         display: grid;
-        gap: 7px;
-        max-height: 178px;
+        gap: 6px;
+        max-height: 180px;
         overflow: auto;
         padding-right: 2px;
     }
@@ -1363,17 +1455,23 @@
         grid-template-columns: minmax(0, 1fr) auto;
         gap: 10px;
         align-items: center;
-        padding: 8px 9px;
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
+        padding: 8px 12px;
+        border: 1px solid var(--ii-line);
+        border-radius: var(--ii-radius-sm);
         background: #fff;
+        transition: border-color 0.15s ease, background 0.15s ease;
+    }
+
+    .ii-pro-user-row:hover {
+        border-color: var(--ii-blue-border);
+        background: var(--ii-blue-soft);
     }
 
     .ii-pro-summary-grid {
         display: grid;
         grid-template-columns: minmax(360px, 0.8fr) minmax(460px, 1.2fr);
-        gap: 12px;
-        margin-top: 12px;
+        gap: 14px;
+        margin-top: 14px;
     }
 
     .ii-pro-summary-split {
@@ -1387,17 +1485,122 @@
         top: 84px;
         margin-left: auto;
         width: fit-content;
-        z-index: 4;
+        z-index: 5;
+        padding: 4px;
     }
 
     .ii-run-button-float .ii-btn {
-        min-width: 158px;
-        min-height: 48px;
+        min-width: 170px;
+        min-height: 50px;
         border-radius: 999px;
-        box-shadow: 0 16px 32px rgba(37, 99, 235, 0.24);
-        font-size: 13px;
+        box-shadow: 0 8px 24px rgba(37, 99, 235, 0.3), 0 2px 8px rgba(37, 99, 235, 0.15);
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+        border: none;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
     }
 
+    .ii-run-button-float .ii-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 12px 32px rgba(37, 99, 235, 0.35), 0 4px 12px rgba(37, 99, 235, 0.2);
+    }
+
+    .ii-run-button-float .ii-btn:active {
+        transform: translateY(0);
+    }
+
+    .ii-analytics-pro {
+        margin-top: 14px;
+        border-color: var(--ii-blue-border);
+        box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.06), var(--ii-shadow-sm);
+    }
+
+    /* Analytics tab system */
+    .ii-analytics-tabs {
+        display: flex;
+        gap: 0;
+        border-bottom: 2px solid var(--ii-line);
+        margin-bottom: 0;
+    }
+
+    .ii-analytics-tab {
+        border: 0;
+        background: transparent;
+        color: var(--ii-muted);
+        padding: 0 18px 12px;
+        font-size: 14px;
+        font-weight: 650;
+        cursor: pointer;
+        transition: color 0.15s ease;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .ii-analytics-tab:hover {
+        color: var(--ii-ink-secondary);
+    }
+
+    .ii-analytics-tab.active {
+        color: var(--ii-blue);
+        font-weight: 700;
+        box-shadow: inset 0 -2px 0 var(--ii-blue);
+    }
+
+    .ii-analytics-tab .ii-chip {
+        font-size: 10px;
+        padding: 2px 7px;
+    }
+
+    .ii-analytics-panel {
+        display: none;
+        padding-top: 16px;
+    }
+
+    .ii-analytics-panel.active {
+        display: block;
+    }
+
+    /* AI Agent placeholder */
+    .ii-ai-placeholder {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 48px 24px;
+        background: linear-gradient(135deg, var(--ii-blue-soft) 0%, #f0f9ff 100%);
+        border: 2px dashed var(--ii-blue-border);
+        border-radius: var(--ii-radius);
+        min-height: 260px;
+    }
+
+    .ii-ai-placeholder i {
+        font-size: 42px;
+        color: var(--ii-blue-light);
+        margin-bottom: 16px;
+        opacity: 0.6;
+    }
+
+    .ii-ai-placeholder h4 {
+        margin: 0 0 8px;
+        font-size: 16px;
+        color: var(--ii-ink);
+    }
+
+    .ii-ai-placeholder p {
+        margin: 0;
+        font-size: 13px;
+        color: var(--ii-muted);
+        max-width: 420px;
+        line-height: 1.5;
+    }
+
+    .ii-ai-placeholder .ii-chip {
+        margin-top: 12px;
+    }
     .ii-analytics-pro {
         margin-top: 12px;
         border-color: #8fb3ff;
@@ -1610,6 +1813,7 @@
         .ii-template-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .ii-analytics-dashboard { grid-template-columns: 1fr; }
         .ii-analytics-copy-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .ii-analytics-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
     }
 
     @media (max-width: 900px) {
@@ -1691,6 +1895,8 @@
         #userInboxTest .ii-panel > .ii-row .ii-select { width: 100%; max-width: none !important; }
         #userInboxTest .ii-result-summary { grid-template-columns: 1fr 1fr; }
         .ii-studio-shell { grid-template-columns: 1fr; }
+        .ii-analytics-tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+        .ii-analytics-tab { white-space: nowrap; flex-shrink: 0; }
     }
 
     @media (max-width: 480px) {
@@ -1715,6 +1921,12 @@
         .ii-inbox-card .ii-actions { grid-column: 1 / -1; justify-content: flex-end; }
         .ii-message-detail-actions { flex-direction: column; }
         .ii-message-detail-actions .ii-btn { width: 100%; }
+        .ii-analytics-tabs { gap: 0; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .ii-analytics-tab { padding: 0 12px 10px; font-size: 12px; white-space: nowrap; }
+        .ii-ai-placeholder { padding: 32px 16px; min-height: 200px; }
+        .ii-ai-placeholder h4 { font-size: 15px; }
+        .ii-ai-placeholder p { font-size: 12px; }
+        .ii-pro-topbar .ii-row { flex-wrap: wrap; gap: 8px; }
     }
 </style>
 
@@ -2156,27 +2368,45 @@ The NightOwl Ranch Team</textarea>
             </div>
 
             <div class="ii-pro-card ii-analytics-pro">
-                <div class="ii-pro-card-head">
-                    <div>
-                        <h3>User Inbox Analytics</h3>
-                        <p class="ii-muted mb-0">Live placement, user health, and domain decisions from the latest synced automated test.</p>
+                <div class="ii-pro-card-head" style="flex-direction: column; align-items: stretch; gap: 0; padding: 0 0 0;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 18px 0;">
+                        <div>
+                            <h3>Test Analytics</h3>
+                            <p class="ii-muted mb-0">Placement, provider health, domain decisions, and AI optimization from automated tests.</p>
+                        </div>
+                        <div class="ii-row">
+                            <span class="ii-muted" id="automatedAnalyticsStatus">Run or select an automated test to see analytics.</span>
+                        </div>
                     </div>
-                    <div class="ii-row">
-                        <span class="ii-muted" id="automatedAnalyticsStatus">Run or select an automated test to see analytics.</span>
+                    <div class="ii-analytics-tabs" style="padding: 0 18px;">
+                        <button class="ii-analytics-tab active" type="button" onclick="switchAnalyticsTab('inbox')"><i class="fas fa-inbox"></i> User Inbox Analytics</button>
+                        <button class="ii-analytics-tab" type="button" onclick="switchAnalyticsTab('ai')"><i class="fas fa-robot"></i> AI Optimization <span class="ii-chip gray">Coming Soon</span></button>
                     </div>
                 </div>
                 <div class="ii-pro-card-body">
-                    <div class="ii-result-summary" id="automatedAnalyticsSummary">
-                        <div class="ii-result-pill"><span class="ii-muted">Users</span><strong>0</strong></div>
-                        <div class="ii-result-pill"><span class="ii-muted">Inbox</span><strong>0</strong></div>
-                        <div class="ii-result-pill"><span class="ii-muted">Spam</span><strong>0</strong></div>
-                        <div class="ii-result-pill"><span class="ii-muted">Missing</span><strong>0</strong></div>
+                    <!-- User Inbox Analytics Panel -->
+                    <div class="ii-analytics-panel active" id="analyticsPanelInbox">
+                        <div class="ii-result-summary" id="automatedAnalyticsSummary">
+                            <div class="ii-result-pill"><span class="ii-muted">Users</span><strong>0</strong></div>
+                            <div class="ii-result-pill"><span class="ii-muted">Inbox</span><strong>0</strong></div>
+                            <div class="ii-result-pill"><span class="ii-muted">Spam</span><strong>0</strong></div>
+                            <div class="ii-result-pill"><span class="ii-muted">Missing</span><strong>0</strong></div>
+                        </div>
+                        <div id="autoAnalyticsCards" class="ii-analytics-dashboard mt-3"></div>
+                        <div id="autoProviderSummary" class="ii-auto-card mt-3" style="display:none;"></div>
+                        <div id="autoDomainActions" class="ii-auto-card mt-3" style="display:none;"></div>
+                        <div id="autoUserActions" class="ii-auto-card mt-3" style="display:none;"></div>
+                        <div id="autoSpamInsights" class="ii-auto-card mt-3" style="display:none;"></div>
                     </div>
-                    <div id="autoAnalyticsCards" class="ii-analytics-dashboard mt-3"></div>
-                    <div id="autoProviderSummary" class="ii-auto-card mt-3" style="display:none;"></div>
-                    <div id="autoDomainActions" class="ii-auto-card mt-3" style="display:none;"></div>
-                    <div id="autoUserActions" class="ii-auto-card mt-3" style="display:none;"></div>
-                    <div id="autoSpamInsights" class="ii-auto-card mt-3" style="display:none;"></div>
+                    <!-- AI Optimization Results Panel -->
+                    <div class="ii-analytics-panel" id="analyticsPanelAI">
+                        <div class="ii-ai-placeholder">
+                            <i class="fas fa-wand-magic-sparkles"></i>
+                            <h4>AI Optimization Engine</h4>
+                            <p>After an automated test completes, the AI agent will analyze deliverability patterns, domain health signals, and provider behavior to generate actionable optimization recommendations for your next send.</p>
+                            <span class="ii-chip blue">Available after test results are synced</span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -3873,6 +4103,18 @@ Here is a concise update for your account. Reply to this email if you have any q
             </label>`).join('');
         const status = document.getElementById('automatedWorkspaceStatus');
         if (status) status.textContent = `${selectedCount} selected from ${selectable.length} retrieved non-admin Workspace API user(s).`;
+    }
+
+    function switchAnalyticsTab(tab) {
+        document.querySelectorAll('.ii-analytics-tab').forEach((el) => el.classList.remove('active'));
+        document.querySelectorAll('.ii-analytics-panel').forEach((el) => el.classList.remove('active'));
+        if (tab === 'ai') {
+            document.querySelectorAll('.ii-analytics-tab')[1]?.classList.add('active');
+            document.getElementById('analyticsPanelAI')?.classList.add('active');
+        } else {
+            document.querySelectorAll('.ii-analytics-tab')[0]?.classList.add('active');
+            document.getElementById('analyticsPanelInbox')?.classList.add('active');
+        }
     }
 
     async function runAutomatedEmailTest() {
