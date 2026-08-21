@@ -3512,6 +3512,7 @@ def _poll_inbox_test_payload(test_id, data=None):
         targeted_only = True
     else:
         targeted_only = _truthy_setting(targeted_only, True)
+    refresh_completed = _truthy_setting(data.get('refresh_completed'), False)
     include_text_search = _truthy_setting(data.get('include_text_search'), False)
     allow_deep_scan = not _truthy_setting(data.get('skip_deep_scan'), True)
     test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
@@ -3531,6 +3532,7 @@ def _poll_inbox_test_payload(test_id, data=None):
         'headers_fetched': 0, 'deleted_old_messages': deleted_old,
         'match_modes': {'x_test_id': 0, 'exact': 0},
         'accounts_synced': 0,
+        'skipped_completed': 0,
         'sync_mode': 'targeted' if targeted_only else 'targeted_plus_recent',
     }
     for row in all_messages:
@@ -3540,6 +3542,10 @@ def _poll_inbox_test_payload(test_id, data=None):
             row.error_message = 'Recipient is external; connect it as an IMAP inbox to observe inbox/spam placement.'
             continue
         diagnostic['checked_rows'] += 1
+        if targeted_only and not refresh_completed and row.placement in ('INBOX', 'SPAM') and row.folder:
+            diagnostic['skipped_completed'] += 1
+            diagnostic['matched_rows'] += 1
+            continue
         pending_by_inbox.setdefault(row.imap_account_id, []).append(row)
 
     for inbox_id, rows in pending_by_inbox.items():
