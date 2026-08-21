@@ -1772,6 +1772,7 @@
                 </div>
                 <div id="automatedEmailResults" class="ii-muted">Run or select an automated test to see source-email verdicts.</div>
             </div>
+            <div id="autoAnalyticsCards" class="ii-analytics-dashboard"></div>
             <div id="autoProviderSummary" class="ii-auto-card mt-3" style="display:none;"></div>
             <div id="autoDomainActions" class="ii-auto-card mt-3" style="display:none;"></div>
             <div id="autoUserActions" class="ii-auto-card mt-3" style="display:none;"></div>
@@ -2529,6 +2530,7 @@ merge_recipe_id, content_blueprint_id</pre>
         automatedPollTimers: {},
         automatedResultFilter: 'ALL',
         automatedCopyBuckets: {inboxUsers: [], inboxDomains: [], spamUsers: [], spamDomains: []},
+        automatedMessages: [],
         selectedResultsTest: null,
         tests: []
     };
@@ -3405,6 +3407,7 @@ merge_recipe_id, content_blueprint_id</pre>
             const manualInput = document.getElementById('automatedManualTestIdInput');
             if (manualInput) manualInput.value = iiState.automatedSelectedTestId;
             localStorage.setItem('ii_automated_last_test_id', iiState.automatedSelectedTestId);
+            iiState.automatedMessages = test.messages || [];
             const existing = iiState.automatedTests.findIndex((item) => item.test_id === iiState.automatedSelectedTestId);
             if (existing >= 0) iiState.automatedTests[existing] = {...iiState.automatedTests[existing], ...test};
             else iiState.automatedTests.unshift(test);
@@ -3513,7 +3516,7 @@ merge_recipe_id, content_blueprint_id</pre>
         const filtered = iiState.automatedResultFilter === 'ALL' ? rows : rows.filter((row) => row.verdict === iiState.automatedResultFilter);
         if (!filtered.length && !rows.length) {
             el.innerHTML = '<div class="ii-muted">No email-level results match this bucket yet.</div>';
-            renderAutoAnalyticsPanels([], test);
+            renderAutomatedEmailAnalytics([], test);
             return;
         }
         const verdictCounts = rows.reduce((acc, row) => {
@@ -3527,55 +3530,6 @@ merge_recipe_id, content_blueprint_id</pre>
         const totalMissing = rows.reduce((sum, r) => sum + (r.missing_count || 0), 0);
         const totalPlacements = totalInbox + totalSpam + totalMissing;
         const observedPct = totalPlacements ? Math.round(((totalInbox + totalSpam) / totalPlacements) * 100) : 0;
-        const inboxPct = totalPlacements ? Math.round((totalInbox / totalPlacements) * 100) : 0;
-        const spamPct = totalPlacements ? Math.round((totalSpam / totalPlacements) * 100) : 0;
-        const missingPct = totalPlacements ? Math.round((totalMissing / totalPlacements) * 100) : 0;
-        const pendingPct = Math.max(0, 100 - inboxPct - spamPct - missingPct);
-        const score = totalPlacements ? Math.max(0, Math.min(100, Math.round(inboxPct - spamPct * 0.35 - missingPct * 0.1))) : null;
-        const domainMap = {};
-        const userMap = {};
-        const providerMap = {};
-        rows.forEach((r) => {
-            const domain = r.source_sender_domain || (r.source_sender || '').split('@').pop() || 'unknown';
-            const sender = r.source_sender || '';
-            const provider = r.source_provider || 'IMAP';
-            domainMap[domain] = domainMap[domain] || {key: domain, total: 0, inbox: 0, spam: 0, pending: 0, missing: 0, users: new Set()};
-            domainMap[domain].total += (r.tests || 0);
-            domainMap[domain].inbox += (r.inbox_count || 0);
-            domainMap[domain].spam += (r.spam_count || 0);
-            domainMap[domain].pending += (r.pending_count || 0);
-            domainMap[domain].missing += (r.missing_count || 0);
-            if (sender) domainMap[domain].users.add(sender);
-            userMap[sender] = userMap[sender] || {key: sender, total: 0, inbox: 0, spam: 0, pending: 0, missing: 0, domain};
-            userMap[sender].total += (r.tests || 0);
-            userMap[sender].inbox += (r.inbox_count || 0);
-            userMap[sender].spam += (r.spam_count || 0);
-            userMap[sender].pending += (r.pending_count || 0);
-            userMap[sender].missing += (r.missing_count || 0);
-            providerMap[provider] = providerMap[provider] || {total: 0, inbox: 0, spam: 0, pending: 0, missing: 0};
-            providerMap[provider].total += (r.tests || 0);
-            providerMap[provider].inbox += (r.inbox_count || 0);
-            providerMap[provider].spam += (r.spam_count || 0);
-            providerMap[provider].pending += (r.pending_count || 0);
-            providerMap[provider].missing += (r.missing_count || 0);
-        });
-        const domains = Object.values(domainMap).map((d) => {
-            const observed = Math.max(0, d.total - d.pending);
-            return {...d, users: d.users.size, observed, inboxRate: observed ? Math.round((d.inbox / observed) * 100) : null, spamRate: observed ? Math.round((d.spam / observed) * 100) : null};
-        }).sort((a, b) => (b.spamRate ?? -1) - (a.spamRate ?? -1));
-        const users = Object.values(userMap).map((u) => {
-            const observed = Math.max(0, u.total - u.pending);
-            return {...u, observed, inboxRate: observed ? Math.round((u.inbox / observed) * 100) : null, spamRate: observed ? Math.round((u.spam / observed) * 100) : null};
-        }).sort((a, b) => (b.spamRate ?? -1) - (a.spamRate ?? -1));
-        const providers = Object.entries(providerMap).sort((a, b) => b[1].total - a[1].total);
-        const inboxDomains = domains.filter((d) => d.inbox > 0).map((d) => d.key);
-        const spamDomains = domains.filter((d) => d.spam > 0).map((d) => d.key);
-        const inboxUsers = users.filter((u) => u.inbox > 0).map((u) => u.key);
-        const spamUsers = users.filter((u) => u.spam > 0).map((u) => u.key);
-        iiState.automatedCopyBuckets.inboxUsers = inboxUsers;
-        iiState.automatedCopyBuckets.inboxDomains = inboxDomains;
-        iiState.automatedCopyBuckets.spamUsers = spamUsers;
-        iiState.automatedCopyBuckets.spamDomains = spamDomains;
         el.innerHTML = `
             <div class="ii-result-summary">
                 <div class="ii-result-pill"><span class="ii-muted">Total emails</span><strong>${rows.length}</strong></div>
@@ -3609,107 +3563,37 @@ merge_recipe_id, content_blueprint_id</pre>
                         </tr>`).join('')}
                 </table>
             </div>`;
-        renderAutoAnalyticsPanels(rows, test);
+        const messages = iiState.automatedMessages || [];
+        renderAutomatedEmailAnalytics(messages, test);
     }
 
-    function renderAutoAnalyticsPanels(rows, test) {
-        const dashEl = document.getElementById('automatedEmailResults');
-        const provEl = document.getElementById('autoProviderSummary');
-        const domainEl = document.getElementById('autoDomainActions');
-        const userEl = document.getElementById('autoUserActions');
-        const spamEl = document.getElementById('autoSpamInsights');
-        if (!rows.length) {
-            [provEl, domainEl, userEl, spamEl].forEach((e) => { if (e) e.style.display = 'none'; });
+    function renderAutomatedEmailAnalytics(messages, test) {
+        const autoProviderOpts = {el: 'autoProviderSummary', providerFn: (row) => row.source_provider || recipientProvider(row.recipient)};
+        const autoDomainOpts = {el: 'autoDomainActions', senderField: 'source_sender', copyBuckets: iiState.automatedCopyBuckets};
+        const autoUserOpts = {el: 'autoUserActions', senderField: 'source_sender', copyBuckets: iiState.automatedCopyBuckets};
+        const autoSpamOpts = {el: 'autoSpamInsights', senderField: 'source_sender'};
+        const autoCardOpts = {el: 'autoAnalyticsCards', senderField: 'source_sender', copyBuckets: iiState.automatedCopyBuckets, providerFn: (row) => row.source_provider || recipientProvider(row.recipient), copyFn: 'copyAutomatedBucket'};
+        if (!messages.length) {
+        ['autoProviderSummary', 'autoDomainActions', 'autoUserActions', 'autoSpamInsights', 'autoAnalyticsCards'].forEach((id) => {
+                const e = document.getElementById(id);
+                if (e) { e.style.display = ''; e.innerHTML = '<div class="ii-panel ii-muted">No per-recipient messages found. Sync to see analytics.</div>'; }
+            });
+            const cardsEl = document.getElementById(autoCardOpts.el);
+            if (cardsEl) {
+                cardsEl.className = 'ii-analytics-dashboard';
+                cardsEl.innerHTML = '<div class="ii-analytics-card ii-muted">No per-recipient messages found. Sync to see analytics.</div>';
+            }
             return;
         }
-        const totalInbox = rows.reduce((sum, r) => sum + (r.inbox_count || 0), 0);
-        const totalSpam = rows.reduce((sum, r) => sum + (r.spam_count || 0), 0);
-        const totalMissing = rows.reduce((sum, r) => sum + (r.missing_count || 0), 0);
-        const totalPlacements = totalInbox + totalSpam + totalMissing;
-        const inboxPct = totalPlacements ? Math.round((totalInbox / totalPlacements) * 100) : 0;
-        const spamPct = totalPlacements ? Math.round((totalSpam / totalPlacements) * 100) : 0;
-        const missingPct = totalPlacements ? Math.round((totalMissing / totalPlacements) * 100) : 0;
-        const score = totalPlacements ? Math.max(0, Math.min(100, Math.round(inboxPct - spamPct * 0.35 - missingPct * 0.1))) : null;
-        const domainMap = {};
-        const userMap = {};
-        const providerMap = {};
-        rows.forEach((r) => {
-            const domain = r.source_sender_domain || (r.source_sender || '').split('@').pop() || 'unknown';
-            const sender = r.source_sender || '';
-            const provider = r.source_provider || 'IMAP';
-            domainMap[domain] = domainMap[domain] || {key: domain, total: 0, inbox: 0, spam: 0, pending: 0, missing: 0, users: new Set()};
-            domainMap[domain].total += (r.tests || 0);
-            domainMap[domain].inbox += (r.inbox_count || 0);
-            domainMap[domain].spam += (r.spam_count || 0);
-            domainMap[domain].pending += (r.pending_count || 0);
-            domainMap[domain].missing += (r.missing_count || 0);
-            if (sender) domainMap[domain].users.add(sender);
-            userMap[sender] = userMap[sender] || {key: sender, total: 0, inbox: 0, spam: 0, pending: 0, missing: 0, domain};
-            userMap[sender].total += (r.tests || 0);
-            userMap[sender].inbox += (r.inbox_count || 0);
-            userMap[sender].spam += (r.spam_count || 0);
-            userMap[sender].pending += (r.pending_count || 0);
-            userMap[sender].missing += (r.missing_count || 0);
-            providerMap[provider] = providerMap[provider] || {total: 0, inbox: 0, spam: 0, pending: 0, missing: 0};
-            providerMap[provider].total += (r.tests || 0);
-            providerMap[provider].inbox += (r.inbox_count || 0);
-            providerMap[provider].spam += (r.spam_count || 0);
-            providerMap[provider].pending += (r.pending_count || 0);
-            providerMap[provider].missing += (r.missing_count || 0);
+        renderUserInboxAnalyticsCards(messages, test.test_id, autoCardOpts);
+        renderUserInboxProviderSummary(messages, autoProviderOpts);
+        renderUserInboxDomainActions(messages, autoDomainOpts);
+        renderUserInboxUserActions(messages, autoUserOpts);
+        renderUserInboxSpamInsights(messages, autoSpamOpts);
+        ['autoProviderSummary', 'autoDomainActions', 'autoUserActions', 'autoSpamInsights'].forEach((id) => {
+            const e = document.getElementById(id);
+            if (e && e.innerHTML.trim()) e.style.display = '';
         });
-        const domains = Object.values(domainMap).map((d) => {
-            const observed = Math.max(0, d.total - d.pending);
-            return {...d, users: d.users.size, observed, inboxRate: observed ? Math.round((d.inbox / observed) * 100) : null, spamRate: observed ? Math.round((d.spam / observed) * 100) : null};
-        }).sort((a, b) => (b.spamRate ?? -1) - (a.spamRate ?? -1));
-        const users = Object.values(userMap).map((u) => {
-            const observed = Math.max(0, u.total - u.pending);
-            return {...u, observed, inboxRate: observed ? Math.round((u.inbox / observed) * 100) : null, spamRate: observed ? Math.round((u.spam / observed) * 100) : null};
-        }).sort((a, b) => (b.spamRate ?? -1) - (a.spamRate ?? -1));
-        const providers = Object.entries(providerMap).sort((a, b) => b[1].total - a[1].total);
-        const inboxDomains = domains.filter((d) => d.inbox > 0).map((d) => d.key);
-        const spamDomains = domains.filter((d) => d.spam > 0).map((d) => d.key);
-        const inboxUsers = users.filter((u) => u.inbox > 0).map((u) => u.key);
-        const spamUsers = users.filter((u) => u.spam > 0).map((u) => u.key);
-        const autoHealth = (item) => {
-            if (item.inboxRate === null) return {label: 'Unobserved', chip: 'gray'};
-            if (item.inbox > item.spam) return {label: 'More inbox', chip: 'green'};
-            if (item.spam > item.inbox) return {label: 'More spam', chip: 'red'};
-            return {label: 'Mixed', chip: 'yellow'};
-        };
-        const miniBar = (item) => {
-            const i = item.observed ? Math.round((item.inbox / item.observed) * 100) : 0;
-            const s = item.observed ? Math.round((item.spam / item.observed) * 100) : 0;
-            const p = item.observed ? Math.round((item.pending / item.observed) * 100) : 0;
-            return `<div style="display:flex;height:10px;overflow:hidden;border-radius:999px;background:#e2e8f0;"><div style="width:${i}%;background:#22c55e;"></div><div style="width:${s}%;background:#ef4444;"></div><div style="width:${p}%;background:#f59e0b;"></div></div>`;
-        };
-        if (provEl) {
-            provEl.style.display = '';
-            provEl.innerHTML = `<div class="ii-panel"><h3>Provider Breakdown</h3>${providers.map(([provider, stats]) => {
-                const rate = stats.total ? Math.round((stats.inbox / stats.total) * 100) : 0;
-                return `<div class="ii-row justify-content-between mb-2"><strong>${escapeHtml(provider)}</strong><span class="ii-chip green">${stats.inbox} inbox</span><span class="ii-chip red">${stats.spam} spam</span><span class="ii-chip yellow">${stats.pending} pending</span><strong>${rate}%</strong></div>`;
-            }).join('') || '<div class="ii-muted">No provider data yet.</div>'}</div>`;
-        }
-        if (domainEl) {
-            domainEl.style.display = domains.length ? '' : 'none';
-            domainEl.innerHTML = `<div class="ii-panel"><div class="ii-row justify-content-between mb-2"><h3>Domain Analytics</h3><div class="ii-row" style="gap:6px;"><button class="ii-btn" type="button" onclick="copyAutomatedBucket('inboxDomains')"><i class="fas fa-globe"></i> Copy inbox domains (${inboxDomains.length})</button><button class="ii-btn" type="button" onclick="copyAutomatedBucket('spamDomains')"><i class="fas fa-ban"></i> Copy spam domains (${spamDomains.length})</button></div></div><div class="ii-actions-grid">${domains.map((item) => {
-                const health = autoHealth(item);
-                return `<div class="ii-action-result-card"><div class="ii-analytics-title"><strong class="ii-domain-text">${escapeHtml(item.key)}</strong><span class="ii-chip ${health.chip}">${health.label}</span></div>${miniBar(item)}<div class="ii-rate-row"><div><span class="ii-muted">Inbox</span><strong>${item.inboxRate === null ? '--' : item.inboxRate + '%'}</strong></div><div><span class="ii-muted">Spam</span><strong>${item.spamRate === null ? '--' : item.spamRate + '%'}</strong></div><div><span class="ii-muted">Users</span><strong>${item.users}</strong></div></div><div class="ii-muted">Score ${item.inbox}/${item.observed || item.total} observed</div></div>`;
-            }).join('')}</div></div>`;
-        }
-        if (userEl) {
-            userEl.style.display = users.length ? '' : 'none';
-            userEl.innerHTML = `<div class="ii-panel"><div class="ii-row justify-content-between mb-2"><h3>User Analytics</h3><div class="ii-row" style="gap:6px;"><button class="ii-btn" type="button" onclick="copyAutomatedBucket('inboxUsers')"><i class="fas fa-users"></i> Copy inbox users (${inboxUsers.length})</button><button class="ii-btn" type="button" onclick="copyAutomatedBucket('spamUsers')"><i class="fas fa-user-xmark"></i> Copy spam users (${spamUsers.length})</button></div></div><div class="ii-actions-grid">${users.map((item) => {
-                const health = autoHealth(item);
-                const focus = item.spam > item.inbox ? 'Review display name and domain' : item.inbox > item.spam ? 'Keep as inbox-performing sender' : 'Monitor next test';
-                return `<div class="ii-action-result-card"><div class="ii-analytics-title"><div><strong>${escapeHtml(item.key.split('@')[0])}</strong><div class="ii-muted ii-email-text">${escapeHtml(item.key)}</div></div><span class="ii-chip ${health.chip}">${health.label}</span></div>${miniBar(item)}<div class="ii-rate-row"><div><span class="ii-muted">Inbox</span><strong>${item.inboxRate === null ? '--' : item.inboxRate + '%'}</strong></div><div><span class="ii-muted">Spam</span><strong>${item.spamRate === null ? '--' : item.spamRate + '%'}</strong></div><div><span class="ii-muted">Domain</span><strong class="ii-domain-text">${escapeHtml(item.domain)}</strong></div></div><div class="ii-muted">${escapeHtml(focus)}</div></div>`;
-            }).join('')}</div></div>`;
-        }
-        if (spamEl) {
-            const spamSenders = users.filter((u) => u.spam > 0);
-            const spamDomainsOnly = domains.filter((d) => d.spam > 0);
-            spamEl.style.display = (spamSenders.length || spamDomainsOnly.length) ? '' : 'none';
-            spamEl.innerHTML = `<div class="ii-panel"><h3>Spam Insights</h3><div class="ii-insight-grid"><div class="ii-insight-card"><h4>Spam Senders</h4>${spamSenders.map((u) => `<div class="ii-insight-row"><span class="ii-email-text">${escapeHtml(u.key)}</span><span class="ii-chip red">${u.spamRate}% spam</span><span class="ii-muted">${u.spam}/${u.total}</span></div>`).join('') || '<div class="ii-muted">No spam senders.</div>'}</div><div class="ii-insight-card"><h4>Spam Domains</h4>${spamDomainsOnly.map((d) => `<div class="ii-insight-row"><strong class="ii-domain-text">${escapeHtml(d.key)}</strong><span class="ii-chip red">${d.spamRate}% spam</span><span class="ii-muted">${d.spam}/${d.total}</span></div>`).join('') || '<div class="ii-muted">No spam domains.</div>'}</div></div></div>`;
-        }
     }
 
     async function searchWorkspaceSenders() {
@@ -5293,17 +5177,18 @@ merge_recipe_id, content_blueprint_id</pre>
         return domain || 'External';
     }
 
-    function renderUserInboxProviderSummary(rows) {
-        const el = document.getElementById('userInboxProviderSummary');
+    function renderUserInboxProviderSummary(rows, opts = {}) {
+        const el = document.getElementById(opts.el || 'userInboxProviderSummary');
         if (!el) return;
         if (el.classList.contains('d-none')) return;
         if (!rows.length) {
             el.textContent = 'Provider analytics appear after a test has results.';
             return;
         }
+        const providerFn = opts.providerFn || ((row) => recipientProvider(row.recipient));
         const providers = {};
         rows.forEach((row) => {
-            const provider = recipientProvider(row.recipient);
+            const provider = providerFn(row);
             providers[provider] ||= {total: 0, inbox: 0, spam: 0, pending: 0, missing: 0, unobserved: 0};
             providers[provider].total += 1;
             if (row.placement === 'INBOX') providers[provider].inbox += 1;
@@ -5325,14 +5210,18 @@ merge_recipe_id, content_blueprint_id</pre>
         }).join('');
     }
 
-    function renderUserInboxAnalyticsCards(rows, testId) {
-        const el = document.getElementById('userInboxAnalyticsCards');
+    function renderUserInboxAnalyticsCards(rows, testId, opts = {}) {
+        const el = document.getElementById(opts.el || 'userInboxAnalyticsCards');
         if (!el) return;
+        const copyFn = opts.copyFn || 'copyUserInboxBucket';
         if (!rows.length) {
             el.className = 'ii-analytics-dashboard';
             el.innerHTML = '<div class="ii-analytics-card ii-muted">No message rows found for this test yet. Sync again after delivery has had time to complete.</div>';
             return;
         }
+        const senderField = opts.senderField || 'sender';
+        const copyBuckets = opts.copyBuckets || iiState.userInboxCopyBuckets;
+        const providerFn = opts.providerFn || ((row) => recipientProvider(row.recipient));
         const summary = matrixSummary(rows);
         const missing = summary.pending + summary.failed;
         const inboxPct = summary.total ? Math.round((summary.inbox / summary.total) * 100) : 0;
@@ -5340,8 +5229,8 @@ merge_recipe_id, content_blueprint_id</pre>
         const pendingPct = summary.total ? Math.round((summary.pending / summary.total) * 100) : 0;
         const missingPct = Math.max(0, 100 - inboxPct - spamPct - pendingPct);
         const score = deliveryScore({sent_count: summary.total}, rows);
-        const domains = userInboxObservationStats(rows, (row) => (row.sender || '').split('@').pop().toLowerCase());
-        const users = userInboxObservationStats(rows, (row) => row.sender || '').map((item) => {
+        const domains = userInboxObservationStats(rows, (row) => (row[senderField] || '').split('@').pop().toLowerCase());
+        const users = userInboxObservationStats(rows, (row) => row[senderField] || '').map((item) => {
             const sender = senderLookup(item.key);
             return {...item, displayName: sender.name || item.key.split('@')[0], domain: item.key.split('@').pop() || ''};
         });
@@ -5349,11 +5238,20 @@ merge_recipe_id, content_blueprint_id</pre>
         const spamDomains = domains.filter((item) => item.spam > 0).map((item) => item.key);
         const inboxUsers = users.filter((item) => item.inbox > 0).map((item) => item.key);
         const spamUsers = users.filter((item) => item.spam > 0).map((item) => item.key);
-        iiState.userInboxCopyBuckets.inboxDomains = inboxDomains;
-        iiState.userInboxCopyBuckets.spamDomains = spamDomains;
-        iiState.userInboxCopyBuckets.inboxUsers = inboxUsers;
-        iiState.userInboxCopyBuckets.spamUsers = spamUsers;
-        const providers = Object.entries(providerStatsFromRows(rows)).sort((a, b) => b[1].total - a[1].total);
+        copyBuckets.inboxDomains = inboxDomains;
+        copyBuckets.spamDomains = spamDomains;
+        copyBuckets.inboxUsers = inboxUsers;
+        copyBuckets.spamUsers = spamUsers;
+        const providerMap = {};
+        rows.forEach((row) => {
+            const provider = providerFn(row);
+            providerMap[provider] ||= {total: 0, inbox: 0, spam: 0, pending: 0};
+            providerMap[provider].total += 1;
+            if (row.placement === 'INBOX') providerMap[provider].inbox += 1;
+            else if (row.placement === 'SPAM') providerMap[provider].spam += 1;
+            else if (row.placement === 'PENDING') providerMap[provider].pending += 1;
+        });
+        const providers = Object.entries(providerMap).sort((a, b) => b[1].total - a[1].total);
         const topDomains = domains.filter((item) => item.inbox || item.spam).sort((a, b) => b.total - a.total || b.spam - a.spam).slice(0, 5);
         const actionUsers = users.filter((item) => item.inbox || item.spam).sort((a, b) => b.spam - a.spam || a.inbox - b.inbox).slice(0, 5);
         el.className = 'ii-analytics-dashboard';
@@ -5402,10 +5300,10 @@ merge_recipe_id, content_blueprint_id</pre>
                     <span class="ii-chip blue">${summary.inbox + summary.spam} located</span>
                 </div>
                 <div class="ii-analytics-copy-grid">
-                    <button class="ii-btn ii-copy-stat-button" type="button" onclick="copyUserInboxBucket('inboxDomains')"><strong>${inboxDomains.length}</strong><span>Copy inbox domains</span></button>
-                    <button class="ii-btn ii-copy-stat-button" type="button" onclick="copyUserInboxBucket('spamDomains')"><strong>${spamDomains.length}</strong><span>Copy spam domains</span></button>
-                    <button class="ii-btn ii-copy-stat-button" type="button" onclick="copyUserInboxBucket('inboxUsers')"><strong>${inboxUsers.length}</strong><span>Copy inbox users</span></button>
-                    <button class="ii-btn ii-copy-stat-button" type="button" onclick="copyUserInboxBucket('spamUsers')"><strong>${spamUsers.length}</strong><span>Copy spam users</span></button>
+                    <button class="ii-btn ii-copy-stat-button" type="button" onclick="${copyFn}('inboxDomains')"><strong>${inboxDomains.length}</strong><span>Copy inbox domains</span></button>
+                    <button class="ii-btn ii-copy-stat-button" type="button" onclick="${copyFn}('spamDomains')"><strong>${spamDomains.length}</strong><span>Copy spam domains</span></button>
+                    <button class="ii-btn ii-copy-stat-button" type="button" onclick="${copyFn}('inboxUsers')"><strong>${inboxUsers.length}</strong><span>Copy inbox users</span></button>
+                    <button class="ii-btn ii-copy-stat-button" type="button" onclick="${copyFn}('spamUsers')"><strong>${spamUsers.length}</strong><span>Copy spam users</span></button>
                 </div>
                 <div class="ii-compact-stat-grid mt-2">
                     <div class="ii-compact-stat"><span class="ii-muted">Inbox domains</span><strong>${inboxDomains.length}</strong><span class="ii-muted">${summary.inbox} inbox hit(s)</span></div>
@@ -5487,14 +5385,16 @@ merge_recipe_id, content_blueprint_id</pre>
         </div>`;
     }
 
-    function renderUserInboxDomainActions(rows) {
-        const el = document.getElementById('userInboxDomainActions');
+    function renderUserInboxDomainActions(rows, opts = {}) {
+        const el = document.getElementById(opts.el || 'userInboxDomainActions');
         if (!el) return;
-        const domains = userInboxObservationStats(rows, (row) => (row.sender || '').split('@').pop().toLowerCase());
+        const senderField = opts.senderField || 'sender';
+        const copyBuckets = opts.copyBuckets || iiState.userInboxCopyBuckets;
+        const domains = userInboxObservationStats(rows, (row) => (row[senderField] || '').split('@').pop().toLowerCase());
         const inboxDomains = domains.filter((item) => item.inbox > 0).map((item) => item.key);
         const spamDomains = domains.filter((item) => item.spam > 0).map((item) => item.key);
-        iiState.userInboxCopyBuckets.inboxDomains = inboxDomains;
-        iiState.userInboxCopyBuckets.spamDomains = spamDomains;
+        copyBuckets.inboxDomains = inboxDomains;
+        copyBuckets.spamDomains = spamDomains;
         if (el.classList.contains('d-none')) return;
         if (!domains.length) {
             el.textContent = 'No domain analytics are available yet.';
@@ -5526,17 +5426,19 @@ merge_recipe_id, content_blueprint_id</pre>
             </div>`;
     }
 
-    function renderUserInboxUserActions(rows) {
-        const el = document.getElementById('userInboxUserActions');
+    function renderUserInboxUserActions(rows, opts = {}) {
+        const el = document.getElementById(opts.el || 'userInboxUserActions');
         if (!el) return;
-        const users = userInboxObservationStats(rows, (row) => row.sender || '').map((item) => {
+        const senderField = opts.senderField || 'sender';
+        const copyBuckets = opts.copyBuckets || iiState.userInboxCopyBuckets;
+        const users = userInboxObservationStats(rows, (row) => row[senderField] || '').map((item) => {
             const sender = senderLookup(item.key);
             return {...item, displayName: sender.name || item.key.split('@')[0], domain: item.key.split('@').pop() || ''};
         });
         const inboxUsers = users.filter((item) => item.inbox > 0).map((item) => item.key);
         const spamUsers = users.filter((item) => item.spam > 0).map((item) => item.key);
-        iiState.userInboxCopyBuckets.inboxUsers = inboxUsers;
-        iiState.userInboxCopyBuckets.spamUsers = spamUsers;
+        copyBuckets.inboxUsers = inboxUsers;
+        copyBuckets.spamUsers = spamUsers;
         if (el.classList.contains('d-none')) return;
         if (!users.length) {
             el.textContent = 'No user analytics are available yet.';
@@ -5615,18 +5517,19 @@ merge_recipe_id, content_blueprint_id</pre>
         if (statusText) statusText.textContent = `Copied ${values.length} item(s) to clipboard.`;
     }
 
-    function renderUserInboxSpamInsights(rows) {
-        const el = document.getElementById('userInboxSpamInsights');
+    function renderUserInboxSpamInsights(rows, opts = {}) {
+        const el = document.getElementById(opts.el || 'userInboxSpamInsights');
         if (!el) return;
         if (el.classList.contains('d-none')) return;
         if (!rows.length) {
             el.textContent = 'Sync a test to see spam percentage by sender, domain, and user display name.';
             return;
         }
+        const senderField = opts.senderField || 'sender';
         const bySender = {};
         const byDomain = {};
         rows.forEach((row) => {
-            const sender = row.sender || '';
+            const sender = row[senderField] || '';
             const domain = sender.split('@').pop() || 'unknown';
             bySender[sender] ||= {total: 0, spam: 0, inbox: 0, pending: 0};
             byDomain[domain] ||= {total: 0, spam: 0, inbox: 0, pending: 0};

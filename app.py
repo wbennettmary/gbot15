@@ -2930,6 +2930,8 @@ def api_inbox_automated_test_results(test_id):
     verdict_counts = {'INBOX': 0, 'MIXED': 0, 'SPAM': 0, 'PENDING': 0, 'INSUFFICIENT_DATA': 0}
     for item in source_results:
         verdict_counts[item['verdict']] = verdict_counts.get(item['verdict'], 0) + 1
+    source_lookup = {item['id']: item for item in source_results}
+    messages = InboxDeliverabilityMessage.query.filter_by(test_id=test_id).order_by(InboxDeliverabilityMessage.id.asc()).all()
     return jsonify({'success': True, 'test': {
         'test_id': test.test_id,
         'name': test.name,
@@ -2947,6 +2949,21 @@ def api_inbox_automated_test_results(test_id):
         'created_at': test.created_at.isoformat() + 'Z' if test.created_at else None,
         'source_results': source_results,
         'verdict_counts': verdict_counts,
+        'messages': [{
+            'sender': m.workspace_sender,
+            'recipient': m.recipient,
+            'source_email_id': m.source_email_id,
+            'source_sender': source_lookup.get(m.source_email_id, {}).get('source_sender', ''),
+            'source_sender_domain': source_lookup.get(m.source_email_id, {}).get('source_sender_domain', ''),
+            'source_provider': source_lookup.get(m.source_email_id, {}).get('source_provider', ''),
+            'test_identifier': m.test_identifier,
+            'placement': m.placement,
+            'folder': m.folder,
+            'status': m.status,
+            'error_message': m.error_message,
+            'sent_at': m.sent_at.isoformat() + 'Z' if m.sent_at else None,
+            'detected_at': m.detected_at.isoformat() + 'Z' if m.detected_at else None,
+        } for m in messages]
     }})
 
 def _placement_from_folder(folder):
