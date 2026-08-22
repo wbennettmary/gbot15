@@ -1008,6 +1008,67 @@
         width: min(460px, 100%);
     }
 
+    .ii-test-list-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+
+    .ii-test-bulk-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        padding: 10px 12px;
+        border: 1px solid #dbeafe;
+        border-radius: 10px;
+        background: #f8fbff;
+        margin-bottom: 12px;
+    }
+
+    .ii-test-origin-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 86px;
+        justify-content: center;
+    }
+
+    .ii-test-origin-chip.manual {
+        background: #fef3c7;
+        color: #92400e;
+        border-color: #fde68a;
+    }
+
+    .ii-test-origin-chip.ai {
+        background: #e0f2fe;
+        color: #075985;
+        border-color: #bae6fd;
+    }
+
+    .ii-agent-setup-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 12px;
+    }
+
+    .ii-agent-setup-block {
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 12px;
+        background: #fff;
+    }
+
+    .ii-agent-template-picker {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: end;
+        gap: 10px;
+    }
+
     .ii-insight-grid {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2172,6 +2233,7 @@
         .ii-template-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .ii-analytics-dashboard { grid-template-columns: 1fr; }
         .ii-agent-result-hero,
+        .ii-agent-setup-grid,
         .ii-saved-list-columns { grid-template-columns: 1fr; }
         .ii-analytics-copy-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .ii-analytics-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -2738,10 +2800,45 @@ The NightOwl Ranch Team</textarea>
                 </div>
                 <div class="ii-pro-card">
                     <div class="ii-pro-card-head">
-                        <h4>Active & Completed Tests</h4>
-                        <button class="ii-btn" type="button" onclick="loadAutomatedTests()"><i class="fas fa-arrows-rotate"></i></button>
+                        <div>
+                            <h4>Active & Completed Tests</h4>
+                            <span class="ii-muted" id="automatedActiveDateLabel">Today</span>
+                        </div>
+                        <div class="ii-row">
+                            <select class="ii-select" id="automatedSectionDateFilter" style="width: 150px;" onchange="syncAutomatedDateFilterFromSection()">
+                                <option value="today" selected>Today</option>
+                                <option value="yesterday">Yesterday</option>
+                                <option value="this_week">This week</option>
+                                <option value="current_month">Current month</option>
+                                <option value="last_month">Last month</option>
+                                <option value="custom">Custom</option>
+                                <option value="all">All time</option>
+                            </select>
+                            <select class="ii-select" id="automatedPageSizeSelect" style="width: 120px;" onchange="changeAutomatedTestsPageSize()">
+                                <option value="5" selected>5 / page</option>
+                                <option value="10">10 / page</option>
+                                <option value="25">25 / page</option>
+                                <option value="50">50 / page</option>
+                                <option value="all">All</option>
+                            </select>
+                            <button class="ii-btn" type="button" onclick="loadAutomatedTests()"><i class="fas fa-arrows-rotate"></i></button>
+                        </div>
                     </div>
                     <div class="ii-pro-card-body">
+                        <div class="ii-test-bulk-bar">
+                            <div>
+                                <strong id="automatedSelectedBulkCount">0 selected</strong>
+                                <div class="ii-muted">Select tests, then view their combined analytics.</div>
+                            </div>
+                            <div class="ii-row">
+                                <select class="ii-select" id="automatedBulkViewTarget" style="width: 190px;">
+                                    <option value="inbox">User Inbox Analytics</option>
+                                    <option value="agent">Agent Results</option>
+                                </select>
+                                <button class="ii-btn ii-btn-primary" type="button" onclick="viewSelectedAutomatedTestsBulk()"><i class="fas fa-chart-simple"></i> View selected</button>
+                                <button class="ii-btn" type="button" onclick="clearAutomatedTestSelection()"><i class="fas fa-xmark"></i></button>
+                            </div>
+                        </div>
                         <div id="automatedTestsList" class="ii-muted">No automated tests loaded.</div>
                     </div>
                 </div>
@@ -2863,24 +2960,63 @@ The NightOwl Ranch Team</textarea>
                             <button class="ii-btn ii-btn-primary w-100" type="button" onclick="applyAiAgentPrompt()"><i class="fas fa-wand-magic-sparkles"></i> Apply prompt to setup</button>
                         </div>
                         <div class="ii-agent-chat-pane" id="aiAgentSetupPane">
-                            <div class="ii-form-grid">
-                                <div class="ii-field" style="grid-column: 1 / -1;">
-                                    <label>List number(s)</label>
-                                    <input class="ii-input" id="aiAgentListIdsInput" placeholder="40, 25">
+                            <div class="ii-agent-setup-grid">
+                                <div class="ii-agent-setup-block">
+                                    <div class="ii-row justify-content-between mb-2">
+                                        <h4 class="mb-0">Run scope</h4>
+                                        <span class="ii-chip blue">Lists</span>
+                                    </div>
+                                    <label class="ii-field">
+                                        <span>List number(s)</span>
+                                        <input class="ii-input" id="aiAgentListIdsInput" placeholder="40, 25">
+                                    </label>
+                                    <div class="ii-form-grid">
+                                        <label class="ii-field">
+                                            <span>Users each test</span>
+                                            <input class="ii-input" id="aiAgentUsersEachInput" type="number" min="1" placeholder="3">
+                                        </label>
+                                        <label class="ii-field">
+                                            <span>Receiving email</span>
+                                            <input class="ii-input" id="aiAgentRecipientEmailInput" placeholder="email@email.com">
+                                        </label>
+                                    </div>
                                 </div>
-                                <div class="ii-field">
-                                    <label>Users each test</label>
-                                    <input class="ii-input" id="aiAgentUsersEachInput" type="number" min="1" placeholder="3">
+                                <div class="ii-agent-setup-block">
+                                    <div class="ii-row justify-content-between mb-2">
+                                        <h4 class="mb-0">Template</h4>
+                                        <span class="ii-chip green">Saved</span>
+                                    </div>
+                                    <div class="ii-agent-template-picker">
+                                        <label class="ii-field mb-0">
+                                            <span>User Inbox saved template</span>
+                                            <select class="ii-select" id="aiAgentSavedTemplateSelect">
+                                                <option value="">Load saved templates first</option>
+                                            </select>
+                                        </label>
+                                        <label class="ii-field mb-0">
+                                            <span>Use</span>
+                                            <input type="checkbox" id="aiAgentUseSavedTemplate">
+                                        </label>
+                                    </div>
+                                    <div class="ii-muted mt-2" id="aiAgentSavedTemplateStatus">Optional: use a saved User Inbox Test template as the automated message.</div>
                                 </div>
-                                <div class="ii-field">
-                                    <label>Receiving email</label>
-                                    <input class="ii-input" id="aiAgentRecipientEmailInput" placeholder="email@email.com">
+                                <div class="ii-agent-setup-block">
+                                    <div class="ii-row justify-content-between">
+                                        <div>
+                                            <strong>Continue all users</strong>
+                                            <div class="ii-muted">Keep running batches until the selected list is complete.</div>
+                                        </div>
+                                        <input type="checkbox" id="aiAgentSetupContinueAll">
+                                    </div>
                                 </div>
-                                <div class="ii-field" style="grid-column: 1 / -1;">
-                                    <label class="mb-0"><input type="checkbox" id="aiAgentSetupContinueAll"> Continue testing until all users are finished</label>
-                                </div>
-                                <div class="ii-field" style="grid-column: 1 / -1;">
-                                    <label class="mb-0"><input type="checkbox" id="aiAgentSetupGreyAction" checked> Handle grey-user action automatically</label>
+                                <div class="ii-agent-setup-block">
+                                    <div class="ii-row justify-content-between">
+                                        <div>
+                                            <strong>Grey-user action</strong>
+                                            <div class="ii-muted">Change grey-user names automatically before retest.</div>
+                                        </div>
+                                        <input type="checkbox" id="aiAgentSetupGreyAction" checked>
+                                    </div>
                                 </div>
                             </div>
                             <button class="ii-btn w-100 mt-2" type="button" onclick="applyAiAgentSetupToPage()"><i class="fas fa-sliders"></i> Apply setup to page</button>
@@ -3659,6 +3795,7 @@ merge_recipe_id, content_blueprint_id</pre>
         automatedTestsTotal: 0,
         automatedTestsPage: 1,
         automatedTestsPerPage: 5,
+        selectedAutomatedTestIds: new Set(),
         automatedSelectedSourceIds: new Set(),
         automatedActiveSourceTab: 'list',
         automatedWorkspaceScope: null,
@@ -5362,6 +5499,8 @@ merge_recipe_id, content_blueprint_id</pre>
         drawer.classList.add('open');
         drawer.setAttribute('aria-hidden', 'false');
         document.querySelector('.ii-floating-command-stack')?.classList.add('is-hidden');
+        if (!iiState.userInboxTemplates.length) loadUserInboxTemplates().catch((err) => console.warn(err));
+        else renderAiAgentSavedTemplateOptions();
         refreshAiAgentConfigLabels();
         setAiAgentChatStatus('Ready. Type a prompt or review setup, then start the agent.');
         window.setTimeout(() => document.getElementById('aiAgentPromptInput')?.focus(), 50);
@@ -5500,6 +5639,8 @@ merge_recipe_id, content_blueprint_id</pre>
         const recipient = (document.getElementById('aiAgentRecipientEmailInput')?.value || '').trim().toLowerCase();
         const grey = document.getElementById('aiAgentSetupGreyAction')?.checked !== false;
         const scope = document.getElementById('aiAgentSetupContinueAll')?.checked ? 'all' : 'one';
+        const useSavedTemplate = document.getElementById('aiAgentUseSavedTemplate')?.checked === true;
+        const savedTemplateId = document.getElementById('aiAgentSavedTemplateSelect')?.value || '';
         const perAccount = document.getElementById('automatedUsersPerAccountInput');
         if (perAccount && usersEach) {
             perAccount.value = usersEach;
@@ -5520,6 +5661,18 @@ merge_recipe_id, content_blueprint_id</pre>
                 messages.push(`List ${option.textContent.trim()} selected${listIds.length > 1 ? `; queued note includes ${listIds.slice(1).join(', ')} for follow-up runs` : ''}.`);
             } else {
                 messages.push(`List ${firstList} was not found in the loaded List Management options.`);
+            }
+        }
+        if (useSavedTemplate) {
+            const template = (iiState.userInboxTemplates || []).find((item) => String(item.id) === String(savedTemplateId));
+            const templateStatus = document.getElementById('aiAgentSavedTemplateStatus');
+            if (template) {
+                useSavedTemplateInAutomatedSetup(template.id);
+                messages.push(`Saved template "${template.name || template.subject || template.id}" loaded.`);
+                if (templateStatus) templateStatus.textContent = `Using ${template.name || template.subject || 'saved template'}.`;
+            } else {
+                messages.push('Select a saved User Inbox template or uncheck Use saved template.');
+                if (templateStatus) templateStatus.textContent = 'Choose a saved template before applying.';
             }
         }
         if (recipient) {
@@ -5870,7 +6023,50 @@ merge_recipe_id, content_blueprint_id</pre>
     function handleAutomatedDateFilterChange() {
         const isCustom = document.getElementById('automatedDateFilter')?.value === 'custom';
         document.getElementById('automatedCustomDateFields')?.classList.toggle('active', isCustom);
+        const sectionFilter = document.getElementById('automatedSectionDateFilter');
+        const mainFilter = document.getElementById('automatedDateFilter');
+        if (sectionFilter && mainFilter && sectionFilter.value !== mainFilter.value) sectionFilter.value = mainFilter.value;
         loadAutomatedTests(1);
+    }
+
+    function syncAutomatedDateFilterFromSection() {
+        const sectionFilter = document.getElementById('automatedSectionDateFilter');
+        const mainFilter = document.getElementById('automatedDateFilter');
+        if (sectionFilter && mainFilter) mainFilter.value = sectionFilter.value;
+        handleAutomatedDateFilterChange();
+    }
+
+    function automatedDateFilterLabel() {
+        const select = document.getElementById('automatedDateFilter');
+        const value = select?.value || 'today';
+        const selected = select?.selectedOptions?.[0]?.textContent || 'Today';
+        if (value === 'custom') {
+            const start = document.getElementById('automatedCustomStartDate')?.value || 'start';
+            const end = document.getElementById('automatedCustomEndDate')?.value || 'end';
+            return `${start} to ${end}`;
+        }
+        return selected;
+    }
+
+    function updateAutomatedActiveDateLabel() {
+        const el = document.getElementById('automatedActiveDateLabel');
+        if (el) el.textContent = automatedDateFilterLabel();
+    }
+
+    function changeAutomatedTestsPageSize() {
+        const value = document.getElementById('automatedPageSizeSelect')?.value || '5';
+        iiState.automatedTestsPerPage = value === 'all' ? 'all' : Math.max(1, parseInt(value, 10) || 5);
+        loadAutomatedTests(1, false);
+    }
+
+    function automatedTestOrigin(test = {}) {
+        const text = `${test.name || ''} ${test.strategy || ''}`.toLowerCase();
+        return text.includes('ai agent') || text.includes('agent retest') ? 'ai' : 'manual';
+    }
+
+    function automatedTestOriginChip(test = {}) {
+        const origin = automatedTestOrigin(test);
+        return `<span class="ii-chip ii-test-origin-chip ${origin}"><i class="fas ${origin === 'ai' ? 'fa-wand-magic-sparkles' : 'fa-hand'}"></i> ${origin === 'ai' ? 'AI' : 'Manual'}</span>`;
     }
 
     async function loadAutomatedTests(pageOrHydrate = 1, hydrateSelected = true) {
@@ -5893,7 +6089,8 @@ merge_recipe_id, content_blueprint_id</pre>
         iiState.automatedTests = data.tests || [];
         iiState.automatedTestsTotal = data.total || 0;
         iiState.automatedTestsPage = data.page || page;
-        iiState.automatedTestsPerPage = data.per_page || iiState.automatedTestsPerPage || 5;
+        iiState.automatedTestsPerPage = document.getElementById('automatedPageSizeSelect')?.value === 'all' ? 'all' : (data.per_page || iiState.automatedTestsPerPage || 5);
+        updateAutomatedActiveDateLabel();
         renderAutomatedTests();
         if (!hydrateSelected) return;
         if (!iiState.automatedSelectedTestId && iiState.automatedTests[0]) {
@@ -5908,13 +6105,15 @@ merge_recipe_id, content_blueprint_id</pre>
     function renderAutomatedTests() {
         const el = document.getElementById('automatedTestsList');
         if (!el) return;
+        renderAutomatedBulkSelectionStatus();
         if (!iiState.automatedTests.length) {
             el.innerHTML = '<div class="ii-muted">No automated tests for the selected date. Today is shown by default.</div>';
             return;
         }
-        const pageCount = Math.max(1, Math.ceil((iiState.automatedTestsTotal || 0) / (iiState.automatedTestsPerPage || 5)));
+        const isAll = iiState.automatedTestsPerPage === 'all';
+        const pageCount = isAll ? 1 : Math.max(1, Math.ceil((iiState.automatedTestsTotal || 0) / (iiState.automatedTestsPerPage || 5)));
         el.innerHTML = `<div class="ii-responsive-table"><table class="ii-pro-compact-table">
-            <tr><th>Test ID</th><th>Started</th><th>Status</th><th>Progress</th><th>Users</th><th>Recipients</th><th>Operations</th><th>Actions</th></tr>
+            <tr><th><input type="checkbox" aria-label="Select visible tests" onchange="toggleVisibleAutomatedTests(this.checked)"></th><th>Test ID</th><th>Date</th><th>Started</th><th>Origin</th><th>Status</th><th>Progress</th><th>Users</th><th>Recipients</th><th>Operations</th><th>Actions</th></tr>
             ${iiState.automatedTests.map((test) => {
             const sent = test.sent_count || 0;
             const total = test.total_messages || sent;
@@ -5925,8 +6124,11 @@ merge_recipe_id, content_blueprint_id</pre>
             const sendW = total ? Math.round((sent / total) * 100) : 0;
             return `
             <tr onclick="viewAutomatedEmailTest('${escapeHtml(test.test_id)}')" style="cursor:pointer; ${iiState.automatedSelectedTestId === test.test_id ? 'background:#eff6ff;' : ''}">
+                <td onclick="event.stopPropagation()"><input type="checkbox" aria-label="Select ${escapeHtml(test.test_id)}" ${iiState.selectedAutomatedTestIds.has(test.test_id) ? 'checked' : ''} onchange="toggleAutomatedTestSelection('${escapeHtml(test.test_id)}', this.checked)"></td>
                 <td><strong>${escapeHtml(test.test_id)}</strong></td>
-                <td>${test.created_at ? new Date(test.created_at).toLocaleString() : ''}</td>
+                <td>${test.created_at ? new Date(test.created_at).toLocaleDateString() : ''}</td>
+                <td>${test.created_at ? new Date(test.created_at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : ''}</td>
+                <td>${automatedTestOriginChip(test)}</td>
                 <td><span class="ii-chip ${statusClass(test.status)}">${escapeHtml(test.status)}</span></td>
                 <td><div class="ii-auto-test-progress" title="Send progress ${sendW}%"><div class="seg sent" style="width:${sendW}%;"></div></div><span class="ii-muted">${sendW}%</span></td>
                 <td>${test.total_users || 0}</td>
@@ -5943,11 +6145,106 @@ merge_recipe_id, content_blueprint_id</pre>
         <div class="ii-user-pager">
             <span class="ii-muted">Page ${iiState.automatedTestsPage}/${pageCount} · ${iiState.automatedTestsTotal} test(s) in selected date</span>
             <div class="ii-row">
-                <button class="ii-btn" type="button" ${iiState.automatedTestsPage <= 1 ? 'disabled' : ''} onclick="loadAutomatedTests(${iiState.automatedTestsPage - 1}, false)"><i class="fas fa-chevron-left"></i></button>
-                <button class="ii-btn" type="button" ${iiState.automatedTestsPage >= pageCount ? 'disabled' : ''} onclick="loadAutomatedTests(${iiState.automatedTestsPage + 1}, false)"><i class="fas fa-chevron-right"></i></button>
+                <button class="ii-btn" type="button" ${isAll || iiState.automatedTestsPage <= 1 ? 'disabled' : ''} onclick="loadAutomatedTests(${iiState.automatedTestsPage - 1}, false)"><i class="fas fa-chevron-left"></i></button>
+                <button class="ii-btn" type="button" ${isAll || iiState.automatedTestsPage >= pageCount ? 'disabled' : ''} onclick="loadAutomatedTests(${iiState.automatedTestsPage + 1}, false)"><i class="fas fa-chevron-right"></i></button>
                 <button class="ii-btn" type="button" onclick="activateInboxTab('history')">View all tests</button>
             </div>
         </div>`;
+    }
+
+    function renderAutomatedBulkSelectionStatus() {
+        const countEl = document.getElementById('automatedSelectedBulkCount');
+        if (countEl) countEl.textContent = `${iiState.selectedAutomatedTestIds.size} selected`;
+    }
+
+    function toggleAutomatedTestSelection(testId, checked) {
+        if (checked) iiState.selectedAutomatedTestIds.add(testId);
+        else iiState.selectedAutomatedTestIds.delete(testId);
+        renderAutomatedBulkSelectionStatus();
+    }
+
+    function toggleVisibleAutomatedTests(checked) {
+        (iiState.automatedTests || []).forEach((test) => {
+            if (checked) iiState.selectedAutomatedTestIds.add(test.test_id);
+            else iiState.selectedAutomatedTestIds.delete(test.test_id);
+        });
+        renderAutomatedTests();
+    }
+
+    function clearAutomatedTestSelection() {
+        iiState.selectedAutomatedTestIds = new Set();
+        renderAutomatedTests();
+    }
+
+    function bulkAgentClassificationFromRows(rows = []) {
+        const summary = matrixSummary(rows);
+        const users = userInboxObservationStats(rows, (row) => row.sender || '').filter((item) => item.key);
+        const toUser = (item) => ({
+            email: item.key,
+            name: senderLookup(item.key).name || '',
+            domain: item.key.split('@').pop() || '',
+            inbox: item.inbox,
+            spam: item.spam,
+            service_account_id: senderLookup(item.key).service_account_id || null,
+        });
+        const greyUsers = users.filter((item) => item.inbox > 0 && item.spam > 0).map(toUser);
+        const greyEmails = new Set(greyUsers.map((item) => item.email));
+        const inboxUsers = users.filter((item) => item.inbox > 0 && !greyEmails.has(item.key)).map(toUser);
+        const spamUsers = users.filter((item) => item.spam > 0 && !greyEmails.has(item.key)).map(toUser);
+        const waitingUsers = users.filter((item) => !item.inbox && !item.spam).map(toUser);
+        return {
+            totals: {
+                messages: summary.total,
+                inbox: summary.inbox,
+                spam: summary.spam,
+                pending: summary.pending,
+                failed: summary.failed,
+                users: users.length,
+                grey: greyUsers.length,
+            },
+            lists: {
+                inbox_users: inboxUsers,
+                spam_users: spamUsers,
+                grey_users: greyUsers,
+                waiting_users: waitingUsers,
+                grey_name_change_lines: greyDomainNameChangeRows(rows),
+            }
+        };
+    }
+
+    async function viewSelectedAutomatedTestsBulk() {
+        const status = document.getElementById('automatedAnalyticsStatus');
+        const ids = Array.from(iiState.selectedAutomatedTestIds);
+        if (!ids.length) {
+            if (status) status.textContent = 'Select one or more tests first.';
+            return;
+        }
+        const target = document.getElementById('automatedBulkViewTarget')?.value || 'inbox';
+        if (status) status.textContent = `Loading ${ids.length} selected test(s)...`;
+        try {
+            const details = await Promise.all(ids.map((id) => fetchAutomatedTestDetail(id, false)));
+            const rows = details.flatMap((test) => (test.messages || []).map((row) => ({...row, test_id: test.test_id || row.test_id})));
+            const label = ids.length === 1 ? ids[0] : `${ids.length} selected tests`;
+            iiState.automatedSelectedTestId = ids[0] || null;
+            iiState.automatedMessages = rows;
+            if (target === 'agent') {
+                const classification = bulkAgentClassificationFromRows(rows);
+                renderAiAgentState('complete', {
+                    source_mode: 'bulk_selection',
+                    stored_at: new Date().toISOString(),
+                    first: {test_id: ids[0], classification},
+                    batches: ids.map((id) => ({test_id: id})),
+                    name_changes: {changed: [], failed: []},
+                });
+                if (status) status.textContent = `Agent Results loaded for ${label}.`;
+            } else {
+                renderAutomatedInboxAnalytics({test_id: label, messages: rows, sent_count: rows.length, total_messages: rows.length});
+                switchAnalyticsTab('inbox');
+                if (status) status.textContent = `Combined User Inbox Analytics loaded for ${label}.`;
+            }
+        } catch (err) {
+            if (status) status.textContent = `Bulk analytics failed: ${err.message}`;
+        }
     }
 
     async function loadAutomatedTestSetup(testId) {
@@ -6259,7 +6556,9 @@ merge_recipe_id, content_blueprint_id</pre>
             ...(finalClass.totals || {})
         };
         const batchCount = (payload.batches || []).length || 1;
-        const resultTitle = payload.source_mode === 'existing_test' ? 'Existing Test Agent completed' : 'AI Test Agent completed';
+        const resultTitle = payload.source_mode === 'bulk_selection'
+            ? 'Bulk selected tests'
+            : payload.source_mode === 'existing_test' ? 'Existing Test Agent completed' : 'AI Test Agent completed';
         const noObservedData = !Number(totals.messages || 0) && !(lists.inbox_users || []).length && !(lists.spam_users || []).length && !(lists.grey_users || []).length;
         iiState.automatedAgentRun = payload;
         if (!payload.fromStorage) storeAiAgentResult(payload);
@@ -7182,7 +7481,19 @@ merge_recipe_id, content_blueprint_id</pre>
             iiState.userInboxTemplatePage = 0;
         }
         renderUserInboxTemplateCards();
+        renderAiAgentSavedTemplateOptions();
         if (iiState.automatedQueueTab === 'saved') renderAutomatedSavedTemplateQueue();
+    }
+
+    function renderAiAgentSavedTemplateOptions() {
+        const select = document.getElementById('aiAgentSavedTemplateSelect');
+        if (!select) return;
+        const current = select.value;
+        const templates = iiState.userInboxTemplates || [];
+        select.innerHTML = templates.length
+            ? '<option value="">Choose saved template</option>' + templates.map((template) => `<option value="${template.id}">${escapeHtml(template.name || template.subject || 'Saved template')}</option>`).join('')
+            : '<option value="">No saved templates yet</option>';
+        if (current && templates.some((template) => String(template.id) === String(current))) select.value = current;
     }
 
     function renderUserInboxTemplateCards() {

@@ -3112,8 +3112,9 @@ def api_inbox_automated_tests():
             page = max(1, int(request.args.get('page') or 1))
         except ValueError:
             page = 1
+        raw_per_page = (request.args.get('per_page') or '5').strip().lower()
         try:
-            per_page = min(25, max(1, int(request.args.get('per_page') or 5)))
+            per_page = 1000 if raw_per_page == 'all' else min(50, max(1, int(raw_per_page)))
         except ValueError:
             per_page = 5
         q = InboxDeliverabilityTest.query.filter(or_(
@@ -3131,7 +3132,8 @@ def api_inbox_automated_tests():
         if end_dt:
             q = q.filter(InboxDeliverabilityTest.created_at < end_dt)
         total = q.count()
-        tests = q.order_by(InboxDeliverabilityTest.created_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
+        ordered = q.order_by(InboxDeliverabilityTest.created_at.desc())
+        tests = ordered.all() if raw_per_page == 'all' else ordered.offset((page - 1) * per_page).limit(per_page).all()
         return jsonify({'success': True, 'tests': [_serialize_automated_test(test) for test in tests], 'total': total, 'page': page, 'per_page': per_page})
 
     data = request.get_json(silent=True) or {}
