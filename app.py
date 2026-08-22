@@ -2789,14 +2789,32 @@ def _body_for_declared_content_type(custom_headers, html_body, text_body):
         return html_body if str(html_body or '').strip() else html_utils.escape(text_body or '').replace('\n', '<br>\n')
     return html_body if str(html_body or '').strip() else (text_body or '')
 
+def _body_looks_quoted_printable_encoded(body):
+    body = str(body or '')
+    if not body:
+        return False
+    hex_escapes = re.findall(r'=[0-9A-Fa-f]{2}', body)
+    soft_breaks = re.findall(r'=\r?\n', body)
+    if soft_breaks and hex_escapes:
+        return True
+    if body.count('=3D') >= 3:
+        return True
+    return len(hex_escapes) >= 6 and (len(hex_escapes) / max(len(body), 1)) > 0.002
+
+def _normalize_raw_mime_body_bytes(body, charset):
+    return (body or '').encode(charset or 'utf-8', errors='replace').replace(b'\r\n', b'\n').replace(b'\r', b'\n').replace(b'\n', b'\r\n')
+
 def _encode_declared_mime_body(body, encoding, charset):
-    body_bytes = (body or '').encode(charset or 'utf-8', errors='replace')
     encoding = (encoding or '').lower()
     if encoding == 'quoted-printable':
+        if _body_looks_quoted_printable_encoded(body):
+            return _normalize_raw_mime_body_bytes(body, charset)
+        body_bytes = (body or '').encode(charset or 'utf-8', errors='replace')
         return quopri.encodestring(body_bytes, quotetabs=True).replace(b'\n', b'\r\n')
     if encoding == 'base64':
+        body_bytes = (body or '').encode(charset or 'utf-8', errors='replace')
         return base64.encodebytes(body_bytes).replace(b'\n', b'\r\n')
-    return body_bytes.replace(b'\r\n', b'\n').replace(b'\r', b'\n').replace(b'\n', b'\r\n')
+    return _normalize_raw_mime_body_bytes(body, charset)
 
 def _build_raw_custom_mime_bytes(sender, recipient, subject, html_body, text_body, test_identifier, custom_headers, sender_name=None):
     message_id = _custom_header_value(custom_headers, 'Message-ID') or make_msgid(idstring=test_identifier)
