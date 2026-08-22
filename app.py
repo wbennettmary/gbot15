@@ -40,7 +40,7 @@ from email.mime.multipart import MIMEMultipart
 import re
 
 from core_logic import google_api, unique_random_alias, get_random_name_pools
-from database import db, User, WhitelistedIP, UsedDomain, GoogleAccount, GoogleToken, Scope, ServerConfig, UserAppPassword, AutomationAccount, RetrievedUser, NamecheapConfig, DomainOperation, AwsConfig, ServiceAccount, CloudflareConfig, Notification, WorkspaceList, AwsGeneratedPassword, InboxImapAccount, InboxEmailMessage, InboxStaticTemplate, InboxUserTemplate, InboxOpenRouterConfig, InboxDeliverabilityTest, InboxDeliverabilityMessage, TestEmailSource, InboxPollJob, ImapFolderSyncState, InboxAiJob, InboxAiSuggestion, InboxAiAuditEvent, InboxAiPromptVersion
+from database import db, User, WhitelistedIP, UsedDomain, GoogleAccount, GoogleToken, Scope, ServerConfig, UserAppPassword, AutomationAccount, RetrievedUser, NamecheapConfig, DomainOperation, AwsConfig, ServiceAccount, CloudflareConfig, Notification, WorkspaceList, AwsGeneratedPassword, InboxImapAccount, InboxEmailMessage, InboxStaticTemplate, InboxUserTemplate, InboxAgentSavedList, InboxOpenRouterConfig, InboxDeliverabilityTest, InboxDeliverabilityMessage, TestEmailSource, InboxPollJob, ImapFolderSyncState, InboxAiJob, InboxAiSuggestion, InboxAiAuditEvent, InboxAiPromptVersion
 from routes.dns_manager import dns_manager
 from routes.aws_manager import aws_manager
 from routes.digitalocean_manager import digitalocean_manager
@@ -1373,6 +1373,13 @@ def _serialize_imap_account(account):
         'unread_count': InboxEmailMessage.query.filter_by(imap_account_id=account.id, is_read=False).count(),
     }
 
+def _imap_owner_options():
+    if session.get('role') != 'admin':
+        username = session.get('user') or ''
+        return [{'id': session.get('user_id'), 'username': username, 'label': username}]
+    users = User.query.order_by(User.username.asc()).all()
+    return [{'id': user.id, 'username': user.username, 'label': user.username} for user in users]
+
 def _current_inbox_owner():
     return (session.get('user') or '').strip()
 
@@ -1764,7 +1771,7 @@ def _sync_mailbox_accounts(accounts, folders=None, limit=200, force_full=False):
 def api_inbox_imap_accounts():
     if request.method == 'GET':
         accounts = _owned_imap_accounts_query().order_by(InboxImapAccount.created_at.desc()).all()
-        return _json_no_store({'success': True, 'accounts': [_serialize_imap_account(a) for a in accounts]})
+        return _json_no_store({'success': True, 'accounts': [_serialize_imap_account(a) for a in accounts], 'owners': _imap_owner_options()})
     data = request.get_json(silent=True) or {}
     provider = _normalize_imap_credential(data.get('provider') or 'generic').lower()
     email_addr = _normalize_imap_credential(data.get('email') or '').lower()
@@ -1781,6 +1788,8 @@ def api_inbox_imap_accounts():
     if account_type not in ('both', 'concurrent', 'test'):
         account_type = 'both'
     owner = _normalize_imap_credential(data.get('owner') or session.get('user') or '').lower()
+    if session.get('role') != 'admin':
+        owner = (session.get('user') or '').strip().lower()
     if not email_addr or '@' not in email_addr:
         return jsonify({'success': False, 'error': 'Valid inbox email is required'}), 400
     if not imap_host:
@@ -2884,6 +2893,64 @@ def _send_deliverability_test_messages_async(test_id, senders, subject, html_bod
             db.session.commit()
         db.session.remove()
 
+def _automated_test_date_bounds(date_filter, custom_start=None, custom_end=None):
+    today = datetime.utcnow().date()
+    date_filter = (date_filter or 'today').strip().lower()
+    if date_filter == 'yesterday':
+        start_date = today - timedelta(days=1)
+        end_date = today
+    elif date_filter == 'this_week':
+        start_date = today - timedelta(days=today.weekday())
+        end_date = today + timedelta(days=1)
+    elif date_filter == 'current_month':
+        start_date = today.replace(day=1)
+        end_date = today + timedelta(days=1)
+    elif date_filter == 'last_month':
+        first_this_month = today.replace(day=1)
+        last_month_last_day = first_this_month - timedelta(days=1)
+        start_date = last_month_last_day.replace(day=1)
+        end_date = first_this_month
+    elif date_filter == 'custom':
+        try:
+            start_date = datetime.strptime(custom_start or '', '%Y-%m-%d').date()
+        except ValueError:
+            start_date = today
+        try:
+            end_date = datetime.strptime(custom_end or '', '%Y-%m-%d').date() + timedelta(days=1)
+        except ValueError:
+            end_date = start_date + timedelta(days=1)
+        if end_date <= start_date:
+            end_date = start_date + timedelta(days=1)
+    elif date_filter in {'all', 'all_time'}:
+        return None, None
+    else:
+        start_date = today
+        end_date = today + timedelta(days=1)
+    return datetime.combine(start_date, datetime.min.time()), datetime.combine(end_date, datetime.min.time())
+
+def _serialize_automated_test(test):
+    return {
+        'test_id': test.test_id,
+        'name': test.name,
+        'status': test.status,
+        'subject': test.subject or '',
+        'html_body': test.html_body or '',
+        'text_body': test.text_body or '',
+        'custom_headers': getattr(test, 'custom_headers', None) or '',
+        'strategy': getattr(test, 'strategy', None),
+        'total_email_sources': getattr(test, 'total_email_sources', 0) or 0,
+        'total_users': getattr(test, 'total_users', 0) or 0,
+        'total_recipients': getattr(test, 'total_recipients', 0) or 0,
+        'total_messages': test.total_messages,
+        'sent_count': test.sent_count,
+        'inbox_count': test.inbox_count,
+        'spam_count': test.spam_count,
+        'pending_count': test.pending_count,
+        'failed_count': test.failed_count,
+        'created_at': test.created_at.isoformat() + 'Z' if test.created_at else None,
+        'source_results': _automated_source_rollups(test.test_id),
+    }
+
 @app.route('/api/inbox-intelligence/tests', methods=['GET', 'POST'])
 @login_required
 @permission_required('inbox_intelligence')
@@ -3041,28 +3108,31 @@ def api_inbox_tests():
 @permission_required('inbox_intelligence')
 def api_inbox_automated_tests():
     if request.method == 'GET':
-        tests = InboxDeliverabilityTest.query.filter(or_(InboxDeliverabilityTest.test_type == 'automated', InboxDeliverabilityTest.name.ilike('Automated:%'), InboxDeliverabilityTest.test_id.ilike('AT-%'))).order_by(InboxDeliverabilityTest.created_at.desc()).limit(50).all()
-        return jsonify({'success': True, 'tests': [{
-            'test_id': test.test_id,
-            'name': test.name,
-            'status': test.status,
-            'subject': test.subject or '',
-            'html_body': test.html_body or '',
-            'text_body': test.text_body or '',
-            'custom_headers': getattr(test, 'custom_headers', None) or '',
-            'strategy': getattr(test, 'strategy', None),
-            'total_email_sources': getattr(test, 'total_email_sources', 0) or 0,
-            'total_users': getattr(test, 'total_users', 0) or 0,
-            'total_recipients': getattr(test, 'total_recipients', 0) or 0,
-            'total_messages': test.total_messages,
-            'sent_count': test.sent_count,
-            'inbox_count': test.inbox_count,
-            'spam_count': test.spam_count,
-            'pending_count': test.pending_count,
-            'failed_count': test.failed_count,
-            'created_at': test.created_at.isoformat() + 'Z' if test.created_at else None,
-            'source_results': _automated_source_rollups(test.test_id),
-        } for test in tests]})
+        try:
+            page = max(1, int(request.args.get('page') or 1))
+        except ValueError:
+            page = 1
+        try:
+            per_page = min(25, max(1, int(request.args.get('per_page') or 5)))
+        except ValueError:
+            per_page = 5
+        q = InboxDeliverabilityTest.query.filter(or_(
+            InboxDeliverabilityTest.test_type == 'automated',
+            InboxDeliverabilityTest.name.ilike('Automated:%'),
+            InboxDeliverabilityTest.test_id.ilike('AT-%')
+        ))
+        start_dt, end_dt = _automated_test_date_bounds(
+            request.args.get('date_filter') or 'today',
+            request.args.get('custom_start'),
+            request.args.get('custom_end')
+        )
+        if start_dt:
+            q = q.filter(InboxDeliverabilityTest.created_at >= start_dt)
+        if end_dt:
+            q = q.filter(InboxDeliverabilityTest.created_at < end_dt)
+        total = q.count()
+        tests = q.order_by(InboxDeliverabilityTest.created_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
+        return jsonify({'success': True, 'tests': [_serialize_automated_test(test) for test in tests], 'total': total, 'page': page, 'per_page': per_page})
 
     data = request.get_json(silent=True) or {}
     source_ids = []
@@ -4003,6 +4073,104 @@ def api_inbox_ai_test_agent_classify():
     if not payload:
         return jsonify({'success': False, 'error': 'Automated test not found'}), 404
     return jsonify({'success': True, 'classification': payload})
+
+def _clean_agent_user_item(item):
+    if isinstance(item, str):
+        email_addr = item.strip().lower()
+        return {'email': email_addr} if email_addr else None
+    if not isinstance(item, dict):
+        return None
+    email_addr = (item.get('email') or item.get('copy_line') or '').strip().lower()
+    if not email_addr:
+        return None
+    cleaned = {
+        'email': email_addr,
+        'name': (item.get('name') or '').strip(),
+        'domain': (item.get('domain') or (email_addr.split('@')[-1] if '@' in email_addr else '')).strip().lower(),
+        'inbox': int(item.get('inbox') or 0),
+        'spam': int(item.get('spam') or 0),
+        'service_account_id': item.get('service_account_id'),
+    }
+    return cleaned
+
+def _serialize_agent_saved_list(row):
+    try:
+        users = json.loads(row.users_json or '[]')
+    except Exception:
+        users = []
+    try:
+        test_ids = json.loads(row.test_ids_json or '[]')
+    except Exception:
+        test_ids = []
+    return {
+        'id': row.id,
+        'result_date': row.result_date.isoformat() if row.result_date else '',
+        'list_type': row.list_type,
+        'users': users,
+        'test_ids': test_ids,
+        'created_by': row.created_by,
+        'created_at': row.created_at.isoformat() + 'Z' if row.created_at else None,
+        'updated_at': row.updated_at.isoformat() + 'Z' if row.updated_at else None,
+    }
+
+@app.route('/api/inbox-intelligence/agent-saved-lists', methods=['GET', 'POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_agent_saved_lists():
+    owner = session.get('user') or ''
+    if request.method == 'GET':
+        rows = InboxAgentSavedList.query.filter_by(created_by=owner).order_by(InboxAgentSavedList.result_date.desc(), InboxAgentSavedList.list_type.asc()).limit(180).all()
+        return jsonify({'success': True, 'lists': [_serialize_agent_saved_list(row) for row in rows]})
+
+    data = request.get_json(silent=True) or {}
+    date_value = (data.get('result_date') or datetime.utcnow().date().isoformat()).strip()
+    try:
+        result_date = datetime.strptime(date_value, '%Y-%m-%d').date()
+    except ValueError:
+        result_date = datetime.utcnow().date()
+    test_ids = []
+    for value in data.get('test_ids') or []:
+        test_id = str(value or '').strip().upper()
+        if test_id and test_id not in test_ids:
+            test_ids.append(test_id)
+    saved = []
+    buckets = {
+        'inbox': data.get('inbox_users') or [],
+        'spam': data.get('spam_users') or [],
+        'grey': data.get('grey_users') or [],
+    }
+    for list_type, values in buckets.items():
+        cleaned = [_clean_agent_user_item(item) for item in values]
+        cleaned = [item for item in cleaned if item]
+        if not cleaned:
+            continue
+        row = InboxAgentSavedList.query.filter_by(result_date=result_date, list_type=list_type, created_by=owner).first()
+        if not row:
+            row = InboxAgentSavedList(result_date=result_date, list_type=list_type, users_json='[]', test_ids_json='[]', created_by=owner)
+            db.session.add(row)
+        try:
+            existing_users = json.loads(row.users_json or '[]')
+        except Exception:
+            existing_users = []
+        by_email = {}
+        for item in existing_users + cleaned:
+            normalized = _clean_agent_user_item(item)
+            if normalized:
+                by_email[normalized['email']] = {**by_email.get(normalized['email'], {}), **normalized}
+        try:
+            existing_test_ids = json.loads(row.test_ids_json or '[]')
+        except Exception:
+            existing_test_ids = []
+        merged_test_ids = []
+        for test_id in existing_test_ids + test_ids:
+            if test_id and test_id not in merged_test_ids:
+                merged_test_ids.append(test_id)
+        row.users_json = json.dumps(sorted(by_email.values(), key=lambda item: item['email']))
+        row.test_ids_json = json.dumps(merged_test_ids)
+        row.updated_at = datetime.utcnow()
+        saved.append(row)
+    db.session.commit()
+    return jsonify({'success': True, 'lists': [_serialize_agent_saved_list(row) for row in saved], 'message': f'Saved {len(saved)} placement list(s).'})
 
 def _generate_workspace_identity(existing_locals=None):
     existing_locals = existing_locals or set()

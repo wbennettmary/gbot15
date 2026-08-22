@@ -474,6 +474,20 @@ class InboxUserTemplate(db.Model):
     created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
     updated_at = db.Column(db.DateTime, default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
 
+class InboxAgentSavedList(db.Model):
+    """Copy-ready AI Agent user lists grouped by result date and placement bucket."""
+    __tablename__ = 'inbox_agent_saved_list'
+    id = db.Column(db.Integer, primary_key=True)
+    result_date = db.Column(db.Date, nullable=False, index=True)
+    list_type = db.Column(db.String(40), nullable=False, index=True)
+    users_json = db.Column(db.Text, nullable=False, default='[]')
+    test_ids_json = db.Column(db.Text, nullable=True)
+    created_by = db.Column(db.String(255), nullable=True, index=True)
+    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+    updated_at = db.Column(db.DateTime, default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
+
+    __table_args__ = (db.UniqueConstraint('result_date', 'list_type', 'created_by', name='uq_agent_saved_list_date_type_user'),)
+
 class InboxOpenRouterConfig(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     encrypted_api_key = db.Column(db.Text, nullable=True)
