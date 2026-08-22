@@ -6,7 +6,7 @@ from flask import Blueprint, request, jsonify, session, render_template, redirec
 from functools import wraps
 from faker import Faker
 from sqlalchemy import func, or_
-from database import db, AfraidConfig, AfraidDomain, AfraidResultList, AfraidCloudflareDomainUsage
+from database import db, AfraidConfig, AfraidDomain, AfraidResultList, AfraidCloudflareDomainUsage, ServiceAccount
 from services.afraid_dns_service import AfraidDNSService
 from services.cloudflare_dns_service import CloudflareDNSService
 
@@ -244,6 +244,22 @@ def search_afraid_domain():
         'tld': domain.tld,
         'used_this_month': bool(domain.last_used_at and domain.last_used_at >= used_cutoff())
     }})
+
+@afraid_manager.route('/api/afraid/service-accounts', methods=['GET'])
+@login_required
+def get_afraid_service_accounts():
+    accounts = ServiceAccount.query.filter_by(is_active=True).order_by(ServiceAccount.name.asc()).all()
+    return jsonify({
+        'success': True,
+        'accounts': [
+            {
+                'id': account.id,
+                'name': account.name,
+                'admin_email': account.admin_email
+            }
+            for account in accounts
+        ]
+    })
 
 @afraid_manager.route('/api/afraid/domains', methods=['POST'])
 @login_required

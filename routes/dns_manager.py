@@ -1038,6 +1038,10 @@ def process_external_cf_entry(entry_data):
                 service_account = ServiceAccount.query.filter_by(admin_email=account).first()
             if not service_account:
                 entry['authStatus'] = 'failed'
+                entry['workspaceStatus'] = 'skipped'
+                entry['tokenStatus'] = 'skipped'
+                entry['dnsStatus'] = 'skipped'
+                entry['verifyStatus'] = 'skipped'
                 entry['message'] = f'Account not found: {account}'
                 logger.error(f"[EXT_CF] Account not found: {account}")
                 return
@@ -1056,6 +1060,9 @@ def process_external_cf_entry(entry_data):
 
             if not result.get('add_success'):
                 entry['workspaceStatus'] = 'failed'
+                entry['tokenStatus'] = 'skipped'
+                entry['dnsStatus'] = 'skipped'
+                entry['verifyStatus'] = 'skipped'
                 entry['message'] = result.get('add_message', 'Failed to add domain to Workspace')
                 logger.error(f"[EXT_CF] Add failed for {external_domain}: {result.get('add_message')}")
                 return
@@ -1066,6 +1073,8 @@ def process_external_cf_entry(entry_data):
             token = result.get('token')
             if not token:
                 entry['tokenStatus'] = 'failed'
+                entry['dnsStatus'] = 'skipped'
+                entry['verifyStatus'] = 'skipped'
                 entry['message'] = result.get('token_message', 'Failed to retrieve TXT token')
                 logger.error(f"[EXT_CF] Token failed for {external_domain}: {result.get('token_message')}")
                 return
@@ -1093,8 +1102,25 @@ def process_external_cf_entry(entry_data):
                 logger.info(f"[EXT_CF] TXT record inserted at @ in {cf_domain} zone for {external_domain}")
             else:
                 entry['dnsStatus'] = 'failed'
+                entry['verifyStatus'] = 'skipped'
                 entry['message'] = dns_result.get('message', 'Cloudflare TXT insertion failed')
                 logger.warning(f"[EXT_CF] DNS insert failed: {dns_result.get('message')}")
+                return
+
+            # ========== STEP 4: Trigger Workspace verification ==========
+            entry['verifyStatus'] = 'running'
+            entry['message'] = f'Verifying {external_domain} in Workspace...'
+            logger.info(f"[EXT_CF] Verifying {external_domain} in Workspace...")
+            verified, verify_msg = svc.verify_domain(external_domain)
+
+            if verified:
+                entry['verifyStatus'] = 'success'
+                entry['message'] = verify_msg or 'Domain verified successfully'
+                logger.info(f"[EXT_CF] Verified {external_domain}: {entry['message']}")
+            else:
+                entry['verifyStatus'] = 'failed'
+                entry['message'] = verify_msg or 'Workspace verification failed'
+                logger.warning(f"[EXT_CF] Verify failed for {external_domain}: {entry['message']}")
 
         except Exception as e:
             logger.error(f"[EXT_CF] Error for {entry.get('externalDomain')}: {e}", exc_info=True)
@@ -1416,6 +1442,7 @@ def start_external_cloudflare():
                     'workspaceStatus': 'pending',
                     'tokenStatus': 'pending',
                     'dnsStatus': 'pending',
+                    'verifyStatus': 'pending',
                     'message': 'Queued',
                     'log': []
                 })

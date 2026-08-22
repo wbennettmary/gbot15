@@ -1,6 +1,118 @@
 {% extends "base.html" %}
 
 {% block content %}
+<style>
+    .afraid-verify-modal .modal-dialog {
+        max-width: min(1120px, calc(100vw - 24px));
+    }
+
+    .afraid-verify-modal .modal-content {
+        border: 0;
+        border-radius: 14px;
+        box-shadow: 0 24px 70px rgba(15, 23, 42, 0.24);
+    }
+
+    .afraid-verify-modal .modal-header {
+        align-items: flex-start;
+        background: linear-gradient(135deg, #0f766e, #2563eb);
+        border-radius: 14px 14px 0 0;
+        color: #fff;
+        padding: 18px 20px;
+    }
+
+    .afraid-verify-modal .modal-title {
+        font-size: 1.05rem;
+        font-weight: 700;
+        line-height: 1.25;
+    }
+
+    .afraid-verify-subtitle {
+        color: rgba(255, 255, 255, 0.78);
+        font-size: 0.82rem;
+        margin-top: 4px;
+    }
+
+    .afraid-verify-toolbar {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        display: grid;
+        gap: 14px;
+        grid-template-columns: minmax(220px, 1.15fr) minmax(200px, 0.85fr);
+        padding: 14px;
+    }
+
+    .afraid-verify-stat {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 10px 12px;
+    }
+
+    .afraid-verify-stat strong {
+        display: block;
+        font-size: 1.2rem;
+        line-height: 1.1;
+    }
+
+    .afraid-verify-log {
+        background: #0f172a;
+        border-radius: 10px;
+        color: #dbeafe;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 12px;
+        height: 190px;
+        overflow: auto;
+        padding: 12px;
+        white-space: pre-wrap;
+    }
+
+    .afraid-verify-table-wrap {
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        max-height: 340px;
+        overflow: auto;
+    }
+
+    .afraid-verify-table {
+        margin-bottom: 0;
+        min-width: 860px;
+    }
+
+    .afraid-verify-table th {
+        background: #f8fafc;
+        color: #475569;
+        font-size: 0.72rem;
+        letter-spacing: .02em;
+        position: sticky;
+        text-transform: uppercase;
+        top: 0;
+        z-index: 1;
+    }
+
+    .afraid-verify-table td,
+    .afraid-verify-table th {
+        vertical-align: middle;
+    }
+
+    .afraid-verify-domain {
+        display: inline-block;
+        max-width: 210px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    @media (max-width: 768px) {
+        .afraid-verify-toolbar {
+            grid-template-columns: 1fr;
+        }
+
+        .afraid-verify-modal .modal-body {
+            padding: 14px;
+        }
+    }
+</style>
 <div class="container mt-4">
     <h2 class="mb-1">Afraid (FreeDNS) Management</h2>
     <p class="text-muted mb-4">Automate CNAME subdomain creation on FreeDNS using your browser session cookies.</p>
@@ -309,6 +421,87 @@
     </div>
 </div>
 
+<div class="modal fade afraid-verify-modal" id="afraidExternalCfModal" tabindex="-1" aria-labelledby="afraidExternalCfModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title" id="afraidExternalCfModalTitle">
+                        <i class="fas fa-cloud-upload-alt me-2"></i>Add & Verify Saved AFRAID Domains
+                    </h5>
+                    <div class="afraid-verify-subtitle" id="afraidExternalCfModalSubtitle">Parse the saved list, add each domain to Workspace, then insert TXT records into Cloudflare.</div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="afraid-verify-toolbar mb-3">
+                    <div>
+                        <label for="afraidExternalCfAccount" class="form-label fw-semibold mb-1">Workspace account</label>
+                        <select class="form-select" id="afraidExternalCfAccount">
+                            <option value="">Loading accounts...</option>
+                        </select>
+                        <div class="form-text">Service accounts are used because the TXT token flow requires stored Workspace JSON credentials.</div>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <div class="afraid-verify-stat">
+                                <span class="text-muted small">Parsed rows</span>
+                                <strong id="afraidExternalCfParsedCount">0</strong>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="afraid-verify-stat">
+                                <span class="text-muted small">Completed</span>
+                                <strong id="afraidExternalCfDoneCount">0</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="afraidExternalCfAlert" class="mb-3"></div>
+
+                <div class="afraid-verify-table-wrap mb-3">
+                    <table class="table table-sm table-hover afraid-verify-table">
+                        <thead>
+                            <tr>
+                                <th style="width:52px">#</th>
+                                <th>External domain</th>
+                                <th>Cloudflare zone</th>
+                                <th class="text-center" title="Account lookup"><i class="fas fa-key"></i></th>
+                                <th class="text-center" title="Workspace add"><i class="fas fa-briefcase"></i></th>
+                                <th class="text-center" title="TXT token"><i class="fas fa-fingerprint"></i></th>
+                                <th class="text-center" title="Cloudflare DNS"><i class="fas fa-globe"></i></th>
+                                <th class="text-center" title="Workspace verification"><i class="fas fa-shield-alt"></i></th>
+                                <th>Message</th>
+                            </tr>
+                        </thead>
+                        <tbody id="afraidExternalCfTableBody">
+                            <tr><td colspan="9" class="text-center text-muted py-4">Open a saved list to prepare verification.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <div class="fw-semibold small text-muted text-uppercase">Process log</div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="btnClearAfraidExternalCfLog">
+                        <i class="fas fa-broom me-1"></i>Clear
+                    </button>
+                </div>
+                <div class="afraid-verify-log" id="afraidExternalCfLog">Ready.</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-outline-danger" id="btnStopAfraidExternalCf">
+                    <i class="fas fa-stop me-1"></i>Stop
+                </button>
+                <button type="button" class="btn btn-primary" id="btnStartAfraidExternalCf">
+                    <i class="fas fa-play me-1"></i>Start verification
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     if (document.getElementById('cookieStatus')) {
@@ -351,6 +544,11 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('afraidListForm').addEventListener('submit', saveManualAfraidList);
     document.getElementById('btnCancelAfraidListEdit').addEventListener('click', resetAfraidListForm);
     document.getElementById('afraidListRaw').addEventListener('input', updateAfraidListCount);
+    document.getElementById('btnStartAfraidExternalCf').addEventListener('click', startAfraidExternalCfVerification);
+    document.getElementById('btnStopAfraidExternalCf').addEventListener('click', stopAfraidExternalCfVerification);
+    document.getElementById('btnClearAfraidExternalCfLog').addEventListener('click', () => {
+        document.getElementById('afraidExternalCfLog').textContent = 'Ready.';
+    });
     document.getElementById('cloudflareSelect').addEventListener('change', (e) => {
         document.getElementById('destinationInput').value = e.target.value;
         updateCloudflareCountState();
@@ -925,6 +1123,13 @@ function renderBatchResults(data) {
         <table class="table table-sm"><thead><tr><th>Status</th><th>Subdomain</th><th>Destination</th><th>Message</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
+let afraidExternalCfEntries = [];
+let afraidExternalCfJobId = null;
+let afraidExternalCfPollInterval = null;
+let afraidExternalCfAccountsLoaded = false;
+let afraidExternalCfLogSeen = {};
+let afraidExternalCfStatusSeen = {};
+
 async function loadAfraidLists() {
     const grid = document.getElementById('afraidListsGrid');
     grid.innerHTML = '<div class="col-12 text-center text-muted py-4">Loading saved Afraid lists...</div>';
@@ -950,6 +1155,9 @@ async function loadAfraidLists() {
                             <div class="text-muted small">${escapeHtml(createdAt)} | owner: ${escapeHtml(lst.created_by || 'user')}</div>
                         </div>
                         <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-success" onclick="openAfraidExternalCfModal(${lst.id})" title="Add and verify domains">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                            </button>
                             <button class="btn btn-outline-secondary" onclick="copyAfraidList(${lst.id})" title="Copy list">
                                 <i class="fas fa-copy"></i>
                             </button>
@@ -974,6 +1182,283 @@ async function loadAfraidLists() {
     } catch (err) {
         grid.innerHTML = `<div class="col-12"><div class="alert alert-danger">${escapeHtml(err.message || 'Could not load Afraid lists')}</div></div>`;
     }
+}
+
+async function loadAfraidExternalCfAccounts() {
+    const select = document.getElementById('afraidExternalCfAccount');
+    if (!select || afraidExternalCfAccountsLoaded) return;
+    select.innerHTML = '<option value="">Loading service accounts...</option>';
+    try {
+        const res = await fetch('/api/afraid/service-accounts');
+        const data = await parseJsonResponse(res);
+        const accounts = data.accounts || [];
+        if (!accounts.length) {
+            select.innerHTML = '<option value="">No active service accounts found</option>';
+            return;
+        }
+        const lastAccount = localStorage.getItem('afraid_external_cf_account') || '';
+        select.innerHTML = '<option value="">Select Workspace service account</option>' + accounts.map(account => {
+            const name = account.name || '';
+            const admin = account.admin_email ? ` (${account.admin_email})` : '';
+            const selected = name === lastAccount ? ' selected' : '';
+            return `<option value="${escapeHtml(name)}"${selected}>${escapeHtml(name + admin)}</option>`;
+        }).join('');
+        afraidExternalCfAccountsLoaded = true;
+    } catch (err) {
+        select.innerHTML = '<option value="">Could not load accounts</option>';
+        showAfraidExternalCfAlert(err.message || 'Could not load service accounts.', 'danger');
+    }
+}
+
+function parseAfraidExternalCfRows(list) {
+    return String(list.raw_results || '')
+        .split('\n')
+        .map(line => line.trim())
+        .filter(Boolean)
+        .map((line, index) => {
+            const parts = line.split(',').map(part => part.trim()).filter(Boolean);
+            return {
+                index: index + 1,
+                account: '',
+                externalDomain: parts[0] || '',
+                cloudflareDomain: parts[1] || '',
+                authStatus: parts.length >= 2 ? 'pending' : 'failed',
+                workspaceStatus: 'pending',
+                tokenStatus: 'pending',
+                dnsStatus: 'pending',
+                verifyStatus: parts.length >= 2 ? 'pending' : 'skipped',
+                message: parts.length >= 2 ? 'Ready' : 'Expected subdomain,cloudflare-domain'
+            };
+        });
+}
+
+function openAfraidExternalCfModal(id) {
+    const list = (window.afraidLists || []).find(item => item.id === id);
+    if (!list) return;
+    afraidExternalCfEntries = parseAfraidExternalCfRows(list);
+    afraidExternalCfJobId = null;
+    afraidExternalCfLogSeen = {};
+    afraidExternalCfStatusSeen = {};
+    if (afraidExternalCfPollInterval) {
+        clearInterval(afraidExternalCfPollInterval);
+        afraidExternalCfPollInterval = null;
+    }
+    document.getElementById('afraidExternalCfModalSubtitle').textContent =
+        `${list.name}: ${afraidExternalCfEntries.length} saved domain row(s) prepared.`;
+    document.getElementById('afraidExternalCfParsedCount').textContent = afraidExternalCfEntries.length;
+    document.getElementById('afraidExternalCfDoneCount').textContent = '0';
+    document.getElementById('afraidExternalCfLog').textContent = 'Parsed saved list. Select a Workspace account, then start verification.';
+    showAfraidExternalCfAlert('', 'secondary');
+    renderAfraidExternalCfTable(afraidExternalCfEntries);
+    setAfraidExternalCfRunning(false);
+    loadAfraidExternalCfAccounts();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('afraidExternalCfModal')).show();
+}
+
+function renderAfraidExternalCfTable(entries) {
+    const tbody = document.getElementById('afraidExternalCfTableBody');
+    if (!tbody) return;
+    if (!entries.length) {
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">This saved list has no rows.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = entries.map(entry => `
+        <tr id="afraid-ext-cf-row-${entry.index}">
+            <td class="text-muted">${entry.index}</td>
+            <td><span class="afraid-verify-domain" title="${escapeHtml(entry.externalDomain)}">${escapeHtml(entry.externalDomain)}</span></td>
+            <td><span class="afraid-verify-domain" title="${escapeHtml(entry.cloudflareDomain)}">${escapeHtml(entry.cloudflareDomain)}</span></td>
+            <td class="text-center">${getAfraidExternalCfStatusBadge(entry.authStatus)}</td>
+            <td class="text-center">${getAfraidExternalCfStatusBadge(entry.workspaceStatus)}</td>
+            <td class="text-center">${getAfraidExternalCfStatusBadge(entry.tokenStatus)}</td>
+            <td class="text-center">${getAfraidExternalCfStatusBadge(entry.dnsStatus)}</td>
+            <td class="text-center">${getAfraidExternalCfStatusBadge(entry.verifyStatus)}</td>
+            <td class="small text-muted">${escapeHtml(entry.message || '')}</td>
+        </tr>
+    `).join('');
+}
+
+function updateAfraidExternalCfTable(entries) {
+    let done = 0;
+    entries.forEach(entry => {
+        const row = document.getElementById(`afraid-ext-cf-row-${entry.index}`);
+        if (!row) return;
+        const cells = row.querySelectorAll('td');
+        if (cells.length < 9) return;
+        cells[3].innerHTML = getAfraidExternalCfStatusBadge(entry.authStatus);
+        cells[4].innerHTML = getAfraidExternalCfStatusBadge(entry.workspaceStatus);
+        cells[5].innerHTML = getAfraidExternalCfStatusBadge(entry.tokenStatus);
+        cells[6].innerHTML = getAfraidExternalCfStatusBadge(entry.dnsStatus);
+        cells[7].innerHTML = getAfraidExternalCfStatusBadge(entry.verifyStatus);
+        cells[8].textContent = entry.message || '';
+        if (entry.verifyStatus === 'success' || entry.authStatus === 'failed' || entry.workspaceStatus === 'failed' || entry.tokenStatus === 'failed' || entry.dnsStatus === 'failed' || entry.verifyStatus === 'failed') {
+            done += 1;
+        }
+    });
+    document.getElementById('afraidExternalCfDoneCount').textContent = done;
+}
+
+function getAfraidExternalCfStatusBadge(status) {
+    const statuses = {
+        pending: '<i class="fas fa-circle text-muted" style="font-size:8px;opacity:.45"></i>',
+        running: '<i class="fas fa-spinner fa-spin text-primary"></i>',
+        success: '<i class="fas fa-check-circle text-success"></i>',
+        failed: '<i class="fas fa-times-circle text-danger"></i>',
+        skipped: '<i class="fas fa-forward text-warning"></i>'
+    };
+    return statuses[status] || statuses.pending;
+}
+
+async function startAfraidExternalCfVerification() {
+    const account = document.getElementById('afraidExternalCfAccount').value.trim();
+    const validEntries = afraidExternalCfEntries.filter(entry => entry.externalDomain && entry.cloudflareDomain);
+    if (!account) {
+        showAfraidExternalCfAlert('Select a Workspace service account before starting.', 'warning');
+        return;
+    }
+    if (!validEntries.length) {
+        showAfraidExternalCfAlert('No valid saved rows found. Expected subdomain,cloudflare-domain.', 'warning');
+        return;
+    }
+    localStorage.setItem('afraid_external_cf_account', account);
+    setAfraidExternalCfRunning(true);
+    showAfraidExternalCfAlert(`Starting ${validEntries.length} domain verification job.`, 'info');
+    logAfraidExternalCf(`Starting job with ${validEntries.length} row(s) using ${account}.`);
+    try {
+        const res = await fetch('/api/domains/external-cloudflare/start', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                entries: validEntries.map(entry => ({
+                    ...entry,
+                    account
+                }))
+            })
+        });
+        const data = await parseJsonResponse(res);
+        if (!data.success) {
+            throw new Error(data.error || 'Could not start verification.');
+        }
+        afraidExternalCfJobId = data.job_id;
+        logAfraidExternalCf(`Job started: ${data.job_id}`);
+        pollAfraidExternalCfJob();
+    } catch (err) {
+        setAfraidExternalCfRunning(false);
+        showAfraidExternalCfAlert(err.message || 'Could not start verification.', 'danger');
+        logAfraidExternalCf(`Start failed: ${err.message || 'Unknown error'}`);
+    }
+}
+
+async function stopAfraidExternalCfVerification() {
+    if (!afraidExternalCfJobId) {
+        showAfraidExternalCfAlert('No active job is running.', 'secondary');
+        return;
+    }
+    try {
+        const res = await fetch('/api/domains/external-cloudflare/stop', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({job_id: afraidExternalCfJobId})
+        });
+        const data = await parseJsonResponse(res);
+        if (!data.success) {
+            throw new Error(data.error || 'Could not stop job.');
+        }
+        logAfraidExternalCf('Job stopped.');
+        finishAfraidExternalCfJob('stopped');
+    } catch (err) {
+        showAfraidExternalCfAlert(err.message || 'Could not stop job.', 'danger');
+    }
+}
+
+function pollAfraidExternalCfJob() {
+    if (afraidExternalCfPollInterval) clearInterval(afraidExternalCfPollInterval);
+    afraidExternalCfPollInterval = setInterval(async () => {
+        if (!afraidExternalCfJobId) {
+            clearInterval(afraidExternalCfPollInterval);
+            afraidExternalCfPollInterval = null;
+            return;
+        }
+        try {
+            const res = await fetch(`/api/domains/external-cloudflare/status/${afraidExternalCfJobId}`);
+            const data = await parseJsonResponse(res);
+            if (!data.success) {
+                throw new Error(data.error || 'Could not read job status.');
+            }
+            updateAfraidExternalCfTable(data.entries || []);
+            renderAfraidExternalCfLogs(data.entries || []);
+            if (['completed', 'stopped', 'failed'].includes(data.status)) {
+                finishAfraidExternalCfJob(data.status);
+            }
+        } catch (err) {
+            logAfraidExternalCf(`Status check failed: ${err.message || 'Unknown error'}`);
+        }
+    }, 2000);
+}
+
+function renderAfraidExternalCfLogs(entries) {
+    entries.forEach(entry => {
+        (entry.log || []).forEach((item, index) => {
+            const key = `${afraidExternalCfJobId}:${entry.index}:log:${index}`;
+            if (afraidExternalCfLogSeen[key]) return;
+            afraidExternalCfLogSeen[key] = true;
+            logAfraidExternalCf(`${entry.externalDomain}: ${item.message}`);
+        });
+        const statusKey = `${afraidExternalCfJobId}:${entry.index}:${entry.authStatus}:${entry.workspaceStatus}:${entry.tokenStatus}:${entry.dnsStatus}:${entry.verifyStatus}`;
+        if (!afraidExternalCfStatusSeen[statusKey]) {
+            afraidExternalCfStatusSeen[statusKey] = true;
+            if (entry.verifyStatus === 'success') {
+                logAfraidExternalCf(`${entry.externalDomain}: verified in Workspace.`);
+            } else if (entry.dnsStatus === 'success' && entry.verifyStatus === 'running') {
+                logAfraidExternalCf(`${entry.externalDomain}: TXT inserted into ${entry.cloudflareDomain}; verification started.`);
+            } else if (entry.authStatus === 'failed' || entry.workspaceStatus === 'failed' || entry.tokenStatus === 'failed' || entry.dnsStatus === 'failed') {
+                logAfraidExternalCf(`${entry.externalDomain}: ${entry.message || 'Failed'}`);
+            } else if (entry.verifyStatus === 'failed') {
+                logAfraidExternalCf(`${entry.externalDomain}: ${entry.message || 'Verification failed'}`);
+            }
+        }
+    });
+}
+
+function finishAfraidExternalCfJob(status) {
+    if (afraidExternalCfPollInterval) {
+        clearInterval(afraidExternalCfPollInterval);
+        afraidExternalCfPollInterval = null;
+    }
+    afraidExternalCfJobId = null;
+    setAfraidExternalCfRunning(false);
+    showAfraidExternalCfAlert(`Verification job ${status}.`, status === 'completed' ? 'success' : 'secondary');
+    logAfraidExternalCf(`Job ${status}.`);
+}
+
+function setAfraidExternalCfRunning(isRunning) {
+    const startBtn = document.getElementById('btnStartAfraidExternalCf');
+    const stopBtn = document.getElementById('btnStopAfraidExternalCf');
+    const accountSelect = document.getElementById('afraidExternalCfAccount');
+    startBtn.disabled = isRunning;
+    stopBtn.disabled = !isRunning;
+    accountSelect.disabled = isRunning;
+    startBtn.innerHTML = isRunning
+        ? '<i class="fas fa-spinner fa-spin me-1"></i>Running'
+        : '<i class="fas fa-play me-1"></i>Start verification';
+}
+
+function showAfraidExternalCfAlert(message, type) {
+    const el = document.getElementById('afraidExternalCfAlert');
+    if (!el) return;
+    if (!message) {
+        el.innerHTML = '';
+        return;
+    }
+    el.innerHTML = `<div class="alert alert-${type} py-2 mb-0 small">${escapeHtml(message)}</div>`;
+}
+
+function logAfraidExternalCf(message) {
+    const el = document.getElementById('afraidExternalCfLog');
+    if (!el) return;
+    const timestamp = new Date().toLocaleTimeString();
+    const existing = el.textContent === 'Ready.' ? '' : `${el.textContent}\n`;
+    el.textContent = `${existing}[${timestamp}] ${message}`;
+    el.scrollTop = el.scrollHeight;
 }
 
 async function loadUsedDomains() {
