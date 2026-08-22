@@ -3900,8 +3900,8 @@ merge_recipe_id, content_blueprint_id</pre>
             <div class="ii-card ii-targeted-alias-card mb-3">
                 <div class="ii-targeted-alias-head">
                     <div>
-                        <h4><i class="fas fa-user-edit text-primary"></i> Targeted User Alias Randomization</h4>
-                        <p class="ii-muted mb-0">Paste exact admin account and user pairs to randomize only those non-admin Workspace users. This is the focused version of bulk alias randomization.</p>
+                        <h4><i class="fas fa-user-edit text-primary"></i> Targeted User Name Randomization</h4>
+                        <p class="ii-muted mb-0">Paste exact admin account and user pairs to randomize names only for those non-admin Workspace users.</p>
                     </div>
                     <span id="iiTargetedAliasCount" class="ii-chip blue">0 selected</span>
                 </div>
@@ -3925,14 +3925,14 @@ merge_recipe_id, content_blueprint_id</pre>
                         <div id="iiTargetedAliasStatus" class="ii-targeted-alias-status" role="status">Paste account,user pairs to prepare a targeted run.</div>
                         <div class="ii-targeted-alias-progress" aria-hidden="true"><span id="iiTargetedAliasProgressBar"></span></div>
                         <div class="ii-row">
-                            <button type="button" class="ii-btn ii-btn-primary" onclick="executeIiTargetedAliasRandomization(event)"><i class="fas fa-user-check"></i> Auth + Randomize Selected Users</button>
+                            <button type="button" class="ii-btn ii-btn-primary" onclick="executeIiTargetedAliasRandomization(event)"><i class="fas fa-user-check"></i> Auth + Randomize Selected Names</button>
                             <button type="button" class="ii-btn" onclick="clearIiTargetedAliasPairs()"><i class="fas fa-eraser"></i> Clear</button>
                         </div>
                     </div>
                 </div>
                 <div id="iiTargetedAliasResults" class="ii-targeted-alias-results">
                     <div class="ii-row justify-content-between mb-2">
-                        <strong>Targeted alias results</strong>
+                        <strong>Targeted name results</strong>
                         <span id="iiTargetedAliasResultSummary" class="ii-muted">No completed targeted run yet.</span>
                     </div>
                     <textarea class="ii-textarea" id="iiTargetedAliasResultText" rows="8" readonly
@@ -4707,7 +4707,7 @@ merge_recipe_id, content_blueprint_id</pre>
             lines.push(`# ${result.account || 'unknown account'}`);
             (result.details || []).forEach((detail) => {
                 if (detail.success) {
-                    lines.push(`${detail.user} -> ${detail.new_primary} (${detail.new_name})`);
+                    lines.push(`${detail.user} -> ${detail.new_name}`);
                 } else if (detail.skipped) {
                     lines.push(`${detail.user} SKIPPED (${detail.error || 'safety rule'})`);
                 } else {
@@ -4738,17 +4738,17 @@ merge_recipe_id, content_blueprint_id</pre>
         const resetButton = () => {
             if (!btn) return;
             btn.disabled = false;
-            btn.innerHTML = originalButtonHtml || '<i class="fas fa-user-check"></i> Auth + Randomize Selected Users';
+            btn.innerHTML = originalButtonHtml || '<i class="fas fa-user-check"></i> Auth + Randomize Selected Names';
         };
 
         try {
             if (btn) {
                 btn.disabled = true;
-                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Randomizing...';
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Randomizing names...';
             }
             setIiTargetedAliasProgress(0);
-            setIiTargetedAliasStatus(`Starting targeted alias randomization for ${parsed.targets.length} user(s)...`, 'ready');
-            if (status) status.textContent = `Targeted alias randomization started for ${parsed.targets.length} selected user(s).`;
+            setIiTargetedAliasStatus(`Starting targeted name randomization for ${parsed.targets.length} user(s)...`, 'ready');
+            if (status) status.textContent = `Targeted name randomization started for ${parsed.targets.length} selected user(s).`;
 
             const started = await iiFetch('/api/targeted-randomize-user-aliases', {
                 method: 'POST',
@@ -4756,14 +4756,14 @@ merge_recipe_id, content_blueprint_id</pre>
                 body: JSON.stringify({targets: parsed.targets})
             });
             const taskId = started.task_id;
-            if (!taskId) throw new Error('No task id returned for targeted alias randomization.');
+            if (!taskId) throw new Error('No task id returned for targeted name randomization.');
 
             const pollProgress = async () => {
                 try {
                     const progress = await iiFetch(`/api/task-progress/${taskId}`);
                     setIiTargetedAliasProgress(progress.percentage || 0);
                     setIiTargetedAliasStatus(progress.message || `Processing... ${progress.percentage || 0}%`, progress.status === 'error' ? 'error' : 'ready');
-                    if (status) status.textContent = progress.message || 'Targeted alias randomization is running.';
+                    if (status) status.textContent = progress.message || 'Targeted name randomization is running.';
 
                     if (progress.status === 'completed') {
                         resetButton();
@@ -4793,7 +4793,7 @@ merge_recipe_id, content_blueprint_id</pre>
         } catch (err) {
             resetButton();
             setIiTargetedAliasStatus(`System error: ${err.message}`, 'error');
-            if (status) status.textContent = `Targeted alias randomization failed: ${err.message}`;
+            if (status) status.textContent = `Targeted name randomization failed: ${err.message}`;
         }
     }
 

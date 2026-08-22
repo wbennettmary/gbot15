@@ -8126,21 +8126,86 @@ def _generate_unique_workspace_identity(existing_aliases_set):
     existing_aliases_set.add(fallback_local)
     return "User", fallback_last, fallback_local
 
+def _latin_name_part(value):
+    normalized = unicodedata.normalize('NFKD', str(value or '')).encode('ascii', 'ignore').decode('ascii')
+    normalized = re.sub(r'[^A-Za-z -]', '', normalized).strip()
+    return re.sub(r'\s+', ' ', normalized)
+
+def _generate_us_latin_workspace_name(existing_names=None):
+    existing_names = existing_names or set()
+    fake = Faker('en_US')
+    for _ in range(200):
+        first_name = _latin_name_part(fake.first_name())
+        last_name = _latin_name_part(fake.last_name())
+        display = f'{first_name} {last_name}'.strip()
+        if first_name and last_name and display.lower() not in existing_names:
+            existing_names.add(display.lower())
+            return first_name, last_name
+    fallback_last = ''.join(random.choices(string.ascii_uppercase, k=4))
+    return 'User', fallback_last
+
+def _service_account_for_alias_token(account_name):
+    token = str(account_name or '').strip()
+    if not token:
+        return None
+    service_account_id = None
+    service_account_match = re.fullmatch(r'(?:ServiceAccount:)?(\d+)', token, re.IGNORECASE)
+    if service_account_match:
+        service_account_id = int(service_account_match.group(1))
+    if service_account_id:
+        account = ServiceAccount.query.get(service_account_id)
+        if account:
+            return account
+    token_lower = token.lower()
+    return ServiceAccount.query.filter(or_(
+        func.lower(ServiceAccount.admin_email) == token_lower,
+        func.lower(ServiceAccount.name) == token_lower,
+        func.lower(ServiceAccount.client_email) == token_lower
+    )).first()
+
+def _workspace_domain_matches_user(account, user_email):
+    user_domain = _email_domain(user_email)
+    admin_domain = _email_domain(getattr(account, 'admin_email', '') or '')
+    if not user_domain or not admin_domain:
+        return False
+    return user_domain == admin_domain or user_domain.endswith(f'.{admin_domain}')
+
+def _resolve_targeted_alias_account(account_name, user_email):
+    exact = _service_account_for_alias_token(account_name)
+    domain_candidates = [
+        account for account in ServiceAccount.query.order_by(ServiceAccount.id.asc()).all()
+        if _workspace_domain_matches_user(account, user_email)
+    ]
+    if exact and _workspace_domain_matches_user(exact, user_email):
+        return exact, None
+    if domain_candidates:
+        active_candidates = [account for account in domain_candidates if getattr(account, 'is_active', True)]
+        return (active_candidates or domain_candidates)[0], None
+    if exact:
+        return exact, None
+    return None, f"Could not find a service account/admin owner for {user_email}."
+
 
 def _authenticate_workspace_alias_account(account_name):
     with app.app_context():
         try:
             from services.google_domains_service import GoogleDomainsService
 
-            service_account = ServiceAccount.query.filter_by(admin_email=account_name).first()
-            if not service_account:
-                service_account = ServiceAccount.query.filter_by(name=account_name).first()
+            service_account = _service_account_for_alias_token(account_name)
 
             if service_account:
                 try:
                     domains_service = GoogleDomainsService(service_account.name)
                     admin_service = domains_service._get_admin_service()
-                    return {'account': account_name, 'authenticated': True, 'service': admin_service, 'is_service_account': True}
+                    return {
+                        'account': service_account.admin_email,
+                        'requested_account': account_name,
+                        'service_account_id': service_account.id,
+                        'service_account_name': service_account.name,
+                        'authenticated': True,
+                        'service': admin_service,
+                        'is_service_account': True
+                    }
                 except Exception as sa_err:
                     return {'account': account_name, 'authenticated': False, 'error': str(sa_err)}
 
@@ -8168,7 +8233,7 @@ def _authenticate_workspace_alias_account(account_name):
             return {'account': account_name, 'authenticated': False, 'error': str(e)}
 
 
-def _randomize_one_workspace_user_identity(service, account_name, user_key, used_aliases):
+def _randomize_one_workspace_user_identity(service, account_name, user_key, used_names):
     user = service.users().get(userKey=user_key).execute()
     primary_email = user.get('primaryEmail', '')
     if not primary_email or '@' not in primary_email:
@@ -8182,24 +8247,14 @@ def _randomize_one_workspace_user_identity(service, account_name, user_key, used
             'error': 'Skipped admin account for safety'
         }
 
-    domain = primary_email.split('@', 1)[1]
-    used_aliases.add(primary_email.split('@', 1)[0].lower())
-    try:
-        existing = service.users().aliases().list(userKey=primary_email).execute()
-        for alias_item in existing.get('aliases', []):
-            alias_email = alias_item.get('alias', '')
-            if '@' in alias_email:
-                used_aliases.add(alias_email.split('@', 1)[0].lower())
-    except Exception:
-        pass
-
-    new_first, new_last, new_local = _generate_unique_workspace_identity(used_aliases)
-    new_primary_email = f"{new_local}@{domain}"
+    current_name = user.get('name') or {}
+    if current_name.get('fullName'):
+        used_names.add(str(current_name.get('fullName')).lower())
+    new_first, new_last = _generate_us_latin_workspace_name(used_names)
 
     service.users().patch(
         userKey=primary_email,
         body={
-            'primaryEmail': new_primary_email,
             'name': {
                 'givenName': new_first,
                 'familyName': new_last
@@ -8209,8 +8264,9 @@ def _randomize_one_workspace_user_identity(service, account_name, user_key, used
 
     return {
         'user': primary_email,
-        'new_primary': new_primary_email,
+        'new_primary': primary_email,
         'new_name': f"{new_first} {new_last}",
+        'changed_field': 'name',
         'success': True
     }
 
@@ -8232,17 +8288,42 @@ def api_targeted_randomize_user_aliases():
         return jsonify({'success': False, 'error': 'No targeted users provided'})
 
     account_targets = {}
+    resolution_failures = []
     for target in targets:
-        account_targets.setdefault(target['account'], []).append(target['user'])
+        service_account, resolve_error = _resolve_targeted_alias_account(target['account'], target['user'])
+        if resolve_error:
+            resolution_failures.append({'account': target['account'], 'user': target['user'], 'error': resolve_error})
+            continue
+        account_key = service_account.admin_email
+        account_targets.setdefault(account_key, []).append(target['user'])
+
+    if not account_targets and resolution_failures:
+        return jsonify({'success': False, 'error': '; '.join(item['error'] for item in resolution_failures[:5])})
 
     task_id = str(uuid.uuid4())
-    update_progress(task_id, 0, len(targets), "starting", "Initializing targeted alias randomization...")
+    update_progress(task_id, 0, len(targets), "starting", "Initializing targeted name randomization...")
 
-    def background_task(task_id, account_targets):
+    def background_task(task_id, account_targets, resolution_failures):
         with app.app_context():
             all_results = []
 
             try:
+                for failure in resolution_failures:
+                    all_results.append({
+                        'account': failure.get('account'),
+                        'authenticated': False,
+                        'error': failure.get('error') or 'Could not resolve account owner',
+                        'aliases_added': 0,
+                        'aliases_failed': 1,
+                        'skipped': 0,
+                        'user_count': 1,
+                        'details': [{
+                            'user': failure.get('user'),
+                            'success': False,
+                            'error': failure.get('error') or 'Could not resolve account owner'
+                        }]
+                    })
+
                 account_names = list(account_targets.keys())
                 app.logger.info(f"[TARGETED ALIAS TASK {task_id}] Starting for {len(targets)} users across {len(account_names)} accounts")
 
@@ -8291,7 +8372,7 @@ def api_targeted_randomize_user_aliases():
                     update_progress(task_id, len(targets), len(targets), "completed", f"Auth Failed: {first_err}", result_data)
                     return
 
-                update_progress(task_id, 0, len(targets), "randomizing", f"Randomizing {len(targets)} selected user(s)...")
+                update_progress(task_id, 0, len(targets), "randomizing", f"Randomizing names for {len(targets)} selected user(s)...")
 
                 def process_account_targets(account_name, user_keys):
                     with app.app_context():
@@ -8305,19 +8386,19 @@ def api_targeted_randomize_user_aliases():
                             'error': None,
                             'details': []
                         }
-                        used_aliases = set()
+                        used_names = set()
                         service = authenticated_accounts[account_name]['service']
 
                         for user_key in user_keys:
                             try:
-                                detail = _randomize_one_workspace_user_identity(service, account_name, user_key, used_aliases)
+                                detail = _randomize_one_workspace_user_identity(service, account_name, user_key, used_names)
                                 account_result['details'].append(detail)
                                 if detail.get('success'):
                                     account_result['aliases_added'] += 1
-                                    app.logger.info(f"[TARGETED IDENTITY] ✅ Updated {detail['user']} -> {detail['new_primary']} ({detail['new_name']})")
+                                    app.logger.info(f"[TARGETED IDENTITY] Updated {detail['user']} name -> {detail['new_name']}")
                                 elif detail.get('skipped'):
                                     account_result['skipped'] += 1
-                                    app.logger.info(f"[TARGETED IDENTITY] 🛡️ Skipped {detail['user']}: {detail['error']}")
+                                    app.logger.info(f"[TARGETED IDENTITY] Skipped {detail['user']}: {detail['error']}")
                                 else:
                                     account_result['aliases_failed'] += 1
                             except Exception as update_err:
@@ -8327,7 +8408,7 @@ def api_targeted_randomize_user_aliases():
                                     'success': False,
                                     'error': str(update_err)
                                 })
-                                app.logger.warning(f"[TARGETED IDENTITY] ❌ Failed update for {user_key}: {update_err}")
+                                app.logger.warning(f"[TARGETED IDENTITY] Failed update for {user_key}: {update_err}")
 
                         return account_result
 
@@ -8361,15 +8442,15 @@ def api_targeted_randomize_user_aliases():
                     'results': all_results
                 }
 
-                update_progress(task_id, len(targets), len(targets), "completed", "Targeted alias randomization finished!", final_result)
-                app.logger.info(f"[TARGETED ALIAS TASK {task_id}] COMPLETED — {total_aliases_added} aliases added, {total_aliases_failed} failed, {total_skipped} skipped")
+                update_progress(task_id, len(targets), len(targets), "completed", "Targeted name randomization finished!", final_result)
+                app.logger.info(f"[TARGETED ALIAS TASK {task_id}] COMPLETED — {total_aliases_added} names updated, {total_aliases_failed} failed, {total_skipped} skipped")
 
             except Exception as e:
                 app.logger.error(f"[TARGETED ALIAS TASK {task_id}] CRASHED: {e}")
                 app.logger.error(traceback.format_exc())
                 update_progress(task_id, 0, 0, "error", f"Task failed: {str(e)}")
 
-    threading.Thread(target=background_task, args=(task_id, account_targets)).start()
+    threading.Thread(target=background_task, args=(task_id, account_targets, resolution_failures)).start()
 
     return jsonify({'success': True, 'task_id': task_id})
 
