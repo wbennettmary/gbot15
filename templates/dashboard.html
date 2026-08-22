@@ -34,6 +34,109 @@
             padding: 20px !important;
         }
     }
+
+    .targeted-alias-panel {
+        margin: 20px 0 18px;
+        padding: 18px;
+        border: 1px solid rgba(9, 105, 218, 0.22);
+        border-left: 4px solid #0969da;
+        border-radius: 10px;
+        background: linear-gradient(135deg, rgba(9, 105, 218, 0.08), rgba(124, 58, 237, 0.06));
+    }
+
+    .targeted-alias-panel__header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 14px;
+    }
+
+    .targeted-alias-panel__title {
+        color: var(--text-primary);
+        font-size: 15px;
+        font-weight: 700;
+        margin: 0 0 4px;
+    }
+
+    .targeted-alias-panel__copy {
+        color: var(--text-secondary);
+        font-size: 12px;
+        line-height: 1.45;
+        margin: 0;
+    }
+
+    .targeted-alias-panel__badge {
+        flex: 0 0 auto;
+        padding: 5px 10px;
+        border-radius: 999px;
+        background: rgba(9, 105, 218, 0.12);
+        color: #0969da;
+        font-size: 12px;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .targeted-alias-panel__grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 260px;
+        gap: 14px;
+        align-items: stretch;
+    }
+
+    .targeted-alias-panel__side {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .targeted-alias-format {
+        padding: 12px;
+        border: 1px solid var(--border-panel);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--text-secondary);
+        font-size: 12px;
+        line-height: 1.45;
+    }
+
+    .targeted-alias-status {
+        min-height: 40px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid var(--border-panel);
+        color: var(--text-secondary);
+        font-size: 12px;
+    }
+
+    .targeted-alias-status.is-error {
+        border-color: rgba(207, 34, 46, 0.35);
+        background: rgba(207, 34, 46, 0.08);
+        color: #cf222e;
+    }
+
+    .targeted-alias-status.is-ready {
+        border-color: rgba(26, 127, 55, 0.35);
+        background: rgba(26, 127, 55, 0.08);
+        color: #1a7f37;
+    }
+
+    @media (max-width: 900px) {
+        .targeted-alias-panel__header,
+        .targeted-alias-panel__grid {
+            display: block;
+        }
+
+        .targeted-alias-panel__badge {
+            display: inline-flex;
+            margin-top: 10px;
+        }
+
+        .targeted-alias-panel__side {
+            margin-top: 12px;
+        }
+    }
 </style>
 <div class="tab-navigation" style="display: none;">
     <nav>
@@ -795,6 +898,60 @@
                         Add Account Row
                     </button>
                 </div>
+
+                <section class="targeted-alias-panel" aria-labelledby="targeted-alias-title">
+                    <div class="targeted-alias-panel__header">
+                        <div>
+                            <h4 id="targeted-alias-title" class="targeted-alias-panel__title">
+                                <i class="fas fa-user-edit"></i>
+                                Targeted User Alias Randomization
+                            </h4>
+                            <p class="targeted-alias-panel__copy">
+                                Randomize only the selected Workspace users with their admin account. The full bulk
+                                button below still changes every non-admin user in the listed accounts.
+                            </p>
+                        </div>
+                        <span id="targeted-alias-count" class="targeted-alias-panel__badge">0 selected</span>
+                    </div>
+                    <div class="targeted-alias-panel__grid">
+                        <div class="form-group-github" style="margin-bottom: 0;">
+                            <label for="targeted-alias-pairs" class="form-label-github">
+                                <i class="fas fa-list-ul"></i>
+                                Admin account and target user pairs
+                            </label>
+                            <textarea id="targeted-alias-pairs" class="form-control-github" rows="6"
+                                style="font-family: 'Courier New', monospace; font-size: 13px; resize: none;"
+                                oninput="updateTargetedAliasPreview()"
+                                placeholder="admin@example.com,user1@example.com&#10;admin2@example.com,user2"></textarea>
+                        </div>
+                        <div class="targeted-alias-panel__side">
+                            <div class="targeted-alias-format">
+                                <strong>Format</strong><br>
+                                One pair per line: <code>account,user</code><br>
+                                Use a full user email or a local part. Local parts use the admin account domain.
+                            </div>
+                            <label class="form-group-github d-flex align-items-start mb-0"
+                                style="gap: 8px; cursor: pointer; color: var(--text-secondary); font-size: 12px;">
+                                <input type="checkbox" id="targeted-alias-confirm" style="margin-top: 3px;">
+                                <span>I confirm this should update only the listed non-admin users.</span>
+                            </label>
+                            <div id="targeted-alias-status" class="targeted-alias-status" role="status">
+                                Paste account,user pairs to prepare a targeted run.
+                            </div>
+                            <div class="d-flex flex-wrap gap-2">
+                                <button type="button" onclick="executeTargetedAliasRandomization(event)"
+                                    class="btn-github" style="background-color: #0969da; border-color: #0969da; color: white;">
+                                    <i class="fas fa-user-check"></i>
+                                    Auth + Randomize Selected Users
+                                </button>
+                                <button type="button" onclick="clearTargetedAliasPairs()" class="btn-github">
+                                    <i class="fas fa-eraser"></i>
+                                    Clear
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
 
                 <div class="d-flex flex-wrap gap-2 mt-4">
                     <div class="form-group-github d-flex align-items-center mb-3">
@@ -6414,11 +6571,24 @@
         // Optimized Bulk Parsing
         let bulkAccountRowCounter = 0;
 
+        function escapeDashboardHtml(value) {
+            return String(value || '').replace(/[&<>"']/g, function (char) {
+                return {
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#39;'
+                }[char];
+            });
+        }
+
         function openBulkAccountModal() {
             document.getElementById('bulk-account-modal').style.display = 'block';
             document.getElementById('bulk-accounts-tbody').innerHTML = '';
             const pasteField = document.getElementById('bulk-accounts-paste');
             if (pasteField) pasteField.value = '';
+            clearTargetedAliasPairs();
             document.getElementById('bulk-account-progress').style.display = 'none';
             const resultsSection = document.getElementById('bulk-account-results');
             if (resultsSection) resultsSection.style.display = 'none';
@@ -6543,6 +6713,83 @@
 
             // Start processing
             processBatch();
+        }
+
+        function parseTargetedAliasPairs() {
+            const textarea = document.getElementById('targeted-alias-pairs');
+            const text = textarea ? textarea.value.trim() : '';
+            const lines = text ? text.split('\n') : [];
+            const targets = [];
+            const errors = [];
+            const seen = new Set();
+
+            lines.forEach((rawLine, index) => {
+                const line = rawLine.trim();
+                if (!line) return;
+
+                const parts = line.split(',').map(part => part.trim()).filter(Boolean);
+                if (parts.length !== 2) {
+                    errors.push(`Line ${index + 1}: use account,user`);
+                    return;
+                }
+
+                const account = parts[0];
+                let user = parts[1];
+                if (!account.includes('@')) {
+                    errors.push(`Line ${index + 1}: admin account must be a full email`);
+                    return;
+                }
+                if (!user) {
+                    errors.push(`Line ${index + 1}: target user is required`);
+                    return;
+                }
+                if (!user.includes('@')) {
+                    user = `${user}@${account.split('@')[1]}`;
+                }
+
+                const key = `${account.toLowerCase()}|${user.toLowerCase()}`;
+                if (seen.has(key)) return;
+                seen.add(key);
+                targets.push({ account, user });
+            });
+
+            return { targets, errors };
+        }
+
+        function setTargetedAliasStatus(message, tone = '') {
+            const status = document.getElementById('targeted-alias-status');
+            if (!status) return;
+            status.classList.remove('is-error', 'is-ready');
+            if (tone === 'error') status.classList.add('is-error');
+            if (tone === 'ready') status.classList.add('is-ready');
+            status.textContent = message;
+        }
+
+        function updateTargetedAliasPreview() {
+            const countBadge = document.getElementById('targeted-alias-count');
+            const parsed = parseTargetedAliasPairs();
+            if (countBadge) countBadge.textContent = `${parsed.targets.length} selected`;
+
+            if (parsed.errors.length > 0) {
+                setTargetedAliasStatus(parsed.errors.slice(0, 3).join(' | '), 'error');
+            } else if (parsed.targets.length > 0) {
+                const accountCount = new Set(parsed.targets.map(target => target.account.toLowerCase())).size;
+                setTargetedAliasStatus(`${parsed.targets.length} user(s) ready across ${accountCount} admin account(s).`, 'ready');
+            } else {
+                setTargetedAliasStatus('Paste account,user pairs to prepare a targeted run.');
+            }
+
+            return parsed;
+        }
+
+        function clearTargetedAliasPairs() {
+            const textarea = document.getElementById('targeted-alias-pairs');
+            const confirmBox = document.getElementById('targeted-alias-confirm');
+            const countBadge = document.getElementById('targeted-alias-count');
+            if (textarea) textarea.value = '';
+            if (confirmBox) confirmBox.checked = false;
+            if (countBadge) countBadge.textContent = '0 selected';
+            setTargetedAliasStatus('Paste account,user pairs to prepare a targeted run.');
         }
 
         function closeBulkAccountModal() {
@@ -8015,6 +8262,110 @@
         // ═══════════════════════════════════════════════════════════
         //  BULK RANDOMIZE USER ALIASES
         // ═══════════════════════════════════════════════════════════
+        function executeTargetedAliasRandomization(event) {
+            try {
+                const parsed = updateTargetedAliasPreview();
+                const confirmBox = document.getElementById('targeted-alias-confirm');
+
+                if (parsed.errors.length > 0) {
+                    return;
+                }
+                if (parsed.targets.length === 0) {
+                    setTargetedAliasStatus('Add at least one account,user pair before starting.', 'error');
+                    return;
+                }
+                if (!confirmBox || !confirmBox.checked) {
+                    setTargetedAliasStatus('Confirm the targeted update before starting.', 'error');
+                    return;
+                }
+
+                const progressDiv = document.getElementById('bulk-account-progress');
+                const progressBar = document.getElementById('bulk-account-progress-bar');
+                const progressText = document.getElementById('bulk-account-progress-text');
+
+                if (progressDiv) progressDiv.style.display = 'block';
+                if (progressBar) { progressBar.style.width = '0%'; progressBar.style.background = '#0969da'; }
+                if (progressText) progressText.textContent = `Starting targeted alias randomization for ${parsed.targets.length} user(s)...`;
+                setTargetedAliasStatus('Targeted task started. Keep this window open while progress updates.', 'ready');
+
+                let btn = null;
+                if (event && event.target) btn = event.target.closest('button');
+                if (!btn) btn = document.querySelector('button[onclick*="executeTargetedAliasRandomization"]');
+                const originalButtonHtml = btn ? btn.innerHTML : '';
+                if (btn) {
+                    btn.disabled = true;
+                    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Randomizing...';
+                }
+
+                const resetButton = () => {
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = originalButtonHtml || '<i class="fas fa-user-check"></i> Auth + Randomize Selected Users';
+                    }
+                };
+
+                fetch('/api/targeted-randomize-user-aliases', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ targets: parsed.targets })
+                })
+                .then(response => response.json())
+                .then(initialData => {
+                    if (initialData.success && initialData.task_id) {
+                        const taskId = initialData.task_id;
+
+                        const pollProgress = () => {
+                            fetch(`/api/task-progress/${taskId}`)
+                                .then(r => r.json())
+                                .then(progress => {
+                                    if (progressBar) progressBar.style.width = `${progress.percentage}%`;
+                                    if (progressText) progressText.textContent = progress.message || `Processing... ${progress.percentage}%`;
+
+                                    if (progress.status === 'completed') {
+                                        resetButton();
+                                        const data = progress.result_data;
+                                        if (data && data.success) {
+                                            if (progressBar) progressBar.style.width = '100%';
+                                            if (progressText) progressText.textContent =
+                                                `${data.total_aliases_added || 0} selected user(s) updated, ${data.total_aliases_failed || 0} failed, ${data.total_skipped || 0} skipped`;
+                                            setTargetedAliasStatus('Targeted run finished. Review the results below.', 'ready');
+                                            displayBulkAliasResults(data);
+                                        } else {
+                                            const errMsg = (data && data.error) ? data.error : 'Unknown error';
+                                            if (progressText) progressText.textContent = `Error: ${errMsg}`;
+                                            setTargetedAliasStatus(errMsg, 'error');
+                                        }
+                                    } else if (progress.status === 'error') {
+                                        resetButton();
+                                        if (progressText) progressText.textContent = `Task failed: ${progress.message}`;
+                                        setTargetedAliasStatus(progress.message || 'Targeted task failed.', 'error');
+                                    } else {
+                                        setTimeout(pollProgress, 1000);
+                                    }
+                                })
+                                .catch(err => {
+                                    console.error('[TARGETED ALIAS] Polling error:', err);
+                                    setTimeout(pollProgress, 3000);
+                                });
+                        };
+
+                        pollProgress();
+                    } else {
+                        resetButton();
+                        setTargetedAliasStatus(initialData.error || 'Failed to start targeted task.', 'error');
+                    }
+                })
+                .catch(err => {
+                    resetButton();
+                    if (progressText) progressText.textContent = 'System Error';
+                    setTargetedAliasStatus(`System error: ${err.message}`, 'error');
+                });
+            } catch (e) {
+                console.error('CRITICAL ERROR in executeTargetedAliasRandomization:', e);
+                setTargetedAliasStatus(`Frontend error: ${e.message}`, 'error');
+            }
+        }
+
         function executeBulkRandomizeAliases(event) {
             try {
                 console.log('executeBulkRandomizeAliases called');
@@ -8155,6 +8506,7 @@
             const resultsSection = document.getElementById('bulk-account-results');
             const summaryDiv = document.getElementById('bulk-account-summary');
             const resultsTextarea = document.getElementById('bulk-account-results-text');
+            const isTargeted = !!data.targeted;
 
             if (!resultsSection || !summaryDiv) {
                 console.error('[ALIAS] Results section not found');
@@ -8169,11 +8521,11 @@
                     <div style="font-size: 24px; font-weight: bold; color: var(--text-primary);">${data.total_accounts || 0}</div>
                 </div>
                 <div>
-                    <strong style="color: #656d76;">Total Users:</strong>
+                    <strong style="color: #656d76;">${isTargeted ? 'Selected Users' : 'Total Users'}:</strong>
                     <div style="font-size: 24px; font-weight: bold; color: var(--text-primary);">${data.total_users || 0}</div>
                 </div>
                 <div>
-                    <strong style="color: #7c3aed;">Aliases Added:</strong>
+                    <strong style="color: #7c3aed;">Updated:</strong>
                     <div style="font-size: 24px; font-weight: bold; color: #7c3aed;">${data.total_aliases_added || 0}</div>
                 </div>
                 <div>
@@ -8182,6 +8534,15 @@
                 </div>
             </div>
             `;
+
+            if ((data.total_skipped || 0) > 0) {
+                summaryHTML += `
+                <div style="margin-bottom: 12px; color: #8250df; font-size: 13px; font-weight: 600;">
+                    <i class="fas fa-shield-alt"></i>
+                    ${data.total_skipped} admin/safety-protected user(s) skipped.
+                </div>
+                `;
+            }
 
             // Per-account breakdown
             if (data.results && data.results.length > 0) {
@@ -8196,12 +8557,13 @@
                     const statusColor = result.authenticated ? '#7c3aed' : '#cf222e';
                     summaryHTML += `
                     <div class="glass-result-item" style="margin-bottom: 4px;">
-                        <strong>${statusIcon} ${result.account}:</strong>
+                        <strong>${statusIcon} ${escapeDashboardHtml(result.account)}:</strong>
                         <span style="color: ${statusColor}; margin-left: 8px;">
-                            ${result.aliases_added || 0} aliases added for ${result.user_count || 0} users
+                            ${result.aliases_added || 0} updated for ${result.user_count || 0} user(s)
                             ${result.aliases_failed ? ` (${result.aliases_failed} failed)` : ''}
+                            ${result.skipped ? ` (${result.skipped} skipped)` : ''}
                         </span>
-                        ${result.error ? `<div style="color: #cf222e; font-size: 12px; margin-top: 4px;">Error: ${result.error}</div>` : ''}
+                        ${result.error ? `<div style="color: #cf222e; font-size: 12px; margin-top: 4px;">Error: ${escapeDashboardHtml(result.error)}</div>` : ''}
                     </div>
                     `;
                 });
@@ -8217,6 +8579,8 @@
                         result.details.forEach(d => {
                             if (d.success) {
                                 identityLog += `${d.user} → ${d.new_primary} (${d.new_name})\n`;
+                            } else if (d.skipped) {
+                                identityLog += `${d.user} SKIPPED (${d.error || 'safety rule'})\n`;
                             } else {
                                 identityLog += `${d.user} ❌ FAILED (${d.error || 'unknown'})\n`;
                             }
@@ -8228,7 +8592,11 @@
 
             // Update section header
             const header = resultsSection.querySelector('h4');
-            if (header) header.innerHTML = '<i class="fas fa-random"></i> Alias Randomization Results';
+            if (header) {
+                header.innerHTML = isTargeted
+                    ? '<i class="fas fa-user-check"></i> Targeted Alias Randomization Results'
+                    : '<i class="fas fa-random"></i> Alias Randomization Results';
+            }
 
             summaryDiv.innerHTML = summaryHTML;
             resultsSection.style.display = 'block';
