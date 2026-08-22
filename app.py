@@ -2592,6 +2592,19 @@ def api_inbox_retrieve_workspace_senders_from_list():
     service_accounts, unmatched, ambiguous = _resolve_workspace_list_service_accounts(workspace_list)
     if not service_accounts:
         return jsonify({'success': False, 'error': 'No saved Workspace service accounts matched this list. Add service account name, admin email, client email, or service account ID per line.', 'unmatched': unmatched, 'ambiguous': ambiguous}), 400
+    selected_account_ids = []
+    for value in data.get('service_account_ids') or []:
+        try:
+            account_id = int(value)
+        except (TypeError, ValueError):
+            continue
+        if account_id and account_id not in selected_account_ids:
+            selected_account_ids.append(account_id)
+    if selected_account_ids:
+        selected_set = set(selected_account_ids)
+        service_accounts = [account for account in service_accounts if account.id in selected_set]
+        if not service_accounts:
+            return jsonify({'success': False, 'error': 'The selected accounts are not part of this List Management source.'}), 400
     if accounts_only:
         return jsonify({
             'success': True,
@@ -3103,7 +3116,7 @@ def api_inbox_tests():
         return jsonify({'success': True, 'test_id': test_id, 'message': 'Deliverability test queued. Sending continues in the background.', 'sent': 0, 'failed': 0, 'queued': test.total_messages})
     return jsonify({'success': True, 'test_id': test_id, 'message': 'Deliverability test created.', 'sent': test.sent_count, 'failed': test.failed_count})
 
-@app.route('/api/inbox-intelligence/automated-tests', methods=['GET', 'POST'])
+@app.route('/api/inbox-intelligence/automated-tests', methods=['GET', 'POST', 'DELETE'])
 @login_required
 @permission_required('inbox_intelligence')
 def api_inbox_automated_tests():
@@ -3135,6 +3148,25 @@ def api_inbox_automated_tests():
         ordered = q.order_by(InboxDeliverabilityTest.created_at.desc())
         tests = ordered.all() if raw_per_page == 'all' else ordered.offset((page - 1) * per_page).limit(per_page).all()
         return jsonify({'success': True, 'tests': [_serialize_automated_test(test) for test in tests], 'total': total, 'page': page, 'per_page': per_page})
+
+    if request.method == 'DELETE':
+        data = request.get_json(silent=True) or {}
+        ids = []
+        for value in data.get('test_ids') or []:
+            test_id = str(value or '').strip().upper()
+            if test_id and test_id not in ids:
+                ids.append(test_id)
+        if not ids:
+            return jsonify({'success': False, 'error': 'Select at least one test to delete'}), 400
+        active_statuses = {'QUEUED', 'SENDING', 'WAITING_FOR_DELIVERY', 'CHECKING_INBOX', 'RUNNING'}
+        tests = InboxDeliverabilityTest.query.filter(InboxDeliverabilityTest.test_id.in_(ids)).all()
+        skipped = [test.test_id for test in tests if (test.status or '').upper() in active_statuses]
+        deletable = [test for test in tests if test.test_id not in skipped]
+        for test in deletable:
+            InboxDeliverabilityMessage.query.filter_by(test_id=test.test_id).delete(synchronize_session=False)
+            db.session.delete(test)
+        db.session.commit()
+        return jsonify({'success': True, 'deleted': len(deletable), 'skipped': skipped, 'message': f'Deleted {len(deletable)} completed test(s).' + (f' Skipped active: {", ".join(skipped)}.' if skipped else '')})
 
     data = request.get_json(silent=True) or {}
     source_ids = []
@@ -3773,6 +3805,18 @@ def api_inbox_test_detail(test_id):
     if not test:
         return jsonify({'success': False, 'error': 'Test not found'}), 404
     messages = InboxDeliverabilityMessage.query.filter_by(test_id=test_id).order_by(InboxDeliverabilityMessage.id.asc()).all()
+    source_ids = []
+    inbox_account_ids = []
+    sender_emails = []
+    for row in messages:
+        if row.source_email_id and row.source_email_id not in source_ids:
+            source_ids.append(row.source_email_id)
+        if row.imap_account_id and row.imap_account_id not in inbox_account_ids:
+            inbox_account_ids.append(row.imap_account_id)
+        sender_email = (row.workspace_sender or '').strip().lower()
+        if sender_email and sender_email not in sender_emails:
+            sender_emails.append(sender_email)
+    sources = TestEmailSource.query.filter(TestEmailSource.id.in_(source_ids)).all() if source_ids else []
     return jsonify({'success': True, 'test': {
         'test_id': test.test_id,
         'name': test.name,
@@ -3781,6 +3825,13 @@ def api_inbox_test_detail(test_id):
         'text_body': test.text_body,
         'custom_headers': getattr(test, 'custom_headers', None) or '',
         'status': test.status,
+        'strategy': getattr(test, 'strategy', None),
+        'total_email_sources': getattr(test, 'total_email_sources', 0) or 0,
+        'total_users': getattr(test, 'total_users', 0) or 0,
+        'total_recipients': getattr(test, 'total_recipients', 0) or 0,
+        'inbox_threshold': getattr(test, 'inbox_threshold', 80) or 80,
+        'spam_threshold': getattr(test, 'spam_threshold', 40) or 40,
+        'minimum_observations': getattr(test, 'minimum_observations', 10) or 10,
         'total_messages': test.total_messages,
         'sent_count': test.sent_count,
         'inbox_count': test.inbox_count,
@@ -3792,6 +3843,28 @@ def api_inbox_test_detail(test_id):
         'created_by': test.created_by,
         'test_type': getattr(test, 'test_type', None) or ('automated' if test.test_id.startswith('AT-') else 'user_inbox'),
         'source_results': _automated_source_rollups(test.test_id),
+        'saved_setup': {
+            'source_ids': source_ids,
+            'inbox_account_ids': inbox_account_ids,
+            'sender_emails': sender_emails,
+            'strategy': getattr(test, 'strategy', None),
+            'inbox_threshold': getattr(test, 'inbox_threshold', 80) or 80,
+            'spam_threshold': getattr(test, 'spam_threshold', 40) or 40,
+            'minimum_observations': getattr(test, 'minimum_observations', 10) or 10,
+            'sources': [{
+                'id': source.id,
+                'source_sender': source.source_sender,
+                'source_sender_domain': source.source_sender_domain,
+                'original_subject': source.original_subject,
+                'html_snapshot': source.html_snapshot,
+                'text_snapshot': source.text_snapshot,
+                'preview_snapshot': source.preview_snapshot,
+                'source_provider': source.source_provider,
+                'original_received_at': source.original_received_at.isoformat() + 'Z' if source.original_received_at else None,
+                'status': source.status,
+                'last_verdict': source.last_verdict,
+            } for source in sources],
+        },
         'messages': [{
             'sender': m.workspace_sender,
             'recipient': m.recipient,

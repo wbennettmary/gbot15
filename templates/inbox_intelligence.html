@@ -2359,7 +2359,7 @@
         }
         .ii-test-bulk-actions {
             display: grid;
-            grid-template-columns: minmax(0, 1fr) auto auto;
+            grid-template-columns: minmax(0, 1fr) auto auto auto;
             width: 100%;
         }
         .ii-test-bulk-actions .ii-select {
@@ -2927,6 +2927,7 @@ The NightOwl Ranch Team</textarea>
                                     <option value="agent">Agent Results</option>
                                 </select>
                                 <button class="ii-btn ii-btn-primary" type="button" onclick="viewSelectedAutomatedTestsBulk()"><i class="fas fa-chart-simple"></i> View selected</button>
+                                <button class="ii-btn" type="button" onclick="deleteSelectedAutomatedTests()"><i class="fas fa-trash"></i> Delete selected</button>
                                 <button class="ii-btn" type="button" onclick="clearAutomatedTestSelection()"><i class="fas fa-xmark"></i></button>
                             </div>
                         </div>
@@ -3865,7 +3866,7 @@ merge_recipe_id, content_blueprint_id</pre>
         userInboxListAccounts: [],
         userInboxListAccountOnly: false,
         selectedUserInboxListAccountIds: new Set(),
-        userInboxCopyBuckets: {inboxDomains: [], spamDomains: [], inboxUsers: [], spamUsers: [], greyDomainNameChangeUsers: []},
+        userInboxCopyBuckets: {inboxDomains: [], spamDomains: [], inboxUsers: [], spamUsers: [], greyDomainNameChangeUsers: [], adminAccounts: []},
         serviceAccounts: [],
         activeMessageId: null,
         explorerRefreshToken: 0,
@@ -3891,10 +3892,11 @@ merge_recipe_id, content_blueprint_id</pre>
         automatedActiveSourceTab: 'list',
         automatedWorkspaceScope: null,
         automatedListRetrieveTimer: null,
+        automatedListRequestToken: 0,
         automatedTests: [],
         automatedSelectedTestId: null,
         automatedPollTimers: {},
-        automatedCopyBuckets: {inboxUsers: [], inboxDomains: [], spamUsers: [], spamDomains: [], greyDomainNameChangeUsers: []},
+        automatedCopyBuckets: {inboxUsers: [], inboxDomains: [], spamUsers: [], spamDomains: [], greyDomainNameChangeUsers: [], adminAccounts: []},
         automatedAiResultCopyBuckets: {inbox_users: [], spam_users: [], inbox_domains: [], spam_domains: []},
         automatedAiResultAnalysis: null,
         automatedAiResultTestId: null,
@@ -5311,13 +5313,13 @@ merge_recipe_id, content_blueprint_id</pre>
         const selectedUsers = iiState.workspaceSenders
             .filter((sender) => iiState.selectedSenderEmails.has(sender.email))
             .filter((sender) => !isAdminWorkspaceSender(sender)).length;
-        const selectedAccounts = iiState.selectedUserInboxListAccountIds?.size || iiState.selectedServiceAccountIds?.size || 0;
+        const selectedAccounts = iiState.automatedActiveSourceTab === 'list'
+            ? (iiState.selectedUserInboxListAccountIds?.size || 0)
+            : (iiState.selectedServiceAccountIds?.size || 0);
         const perAccountRaw = (document.getElementById('automatedUsersPerAccountInput')?.value || '').trim();
         const perAccount = perAccountRaw ? Math.max(1, parseInt(perAccountRaw, 10) || 1) : null;
-        const listId = document.getElementById('automatedWorkspaceListSelect')?.value || '';
-        const selectedList = listId ? (iiState.workspaceLists || []).find((item) => String(item.id) === String(listId)) : null;
-        if (!selectedUsers && selectedList && perAccount) {
-            return (selectedList.account_count || 1) * perAccount;
+        if (perAccount && selectedAccounts) {
+            return selectedAccounts * perAccount;
         }
         return selectedUsers || (selectedAccounts * (perAccount || 1));
     }
@@ -5432,6 +5434,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 source_ids: [...iiState.automatedSelectedSourceIds],
                 senders: selectedSenders,
                 service_account_ids: automatedServiceAccountPayload(selectedSenders),
+                list_id: document.getElementById('automatedWorkspaceListSelect')?.value || null,
                 max_per_account: perAccountRaw,
                 inbox_account_ids: [...iiState.selectedInboxIds],
                 strategy: summary.strategy,
@@ -5454,6 +5457,7 @@ merge_recipe_id, content_blueprint_id</pre>
             body: JSON.stringify(payload)
         });
         cacheTestSenderContext(data.test_id, data.senders || payload.senders || []);
+        cacheAutomatedSetupContext(data.test_id, payload, data.senders || payload.senders || []);
         return data;
     }
 
@@ -5504,6 +5508,34 @@ merge_recipe_id, content_blueprint_id</pre>
             return JSON.parse(localStorage.getItem(`ii_test_sender_context_${testId}`) || '[]');
         } catch (err) {
             return [];
+        }
+    }
+
+    function cacheAutomatedSetupContext(testId, payload, senders = []) {
+        if (!testId || !payload) return;
+        const setup = {
+            source_ids: payload.source_ids || [],
+            service_account_ids: payload.service_account_ids || [],
+            inbox_account_ids: payload.inbox_account_ids || [],
+            list_id: payload.list_id || null,
+            max_per_account: payload.max_per_account || '',
+            strategy: payload.strategy || 'distributed',
+            inbox_threshold: payload.inbox_threshold || 80,
+            spam_threshold: payload.spam_threshold || 40,
+            minimum_observations: payload.minimum_observations || 10,
+            senders: senders || payload.senders || [],
+        };
+        try {
+            localStorage.setItem(`ii_automated_setup_context_${testId}`, JSON.stringify(setup));
+        } catch (err) { /* storage is best-effort */ }
+    }
+
+    function cachedAutomatedSetupContext(testId) {
+        if (!testId) return {};
+        try {
+            return JSON.parse(localStorage.getItem(`ii_automated_setup_context_${testId}`) || '{}');
+        } catch (err) {
+            return {};
         }
     }
 
@@ -6292,6 +6324,28 @@ merge_recipe_id, content_blueprint_id</pre>
         renderAutomatedTests();
     }
 
+    async function deleteSelectedAutomatedTests() {
+        const status = document.getElementById('automatedAnalyticsStatus') || document.getElementById('automatedStatusText');
+        const ids = Array.from(iiState.selectedAutomatedTestIds);
+        if (!ids.length) {
+            if (status) status.textContent = 'Select one or more completed tests first.';
+            return;
+        }
+        if (!confirm(`Delete ${ids.length} selected completed test(s)? Active tests will be skipped.`)) return;
+        try {
+            const data = await iiFetch('/api/inbox-intelligence/automated-tests', {
+                method: 'DELETE',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({test_ids: ids})
+            });
+            iiState.selectedAutomatedTestIds = new Set();
+            await loadAutomatedTests(iiState.automatedTestsPage || 1, false);
+            if (status) status.textContent = data.message || `Deleted ${data.deleted || 0} completed test(s).`;
+        } catch (err) {
+            if (status) status.textContent = `Delete failed: ${err.message}`;
+        }
+    }
+
     function bulkAgentClassificationFromRows(rows = []) {
         const summary = matrixSummary(rows);
         const users = userInboxObservationStats(rows, (row) => row.sender || '').filter((item) => item.key);
@@ -6368,6 +6422,9 @@ merge_recipe_id, content_blueprint_id</pre>
         try {
             const data = await iiFetch(`/api/inbox-intelligence/tests/${testId}`);
             const test = data.test || {};
+            const savedSetup = test.saved_setup || {};
+            const cachedSetup = cachedAutomatedSetupContext(test.test_id || testId);
+            const setup = {...savedSetup, ...cachedSetup};
             const headerInput = document.getElementById('automatedHeaderInput');
             const bodyInput = document.getElementById('automatedBodyInput');
             const modeInput = document.getElementById('automatedBodyMode');
@@ -6375,13 +6432,91 @@ merge_recipe_id, content_blueprint_id</pre>
             if (headerInput) headerInput.value = test.custom_headers || fallbackHeader;
             if (bodyInput) bodyInput.value = test.html_body || test.text_body || '';
             if (modeInput) modeInput.value = test.html_body ? 'html' : 'text';
+
+            const sourceIds = (setup.source_ids || []).map(Number).filter(Boolean);
+            const savedSources = setup.sources || savedSetup.sources || [];
+            if (sourceIds.length || savedSources.length) {
+                iiState.automatedQueueTab = 'pushed';
+                document.querySelectorAll('[data-auto-queue-tab]').forEach((tab) => tab.classList.toggle('active', tab.dataset.autoQueueTab === 'pushed'));
+                const search = document.getElementById('autoQueueSearch');
+                if (search) search.placeholder = 'Search subject, sender, domain...';
+                const byId = {};
+                (iiState.automatedQueue || []).forEach((source) => { byId[source.id] = source; });
+                savedSources.forEach((source) => {
+                    if (source?.id) byId[source.id] = {...byId[source.id], ...source};
+                });
+                iiState.automatedQueue = Object.values(byId);
+                iiState.automatedSelectedSourceIds = new Set(sourceIds);
+                renderAutomatedQueue();
+            } else {
+                iiState.automatedSelectedSourceIds = new Set();
+            }
+
+            if (setup.list_id) {
+                switchAutomatedWorkspaceSourceTab('list');
+                const listSelect = document.getElementById('automatedWorkspaceListSelect');
+                if (listSelect) listSelect.value = String(setup.list_id);
+                iiState.automatedWorkspaceScope = {type: 'list', id: String(setup.list_id)};
+            } else {
+                switchAutomatedWorkspaceSourceTab('manual');
+            }
+
+            const senderContext = (setup.senders && setup.senders.length ? setup.senders : cachedTestSenderContext(test.test_id || testId));
+            const fallbackSenderEmails = setup.sender_emails || [];
+            const restoredSenders = senderContext.length
+                ? senderContext
+                : fallbackSenderEmails.map((email) => ({email, name: '', service_account_id: null}));
+            if (restoredSenders.length) {
+                const byEmail = {};
+                (iiState.workspaceSenders || []).forEach((sender) => { byEmail[String(sender.email || '').toLowerCase()] = sender; });
+                restoredSenders.forEach((sender) => {
+                    const email = String(sender.email || '').toLowerCase();
+                    if (!email) return;
+                    byEmail[email] = {...byEmail[email], ...sender, email};
+                });
+                iiState.workspaceSenders = Object.values(byEmail).sort((a, b) => a.email.localeCompare(b.email));
+                iiState.selectedSenderEmails = new Set(restoredSenders.map((sender) => String(sender.email || '').toLowerCase()).filter(Boolean));
+            }
+
+            const accountIds = (setup.service_account_ids || restoredSenders.map((sender) => sender.service_account_id)).map(Number).filter(Boolean);
+            iiState.selectedServiceAccountIds = new Set(accountIds);
+            iiState.selectedUserInboxListAccountIds = new Set(setup.list_id ? accountIds : []);
+            iiState.userInboxListAccountOnly = false;
+
+            const inboxIds = (setup.inbox_account_ids || []).map(Number).filter(Boolean);
+            iiState.selectedInboxIds = new Set(inboxIds);
+            const strategyInput = document.getElementById('automatedStrategyInput');
+            if (strategyInput) strategyInput.value = setup.strategy || test.strategy || 'distributed';
+            const perAccountInput = document.getElementById('automatedUsersPerAccountInput');
+            if (perAccountInput) perAccountInput.value = setup.max_per_account || '';
+            const inboxThreshold = document.getElementById('automatedInboxThresholdInput');
+            if (inboxThreshold) inboxThreshold.value = setup.inbox_threshold || test.inbox_threshold || 80;
+            const spamThreshold = document.getElementById('automatedSpamThresholdInput');
+            if (spamThreshold) spamThreshold.value = setup.spam_threshold || test.spam_threshold || 40;
+            const minObs = document.getElementById('automatedMinimumObservationsInput');
+            if (minObs) minObs.value = setup.minimum_observations || test.minimum_observations || 10;
+
             iiState.automatedSelectedTestId = test.test_id || testId;
             const manualInput = document.getElementById('automatedManualTestIdInput');
             if (manualInput) manualInput.value = iiState.automatedSelectedTestId;
             localStorage.setItem('ii_automated_last_test_id', iiState.automatedSelectedTestId);
+            renderWorkspaceSenders();
+            renderTestSenderSelector();
+            renderUserInboxSenderSelector();
+            renderAutomatedServiceAccountSelector();
+            renderAutomatedWorkspaceUsers();
+            renderAutomatedInboxSelector();
             updateAutomatedMessageSetup();
+            updateAutomatedSummary();
             activateInboxTab('automatedTests');
-            if (status) status.textContent = `Loaded saved Message Setup from ${iiState.automatedSelectedTestId}.`;
+            const restoredParts = [
+                'message',
+                sourceIds.length ? `${sourceIds.length} pushed template(s)` : '',
+                restoredSenders.length ? `${restoredSenders.length} sender user(s)` : '',
+                accountIds.length ? `${accountIds.length} Workspace account(s)` : '',
+                inboxIds.length ? `${inboxIds.length} IMAP inbox(es)` : '',
+            ].filter(Boolean).join(', ');
+            if (status) status.textContent = `Loaded saved setup from ${iiState.automatedSelectedTestId}: ${restoredParts}.`;
         } catch (err) {
             if (status) status.textContent = `Could not load saved setup: ${err.message}`;
         }
@@ -6411,7 +6546,7 @@ merge_recipe_id, content_blueprint_id</pre>
     function clearAutomatedAnalytics() {
         iiState.automatedSelectedTestId = null;
         iiState.automatedMessages = [];
-        iiState.automatedCopyBuckets = {inboxUsers: [], inboxDomains: [], spamUsers: [], spamDomains: [], greyDomainNameChangeUsers: []};
+        iiState.automatedCopyBuckets = {inboxUsers: [], inboxDomains: [], spamUsers: [], spamDomains: [], greyDomainNameChangeUsers: [], adminAccounts: []};
         iiState.automatedAiResultCopyBuckets = {inbox_users: [], spam_users: [], inbox_domains: [], spam_domains: []};
         iiState.automatedAiResultAnalysis = null;
         iiState.automatedAiResultTestId = null;
@@ -7280,7 +7415,8 @@ merge_recipe_id, content_blueprint_id</pre>
         const inboxUsers = users.filter((item) => item.inbox > 0).map((item) => item.key);
         const spamUsers = users.filter((item) => item.spam > 0).map((item) => item.key);
         const greyDomainNameChangeUsers = greyDomainNameChangeRows(rows, 'sender');
-        iiState.automatedCopyBuckets = {inboxDomains, spamDomains, inboxUsers, spamUsers, greyDomainNameChangeUsers};
+        const adminAccounts = [...new Set(users.map((item) => adminAccountLabelForSender(item.key)).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+        iiState.automatedCopyBuckets = {inboxDomains, spamDomains, inboxUsers, spamUsers, greyDomainNameChangeUsers, adminAccounts};
         const providers = {};
         rows.forEach((row) => {
             const key = recipientProvider(row.recipient);
@@ -7325,6 +7461,7 @@ merge_recipe_id, content_blueprint_id</pre>
                     <button class="ii-btn ii-copy-stat-button" type="button" onclick="copyAutomatedBucket('spamDomains')"><strong>${spamDomains.length}</strong><span>Spam domains</span></button>
                     <button class="ii-btn ii-copy-stat-button" type="button" onclick="copyAutomatedBucket('inboxUsers')"><strong>${inboxUsers.length}</strong><span>Inbox users</span></button>
                     <button class="ii-btn ii-copy-stat-button" type="button" onclick="copyAutomatedBucket('spamUsers')"><strong>${spamUsers.length}</strong><span>Spam users</span></button>
+                    <button class="ii-btn ii-copy-stat-button" type="button" onclick="copyAutomatedBucket('adminAccounts')"><strong>${adminAccounts.length}</strong><span>Admin accounts</span></button>
                     <button class="ii-btn ii-copy-stat-button" type="button" onclick="copyAutomatedBucket('greyDomainNameChangeUsers')"><strong>${greyDomainNameChangeUsers.length}</strong><span>Grey-domain name changes</span></button>
                 </div>
                 <div class="ii-insight-grid mt-3">
@@ -8170,20 +8307,38 @@ merge_recipe_id, content_blueprint_id</pre>
         }
         const accountsOnly = !rawLimit;
         iiState.automatedWorkspaceScope = {type: 'list', id: listId};
+        const selectedListAccountIds = [...(iiState.selectedUserInboxListAccountIds || new Set())];
+        if (!accountsOnly && iiState.userInboxListAccounts.length && !selectedListAccountIds.length) {
+            if (status) status.textContent = 'Select one or more accounts from the list before retrieving users per account.';
+            return;
+        }
         if (status) status.textContent = accountsOnly
             ? 'Retrieving list account cards. Set Users per account to retrieve sender users.'
-            : `Retrieving ${maxPerAccount} user(s) per list account...`;
+            : `Retrieving ${maxPerAccount} user(s) from ${selectedListAccountIds.length || 'all'} selected list account(s)...`;
+        const requestToken = Date.now();
+        iiState.automatedListRequestToken = requestToken;
         try {
             const data = await iiFetch('/api/inbox-intelligence/workspace-senders/retrieve-list', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({list_id: listId, max_per_account: maxPerAccount || 0, accounts_only: accountsOnly})
+                body: JSON.stringify({
+                    list_id: listId,
+                    max_per_account: maxPerAccount || 0,
+                    accounts_only: accountsOnly,
+                    service_account_ids: selectedListAccountIds
+                })
             });
+            if (iiState.automatedListRequestToken !== requestToken) return;
             iiState.userInboxListAccounts = data.service_accounts || [];
             iiState.userInboxListAccountOnly = accountsOnly;
             if (accountsOnly) {
                 iiState.selectedSenderEmails = new Set();
-                iiState.selectedUserInboxListAccountIds = new Set(iiState.userInboxListAccounts.map((account) => account.id));
+                if (!iiState.selectedUserInboxListAccountIds.size) {
+                    iiState.selectedUserInboxListAccountIds = new Set(iiState.userInboxListAccounts.map((account) => account.id));
+                } else {
+                    const available = new Set(iiState.userInboxListAccounts.map((account) => account.id));
+                    iiState.selectedUserInboxListAccountIds = new Set([...iiState.selectedUserInboxListAccountIds].filter((id) => available.has(id)));
+                }
                 if (status) status.textContent = `Loaded ${iiState.userInboxListAccounts.length} account card(s). Enter Users per account and Retrieve List to display users.`;
             } else {
                 const byEmail = {};
@@ -8196,8 +8351,8 @@ merge_recipe_id, content_blueprint_id</pre>
                 iiState.workspaceSenders = Object.values(byEmail).sort((a, b) => a.email.localeCompare(b.email));
                 iiState.selectedSenderEmails = new Set(returnedEmails);
                 iiState.userInboxListAccountOnly = false;
-                iiState.selectedUserInboxListAccountIds = new Set();
-                if (status) status.textContent = `Retrieved and selected ${returnedEmails.length} non-admin user(s), ${maxPerAccount} per list account.`;
+                iiState.selectedUserInboxListAccountIds = new Set((data.service_accounts || []).map((account) => account.id));
+                if (status) status.textContent = `Retrieved and selected ${returnedEmails.length} non-admin user(s), ${maxPerAccount} per selected list account.`;
             }
             renderWorkspaceSenders();
             renderTestSenderSelector();
@@ -8425,6 +8580,11 @@ merge_recipe_id, content_blueprint_id</pre>
         renderUserInboxSenderSelector();
         renderAutomatedServiceAccountSelector();
         updateAutomatedSummary();
+        const perAccountRaw = (document.getElementById('automatedUsersPerAccountInput')?.value || '').trim();
+        if (iiState.automatedActiveSourceTab === 'list' && perAccountRaw) {
+            window.clearTimeout(iiState.automatedListRetrieveTimer);
+            iiState.automatedListRetrieveTimer = window.setTimeout(() => retrieveAutomatedWorkspaceListUsers(), 250);
+        }
     }
 
     function clearUserInboxListAccountCards() {
@@ -9196,11 +9356,13 @@ merge_recipe_id, content_blueprint_id</pre>
         const inboxUsers = users.filter((item) => item.inbox > 0).map((item) => item.key);
         const spamUsers = users.filter((item) => item.spam > 0).map((item) => item.key);
         const greyDomainNameChangeUsers = greyDomainNameChangeRows(rows, senderField);
+        const adminAccounts = [...new Set(users.map((item) => adminAccountLabelForSender(item.key)).filter(Boolean))].sort((a, b) => a.localeCompare(b));
         copyBuckets.inboxDomains = inboxDomains;
         copyBuckets.spamDomains = spamDomains;
         copyBuckets.inboxUsers = inboxUsers;
         copyBuckets.spamUsers = spamUsers;
         copyBuckets.greyDomainNameChangeUsers = greyDomainNameChangeUsers;
+        copyBuckets.adminAccounts = adminAccounts;
         const providerMap = {};
         rows.forEach((row) => {
             const provider = providerFn(row);
@@ -9263,6 +9425,7 @@ merge_recipe_id, content_blueprint_id</pre>
                     <button class="ii-btn ii-copy-stat-button" type="button" onclick="${copyFn}('spamDomains')"><strong>${spamDomains.length}</strong><span>Copy spam domains</span></button>
                     <button class="ii-btn ii-copy-stat-button" type="button" onclick="${copyFn}('inboxUsers')"><strong>${inboxUsers.length}</strong><span>Copy inbox users</span></button>
                     <button class="ii-btn ii-copy-stat-button" type="button" onclick="${copyFn}('spamUsers')"><strong>${spamUsers.length}</strong><span>Copy spam users</span></button>
+                    <button class="ii-btn ii-copy-stat-button" type="button" onclick="${copyFn}('adminAccounts')"><strong>${adminAccounts.length}</strong><span>Copy admin accounts</span></button>
                     <button class="ii-btn ii-copy-stat-button" type="button" onclick="${copyFn}('greyDomainNameChangeUsers')"><strong>${greyDomainNameChangeUsers.length}</strong><span>Copy grey-domain name changes</span></button>
                 </div>
                 <div class="ii-compact-stat-grid mt-2">
@@ -9303,6 +9466,20 @@ merge_recipe_id, content_blueprint_id</pre>
 
     function senderLookup(email) {
         return iiState.workspaceSenders.find((sender) => sender.email === email) || {};
+    }
+
+    function adminAccountLabelForSender(email) {
+        const sender = senderLookup(email);
+        const accountId = sender.service_account_id;
+        const account = accountId ? (iiState.serviceAccounts || []).find((item) => Number(item.id) === Number(accountId)) : null;
+        return String(
+            sender.service_account_admin_email ||
+            account?.admin_email ||
+            sender.service_account_name ||
+            account?.name ||
+            sender.source ||
+            (accountId ? `ServiceAccount:${accountId}` : '')
+        ).trim();
     }
 
     function greyDomainNameChangeRows(rows, senderField = 'sender') {
