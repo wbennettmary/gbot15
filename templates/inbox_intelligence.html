@@ -1017,16 +1017,30 @@
     }
 
     .ii-test-bulk-bar {
-        display: flex;
-        justify-content: space-between;
+        display: grid;
+        grid-template-columns: minmax(180px, 1fr) minmax(260px, auto);
         align-items: center;
         gap: 10px;
-        flex-wrap: wrap;
         padding: 10px 12px;
         border: 1px solid #dbeafe;
         border-radius: 10px;
         background: #f8fbff;
         margin-bottom: 12px;
+    }
+
+    .ii-test-card-head {
+        display: grid;
+        grid-template-columns: minmax(190px, 1fr) minmax(320px, auto);
+        gap: 12px;
+        align-items: center;
+    }
+
+    .ii-test-card-controls {
+        display: grid;
+        grid-template-columns: minmax(130px, 150px) minmax(105px, 120px) 40px;
+        gap: 8px;
+        align-items: center;
+        justify-content: end;
     }
 
     .ii-test-origin-chip {
@@ -1051,7 +1065,7 @@
 
     .ii-agent-setup-grid {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
         gap: 12px;
     }
 
@@ -1064,9 +1078,29 @@
 
     .ii-agent-template-picker {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-columns: minmax(0, 1fr);
         align-items: end;
         gap: 10px;
+    }
+
+    .ii-agent-template-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 9px 10px;
+        border: 1px solid #dbeafe;
+        border-radius: 8px;
+        background: #f8fbff;
+        margin-top: 10px;
+    }
+
+    .ii-test-bulk-actions {
+        justify-content: end;
+    }
+
+    .ii-test-bulk-actions .ii-select {
+        width: 190px;
     }
 
     .ii-insight-grid {
@@ -1461,6 +1495,13 @@
         letter-spacing: -0.01em;
     }
 
+    .ii-pro-card-head.ii-test-card-head {
+        display: grid;
+        grid-template-columns: minmax(190px, 1fr) minmax(320px, auto);
+        gap: 12px;
+        align-items: center;
+    }
+
     .ii-pro-card-body {
         padding: 10px 12px;
     }
@@ -1835,9 +1876,10 @@
         pointer-events: auto;
         position: absolute;
         right: 22px;
-        bottom: 132px;
-        width: min(460px, calc(100vw - 32px));
-        max-height: min(720px, calc(100vh - 160px));
+        top: 72px;
+        bottom: 28px;
+        width: min(760px, calc(100vw - 44px));
+        max-height: calc(100vh - 100px);
         display: grid;
         grid-template-rows: auto auto minmax(0, 1fr) auto;
         background: #fff;
@@ -1850,28 +1892,29 @@
     .ii-agent-chat-head {
         display: flex;
         justify-content: space-between;
+        align-items: flex-start;
         gap: 12px;
-        padding: 14px 16px;
+        padding: 16px 18px;
         background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);
         border-bottom: 1px solid #dbeafe;
     }
 
     .ii-agent-chat-head h3 {
         margin: 0;
-        font-size: 16px;
+        font-size: 20px;
         font-weight: 800;
     }
 
     .ii-agent-chat-head p {
         margin: 4px 0 0;
-        font-size: 12px;
+        font-size: 13px;
         color: #64748b;
     }
 
     .ii-agent-chat-tabs {
         display: flex;
         gap: 6px;
-        padding: 8px 12px 0;
+        padding: 10px 16px 0;
     }
 
     .ii-agent-chat-tab {
@@ -1890,7 +1933,7 @@
     }
 
     .ii-agent-chat-body {
-        padding: 12px;
+        padding: 14px 16px;
         overflow-y: auto;
     }
 
@@ -1915,7 +1958,7 @@
 
     .ii-agent-chat-status {
         margin-top: 10px;
-        padding: 9px 10px;
+        padding: 10px 12px;
         border-radius: 10px;
         background: #f8fafc;
         color: #475569;
@@ -1936,7 +1979,7 @@
         display: flex;
         justify-content: flex-end;
         gap: 8px;
-        padding: 12px;
+        padding: 12px 16px;
         border-top: 1px solid #e2e8f0;
         background: #f8fafc;
     }
@@ -2235,6 +2278,15 @@
         .ii-agent-result-hero,
         .ii-agent-setup-grid,
         .ii-saved-list-columns { grid-template-columns: 1fr; }
+        .ii-pro-card-head.ii-test-card-head,
+        .ii-test-bulk-bar {
+            grid-template-columns: 1fr;
+            align-items: stretch;
+        }
+        .ii-test-card-controls {
+            grid-template-columns: minmax(0, 1fr) minmax(100px, 140px) 40px;
+            justify-content: stretch;
+        }
         .ii-analytics-copy-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .ii-analytics-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
     }
@@ -2298,13 +2350,52 @@
         .ii-auto-top-actions { grid-template-columns: 1fr; }
         #automatedTests .ii-stepper { grid-template-columns: 1fr; }
         #automatedTests .ii-stepper .ii-step:not(:last-child)::after { display: none; }
+        #automatedTests .ii-test-card-controls .ii-btn,
+        #automatedTests .ii-test-card-controls .ii-select,
+        #automatedTests .ii-test-bulk-actions .ii-btn,
+        #automatedTests .ii-test-bulk-actions .ii-select {
+            width: auto;
+            max-width: none !important;
+        }
+        .ii-test-bulk-actions {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto auto;
+            width: 100%;
+        }
+        .ii-test-bulk-actions .ii-select {
+            width: 100%;
+        }
         .ii-pro-topbar { grid-template-columns: 1fr; }
         .ii-pro-stepper { grid-template-columns: 1fr; }
         .ii-pro-summary-split { grid-template-columns: 1fr; }
         .ii-header-editor-wrap { grid-template-columns: 1fr; }
         .ii-floating-command-stack { right: 12px; bottom: 92px; width: 150px; }
         .ii-floating-action { padding: 10px 12px; border-radius: 14px; }
-        .ii-agent-chat-panel { right: 12px; bottom: 118px; width: calc(100vw - 24px); max-height: calc(100vh - 140px); }
+        .ii-agent-chat-panel {
+            right: 12px;
+            left: 12px;
+            top: 54px;
+            bottom: 12px;
+            width: auto;
+            max-height: none;
+            border-radius: 14px;
+        }
+        .ii-agent-chat-head {
+            padding: 12px 14px;
+        }
+        .ii-agent-chat-head h3 {
+            font-size: 17px;
+        }
+        .ii-agent-chat-body {
+            padding: 12px;
+        }
+        .ii-agent-chat-foot {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+        }
+        .ii-agent-chat-foot .ii-btn:last-child {
+            grid-column: 1 / -1;
+        }
         .ii-sync-status-grid,
         .ii-modal.automated-preview .ii-layout-2 { grid-template-columns: 1fr; }
         .ii-template-actions .ii-btn { flex-basis: calc(50% - 4px); }
@@ -2799,13 +2890,13 @@ The NightOwl Ranch Team</textarea>
                     </div>
                 </div>
                 <div class="ii-pro-card">
-                    <div class="ii-pro-card-head">
+                    <div class="ii-pro-card-head ii-test-card-head">
                         <div>
                             <h4>Active & Completed Tests</h4>
                             <span class="ii-muted" id="automatedActiveDateLabel">Today</span>
                         </div>
-                        <div class="ii-row">
-                            <select class="ii-select" id="automatedSectionDateFilter" style="width: 150px;" onchange="syncAutomatedDateFilterFromSection()">
+                        <div class="ii-test-card-controls">
+                            <select class="ii-select" id="automatedSectionDateFilter" onchange="syncAutomatedDateFilterFromSection()">
                                 <option value="today" selected>Today</option>
                                 <option value="yesterday">Yesterday</option>
                                 <option value="this_week">This week</option>
@@ -2814,7 +2905,7 @@ The NightOwl Ranch Team</textarea>
                                 <option value="custom">Custom</option>
                                 <option value="all">All time</option>
                             </select>
-                            <select class="ii-select" id="automatedPageSizeSelect" style="width: 120px;" onchange="changeAutomatedTestsPageSize()">
+                            <select class="ii-select" id="automatedPageSizeSelect" onchange="changeAutomatedTestsPageSize()">
                                 <option value="5" selected>5 / page</option>
                                 <option value="10">10 / page</option>
                                 <option value="25">25 / page</option>
@@ -2830,8 +2921,8 @@ The NightOwl Ranch Team</textarea>
                                 <strong id="automatedSelectedBulkCount">0 selected</strong>
                                 <div class="ii-muted">Select tests, then view their combined analytics.</div>
                             </div>
-                            <div class="ii-row">
-                                <select class="ii-select" id="automatedBulkViewTarget" style="width: 190px;">
+                            <div class="ii-row ii-test-bulk-actions">
+                                <select class="ii-select" id="automatedBulkViewTarget">
                                     <option value="inbox">User Inbox Analytics</option>
                                     <option value="agent">Agent Results</option>
                                 </select>
@@ -2984,21 +3075,21 @@ The NightOwl Ranch Team</textarea>
                                 <div class="ii-agent-setup-block">
                                     <div class="ii-row justify-content-between mb-2">
                                         <h4 class="mb-0">Template</h4>
-                                        <span class="ii-chip green">Saved</span>
+                                        <span class="ii-chip blue" id="aiAgentTemplateModeChip">Pushed</span>
                                     </div>
                                     <div class="ii-agent-template-picker">
                                         <label class="ii-field mb-0">
-                                            <span>User Inbox saved template</span>
+                                            <span id="aiAgentTemplateSelectLabel">Pushed template</span>
                                             <select class="ii-select" id="aiAgentSavedTemplateSelect">
-                                                <option value="">Load saved templates first</option>
+                                                <option value="">Load pushed templates first</option>
                                             </select>
                                         </label>
-                                        <label class="ii-field mb-0">
-                                            <span>Use</span>
-                                            <input type="checkbox" id="aiAgentUseSavedTemplate">
+                                        <label class="ii-agent-template-toggle">
+                                            <span>Use saved User Inbox templates</span>
+                                            <input type="checkbox" id="aiAgentUseSavedTemplate" onchange="switchAiAgentTemplateMode()">
                                         </label>
                                     </div>
-                                    <div class="ii-muted mt-2" id="aiAgentSavedTemplateStatus">Optional: use a saved User Inbox Test template as the automated message.</div>
+                                    <div class="ii-muted mt-2" id="aiAgentSavedTemplateStatus">Showing pushed templates from the Automated Test Queue.</div>
                                 </div>
                                 <div class="ii-agent-setup-block">
                                     <div class="ii-row justify-content-between">
@@ -4936,7 +5027,17 @@ merge_recipe_id, content_blueprint_id</pre>
         iiState.automatedQueueTotal = data.total || 0;
         iiState.automatedQueuePage = data.page || 1;
         renderAutomatedQueue();
+        renderAiAgentTemplateOptions();
         updateAutomatedSummary();
+    }
+
+    async function loadAiAgentPushedTemplates(page = 1) {
+        const params = new URLSearchParams({page, per_page: 20});
+        const data = await iiFetch('/api/inbox-intelligence/test-email-sources?' + params.toString());
+        iiState.automatedQueue = data.sources || [];
+        iiState.automatedQueueTotal = data.total || 0;
+        iiState.automatedQueuePage = data.page || page;
+        renderAiAgentTemplateOptions();
     }
 
     function switchAutomatedQueueTab(tabName) {
@@ -4995,7 +5096,7 @@ merge_recipe_id, content_blueprint_id</pre>
         const label = document.getElementById('automatedTemplateSource');
         if (label) label.textContent = `Loaded saved User Inbox template: ${template.name || subject}`;
         updateAutomatedMessageSetup();
-        renderAutomatedSavedTemplateQueue();
+        if (iiState.automatedQueueTab === 'saved') renderAutomatedSavedTemplateQueue();
     }
 
     function verdictChip(verdict) {
@@ -5499,8 +5600,8 @@ merge_recipe_id, content_blueprint_id</pre>
         drawer.classList.add('open');
         drawer.setAttribute('aria-hidden', 'false');
         document.querySelector('.ii-floating-command-stack')?.classList.add('is-hidden');
-        if (!iiState.userInboxTemplates.length) loadUserInboxTemplates().catch((err) => console.warn(err));
-        else renderAiAgentSavedTemplateOptions();
+        if (!iiState.automatedQueue.length) loadAiAgentPushedTemplates(iiState.automatedQueuePage || 1).catch((err) => console.warn(err));
+        renderAiAgentTemplateOptions();
         refreshAiAgentConfigLabels();
         setAiAgentChatStatus('Ready. Type a prompt or review setup, then start the agent.');
         window.setTimeout(() => document.getElementById('aiAgentPromptInput')?.focus(), 50);
@@ -5664,6 +5765,9 @@ merge_recipe_id, content_blueprint_id</pre>
             }
         }
         if (useSavedTemplate) {
+            if (!iiState.userInboxTemplates.length) {
+                try { await loadUserInboxTemplates(); } catch (err) { /* handled by missing template message */ }
+            }
             const template = (iiState.userInboxTemplates || []).find((item) => String(item.id) === String(savedTemplateId));
             const templateStatus = document.getElementById('aiAgentSavedTemplateStatus');
             if (template) {
@@ -5673,6 +5777,18 @@ merge_recipe_id, content_blueprint_id</pre>
             } else {
                 messages.push('Select a saved User Inbox template or uncheck Use saved template.');
                 if (templateStatus) templateStatus.textContent = 'Choose a saved template before applying.';
+            }
+        } else if (savedTemplateId) {
+            const source = (iiState.automatedQueue || []).find((item) => String(item.id) === String(savedTemplateId));
+            const templateStatus = document.getElementById('aiAgentSavedTemplateStatus');
+            if (source) {
+                iiState.automatedSelectedSourceIds = new Set([source.id]);
+                renderAutomatedQueue();
+                syncMessageSetupFromQueue();
+                messages.push(`Pushed template "${source.original_subject || source.id}" selected.`);
+                if (templateStatus) templateStatus.textContent = `Using pushed template ${source.original_subject || source.id}.`;
+            } else if (templateStatus) {
+                templateStatus.textContent = 'Choose a pushed template or enable saved templates.';
             }
         }
         if (recipient) {
@@ -7481,19 +7597,62 @@ merge_recipe_id, content_blueprint_id</pre>
             iiState.userInboxTemplatePage = 0;
         }
         renderUserInboxTemplateCards();
-        renderAiAgentSavedTemplateOptions();
+        renderAiAgentTemplateOptions();
         if (iiState.automatedQueueTab === 'saved') renderAutomatedSavedTemplateQueue();
     }
 
-    function renderAiAgentSavedTemplateOptions() {
+    async function ensureAiAgentSavedTemplatesLoaded() {
+        if (iiState.userInboxTemplates.length) return;
+        try {
+            await loadUserInboxTemplates();
+        } catch (err) {
+            const status = document.getElementById('aiAgentSavedTemplateStatus');
+            if (status) status.textContent = `Could not load saved templates: ${err.message}`;
+        }
+    }
+
+    async function switchAiAgentTemplateMode() {
+        const select = document.getElementById('aiAgentSavedTemplateSelect');
+        if (select) select.value = '';
+        if (document.getElementById('aiAgentUseSavedTemplate')?.checked === true) {
+            await ensureAiAgentSavedTemplatesLoaded();
+        }
+        renderAiAgentTemplateOptions();
+    }
+
+    function renderAiAgentTemplateOptions() {
         const select = document.getElementById('aiAgentSavedTemplateSelect');
         if (!select) return;
         const current = select.value;
-        const templates = iiState.userInboxTemplates || [];
-        select.innerHTML = templates.length
-            ? '<option value="">Choose saved template</option>' + templates.map((template) => `<option value="${template.id}">${escapeHtml(template.name || template.subject || 'Saved template')}</option>`).join('')
-            : '<option value="">No saved templates yet</option>';
-        if (current && templates.some((template) => String(template.id) === String(current))) select.value = current;
+        const useSaved = document.getElementById('aiAgentUseSavedTemplate')?.checked === true;
+        const label = document.getElementById('aiAgentTemplateSelectLabel');
+        const chip = document.getElementById('aiAgentTemplateModeChip');
+        const status = document.getElementById('aiAgentSavedTemplateStatus');
+        if (useSaved) {
+            const templates = iiState.userInboxTemplates || [];
+            if (label) label.textContent = 'Saved User Inbox template';
+            if (chip) {
+                chip.textContent = 'Saved';
+                chip.className = 'ii-chip green';
+            }
+            select.innerHTML = templates.length
+                ? '<option value="">Choose saved template</option>' + templates.map((template) => `<option value="${template.id}">${escapeHtml(template.name || template.subject || 'Saved template')}</option>`).join('')
+                : '<option value="">No saved templates yet</option>';
+            if (current && templates.some((template) => String(template.id) === String(current))) select.value = current;
+            if (status) status.textContent = templates.length ? 'Showing saved templates from the User Inbox Test tab.' : 'No saved templates yet. Save one in User Inbox Test first.';
+            return;
+        }
+        const sources = iiState.automatedQueue || [];
+        if (label) label.textContent = 'Pushed template';
+        if (chip) {
+            chip.textContent = 'Pushed';
+            chip.className = 'ii-chip blue';
+        }
+        select.innerHTML = sources.length
+            ? '<option value="">Choose pushed template</option>' + sources.map((source) => `<option value="${source.id}">${escapeHtml(source.original_subject || source.source_sender || 'Pushed template')}</option>`).join('')
+            : '<option value="">No pushed templates loaded</option>';
+        if (current && sources.some((source) => String(source.id) === String(current))) select.value = current;
+        if (status) status.textContent = sources.length ? 'Showing pushed templates from the Automated Test Queue.' : 'Push emails into the Automated Test Queue first, or enable saved templates.';
     }
 
     function renderUserInboxTemplateCards() {
