@@ -2498,6 +2498,79 @@ def _retrieve_workspace_senders_from_service_accounts(service_accounts, max_per_
     deduped = {row['email']: row for row in retrieved}
     return sorted(deduped.values(), key=lambda x: x['email']), errors
 
+def _email_domain(value):
+    value = (value or '').strip().lower()
+    return value.rsplit('@', 1)[1] if '@' in value else ''
+
+def _workspace_sender_payload(email_addr, name='', service_account=None, service_account_id=None):
+    email_addr = (email_addr or '').strip().lower()
+    account_id = service_account.id if service_account else service_account_id
+    return {
+        'email': email_addr,
+        'name': (name or email_addr.split('@')[0] if email_addr else '').strip(),
+        'domain': _email_domain(email_addr),
+        'source': f'service_account:{service_account.name}' if service_account else '',
+        'service_account_id': account_id,
+        'service_account_name': service_account.name if service_account else '',
+        'service_account_admin_email': service_account.admin_email if service_account else '',
+        'send_method': 'workspace_api',
+    }
+
+def _enrich_workspace_sender_payloads(senders, service_account_map=None):
+    ids = []
+    for sender in senders or []:
+        try:
+            account_id = int(sender.get('service_account_id') or 0)
+        except (TypeError, ValueError, AttributeError):
+            continue
+        if account_id and account_id not in ids:
+            ids.append(account_id)
+    if service_account_map is None:
+        service_account_map = {sa.id: sa for sa in ServiceAccount.query.filter(ServiceAccount.id.in_(ids)).all()} if ids else {}
+    enriched = []
+    for sender in senders or []:
+        if not isinstance(sender, dict):
+            continue
+        email_addr = (sender.get('email') or '').strip().lower()
+        if not email_addr:
+            continue
+        try:
+            account_id = int(sender.get('service_account_id') or 0) or None
+        except (TypeError, ValueError):
+            account_id = None
+        account = service_account_map.get(account_id)
+        payload = _workspace_sender_payload(email_addr, sender.get('name') or '', account, account_id)
+        if not account:
+            payload['source'] = (sender.get('source') or '').strip()
+            payload['service_account_name'] = (sender.get('service_account_name') or '').strip()
+            payload['service_account_admin_email'] = (sender.get('service_account_admin_email') or '').strip()
+        enriched.append(payload)
+    return enriched
+
+def _sender_context_from_message_emails(sender_emails):
+    accounts = ServiceAccount.query.order_by(ServiceAccount.id.asc()).all()
+    by_domain = {}
+    ambiguous_domains = set()
+    for account in accounts:
+        domain = _email_domain(account.admin_email)
+        if not domain:
+            continue
+        if domain in by_domain:
+            ambiguous_domains.add(domain)
+        else:
+            by_domain[domain] = account
+    context = []
+    seen = set()
+    for email_addr in sender_emails or []:
+        email_addr = (email_addr or '').strip().lower()
+        if not email_addr or email_addr in seen:
+            continue
+        seen.add(email_addr)
+        domain = _email_domain(email_addr)
+        account = by_domain.get(domain) if domain and domain not in ambiguous_domains else None
+        context.append(_workspace_sender_payload(email_addr, '', account, account.id if account else None))
+    return context
+
 def _parse_workspace_list_keys(raw_accounts):
     keys = []
     for raw_line in (raw_accounts or '').splitlines():
@@ -3094,6 +3167,7 @@ def api_inbox_tests():
     if any(not s.get('service_account_id') for s in senders):
         return jsonify({'success': False, 'error': 'Every sender must come from a selected Workspace account so Gmail API delegation can send it.'}), 400
     service_account_map = {sa.id: sa for sa in ServiceAccount.query.filter(ServiceAccount.id.in_([s['service_account_id'] for s in senders])).all()}
+    senders = _enrich_workspace_sender_payloads(senders, service_account_map)
     admin_senders = [s['email'] for s in senders if _email_is_reserved_admin_sender(s['email'], service_account_map.get(s['service_account_id']))]
     if admin_senders:
         return jsonify({'success': False, 'error': f"Admin sender accounts cannot be used for tests: {', '.join(admin_senders[:5])}"}), 400
@@ -3173,8 +3247,8 @@ def api_inbox_tests():
             args=(test_id, senders, subject, html_body, text_body, custom_headers),
             daemon=True
         ).start()
-        return jsonify({'success': True, 'test_id': test_id, 'message': 'Deliverability test queued. Sending continues in the background.', 'sent': 0, 'failed': 0, 'queued': test.total_messages})
-    return jsonify({'success': True, 'test_id': test_id, 'message': 'Deliverability test created.', 'sent': test.sent_count, 'failed': test.failed_count})
+        return jsonify({'success': True, 'test_id': test_id, 'message': 'Deliverability test queued. Sending continues in the background.', 'sent': 0, 'failed': 0, 'queued': test.total_messages, 'senders': senders})
+    return jsonify({'success': True, 'test_id': test_id, 'message': 'Deliverability test created.', 'sent': test.sent_count, 'failed': test.failed_count, 'senders': senders})
 
 @app.route('/api/inbox-intelligence/automated-tests', methods=['GET', 'POST', 'DELETE'])
 @login_required
@@ -3281,6 +3355,8 @@ def api_inbox_automated_tests():
             return jsonify({'success': False, 'error': f"Could not retrieve users from selected Workspace sources: {expansion_errors[0].get('error', 'Unknown error')}"}), 400
     if not senders:
         return jsonify({'success': False, 'error': 'Select Workspace users or account sources first'}), 400
+    service_account_map = {sa.id: sa for sa in ServiceAccount.query.filter(ServiceAccount.id.in_([s['service_account_id'] for s in senders])).all()}
+    senders = _enrich_workspace_sender_payloads(senders, service_account_map)
 
     inbox_ids = []
     for value in data.get('inbox_account_ids', []):
@@ -3383,7 +3459,11 @@ def api_inbox_automated_tests():
             {
                 'email': sender.get('email'),
                 'name': sender.get('name') or '',
-                'service_account_id': sender.get('service_account_id')
+                'domain': sender.get('domain') or '',
+                'source': sender.get('source') or '',
+                'service_account_id': sender.get('service_account_id'),
+                'service_account_name': sender.get('service_account_name') or '',
+                'service_account_admin_email': sender.get('service_account_admin_email') or ''
             } for sender in senders
         ],
         'message': f'Automated test queued with {rows_created} operation(s).'
@@ -3880,6 +3960,7 @@ def api_inbox_test_detail(test_id):
         if sender_email and sender_email not in sender_emails:
             sender_emails.append(sender_email)
     sources = TestEmailSource.query.filter(TestEmailSource.id.in_(source_ids)).all() if source_ids else []
+    sender_context = _sender_context_from_message_emails(sender_emails)
     return jsonify({'success': True, 'test': {
         'test_id': test.test_id,
         'name': test.name,
@@ -3910,6 +3991,7 @@ def api_inbox_test_detail(test_id):
             'source_ids': source_ids,
             'inbox_account_ids': inbox_account_ids,
             'sender_emails': sender_emails,
+            'senders': sender_context,
             'strategy': getattr(test, 'strategy', None),
             'inbox_threshold': getattr(test, 'inbox_threshold', 80) or 80,
             'spam_threshold': getattr(test, 'spam_threshold', 40) or 40,

@@ -1005,36 +1005,45 @@
     }
 
     .ii-analytics-copy-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-        gap: 12px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
         align-items: stretch;
     }
 
     .ii-copy-stat-button {
+        flex: 1 1 150px;
+        max-width: 220px;
         display: grid;
-        grid-template-columns: auto 1fr;
-        gap: 4px 10px;
+        grid-template-columns: 28px minmax(0, 1fr);
+        grid-template-rows: auto auto;
+        gap: 2px 8px;
         text-align: left;
-        min-height: 82px;
+        min-height: 54px;
+        padding: 8px 10px;
         align-content: center;
         align-items: center;
         background: linear-gradient(135deg, #ffffff 0%, #eff6ff 100%);
         border: 1px solid #93c5fd;
         color: #0f172a;
-        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08), 0 1px 0 rgba(255, 255, 255, 0.75) inset;
+        box-shadow: 0 6px 14px rgba(15, 23, 42, 0.06), 0 1px 0 rgba(255, 255, 255, 0.75) inset;
         white-space: normal;
-        line-height: 1.25;
+        line-height: 1.15;
         transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
     }
 
     .ii-copy-stat-button strong {
-        font-size: 22px;
+        font-size: 17px;
+        line-height: 1;
         color: #0f172a;
     }
 
     .ii-copy-stat-button span {
         min-width: 0;
+        overflow-wrap: anywhere;
+        font-size: 11px;
+        font-weight: 700;
+        color: #475569;
     }
 
     .ii-copy-stat-button i {
@@ -1042,24 +1051,24 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 34px;
-        height: 34px;
-        border-radius: 8px;
+        width: 28px;
+        height: 28px;
+        border-radius: 7px;
         background: rgba(37, 99, 235, 0.12);
         color: #2563eb;
-        font-size: 15px;
+        font-size: 13px;
     }
 
     .ii-copy-stat-button:hover:not(:disabled) {
         transform: translateY(-1px);
         border-color: #2563eb;
-        box-shadow: 0 14px 28px rgba(37, 99, 235, 0.16), 0 1px 0 rgba(255, 255, 255, 0.8) inset;
+        box-shadow: 0 10px 18px rgba(37, 99, 235, 0.13), 0 1px 0 rgba(255, 255, 255, 0.8) inset;
     }
 
     .ii-copy-stat-button.inbox {
         background: linear-gradient(135deg, #ffffff 0%, #ecfdf5 100%);
         border-color: #86efac;
-        box-shadow: 0 10px 24px rgba(22, 163, 74, 0.12), 0 1px 0 rgba(255, 255, 255, 0.75) inset;
+        box-shadow: 0 6px 14px rgba(22, 163, 74, 0.09), 0 1px 0 rgba(255, 255, 255, 0.75) inset;
     }
 
     .ii-copy-stat-button.inbox i {
@@ -1069,13 +1078,13 @@
 
     .ii-copy-stat-button.inbox:hover:not(:disabled) {
         border-color: #16a34a;
-        box-shadow: 0 14px 28px rgba(22, 163, 74, 0.18), 0 1px 0 rgba(255, 255, 255, 0.8) inset;
+        box-shadow: 0 10px 18px rgba(22, 163, 74, 0.16), 0 1px 0 rgba(255, 255, 255, 0.8) inset;
     }
 
     .ii-copy-stat-button.spam {
         background: linear-gradient(135deg, #ffffff 0%, #fef2f2 100%);
         border-color: #fca5a5;
-        box-shadow: 0 10px 24px rgba(220, 38, 38, 0.12), 0 1px 0 rgba(255, 255, 255, 0.75) inset;
+        box-shadow: 0 6px 14px rgba(220, 38, 38, 0.09), 0 1px 0 rgba(255, 255, 255, 0.75) inset;
     }
 
     .ii-copy-stat-button.spam i {
@@ -1085,13 +1094,13 @@
 
     .ii-copy-stat-button.spam:hover:not(:disabled) {
         border-color: #dc2626;
-        box-shadow: 0 14px 28px rgba(220, 38, 38, 0.18), 0 1px 0 rgba(255, 255, 255, 0.8) inset;
+        box-shadow: 0 10px 18px rgba(220, 38, 38, 0.16), 0 1px 0 rgba(255, 255, 255, 0.8) inset;
     }
 
     .ii-copy-stat-button.account {
         background: linear-gradient(135deg, #ffffff 0%, #f5f3ff 100%);
         border-color: #c4b5fd;
-        box-shadow: 0 10px 24px rgba(124, 58, 237, 0.12), 0 1px 0 rgba(255, 255, 255, 0.75) inset;
+        box-shadow: 0 6px 14px rgba(124, 58, 237, 0.09), 0 1px 0 rgba(255, 255, 255, 0.75) inset;
     }
 
     .ii-copy-stat-button.account i {
@@ -1101,16 +1110,20 @@
 
     .ii-copy-stat-button.account:hover:not(:disabled) {
         border-color: #7c3aed;
-        box-shadow: 0 14px 28px rgba(124, 58, 237, 0.18), 0 1px 0 rgba(255, 255, 255, 0.8) inset;
+        box-shadow: 0 10px 18px rgba(124, 58, 237, 0.16), 0 1px 0 rgba(255, 255, 255, 0.8) inset;
     }
 
-    @media (max-width: 640px) {
-        .ii-analytics-copy-grid {
-            grid-template-columns: 1fr;
-        }
-
+    @media (max-width: 700px) {
         .ii-copy-stat-button {
-            min-height: 66px;
+            flex-basis: calc(50% - 8px);
+            max-width: none;
+            min-height: 52px;
+        }
+    }
+
+    @media (max-width: 420px) {
+        .ii-copy-stat-button {
+            flex-basis: 100%;
         }
     }
 
@@ -4091,7 +4104,7 @@ merge_recipe_id, content_blueprint_id</pre>
         userInboxListAccounts: [],
         userInboxListAccountOnly: false,
         selectedUserInboxListAccountIds: new Set(),
-        userInboxCopyBuckets: {inboxDomains: [], spamDomains: [], inboxUsers: [], spamUsers: [], inboxUserAccountLines: [], spamUserAccountLines: [], greyDomainNameChangeUsers: [], adminAccounts: []},
+        userInboxCopyBuckets: {inboxDomains: [], spamDomains: [], inboxUsers: [], spamUsers: [], inboxUserAccountLines: [], spamUserAccountLines: [], greyDomainNameChangeUsers: []},
         serviceAccounts: [],
         activeMessageId: null,
         explorerRefreshToken: 0,
@@ -4121,7 +4134,7 @@ merge_recipe_id, content_blueprint_id</pre>
         automatedTests: [],
         automatedSelectedTestId: null,
         automatedPollTimers: {},
-        automatedCopyBuckets: {inboxUsers: [], inboxDomains: [], spamUsers: [], spamDomains: [], inboxUserAccountLines: [], spamUserAccountLines: [], greyDomainNameChangeUsers: [], adminAccounts: []},
+        automatedCopyBuckets: {inboxUsers: [], inboxDomains: [], spamUsers: [], spamDomains: [], inboxUserAccountLines: [], spamUserAccountLines: [], greyDomainNameChangeUsers: []},
         automatedAiResultCopyBuckets: {inbox_users: [], spam_users: [], inbox_domains: [], spam_domains: []},
         automatedAiResultAnalysis: null,
         automatedAiResultTestId: null,
@@ -5841,7 +5854,15 @@ merge_recipe_id, content_blueprint_id</pre>
         return iiState.workspaceSenders
             .filter((sender) => iiState.selectedSenderEmails.has(sender.email))
             .filter((sender) => !isAdminWorkspaceSender(sender))
-            .map((sender) => ({email: sender.email, name: sender.name || '', service_account_id: sender.service_account_id}));
+            .map((sender) => ({
+                email: sender.email,
+                name: sender.name || '',
+                domain: sender.domain || '',
+                source: sender.source || '',
+                service_account_id: sender.service_account_id,
+                service_account_name: sender.service_account_name || '',
+                service_account_admin_email: sender.service_account_admin_email || ''
+            }));
     }
 
     function automatedServiceAccountPayload(selectedSenders) {
@@ -5974,10 +5995,12 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     function hydrateWorkspaceSenderContextForTest(test = {}) {
-        const setup = {...(test.saved_setup || {}), ...cachedAutomatedSetupContext(test.test_id)};
+        const savedSetup = test.saved_setup || {};
+        const cachedSetup = cachedAutomatedSetupContext(test.test_id);
         const senders = [
-            ...(setup.senders || []),
             ...cachedTestSenderContext(test.test_id),
+            ...(cachedSetup.senders || []),
+            ...(savedSetup.senders || []),
         ];
         if (!senders.length) return;
         const byEmail = {};
@@ -6010,6 +6033,7 @@ merge_recipe_id, content_blueprint_id</pre>
             };
         };
         cachedTestSenderContext(test?.test_id).forEach(add);
+        ((test?.saved_setup || {}).senders || []).forEach(add);
         (iiState.workspaceSenders || []).forEach(add);
         selectedAutomatedSenderPayload().forEach(add);
         const seen = new Set();
@@ -6457,6 +6481,7 @@ merge_recipe_id, content_blueprint_id</pre>
             const data = await iiFetch(`/api/inbox-intelligence/tests/${testId}`);
             const test = data.test || {};
             iiState.automatedSelectedTestId = test.test_id || testId;
+            hydrateWorkspaceSenderContextForTest(test);
             const manualInput = document.getElementById('automatedManualTestIdInput');
             if (manualInput) manualInput.value = iiState.automatedSelectedTestId;
             const agentSourceInput = document.getElementById('aiAgentSourceTestIdInput');
@@ -6884,7 +6909,11 @@ merge_recipe_id, content_blueprint_id</pre>
             const test = data.test || {};
             const savedSetup = test.saved_setup || {};
             const cachedSetup = cachedAutomatedSetupContext(test.test_id || testId);
-            const setup = {...savedSetup, ...cachedSetup};
+            const setup = {...cachedSetup, ...savedSetup};
+            setup.senders = [
+                ...(cachedSetup.senders || []),
+                ...(savedSetup.senders || []),
+            ];
             const headerInput = document.getElementById('automatedHeaderInput');
             const bodyInput = document.getElementById('automatedBodyInput');
             const modeInput = document.getElementById('automatedBodyMode');
@@ -7006,7 +7035,7 @@ merge_recipe_id, content_blueprint_id</pre>
     function clearAutomatedAnalytics() {
         iiState.automatedSelectedTestId = null;
         iiState.automatedMessages = [];
-        iiState.automatedCopyBuckets = {inboxUsers: [], inboxDomains: [], spamUsers: [], spamDomains: [], inboxUserAccountLines: [], spamUserAccountLines: [], greyDomainNameChangeUsers: [], adminAccounts: []};
+        iiState.automatedCopyBuckets = {inboxUsers: [], inboxDomains: [], spamUsers: [], spamDomains: [], inboxUserAccountLines: [], spamUserAccountLines: [], greyDomainNameChangeUsers: []};
         iiState.automatedAiResultCopyBuckets = {inbox_users: [], spam_users: [], inbox_domains: [], spam_domains: []};
         iiState.automatedAiResultAnalysis = null;
         iiState.automatedAiResultTestId = null;
@@ -7877,8 +7906,7 @@ merge_recipe_id, content_blueprint_id</pre>
         const inboxUserAccountLines = accountUserLinesForSenders(inboxUsers);
         const spamUserAccountLines = accountUserLinesForSenders(spamUsers);
         const greyDomainNameChangeUsers = greyDomainNameChangeRows(rows, 'sender');
-        const adminAccounts = [...new Set(users.map((item) => adminAccountLabelForSender(item.key)).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-        iiState.automatedCopyBuckets = {inboxDomains, spamDomains, inboxUsers, spamUsers, inboxUserAccountLines, spamUserAccountLines, greyDomainNameChangeUsers, adminAccounts};
+        iiState.automatedCopyBuckets = {inboxDomains, spamDomains, inboxUsers, spamUsers, inboxUserAccountLines, spamUserAccountLines, greyDomainNameChangeUsers};
         const providers = {};
         rows.forEach((row) => {
             const key = recipientProvider(row.recipient);
@@ -7921,11 +7949,8 @@ merge_recipe_id, content_blueprint_id</pre>
                 <div class="ii-analytics-copy-grid">
                     <button class="ii-btn ii-copy-stat-button inbox" type="button" onclick="copyAutomatedBucket('inboxDomains')"><i class="fas fa-inbox"></i><strong>${inboxDomains.length}</strong><span>Inbox domains</span></button>
                     <button class="ii-btn ii-copy-stat-button spam" type="button" onclick="copyAutomatedBucket('spamDomains')"><i class="fas fa-triangle-exclamation"></i><strong>${spamDomains.length}</strong><span>Spam domains</span></button>
-                    <button class="ii-btn ii-copy-stat-button inbox" type="button" onclick="copyAutomatedBucket('inboxUsers')"><i class="fas fa-user-check"></i><strong>${inboxUsers.length}</strong><span>Inbox users</span></button>
-                    <button class="ii-btn ii-copy-stat-button spam" type="button" onclick="copyAutomatedBucket('spamUsers')"><i class="fas fa-user-xmark"></i><strong>${spamUsers.length}</strong><span>Spam users</span></button>
-                    <button class="ii-btn ii-copy-stat-button account" type="button" onclick="copyAutomatedBucket('inboxUserAccountLines')"><i class="fas fa-clipboard-list"></i><strong>${inboxUserAccountLines.length}</strong><span>Inbox account,user</span></button>
-                    <button class="ii-btn ii-copy-stat-button account" type="button" onclick="copyAutomatedBucket('spamUserAccountLines')"><i class="fas fa-clipboard-list"></i><strong>${spamUserAccountLines.length}</strong><span>Spam account,user</span></button>
-                    <button class="ii-btn ii-copy-stat-button account" type="button" onclick="copyAutomatedBucket('adminAccounts')"><i class="fas fa-user-shield"></i><strong>${adminAccounts.length}</strong><span>Admin accounts</span></button>
+                    <button class="ii-btn ii-copy-stat-button inbox" type="button" onclick="copyAutomatedBucket('inboxUserAccountLines')"><i class="fas fa-clipboard-list"></i><strong>${inboxUserAccountLines.length}</strong><span>Inbox account,user</span></button>
+                    <button class="ii-btn ii-copy-stat-button spam" type="button" onclick="copyAutomatedBucket('spamUserAccountLines')"><i class="fas fa-clipboard-list"></i><strong>${spamUserAccountLines.length}</strong><span>Spam account,user</span></button>
                     <button class="ii-btn ii-copy-stat-button account" type="button" onclick="copyAutomatedBucket('greyDomainNameChangeUsers')"><i class="fas fa-id-card"></i><strong>${greyDomainNameChangeUsers.length}</strong><span>Grey-domain name changes</span></button>
                 </div>
                 <div class="ii-insight-grid mt-3">
@@ -9822,7 +9847,6 @@ merge_recipe_id, content_blueprint_id</pre>
         const inboxUserAccountLines = accountUserLinesForSenders(inboxUsers);
         const spamUserAccountLines = accountUserLinesForSenders(spamUsers);
         const greyDomainNameChangeUsers = greyDomainNameChangeRows(rows, senderField);
-        const adminAccounts = [...new Set(users.map((item) => adminAccountLabelForSender(item.key)).filter(Boolean))].sort((a, b) => a.localeCompare(b));
         copyBuckets.inboxDomains = inboxDomains;
         copyBuckets.spamDomains = spamDomains;
         copyBuckets.inboxUsers = inboxUsers;
@@ -9830,7 +9854,6 @@ merge_recipe_id, content_blueprint_id</pre>
         copyBuckets.inboxUserAccountLines = inboxUserAccountLines;
         copyBuckets.spamUserAccountLines = spamUserAccountLines;
         copyBuckets.greyDomainNameChangeUsers = greyDomainNameChangeUsers;
-        copyBuckets.adminAccounts = adminAccounts;
         const providerMap = {};
         rows.forEach((row) => {
             const provider = providerFn(row);
@@ -9891,11 +9914,8 @@ merge_recipe_id, content_blueprint_id</pre>
                 <div class="ii-analytics-copy-grid">
                     <button class="ii-btn ii-copy-stat-button inbox" type="button" onclick="${copyFn}('inboxDomains')"><i class="fas fa-inbox"></i><strong>${inboxDomains.length}</strong><span>Copy inbox domains</span></button>
                     <button class="ii-btn ii-copy-stat-button spam" type="button" onclick="${copyFn}('spamDomains')"><i class="fas fa-triangle-exclamation"></i><strong>${spamDomains.length}</strong><span>Copy spam domains</span></button>
-                    <button class="ii-btn ii-copy-stat-button inbox" type="button" onclick="${copyFn}('inboxUsers')"><i class="fas fa-user-check"></i><strong>${inboxUsers.length}</strong><span>Copy inbox users</span></button>
-                    <button class="ii-btn ii-copy-stat-button spam" type="button" onclick="${copyFn}('spamUsers')"><i class="fas fa-user-xmark"></i><strong>${spamUsers.length}</strong><span>Copy spam users</span></button>
-                    <button class="ii-btn ii-copy-stat-button account" type="button" onclick="${copyFn}('inboxUserAccountLines')"><i class="fas fa-clipboard-list"></i><strong>${inboxUserAccountLines.length}</strong><span>Copy inbox account,user</span></button>
-                    <button class="ii-btn ii-copy-stat-button account" type="button" onclick="${copyFn}('spamUserAccountLines')"><i class="fas fa-clipboard-list"></i><strong>${spamUserAccountLines.length}</strong><span>Copy spam account,user</span></button>
-                    <button class="ii-btn ii-copy-stat-button account" type="button" onclick="${copyFn}('adminAccounts')"><i class="fas fa-user-shield"></i><strong>${adminAccounts.length}</strong><span>Copy admin accounts</span></button>
+                    <button class="ii-btn ii-copy-stat-button inbox" type="button" onclick="${copyFn}('inboxUserAccountLines')"><i class="fas fa-clipboard-list"></i><strong>${inboxUserAccountLines.length}</strong><span>Copy inbox account,user</span></button>
+                    <button class="ii-btn ii-copy-stat-button spam" type="button" onclick="${copyFn}('spamUserAccountLines')"><i class="fas fa-clipboard-list"></i><strong>${spamUserAccountLines.length}</strong><span>Copy spam account,user</span></button>
                     <button class="ii-btn ii-copy-stat-button account" type="button" onclick="${copyFn}('greyDomainNameChangeUsers')"><i class="fas fa-id-card"></i><strong>${greyDomainNameChangeUsers.length}</strong><span>Copy grey-domain name changes</span></button>
                 </div>
                 <div class="ii-compact-stat-grid mt-2">
@@ -9935,21 +9955,29 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     function senderLookup(email) {
-        return iiState.workspaceSenders.find((sender) => sender.email === email) || {};
+        const key = String(email || '').trim().toLowerCase();
+        return iiState.workspaceSenders.find((sender) => String(sender.email || '').toLowerCase() === key) || {};
+    }
+
+    function cleanAdminAccountLabel(value) {
+        const label = String(value || '').trim();
+        if (!label) return '';
+        if (/^serviceaccount:\d+$/i.test(label)) return '';
+        if (/^service_account:/i.test(label)) return '';
+        return label;
     }
 
     function adminAccountLabelForSender(email) {
         const sender = senderLookup(email);
         const accountId = sender.service_account_id;
         const account = accountId ? (iiState.serviceAccounts || []).find((item) => Number(item.id) === Number(accountId)) : null;
-        return String(
+        return cleanAdminAccountLabel(
             sender.service_account_admin_email ||
             account?.admin_email ||
             sender.service_account_name ||
             account?.name ||
-            sender.source ||
-            (accountId ? `ServiceAccount:${accountId}` : '')
-        ).trim();
+            ''
+        );
     }
 
     function accountUserLineForSender(email) {
