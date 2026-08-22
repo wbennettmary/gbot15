@@ -76,7 +76,7 @@
 
     .afraid-verify-table {
         margin-bottom: 0;
-        min-width: 860px;
+        min-width: 1020px;
     }
 
     .afraid-verify-table th {
@@ -103,6 +103,17 @@
         white-space: nowrap;
     }
 
+    .afraid-list-card-actions {
+        display: grid;
+        gap: 8px;
+        grid-template-columns: minmax(180px, 1fr) auto;
+        min-width: min(100%, 360px);
+    }
+
+    .afraid-list-card-buttons {
+        display: inline-flex;
+    }
+
     @media (max-width: 768px) {
         .afraid-verify-toolbar {
             grid-template-columns: 1fr;
@@ -110,6 +121,11 @@
 
         .afraid-verify-modal .modal-body {
             padding: 14px;
+        }
+
+        .afraid-list-card-actions {
+            grid-template-columns: 1fr;
+            width: 100%;
         }
     }
 </style>
@@ -465,6 +481,7 @@
                         <thead>
                             <tr>
                                 <th style="width:52px">#</th>
+                                <th>Account</th>
                                 <th>External domain</th>
                                 <th>Cloudflare zone</th>
                                 <th class="text-center" title="Account lookup"><i class="fas fa-key"></i></th>
@@ -476,7 +493,7 @@
                             </tr>
                         </thead>
                         <tbody id="afraidExternalCfTableBody">
-                            <tr><td colspan="9" class="text-center text-muted py-4">Open a saved list to prepare verification.</td></tr>
+                            <tr><td colspan="10" class="text-center text-muted py-4">Open a saved list to prepare verification.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -1127,6 +1144,10 @@ let afraidExternalCfEntries = [];
 let afraidExternalCfJobId = null;
 let afraidExternalCfPollInterval = null;
 let afraidExternalCfAccountsLoaded = false;
+let afraidExternalCfAccounts = [];
+let afraidWorkspaceListsLoaded = false;
+let afraidWorkspaceLists = [];
+let afraidExternalCfMergedSource = null;
 let afraidExternalCfLogSeen = {};
 let afraidExternalCfStatusSeen = {};
 
@@ -1134,6 +1155,7 @@ async function loadAfraidLists() {
     const grid = document.getElementById('afraidListsGrid');
     grid.innerHTML = '<div class="col-12 text-center text-muted py-4">Loading saved Afraid lists...</div>';
     try {
+        await loadAfraidWorkspaceLists();
         const res = await fetch('/api/afraid/lists');
         const data = await parseJsonResponse(res);
         if (!data.success || !data.lists.length) {
@@ -1149,24 +1171,29 @@ async function loadAfraidLists() {
             col.className = 'col-lg-6';
             col.innerHTML = `
                 <div class="card h-100">
-                    <div class="card-header bg-light d-flex justify-content-between align-items-start">
+                    <div class="card-header bg-light d-flex justify-content-between align-items-start gap-3 flex-wrap">
                         <div>
                             <h6 class="mb-1">${escapeHtml(lst.name)}</h6>
                             <div class="text-muted small">${escapeHtml(createdAt)} | owner: ${escapeHtml(lst.created_by || 'user')}</div>
                         </div>
-                        <div class="btn-group btn-group-sm">
-                            <button class="btn btn-outline-success" onclick="openAfraidExternalCfModal(${lst.id})" title="Add and verify domains">
-                                <i class="fas fa-cloud-upload-alt"></i>
-                            </button>
-                            <button class="btn btn-outline-secondary" onclick="copyAfraidList(${lst.id})" title="Copy list">
-                                <i class="fas fa-copy"></i>
-                            </button>
-                            <button class="btn btn-outline-primary" onclick="editAfraidList(${lst.id})" title="Edit list">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                            <button class="btn btn-outline-danger" onclick="deleteAfraidList(${lst.id})" title="Delete list">
-                                <i class="fas fa-trash"></i>
-                            </button>
+                        <div class="afraid-list-card-actions">
+                            <select class="form-select form-select-sm afraid-card-account-select" id="afraid-card-list-${lst.id}" title="List Management account source">
+                                ${renderAfraidWorkspaceListOptions()}
+                            </select>
+                            <div class="btn-group btn-group-sm afraid-list-card-buttons">
+                                <button class="btn btn-outline-success" onclick="openAfraidExternalCfModal(${lst.id}, {autoStart: true})" title="Add and verify domains">
+                                    <i class="fas fa-cloud-upload-alt"></i>
+                                </button>
+                                <button class="btn btn-outline-secondary" onclick="copyAfraidList(${lst.id})" title="Copy list">
+                                    <i class="fas fa-copy"></i>
+                                </button>
+                                <button class="btn btn-outline-primary" onclick="editAfraidList(${lst.id})" title="Edit list">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-outline-danger" onclick="deleteAfraidList(${lst.id})" title="Delete list">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
                         </div>
                     </div>
                     <div class="card-body">
@@ -1184,33 +1211,89 @@ async function loadAfraidLists() {
     }
 }
 
+async function loadAfraidWorkspaceLists() {
+    if (afraidWorkspaceListsLoaded) return;
+    try {
+        const res = await fetch('/api/lists');
+        const data = await parseJsonResponse(res);
+        afraidWorkspaceLists = data.success ? (data.lists || []) : [];
+        afraidWorkspaceListsLoaded = true;
+    } catch (err) {
+        afraidWorkspaceLists = [];
+        afraidWorkspaceListsLoaded = false;
+        showAfraidExternalCfAlert(err.message || 'Could not load List Management account lists.', 'danger');
+    }
+}
+
+function renderAfraidWorkspaceListOptions(selectedValue = '') {
+    if (!afraidWorkspaceLists.length) {
+        return '<option value="">No List Management lists found</option>';
+    }
+    return '<option value="">Select account list</option>' + afraidWorkspaceLists.map(list => {
+        const selected = String(list.id) === String(selectedValue) ? ' selected' : '';
+        const label = `${list.name} (${list.account_count || 0})`;
+        return `<option value="${escapeHtml(list.id)}"${selected}>${escapeHtml(label)}</option>`;
+    }).join('');
+}
+
+function getAfraidCardSelectedWorkspaceList(listId) {
+    const selectedId = document.getElementById(`afraid-card-list-${listId}`)?.value || '';
+    return (afraidWorkspaceLists || []).find(list => String(list.id) === String(selectedId)) || null;
+}
+
+function parseAfraidWorkspaceAccounts(rawAccounts) {
+    const accounts = [];
+    const seen = new Set();
+    String(rawAccounts || '').split('\n').forEach(line => {
+        const clean = line.trim();
+        if (!clean) return;
+        const account = clean.split(/[,:]/)[0].trim();
+        if (!account || seen.has(account.toLowerCase())) return;
+        seen.add(account.toLowerCase());
+        accounts.push(account);
+    });
+    return accounts;
+}
+
 async function loadAfraidExternalCfAccounts() {
     const select = document.getElementById('afraidExternalCfAccount');
-    if (!select || afraidExternalCfAccountsLoaded) return;
-    select.innerHTML = '<option value="">Loading service accounts...</option>';
+    if (afraidExternalCfAccountsLoaded) {
+        if (select) select.innerHTML = renderAfraidExternalCfAccountOptions();
+        return;
+    }
+    if (select) select.innerHTML = '<option value="">Loading service accounts...</option>';
     try {
         const res = await fetch('/api/afraid/service-accounts');
         const data = await parseJsonResponse(res);
         const accounts = data.accounts || [];
+        afraidExternalCfAccounts = accounts;
         if (!accounts.length) {
-            select.innerHTML = '<option value="">No active service accounts found</option>';
+            if (select) select.innerHTML = '<option value="">No active service accounts found</option>';
             return;
         }
-        const lastAccount = localStorage.getItem('afraid_external_cf_account') || '';
-        select.innerHTML = '<option value="">Select Workspace service account</option>' + accounts.map(account => {
-            const name = account.name || '';
-            const admin = account.admin_email ? ` (${account.admin_email})` : '';
-            const selected = name === lastAccount ? ' selected' : '';
-            return `<option value="${escapeHtml(name)}"${selected}>${escapeHtml(name + admin)}</option>`;
-        }).join('');
         afraidExternalCfAccountsLoaded = true;
+        if (select) select.innerHTML = renderAfraidExternalCfAccountOptions();
     } catch (err) {
-        select.innerHTML = '<option value="">Could not load accounts</option>';
+        if (select) select.innerHTML = '<option value="">Could not load accounts</option>';
         showAfraidExternalCfAlert(err.message || 'Could not load service accounts.', 'danger');
     }
 }
 
-function parseAfraidExternalCfRows(list) {
+function renderAfraidExternalCfAccountOptions(selectedValue = null) {
+    const selectedAccount = selectedValue ?? localStorage.getItem('afraid_external_cf_account') ?? '';
+    if (!afraidExternalCfAccounts.length) {
+        return '<option value="">No active service accounts found</option>';
+    }
+    return '<option value="">Select Workspace account</option>' + afraidExternalCfAccounts.map(account => {
+        const name = account.name || '';
+        const admin = account.admin_email ? ` (${account.admin_email})` : '';
+        const selected = name === selectedAccount ? ' selected' : '';
+        return `<option value="${escapeHtml(name)}"${selected}>${escapeHtml(name + admin)}</option>`;
+    }).join('');
+}
+
+function parseAfraidExternalCfRows(list, accounts = []) {
+    const accountList = Array.isArray(accounts) ? accounts : [accounts].filter(Boolean);
     return String(list.raw_results || '')
         .split('\n')
         .map(line => line.trim())
@@ -1219,7 +1302,7 @@ function parseAfraidExternalCfRows(list) {
             const parts = line.split(',').map(part => part.trim()).filter(Boolean);
             return {
                 index: index + 1,
-                account: '',
+                account: accountList.length ? accountList[index % accountList.length] : '',
                 externalDomain: parts[0] || '',
                 cloudflareDomain: parts[1] || '',
                 authStatus: parts.length >= 2 ? 'pending' : 'failed',
@@ -1232,10 +1315,17 @@ function parseAfraidExternalCfRows(list) {
         });
 }
 
-function openAfraidExternalCfModal(id) {
+async function openAfraidExternalCfModal(id, options = {}) {
     const list = (window.afraidLists || []).find(item => item.id === id);
     if (!list) return;
-    afraidExternalCfEntries = parseAfraidExternalCfRows(list);
+    await loadAfraidWorkspaceLists();
+    await loadAfraidExternalCfAccounts();
+    const workspaceList = getAfraidCardSelectedWorkspaceList(id);
+    const workspaceAccounts = workspaceList ? parseAfraidWorkspaceAccounts(workspaceList.raw_accounts) : [];
+    afraidExternalCfMergedSource = workspaceList
+        ? {id: workspaceList.id, name: workspaceList.name, accountCount: workspaceAccounts.length}
+        : null;
+    afraidExternalCfEntries = parseAfraidExternalCfRows(list, workspaceAccounts);
     afraidExternalCfJobId = null;
     afraidExternalCfLogSeen = {};
     afraidExternalCfStatusSeen = {};
@@ -1244,27 +1334,46 @@ function openAfraidExternalCfModal(id) {
         afraidExternalCfPollInterval = null;
     }
     document.getElementById('afraidExternalCfModalSubtitle').textContent =
-        `${list.name}: ${afraidExternalCfEntries.length} saved domain row(s) prepared.`;
+        `${list.name}: ${afraidExternalCfEntries.length} saved row(s) prepared as account,afraiddomain,cloudflaredomain.`;
     document.getElementById('afraidExternalCfParsedCount').textContent = afraidExternalCfEntries.length;
     document.getElementById('afraidExternalCfDoneCount').textContent = '0';
-    document.getElementById('afraidExternalCfLog').textContent = 'Parsed saved list. Select a Workspace account, then start verification.';
+    const accountSelect = document.getElementById('afraidExternalCfAccount');
+    accountSelect.innerHTML = afraidExternalCfMergedSource
+        ? `<option value="">Merged from ${escapeHtml(afraidExternalCfMergedSource.name)} (${afraidExternalCfMergedSource.accountCount} accounts)</option>`
+        : renderAfraidExternalCfAccountOptions();
+    accountSelect.value = '';
+    accountSelect.disabled = Boolean(afraidExternalCfMergedSource);
+    document.getElementById('afraidExternalCfLog').textContent = afraidExternalCfMergedSource
+        ? `Merged ${afraidExternalCfMergedSource.accountCount} account(s) from ${afraidExternalCfMergedSource.name} with ${afraidExternalCfEntries.length} AFRAID row(s). Ready to start.`
+        : 'Parsed saved list. Select a List Management account source from the card, or choose one Workspace account here.';
     showAfraidExternalCfAlert('', 'secondary');
     renderAfraidExternalCfTable(afraidExternalCfEntries);
     setAfraidExternalCfRunning(false);
-    loadAfraidExternalCfAccounts();
     bootstrap.Modal.getOrCreateInstance(document.getElementById('afraidExternalCfModal')).show();
+    if (options.autoStart) {
+        if (!afraidExternalCfMergedSource) {
+            showAfraidExternalCfAlert('Select a List Management account list from the card dropdown before using Add and verify domains.', 'warning');
+            return;
+        }
+        if (!workspaceAccounts.length) {
+            showAfraidExternalCfAlert('The selected List Management source has no usable accounts.', 'warning');
+            return;
+        }
+        window.setTimeout(() => startAfraidExternalCfVerification(), 250);
+    }
 }
 
 function renderAfraidExternalCfTable(entries) {
     const tbody = document.getElementById('afraidExternalCfTableBody');
     if (!tbody) return;
     if (!entries.length) {
-        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">This saved list has no rows.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">This saved list has no rows.</td></tr>';
         return;
     }
     tbody.innerHTML = entries.map(entry => `
         <tr id="afraid-ext-cf-row-${entry.index}">
             <td class="text-muted">${entry.index}</td>
+            <td><span class="afraid-verify-domain" title="${escapeHtml(entry.account)}">${escapeHtml(entry.account || 'Not selected')}</span></td>
             <td><span class="afraid-verify-domain" title="${escapeHtml(entry.externalDomain)}">${escapeHtml(entry.externalDomain)}</span></td>
             <td><span class="afraid-verify-domain" title="${escapeHtml(entry.cloudflareDomain)}">${escapeHtml(entry.cloudflareDomain)}</span></td>
             <td class="text-center">${getAfraidExternalCfStatusBadge(entry.authStatus)}</td>
@@ -1283,13 +1392,14 @@ function updateAfraidExternalCfTable(entries) {
         const row = document.getElementById(`afraid-ext-cf-row-${entry.index}`);
         if (!row) return;
         const cells = row.querySelectorAll('td');
-        if (cells.length < 9) return;
-        cells[3].innerHTML = getAfraidExternalCfStatusBadge(entry.authStatus);
-        cells[4].innerHTML = getAfraidExternalCfStatusBadge(entry.workspaceStatus);
-        cells[5].innerHTML = getAfraidExternalCfStatusBadge(entry.tokenStatus);
-        cells[6].innerHTML = getAfraidExternalCfStatusBadge(entry.dnsStatus);
-        cells[7].innerHTML = getAfraidExternalCfStatusBadge(entry.verifyStatus);
-        cells[8].textContent = entry.message || '';
+        if (cells.length < 10) return;
+        cells[1].textContent = entry.account || '';
+        cells[4].innerHTML = getAfraidExternalCfStatusBadge(entry.authStatus);
+        cells[5].innerHTML = getAfraidExternalCfStatusBadge(entry.workspaceStatus);
+        cells[6].innerHTML = getAfraidExternalCfStatusBadge(entry.tokenStatus);
+        cells[7].innerHTML = getAfraidExternalCfStatusBadge(entry.dnsStatus);
+        cells[8].innerHTML = getAfraidExternalCfStatusBadge(entry.verifyStatus);
+        cells[9].textContent = entry.message || '';
         if (entry.verifyStatus === 'success' || entry.authStatus === 'failed' || entry.workspaceStatus === 'failed' || entry.tokenStatus === 'failed' || entry.dnsStatus === 'failed' || entry.verifyStatus === 'failed') {
             done += 1;
         }
@@ -1311,26 +1421,39 @@ function getAfraidExternalCfStatusBadge(status) {
 async function startAfraidExternalCfVerification() {
     const account = document.getElementById('afraidExternalCfAccount').value.trim();
     const validEntries = afraidExternalCfEntries.filter(entry => entry.externalDomain && entry.cloudflareDomain);
-    if (!account) {
+    const missingAccounts = validEntries.filter(entry => !entry.account);
+    if (!afraidExternalCfMergedSource && !account) {
         showAfraidExternalCfAlert('Select a Workspace service account before starting.', 'warning');
+        return;
+    }
+    if (missingAccounts.length && !account) {
+        showAfraidExternalCfAlert('The merged schedule is missing account values. Select a List Management source first.', 'warning');
         return;
     }
     if (!validEntries.length) {
         showAfraidExternalCfAlert('No valid saved rows found. Expected subdomain,cloudflare-domain.', 'warning');
         return;
     }
-    localStorage.setItem('afraid_external_cf_account', account);
+    if (account) {
+        localStorage.setItem('afraid_external_cf_account', account);
+        afraidExternalCfEntries = afraidExternalCfEntries.map(entry => ({
+            ...entry,
+            account
+        }));
+    }
     setAfraidExternalCfRunning(true);
     showAfraidExternalCfAlert(`Starting ${validEntries.length} domain verification job.`, 'info');
-    logAfraidExternalCf(`Starting job with ${validEntries.length} row(s) using ${account}.`);
+    logAfraidExternalCf(afraidExternalCfMergedSource
+        ? `Starting job with ${validEntries.length} merged row(s) from ${afraidExternalCfMergedSource.name}.`
+        : `Starting job with ${validEntries.length} row(s) using ${account}.`);
     try {
         const res = await fetch('/api/domains/external-cloudflare/start', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
-                entries: validEntries.map(entry => ({
+                entries: afraidExternalCfEntries.filter(entry => entry.externalDomain && entry.cloudflareDomain).map(entry => ({
                     ...entry,
-                    account
+                    account: entry.account || account
                 }))
             })
         });
@@ -1436,7 +1559,7 @@ function setAfraidExternalCfRunning(isRunning) {
     const accountSelect = document.getElementById('afraidExternalCfAccount');
     startBtn.disabled = isRunning;
     stopBtn.disabled = !isRunning;
-    accountSelect.disabled = isRunning;
+    accountSelect.disabled = isRunning || Boolean(afraidExternalCfMergedSource);
     startBtn.innerHTML = isRunning
         ? '<i class="fas fa-spinner fa-spin me-1"></i>Running'
         : '<i class="fas fa-play me-1"></i>Start verification';
