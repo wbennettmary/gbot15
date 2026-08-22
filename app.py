@@ -8172,17 +8172,15 @@ def _workspace_domain_matches_user(account, user_email):
 
 def _resolve_targeted_alias_account(account_name, user_email):
     exact = _service_account_for_alias_token(account_name)
+    if exact:
+        return exact, None
     domain_candidates = [
         account for account in ServiceAccount.query.order_by(ServiceAccount.id.asc()).all()
         if _workspace_domain_matches_user(account, user_email)
     ]
-    if exact and _workspace_domain_matches_user(exact, user_email):
-        return exact, None
     if domain_candidates:
         active_candidates = [account for account in domain_candidates if getattr(account, 'is_active', True)]
         return (active_candidates or domain_candidates)[0], None
-    if exact:
-        return exact, None
     return None, f"Could not find a service account/admin owner for {user_email}."
 
 
@@ -8232,9 +8230,58 @@ def _authenticate_workspace_alias_account(account_name):
         except Exception as e:
             return {'account': account_name, 'authenticated': False, 'error': str(e)}
 
+def _list_workspace_users_for_alias_service(service, account_name):
+    users = []
+    page_token = None
+    while True:
+        try:
+            kwargs = {'customer': 'my_customer', 'maxResults': 500}
+            if page_token:
+                kwargs['pageToken'] = page_token
+            users_result = service.users().list(**kwargs).execute()
+            users.extend(users_result.get('users', []))
+            page_token = users_result.get('nextPageToken')
+            if not page_token:
+                break
+        except Exception as list_err:
+            app.logger.warning(f"[TARGETED NAME] Error listing users for {account_name}: {list_err}")
+            raise
+    return users
+
+def _workspace_user_matches_target(service, user, target_key):
+    target = str(target_key or '').strip().lower()
+    if not target:
+        return False
+    primary_email = str(user.get('primaryEmail') or '').strip().lower()
+    if primary_email == target:
+        return True
+    if '@' not in target and primary_email.split('@', 1)[0] == target:
+        return True
+    aliases = user.get('aliases') or user.get('nonEditableAliases') or []
+    for alias_email in aliases:
+        if str(alias_email or '').strip().lower() == target:
+            return True
+    try:
+        alias_result = service.users().aliases().list(userKey=primary_email).execute()
+        for alias_item in alias_result.get('aliases', []):
+            if str(alias_item.get('alias') or '').strip().lower() == target:
+                return True
+    except Exception:
+        pass
+    return False
+
+def _find_workspace_user_from_listed_users(service, account_name, user_key):
+    all_users = _list_workspace_users_for_alias_service(service, account_name)
+    for user in all_users:
+        if _workspace_user_matches_target(service, user, user_key):
+            return user, all_users
+    return None, all_users
+
 
 def _randomize_one_workspace_user_identity(service, account_name, user_key, used_names):
-    user = service.users().get(userKey=user_key).execute()
+    user, all_users = _find_workspace_user_from_listed_users(service, account_name, user_key)
+    if not user:
+        raise ValueError(f"{user_key} was not found in the users visible to {account_name}.")
     primary_email = user.get('primaryEmail', '')
     if not primary_email or '@' not in primary_email:
         raise ValueError(f"Could not resolve a primary email for {user_key}")
@@ -8248,6 +8295,10 @@ def _randomize_one_workspace_user_identity(service, account_name, user_key, used
         }
 
     current_name = user.get('name') or {}
+    for existing_user in all_users:
+        existing_name = (existing_user.get('name') or {}).get('fullName')
+        if existing_name:
+            used_names.add(str(existing_name).lower())
     if current_name.get('fullName'):
         used_names.add(str(current_name.get('fullName')).lower())
     new_first, new_last = _generate_us_latin_workspace_name(used_names)
