@@ -3228,9 +3228,12 @@ def api_inbox_automated_tests():
             inbox_ids.append(int(value))
         except (TypeError, ValueError):
             continue
-    inboxes = InboxImapAccount.query.filter(InboxImapAccount.id.in_(inbox_ids)).all()
+    inboxes = _enabled_imap_accounts_query().filter(
+        InboxImapAccount.id.in_(inbox_ids),
+        func.lower(InboxImapAccount.account_type) == 'test'
+    ).all()
     if not inboxes:
-        return jsonify({'success': False, 'error': 'Select at least one connected receiving inbox'}), 400
+        return jsonify({'success': False, 'error': 'Select at least one IMAP account marked as Test - send and analytics'}), 400
     strategy = (data.get('strategy') or 'distributed').strip().lower()
     if strategy not in {'distributed', 'full_matrix'}:
         strategy = 'distributed'

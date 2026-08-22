@@ -4209,7 +4209,7 @@ merge_recipe_id, content_blueprint_id</pre>
         const listId = document.getElementById('automatedWorkspaceListSelect')?.value || '';
         const listAccountIds = [...(iiState.selectedUserInboxListAccountIds || new Set())];
         const accountIds = listAccountIds.length ? listAccountIds : [...(iiState.selectedServiceAccountIds || new Set())];
-        const inboxIds = [...(iiState.selectedInboxIds || new Set())];
+        const inboxIds = [...automatedSelectedInboxIds()];
         const rawPerAccount = (document.getElementById('automatedUsersPerAccountInput')?.value || '').trim();
         if (status) status.textContent = 'Requesting AI allocation advice...';
         try {
@@ -4258,7 +4258,7 @@ merge_recipe_id, content_blueprint_id</pre>
                     source_ids: [...iiState.automatedSelectedSourceIds],
                     service_account_ids: [...(iiState.selectedUserInboxListAccountIds?.size ? iiState.selectedUserInboxListAccountIds : iiState.selectedServiceAccountIds || new Set())],
                     list_id: document.getElementById('automatedWorkspaceListSelect')?.value || null,
-                    inbox_account_ids: [...(iiState.selectedInboxIds || new Set())],
+                    inbox_account_ids: [...automatedSelectedInboxIds()],
                     users_per_account: rawPerAccount || null,
                     selected_sender_count: summary.users,
                     strategy: summary.strategy,
@@ -4465,6 +4465,19 @@ merge_recipe_id, content_blueprint_id</pre>
 
     function isReceivingImapAccount(account) {
         return account?.is_enabled !== false && ['both', 'test'].includes(normalizeImapAccountType(account?.account_type));
+    }
+
+    function isAutomatedReceivingImapAccount(account) {
+        return account?.is_enabled !== false && normalizeImapAccountType(account?.account_type) === 'test';
+    }
+
+    function automatedReceivingAccounts() {
+        return (iiState.imapAccounts || []).filter(isAutomatedReceivingImapAccount);
+    }
+
+    function automatedSelectedInboxIds() {
+        const validIds = new Set(automatedReceivingAccounts().map((account) => account.id));
+        return new Set([...(iiState.selectedInboxIds || new Set())].filter((id) => validIds.has(id)));
     }
 
     function isEnabledImapAccount(account) {
@@ -5261,12 +5274,12 @@ merge_recipe_id, content_blueprint_id</pre>
         const picker = document.getElementById('automatedInboxPicker');
         const status = document.getElementById('automatedInboxStatus');
         if (!el) return;
-        const receivingAccounts = iiState.imapAccounts.filter(isReceivingImapAccount);
-        iiState.selectedInboxIds = new Set([...iiState.selectedInboxIds].filter((id) => receivingAccounts.some((account) => account.id === id)));
+        const receivingAccounts = automatedReceivingAccounts();
+        iiState.selectedInboxIds = automatedSelectedInboxIds();
         if (!receivingAccounts.length) {
             el.innerHTML = '';
-            if (picker) picker.innerHTML = '<div class="ii-muted">Connect or mark an IMAP account as Test/Both first.</div>';
-            if (status) status.textContent = 'Only Test or Both IMAP accounts can receive automated test analytics.';
+            if (picker) picker.innerHTML = '<div class="ii-muted">Connect or mark an IMAP account as Test first.</div>';
+            if (status) status.textContent = 'Only IMAP accounts marked as Test - send and analytics can receive automated test analytics.';
             return;
         }
         el.innerHTML = receivingAccounts.map((account) => `
@@ -5300,7 +5313,7 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     function selectAutomatedInboxes(checked) {
-        if (checked) iiState.imapAccounts.filter(isReceivingImapAccount).forEach((account) => iiState.selectedInboxIds.add(account.id));
+        if (checked) automatedReceivingAccounts().forEach((account) => iiState.selectedInboxIds.add(account.id));
         else iiState.selectedInboxIds = new Set();
         renderInboxSourceSelector();
         renderTestInboxSelector();
@@ -5327,7 +5340,7 @@ merge_recipe_id, content_blueprint_id</pre>
     function updateAutomatedSummary() {
         const emails = iiState.automatedSelectedSourceIds.size || (manualAutomatedMessageReady() ? 1 : 0);
         const users = automatedSenderCount();
-        const recipients = iiState.selectedInboxIds.size;
+        const recipients = automatedSelectedInboxIds().size;
         const strategy = document.getElementById('automatedStrategyInput')?.value || 'distributed';
         const operations = strategy === 'full_matrix' ? emails * users * recipients : emails * users;
         const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
@@ -5436,7 +5449,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 service_account_ids: automatedServiceAccountPayload(selectedSenders),
                 list_id: document.getElementById('automatedWorkspaceListSelect')?.value || null,
                 max_per_account: perAccountRaw,
-                inbox_account_ids: [...iiState.selectedInboxIds],
+                inbox_account_ids: [...automatedSelectedInboxIds()],
                 strategy: summary.strategy,
                 inbox_threshold: document.getElementById('automatedInboxThresholdInput')?.value || 80,
                 spam_threshold: document.getElementById('automatedSpamThresholdInput')?.value || 40,
@@ -5727,7 +5740,7 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     function firstReceivingInboxAccount() {
-        return (iiState.imapAccounts || []).find(isReceivingImapAccount) || null;
+        return automatedReceivingAccounts()[0] || null;
     }
 
     function ensureFirstReceivingInboxSelected() {
