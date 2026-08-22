@@ -8113,13 +8113,13 @@ def _generate_unique_workspace_identity(existing_aliases_set):
     for _ in range(300):
         first_name = random.choice(first_names)
         last_name = random.choice(last_names)
-        clean_first = first_name.lower().replace("'", "").replace("-", "").replace(" ", "")
-        clean_last = last_name.lower().replace("'", "").replace("-", "").replace(" ", "")
+        clean_first = _latin_name_part(first_name).lower().replace("'", "").replace("-", "").replace(" ", "")
+        clean_last = _latin_name_part(last_name).lower().replace("'", "").replace("-", "").replace(" ", "")
         candidate_local = f"{clean_first}{clean_last}"
 
         if candidate_local not in existing_aliases_set:
             existing_aliases_set.add(candidate_local)
-            return first_name, last_name, candidate_local
+            return _latin_name_part(first_name), _latin_name_part(last_name), candidate_local
 
     fallback_last = ''.join(random.choices(string.ascii_uppercase, k=4))
     fallback_local = f"user{fallback_last.lower()}"
@@ -8277,8 +8277,30 @@ def _find_workspace_user_from_listed_users(service, account_name, user_key):
             return user, all_users
     return None, all_users
 
+def _collect_workspace_used_alias_locals(service, all_users):
+    used_aliases = set()
+    for existing_user in all_users or []:
+        primary_email = str(existing_user.get('primaryEmail') or '').strip().lower()
+        if '@' in primary_email:
+            used_aliases.add(primary_email.split('@', 1)[0])
+        aliases = (existing_user.get('aliases') or []) + (existing_user.get('nonEditableAliases') or [])
+        for alias_email in aliases:
+            alias_email = str(alias_email or '').strip().lower()
+            if '@' in alias_email:
+                used_aliases.add(alias_email.split('@', 1)[0])
+        if not primary_email:
+            continue
+        try:
+            alias_result = service.users().aliases().list(userKey=primary_email).execute()
+            for alias_item in alias_result.get('aliases', []):
+                alias_email = str(alias_item.get('alias') or '').strip().lower()
+                if '@' in alias_email:
+                    used_aliases.add(alias_email.split('@', 1)[0])
+        except Exception:
+            pass
+    return used_aliases
 
-def _randomize_one_workspace_user_identity(service, account_name, user_key, used_names):
+def _randomize_one_workspace_user_identity(service, account_name, user_key, used_aliases):
     user, all_users = _find_workspace_user_from_listed_users(service, account_name, user_key)
     if not user:
         raise ValueError(f"{user_key} was not found in the users visible to {account_name}.")
@@ -8294,18 +8316,15 @@ def _randomize_one_workspace_user_identity(service, account_name, user_key, used
             'error': 'Skipped admin account for safety'
         }
 
-    current_name = user.get('name') or {}
-    for existing_user in all_users:
-        existing_name = (existing_user.get('name') or {}).get('fullName')
-        if existing_name:
-            used_names.add(str(existing_name).lower())
-    if current_name.get('fullName'):
-        used_names.add(str(current_name.get('fullName')).lower())
-    new_first, new_last = _generate_us_latin_workspace_name(used_names)
+    domain = primary_email.split('@', 1)[1]
+    used_aliases.update(_collect_workspace_used_alias_locals(service, all_users))
+    new_first, new_last, new_local = _generate_unique_workspace_identity(used_aliases)
+    new_primary_email = f"{new_local}@{domain}"
 
     service.users().patch(
         userKey=primary_email,
         body={
+            'primaryEmail': new_primary_email,
             'name': {
                 'givenName': new_first,
                 'familyName': new_last
@@ -8315,9 +8334,9 @@ def _randomize_one_workspace_user_identity(service, account_name, user_key, used
 
     return {
         'user': primary_email,
-        'new_primary': primary_email,
+        'new_primary': new_primary_email,
         'new_name': f"{new_first} {new_last}",
-        'changed_field': 'name',
+        'changed_field': 'identity',
         'success': True
     }
 
@@ -8352,7 +8371,7 @@ def api_targeted_randomize_user_aliases():
         return jsonify({'success': False, 'error': '; '.join(item['error'] for item in resolution_failures[:5])})
 
     task_id = str(uuid.uuid4())
-    update_progress(task_id, 0, len(targets), "starting", "Initializing targeted name randomization...")
+    update_progress(task_id, 0, len(targets), "starting", "Initializing targeted identity randomization...")
 
     def background_task(task_id, account_targets, resolution_failures):
         with app.app_context():
@@ -8423,7 +8442,7 @@ def api_targeted_randomize_user_aliases():
                     update_progress(task_id, len(targets), len(targets), "completed", f"Auth Failed: {first_err}", result_data)
                     return
 
-                update_progress(task_id, 0, len(targets), "randomizing", f"Randomizing names for {len(targets)} selected user(s)...")
+                update_progress(task_id, 0, len(targets), "randomizing", f"Randomizing identities for {len(targets)} selected user(s)...")
 
                 def process_account_targets(account_name, user_keys):
                     with app.app_context():
@@ -8437,16 +8456,16 @@ def api_targeted_randomize_user_aliases():
                             'error': None,
                             'details': []
                         }
-                        used_names = set()
+                        used_aliases = set()
                         service = authenticated_accounts[account_name]['service']
 
                         for user_key in user_keys:
                             try:
-                                detail = _randomize_one_workspace_user_identity(service, account_name, user_key, used_names)
+                                detail = _randomize_one_workspace_user_identity(service, account_name, user_key, used_aliases)
                                 account_result['details'].append(detail)
                                 if detail.get('success'):
                                     account_result['aliases_added'] += 1
-                                    app.logger.info(f"[TARGETED IDENTITY] Updated {detail['user']} name -> {detail['new_name']}")
+                                    app.logger.info(f"[TARGETED IDENTITY] Updated {detail['user']} -> {detail['new_primary']} ({detail['new_name']})")
                                 elif detail.get('skipped'):
                                     account_result['skipped'] += 1
                                     app.logger.info(f"[TARGETED IDENTITY] Skipped {detail['user']}: {detail['error']}")
@@ -8493,8 +8512,8 @@ def api_targeted_randomize_user_aliases():
                     'results': all_results
                 }
 
-                update_progress(task_id, len(targets), len(targets), "completed", "Targeted name randomization finished!", final_result)
-                app.logger.info(f"[TARGETED ALIAS TASK {task_id}] COMPLETED — {total_aliases_added} names updated, {total_aliases_failed} failed, {total_skipped} skipped")
+                update_progress(task_id, len(targets), len(targets), "completed", "Targeted identity randomization finished!", final_result)
+                app.logger.info(f"[TARGETED ALIAS TASK {task_id}] COMPLETED — {total_aliases_added} identities updated, {total_aliases_failed} failed, {total_skipped} skipped")
 
             except Exception as e:
                 app.logger.error(f"[TARGETED ALIAS TASK {task_id}] CRASHED: {e}")
