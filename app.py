@@ -19,6 +19,7 @@ import hashlib
 import html as html_utils
 import hmac
 import ssl
+import quopri
 from email import message_from_bytes
 from email.header import decode_header, make_header
 from email.utils import parsedate_to_datetime, parseaddr, formatdate, make_msgid, formataddr
@@ -2738,6 +2739,18 @@ def _custom_content_type_is_multipart(header_text):
     content_type = _custom_header_value(header_text, 'Content-Type')
     return bool(re.search(r'^\s*multipart/', content_type or '', re.IGNORECASE))
 
+def _custom_content_type_main(header_text):
+    content_type = _custom_header_value(header_text, 'Content-Type')
+    return (content_type.split(';', 1)[0].strip().lower() if content_type else '')
+
+def _custom_content_transfer_encoding(header_text):
+    return (_custom_header_value(header_text, 'Content-Transfer-Encoding') or '').strip().lower()
+
+def _custom_content_charset(header_text):
+    content_type = _custom_header_value(header_text, 'Content-Type')
+    match = re.search(r'charset=["\']?([^"\';\s]+)', content_type or '', re.IGNORECASE)
+    return match.group(1) if match else 'utf-8'
+
 def _body_looks_like_mime_parts(body):
     body = body or ''
     return bool(
@@ -2753,16 +2766,37 @@ def _normalize_mime_boundary_delimiters(body, boundary):
     if not core:
         return body
     delimiter = f'--{boundary}'
-    pattern = re.compile(rf'(?m)^-+{re.escape(core)}(--)?[ \t]*$')
+    pattern = re.compile(rf'(?m)^(?:-+)?{re.escape(core)}(--)?[ \t]*$')
     return pattern.sub(lambda match: f'{delimiter}{match.group(1) or ""}', body)
 
 def _should_send_raw_custom_mime(custom_headers, html_body, text_body):
     boundary = _raw_mime_boundary(custom_headers)
     body = html_body or text_body or ''
+    if custom_headers and not _custom_content_type_is_multipart(custom_headers) and (
+        _custom_content_transfer_encoding(custom_headers) or _custom_content_type_main(custom_headers)
+    ):
+        return True
     if not boundary:
         return False
     normalized_body = _normalize_mime_boundary_delimiters(body, boundary)
     return bool(f'--{boundary}' in normalized_body or (_custom_content_type_is_multipart(custom_headers) and _body_looks_like_mime_parts(body)))
+
+def _body_for_declared_content_type(custom_headers, html_body, text_body):
+    content_type = _custom_content_type_main(custom_headers)
+    if content_type == 'text/plain':
+        return text_body if str(text_body or '').strip() else html_utils.unescape(re.sub(r'<[^>]+>', ' ', html_body or ''))
+    if content_type == 'text/html':
+        return html_body if str(html_body or '').strip() else html_utils.escape(text_body or '').replace('\n', '<br>\n')
+    return html_body if str(html_body or '').strip() else (text_body or '')
+
+def _encode_declared_mime_body(body, encoding, charset):
+    body_bytes = (body or '').encode(charset or 'utf-8', errors='replace')
+    encoding = (encoding or '').lower()
+    if encoding == 'quoted-printable':
+        return quopri.encodestring(body_bytes, quotetabs=True).replace(b'\n', b'\r\n')
+    if encoding == 'base64':
+        return base64.encodebytes(body_bytes).replace(b'\n', b'\r\n')
+    return body_bytes.replace(b'\r\n', b'\n').replace(b'\r', b'\n').replace(b'\n', b'\r\n')
 
 def _build_raw_custom_mime_bytes(sender, recipient, subject, html_body, text_body, test_identifier, custom_headers, sender_name=None):
     message_id = _custom_header_value(custom_headers, 'Message-ID') or make_msgid(idstring=test_identifier)
@@ -2783,9 +2817,17 @@ def _build_raw_custom_mime_bytes(sender, recipient, subject, html_body, text_bod
             header_lines.append(line)
     for name, value in _parse_custom_header_lines(custom_headers, sender, recipient, subject, test_identifier, message_id, sender_name):
         header_lines.append(f'{name}: {value}')
-    body = _replace_email_tokens(html_body or text_body or '', sender, recipient, subject, test_identifier, message_id, sender_name)
+    if _custom_content_type_is_multipart(custom_headers):
+        body = html_body or text_body or ''
+    else:
+        body = _body_for_declared_content_type(custom_headers, html_body, text_body)
+    body = _replace_email_tokens(body, sender, recipient, subject, test_identifier, message_id, sender_name)
     body = _normalize_mime_boundary_delimiters(body, _raw_mime_boundary(custom_headers))
-    return ('\r\n'.join(header_lines) + '\r\n\r\n' + body).encode('utf-8')
+    if _custom_content_type_is_multipart(custom_headers):
+        body_bytes = body.encode(_custom_content_charset(custom_headers), errors='replace')
+    else:
+        body_bytes = _encode_declared_mime_body(body, _custom_content_transfer_encoding(custom_headers), _custom_content_charset(custom_headers))
+    return ('\r\n'.join(header_lines) + '\r\n\r\n').encode('utf-8') + body_bytes
 
 def _apply_custom_headers(msg, header_text, sender, recipient, subject, test_identifier, sender_name=None):
     message_id = msg.get('Message-ID') or make_msgid(idstring=test_identifier)
