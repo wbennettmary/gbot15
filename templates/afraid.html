@@ -1322,13 +1322,12 @@ function generateManualSubdomains() {
     };
     const requested = Math.min(5000, Math.max(1, Number(countInput?.value || 0) || 0));
     if (!input || !requested) return;
-    const existing = getManualSubdomains();
-    const used = new Set(existing.map(label => label.trim().toLowerCase()).filter(Boolean));
+    const used = new Set();
     const generated = [];
     for (let index = 0; index < requested; index += 1) {
         generated.push(generateUniqueManualSubdomain(used, index, options));
     }
-    input.value = [...existing, ...generated].join('\n');
+    input.value = generated.join('\n');
     updateManualSubdomainsCount();
 }
 
