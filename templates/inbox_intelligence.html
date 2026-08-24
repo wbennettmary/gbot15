@@ -4141,6 +4141,7 @@ merge_recipe_id, content_blueprint_id</pre>
         automatedAiResultTestId: null,
         automatedAgentRun: null,
         automatedAgentResults: [],
+        automatedActiveSenderContext: [],
         agentSavedLists: [],
         userInboxTemplateNameResolver: null,
         aiAgentRunning: false,
@@ -6008,6 +6009,7 @@ merge_recipe_id, content_blueprint_id</pre>
             ...(cachedSetup.senders || []),
             ...(savedSetup.senders || []),
         ];
+        iiState.automatedActiveSenderContext = senders;
         if (!senders.length) return;
         const byEmail = {};
         (iiState.workspaceSenders || []).forEach((sender) => {
@@ -6306,6 +6308,9 @@ merge_recipe_id, content_blueprint_id</pre>
         let messages = [];
         if (listIds.length) {
             const select = document.getElementById('automatedWorkspaceListSelect');
+            if (!iiState.workspaceLists.length || !Array.from(select?.options || []).some((option) => option.value)) {
+                await loadWorkspaceLists();
+            }
             const firstList = listIds[0];
             const option = findAutomatedWorkspaceListOption(firstList);
             if (select && option) {
@@ -6358,13 +6363,15 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     async function startAiAgentFromChat() {
+        setAiAgentChatStatus('Starting AI Test Agent and applying setup...');
+        renderAiAgentState('loading', {message: 'Starting AI Test Agent', detail: 'Applying the selected list, template, and receiving inbox.'});
         const promptPaneActive = document.getElementById('aiAgentPromptPane')?.classList.contains('active');
         if (promptPaneActive && (document.getElementById('aiAgentPromptInput')?.value || '').trim()) {
             await applyAiAgentPrompt();
         } else {
             await applyAiAgentSetupToPage();
         }
-        await startAutomatedAiAgent();
+        await startAutomatedAiAgent({setupAlreadyApplied: true});
     }
 
     async function startAiAgentFromChatManual() {
@@ -7585,7 +7592,23 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     async function ensureAiAgentWorkspaceSelection(scope, perAccount) {
-        const listId = document.getElementById('automatedWorkspaceListSelect')?.value || '';
+        const listSelect = document.getElementById('automatedWorkspaceListSelect');
+        let listId = listSelect?.value || '';
+        if (!listId) {
+            const rawListInput = document.getElementById('aiAgentListIdsInput')?.value || '';
+            const listTokens = parseAiAgentListTokens(rawListInput);
+            if (listTokens.length) {
+                if (!iiState.workspaceLists.length || !Array.from(listSelect?.options || []).some((option) => option.value)) {
+                    await loadWorkspaceLists();
+                }
+                const option = findAutomatedWorkspaceListOption(listTokens[0]);
+                if (listSelect && option) {
+                    listSelect.value = option.value;
+                    listId = option.value;
+                    switchAutomatedWorkspaceSourceTab('list');
+                }
+            }
+        }
         if (selectedAutomatedSenderPayload().length) return;
         if (listId) {
             if (perAccount) {
@@ -7751,13 +7774,17 @@ merge_recipe_id, content_blueprint_id</pre>
         setAiAgentChatStatus(`AI Test Agent completed ${batches.length} account batch(es). Final lists are ready to copy.`, 'success');
     }
 
-    async function startAutomatedAiAgent() {
+    async function startAutomatedAiAgent(options = {}) {
         const status = document.getElementById('automatedStatusText');
         if (!II_AI_ENABLED) { renderAiAgentState('error', {message: iiAiDisabledHint()}); return; }
         try {
             iiState.aiAgentStopRequested = false;
             setAiAgentRunning(true);
-            if (document.getElementById('aiAgentChatDrawer')?.classList.contains('open')) {
+            setAiAgentChatStatus('Starting AI Test Agent and checking setup...');
+            renderAiAgentState('loading', {message: 'Starting AI Test Agent', detail: 'Checking list, users, template, and receiving inbox before sending.'});
+            if (status) status.textContent = 'AI Test Agent is starting...';
+            await new Promise((resolve) => requestAnimationFrame(resolve));
+            if (!options.setupAlreadyApplied && document.getElementById('aiAgentChatDrawer')?.classList.contains('open')) {
                 const promptPaneActive = document.getElementById('aiAgentPromptPane')?.classList.contains('active');
                 if (promptPaneActive && (document.getElementById('aiAgentPromptInput')?.value || '').trim()) {
                     await applyAiAgentPrompt();
@@ -10073,9 +10100,30 @@ merge_recipe_id, content_blueprint_id</pre>
             </div>`;
     }
 
+    function mergeSenderRecord(base = {}, next = {}) {
+        const merged = {...base};
+        Object.entries(next || {}).forEach(([key, value]) => {
+            if (value !== undefined && value !== null && String(value).trim() !== '') merged[key] = value;
+        });
+        return merged;
+    }
+
     function senderLookup(email) {
         const key = String(email || '').trim().toLowerCase();
-        return iiState.workspaceSenders.find((sender) => String(sender.email || '').toLowerCase() === key) || {};
+        if (!key) return {};
+        const candidates = [
+            ...(iiState.workspaceSenders || []),
+            ...(iiState.automatedActiveSenderContext || []),
+            ...cachedTestSenderContext(iiState.automatedSelectedTestId),
+            ...((cachedAutomatedSetupContext(iiState.automatedSelectedTestId).senders) || []),
+        ];
+        try {
+            candidates.push(...selectedAutomatedSenderPayload());
+        } catch (err) { /* selection helper may not be ready during early render */ }
+        return candidates.reduce((match, sender) => {
+            if (String(sender?.email || '').trim().toLowerCase() !== key) return match;
+            return mergeSenderRecord(match, {...sender, email: key});
+        }, {});
     }
 
     function cleanAdminAccountLabel(value) {
@@ -10089,7 +10137,11 @@ merge_recipe_id, content_blueprint_id</pre>
     function adminAccountLabelForSender(email) {
         const sender = senderLookup(email);
         const accountId = sender.service_account_id;
-        const account = accountId ? (iiState.serviceAccounts || []).find((item) => Number(item.id) === Number(accountId)) : null;
+        const accounts = [
+            ...(iiState.serviceAccounts || []),
+            ...(iiState.userInboxListAccounts || []),
+        ];
+        const account = accountId ? accounts.find((item) => Number(item.id) === Number(accountId)) : null;
         return cleanAdminAccountLabel(
             sender.service_account_admin_email ||
             account?.admin_email ||
