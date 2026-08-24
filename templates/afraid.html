@@ -106,12 +106,71 @@
     .afraid-list-card-actions {
         display: grid;
         gap: 8px;
-        grid-template-columns: minmax(180px, 1fr) auto;
-        min-width: min(100%, 360px);
+        grid-template-columns: minmax(210px, 1fr) auto;
+        min-width: min(100%, 430px);
     }
 
     .afraid-list-card-buttons {
         display: inline-flex;
+        gap: 6px;
+        justify-content: flex-end;
+    }
+
+    .afraid-list-icon-btn {
+        align-items: center;
+        border-radius: 9px;
+        display: inline-flex;
+        height: 34px;
+        justify-content: center;
+        padding: 0;
+        width: 34px;
+    }
+
+    .afraid-list-icon-btn i {
+        font-size: 13px;
+        line-height: 1;
+    }
+
+    .afraid-list-icon-btn.verify-all {
+        background: #ecfdf5;
+        border-color: #86efac;
+        color: #15803d;
+    }
+
+    .afraid-list-icon-btn.verify-specific {
+        background: #eff6ff;
+        border-color: #93c5fd;
+        color: #1d4ed8;
+    }
+
+    .afraid-list-icon-btn.copy-list {
+        background: #f8fafc;
+        border-color: #cbd5e1;
+        color: #334155;
+    }
+
+    .afraid-list-icon-btn.edit-list {
+        background: #fefce8;
+        border-color: #fde68a;
+        color: #a16207;
+    }
+
+    .afraid-list-icon-btn.delete-list {
+        background: #fef2f2;
+        border-color: #fecaca;
+        color: #b91c1c;
+    }
+
+    .afraid-specific-account-panel {
+        background: #f8fafc;
+        border: 1px solid #dbeafe;
+        border-radius: 12px;
+        display: none;
+        padding: 12px;
+    }
+
+    .afraid-specific-account-panel.is-visible {
+        display: block;
     }
 
     @media (max-width: 768px) {
@@ -126,6 +185,10 @@
         .afraid-list-card-actions {
             grid-template-columns: 1fr;
             width: 100%;
+        }
+
+        .afraid-list-card-buttons {
+            justify-content: flex-start;
         }
     }
 </style>
@@ -472,6 +535,20 @@
                             </div>
                         </div>
                     </div>
+                </div>
+
+                <div class="afraid-specific-account-panel mb-3" id="afraidSpecificAccountPanel">
+                    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-2">
+                        <div>
+                            <label for="afraidSpecificAccountsInput" class="form-label fw-semibold mb-1">Specific accounts from selected List Management source</label>
+                            <div class="form-text mt-0">Paste one account per line. Only accounts that exist in the selected list will be used.</div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="btnApplyAfraidSpecificAccounts">
+                            <i class="fas fa-filter me-1"></i>Apply accounts
+                        </button>
+                    </div>
+                    <textarea class="form-control font-monospace" id="afraidSpecificAccountsInput" rows="5" placeholder="admin@example.com&#10;service-account-name&#10;admin2@example.com"></textarea>
+                    <div class="form-text" id="afraidSpecificAccountsStatus">Paste accounts, then apply before starting.</div>
                 </div>
 
                 <div id="afraidExternalCfAlert" class="mb-3"></div>
@@ -1148,6 +1225,9 @@ let afraidExternalCfAccounts = [];
 let afraidWorkspaceListsLoaded = false;
 let afraidWorkspaceLists = [];
 let afraidExternalCfMergedSource = null;
+let afraidExternalCfSourceList = null;
+let afraidExternalCfSourceAccounts = [];
+let afraidExternalCfSpecificMode = false;
 let afraidExternalCfLogSeen = {};
 let afraidExternalCfStatusSeen = {};
 
@@ -1181,16 +1261,19 @@ async function loadAfraidLists() {
                                 ${renderAfraidWorkspaceListOptions()}
                             </select>
                             <div class="btn-group btn-group-sm afraid-list-card-buttons">
-                                <button class="btn btn-outline-success" onclick="openAfraidExternalCfModal(${lst.id}, {autoStart: true})" title="Add and verify domains">
+                                <button class="btn afraid-list-icon-btn verify-all" onclick="openAfraidExternalCfModal(${lst.id}, {autoStart: true})" title="Add and verify domains for all selected list accounts" aria-label="Add and verify domains for all selected list accounts">
                                     <i class="fas fa-cloud-upload-alt"></i>
                                 </button>
-                                <button class="btn btn-outline-secondary" onclick="copyAfraidList(${lst.id})" title="Copy list">
+                                <button class="btn afraid-list-icon-btn verify-specific" onclick="openAfraidExternalCfModal(${lst.id}, {specificAccounts: true})" title="Add and verify domains for pasted accounts only" aria-label="Add and verify domains for pasted accounts only">
+                                    <i class="fas fa-user-check"></i>
+                                </button>
+                                <button class="btn afraid-list-icon-btn copy-list" onclick="copyAfraidList(${lst.id})" title="Copy list" aria-label="Copy list">
                                     <i class="fas fa-copy"></i>
                                 </button>
-                                <button class="btn btn-outline-primary" onclick="editAfraidList(${lst.id})" title="Edit list">
+                                <button class="btn afraid-list-icon-btn edit-list" onclick="editAfraidList(${lst.id})" title="Edit list" aria-label="Edit list">
                                     <i class="fas fa-edit"></i>
                                 </button>
-                                <button class="btn btn-outline-danger" onclick="deleteAfraidList(${lst.id})" title="Delete list">
+                                <button class="btn afraid-list-icon-btn delete-list" onclick="deleteAfraidList(${lst.id})" title="Delete list" aria-label="Delete list">
                                     <i class="fas fa-trash"></i>
                                 </button>
                             </div>
@@ -1253,6 +1336,49 @@ function parseAfraidWorkspaceAccounts(rawAccounts) {
         accounts.push(account);
     });
     return accounts;
+}
+
+function parseAfraidSpecificAccountInput() {
+    const input = document.getElementById('afraidSpecificAccountsInput');
+    const accounts = [];
+    const seen = new Set();
+    String(input?.value || '').split('\n').forEach(line => {
+        const clean = line.trim();
+        if (!clean) return;
+        const account = clean.split(/[,\s]+/)[0].trim();
+        const key = account.toLowerCase();
+        if (!account || seen.has(key)) return;
+        seen.add(key);
+        accounts.push(account);
+    });
+    return accounts;
+}
+
+function normalizeAfraidAccountKey(value) {
+    return String(value || '').trim().toLowerCase();
+}
+
+function filterAfraidSpecificAccounts(pastedAccounts, sourceAccounts) {
+    const sourceMap = new Map();
+    (sourceAccounts || []).forEach(account => {
+        sourceMap.set(normalizeAfraidAccountKey(account), account);
+    });
+    const matched = [];
+    const unmatched = [];
+    pastedAccounts.forEach(account => {
+        const match = sourceMap.get(normalizeAfraidAccountKey(account));
+        if (match) matched.push(match);
+        else unmatched.push(account);
+    });
+    return {matched, unmatched};
+}
+
+function updateAfraidSpecificAccountsStatus(message, tone = 'muted') {
+    const status = document.getElementById('afraidSpecificAccountsStatus');
+    if (!status) return;
+    const className = tone === 'danger' ? 'text-danger' : tone === 'success' ? 'text-success' : 'text-muted';
+    status.className = `form-text ${className}`;
+    status.textContent = message;
 }
 
 async function loadAfraidExternalCfAccounts() {
@@ -1322,10 +1448,13 @@ async function openAfraidExternalCfModal(id, options = {}) {
     await loadAfraidExternalCfAccounts();
     const workspaceList = getAfraidCardSelectedWorkspaceList(id);
     const workspaceAccounts = workspaceList ? parseAfraidWorkspaceAccounts(workspaceList.raw_accounts) : [];
+    afraidExternalCfSourceList = list;
+    afraidExternalCfSourceAccounts = workspaceAccounts;
+    afraidExternalCfSpecificMode = Boolean(options.specificAccounts);
     afraidExternalCfMergedSource = workspaceList
         ? {id: workspaceList.id, name: workspaceList.name, accountCount: workspaceAccounts.length}
         : null;
-    afraidExternalCfEntries = parseAfraidExternalCfRows(list, workspaceAccounts);
+    afraidExternalCfEntries = parseAfraidExternalCfRows(list, afraidExternalCfSpecificMode ? [] : workspaceAccounts);
     afraidExternalCfJobId = null;
     afraidExternalCfLogSeen = {};
     afraidExternalCfStatusSeen = {};
@@ -1334,7 +1463,9 @@ async function openAfraidExternalCfModal(id, options = {}) {
         afraidExternalCfPollInterval = null;
     }
     document.getElementById('afraidExternalCfModalSubtitle').textContent =
-        `${list.name}: ${afraidExternalCfEntries.length} saved row(s) prepared as account,afraiddomain,cloudflaredomain.`;
+        afraidExternalCfSpecificMode
+            ? `${list.name}: paste specific accounts from ${workspaceList ? workspaceList.name : 'the selected List Management source'} to prepare account,afraiddomain,cloudflaredomain rows.`
+            : `${list.name}: ${afraidExternalCfEntries.length} saved row(s) prepared as account,afraiddomain,cloudflaredomain.`;
     document.getElementById('afraidExternalCfParsedCount').textContent = afraidExternalCfEntries.length;
     document.getElementById('afraidExternalCfDoneCount').textContent = '0';
     const accountSelect = document.getElementById('afraidExternalCfAccount');
@@ -1342,14 +1473,26 @@ async function openAfraidExternalCfModal(id, options = {}) {
         ? `<option value="">Merged from ${escapeHtml(afraidExternalCfMergedSource.name)} (${afraidExternalCfMergedSource.accountCount} accounts)</option>`
         : renderAfraidExternalCfAccountOptions();
     accountSelect.value = '';
-    accountSelect.disabled = Boolean(afraidExternalCfMergedSource);
-    document.getElementById('afraidExternalCfLog').textContent = afraidExternalCfMergedSource
-        ? `Merged ${afraidExternalCfMergedSource.accountCount} account(s) from ${afraidExternalCfMergedSource.name} with ${afraidExternalCfEntries.length} AFRAID row(s). Ready to start.`
-        : 'Parsed saved list. Select a List Management account source from the card, or choose one Workspace account here.';
+    accountSelect.disabled = Boolean(afraidExternalCfMergedSource) || afraidExternalCfSpecificMode;
+    const specificPanel = document.getElementById('afraidSpecificAccountPanel');
+    const specificInput = document.getElementById('afraidSpecificAccountsInput');
+    if (specificPanel) specificPanel.classList.toggle('is-visible', afraidExternalCfSpecificMode);
+    if (specificInput) specificInput.value = '';
+    updateAfraidSpecificAccountsStatus('Paste accounts, then apply before starting.');
+    document.getElementById('afraidExternalCfLog').textContent = afraidExternalCfSpecificMode
+        ? `Specific-account mode for ${list.name}. Paste accounts from ${workspaceList ? workspaceList.name : 'the selected list'} and apply them before starting.`
+        : afraidExternalCfMergedSource
+            ? `Merged ${afraidExternalCfMergedSource.accountCount} account(s) from ${afraidExternalCfMergedSource.name} with ${afraidExternalCfEntries.length} AFRAID row(s). Ready to start.`
+            : 'Parsed saved list. Select a List Management account source from the card, or choose one Workspace account here.';
     showAfraidExternalCfAlert('', 'secondary');
     renderAfraidExternalCfTable(afraidExternalCfEntries);
     setAfraidExternalCfRunning(false);
     bootstrap.Modal.getOrCreateInstance(document.getElementById('afraidExternalCfModal')).show();
+    if (afraidExternalCfSpecificMode && !afraidExternalCfMergedSource) {
+        showAfraidExternalCfAlert('Select a List Management account source from the saved-list card, then paste the specific accounts to process.', 'warning');
+        updateAfraidSpecificAccountsStatus('Select a List Management source on the saved-list card first.', 'danger');
+        return;
+    }
     if (options.autoStart) {
         if (!afraidExternalCfMergedSource) {
             showAfraidExternalCfAlert('Select a List Management account list from the card dropdown before using Add and verify domains.', 'warning');
@@ -1386,6 +1529,47 @@ function renderAfraidExternalCfTable(entries) {
     `).join('');
 }
 
+function applyAfraidExternalCfSpecificAccounts() {
+    if (!afraidExternalCfSpecificMode) return true;
+    if (!afraidExternalCfSourceList) {
+        showAfraidExternalCfAlert('No Afraid list is loaded for this modal.', 'warning');
+        return false;
+    }
+    if (!afraidExternalCfMergedSource || !afraidExternalCfSourceAccounts.length) {
+        showAfraidExternalCfAlert('Select a List Management account source from the card before using specific accounts.', 'warning');
+        updateAfraidSpecificAccountsStatus('Select a List Management source on the saved-list card first.', 'danger');
+        return false;
+    }
+    const pasted = parseAfraidSpecificAccountInput();
+    if (!pasted.length) {
+        showAfraidExternalCfAlert('Paste at least one account to use specific-account mode.', 'warning');
+        updateAfraidSpecificAccountsStatus('Paste at least one account.', 'danger');
+        return false;
+    }
+    const {matched, unmatched} = filterAfraidSpecificAccounts(pasted, afraidExternalCfSourceAccounts);
+    if (unmatched.length) {
+        const preview = unmatched.slice(0, 5).join(', ');
+        showAfraidExternalCfAlert(`Some pasted accounts are not in the selected List Management source: ${preview}`, 'warning');
+        updateAfraidSpecificAccountsStatus(`${unmatched.length} pasted account(s) were not found in ${afraidExternalCfMergedSource.name}.`, 'danger');
+        return false;
+    }
+    if (!matched.length) {
+        showAfraidExternalCfAlert('No pasted accounts matched the selected List Management source.', 'warning');
+        updateAfraidSpecificAccountsStatus('No matching accounts found.', 'danger');
+        return false;
+    }
+    afraidExternalCfEntries = parseAfraidExternalCfRows(afraidExternalCfSourceList, matched);
+    document.getElementById('afraidExternalCfParsedCount').textContent = afraidExternalCfEntries.length;
+    document.getElementById('afraidExternalCfDoneCount').textContent = '0';
+    renderAfraidExternalCfTable(afraidExternalCfEntries);
+    updateAfraidSpecificAccountsStatus(`${matched.length} specific account(s) applied from ${afraidExternalCfMergedSource.name}.`, 'success');
+    showAfraidExternalCfAlert(`${matched.length} specific account(s) applied. Ready to start verification.`, 'success');
+    logAfraidExternalCf(`Applied ${matched.length} specific account(s): ${matched.join(', ')}`);
+    return true;
+}
+
+document.getElementById('btnApplyAfraidSpecificAccounts')?.addEventListener('click', applyAfraidExternalCfSpecificAccounts);
+
 function updateAfraidExternalCfTable(entries) {
     let done = 0;
     entries.forEach(entry => {
@@ -1420,6 +1604,9 @@ function getAfraidExternalCfStatusBadge(status) {
 
 async function startAfraidExternalCfVerification() {
     const account = document.getElementById('afraidExternalCfAccount').value.trim();
+    if (afraidExternalCfSpecificMode && !applyAfraidExternalCfSpecificAccounts()) {
+        return;
+    }
     const validEntries = afraidExternalCfEntries.filter(entry => entry.externalDomain && entry.cloudflareDomain);
     const missingAccounts = validEntries.filter(entry => !entry.account);
     if (!afraidExternalCfMergedSource && !account) {
