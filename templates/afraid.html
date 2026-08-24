@@ -372,15 +372,21 @@
                             </div>
                         </div>
                         <div class="mb-3">
-                            <div class="d-flex justify-content-between align-items-end gap-3 flex-wrap mb-2">
+                            <div class="d-flex align-items-end gap-2 flex-wrap mb-2">
                                 <label for="manualSubdomainsInput" class="form-label fw-semibold mb-0">Manual Subdomains</label>
-                                <div class="d-flex align-items-center gap-2 flex-wrap">
-                                    <label for="manualSubdomainGenerateCount" class="form-label small text-muted mb-0">Generate</label>
-                                    <input type="number" class="form-control form-control-sm" id="manualSubdomainGenerateCount" min="1" max="5000" value="25" style="width: 96px;">
-                                    <button type="button" class="btn btn-sm btn-outline-primary" id="btnGenerateManualSubdomains">
-                                        <svg class="afraid-svg-icon me-1"><use href="#afraid-icon-wand"></use></svg>Generate
-                                    </button>
-                                </div>
+                                <label for="manualSubdomainGenerateCount" class="form-label small text-muted mb-0 ms-auto">Generate</label>
+                                <input type="number" class="form-control form-control-sm" id="manualSubdomainGenerateCount" min="1" max="5000" value="25" style="width: 96px;">
+                                <label class="form-check form-check-inline small mb-1">
+                                    <input class="form-check-input" type="checkbox" id="manualSubdomainAllowDots">
+                                    <span class="form-check-label">with dots</span>
+                                </label>
+                                <label class="form-check form-check-inline small mb-1">
+                                    <input class="form-check-input" type="checkbox" id="manualSubdomainAllowHyphens">
+                                    <span class="form-check-label">with -</span>
+                                </label>
+                                <button type="button" class="btn btn-sm btn-primary" id="btnGenerateManualSubdomains">
+                                    <svg class="afraid-svg-icon me-1"><use href="#afraid-icon-wand"></use></svg>Generate
+                                </button>
                             </div>
                             <textarea class="form-control font-monospace" id="manualSubdomainsInput" rows="5" placeholder="mail&#10;shop&#10;support"></textarea>
                             <div class="form-text" id="manualSubdomainsCount">0 manual subdomains</div>
@@ -1165,31 +1171,51 @@ const afraidSubdomainWordPool = [
     'atlas','bridge','signal','harbor','summit','anchor','matrix','vertex','nova','orbit','pulse','copper','silver','granite','maple','cedar','river','meadow','field','stone','bright','rapid','clear','steady','prime','north','south','east','west','metro','urban','rural','forest','valley','ridge','canyon','cloud','storm','rain','sun','lunar','solar','ember','flint','slate','coral','amber','jade','onyx','opal','pearl','ruby','sierra','delta','echo','foxtrot','gamma','omega','alpha','vector','relay','proxy','portal','kernel','canvas','thread','pilot','engine','rocket','beacon','magnet','signalbox','mailhub','postline','inboxer','sendgrid','relaybox','dispatch','courier','parcel','packet','stream','pipeline','garden','market','station','office','studio','lab','works','craft','forge','mill','tower','haven','landing','source','native','public','secure','trust','shield','vault','tempo','motion','spark','flame','glow','wave','drift','breeze','trail','path','route','lane','vista','horizon','summitline','clearing','prairie','brook','creek','branch','leaf','root','sprout','seed','harvest','orchard','grove','timber','marble','carbon','iron','nickel','quartz','topaz','cobalt','indigo','violet','scarlet','crimson','golden','ivory','arctic','pacific','atlantic','central','coastal','desert','highland','lowland','midtown','uptown','downtown','crossing','junction','terminal','gateway','node','cluster','origin','corner','square','circle','triangle','apex','zenith','nimbus','stratus','aurora','comet','meteor','nebula','cosmos','saturn','mercury','neptune','apollo','meridian','compass','radar','sonar','optic','prism','lens','focus','pixel','vectorial','binary','cipher','ledger','record','archive','index','queue','stack','cache','buffer','socket','router','switch','server','client','host','domain','zone','record'
 ];
 
-function cleanGeneratedSubdomainLabel(value) {
+function cleanGeneratedSubdomainSegment(value, allowHyphens = false) {
+    const pattern = allowHyphens ? /[^a-z0-9-]/g : /[^a-z0-9]/g;
     return String(value || '')
         .toLowerCase()
-        .replace(/[^a-z0-9-]/g, '')
+        .replace(pattern, '')
         .replace(/^-+|-+$/g, '')
         .slice(0, 63);
 }
 
-function buildGeneratedSubdomainCandidate(index) {
+function cleanGeneratedSubdomainLabel(value, options = {}) {
+    const allowDots = Boolean(options.allowDots);
+    const allowHyphens = Boolean(options.allowHyphens);
+    if (allowDots) {
+        return String(value || '')
+            .split('.')
+            .map(part => cleanGeneratedSubdomainSegment(part, allowHyphens))
+            .filter(Boolean)
+            .join('.')
+            .slice(0, 253)
+            .replace(/^\.+|\.+$/g, '');
+    }
+    return cleanGeneratedSubdomainSegment(value, allowHyphens);
+}
+
+function joinGeneratedSubdomainWords(words, options = {}) {
+    const allowDots = Boolean(options.allowDots);
+    const allowHyphens = Boolean(options.allowHyphens);
+    if (allowDots && allowHyphens) return `${words[0]}-${words[1]}.${words[2]}`;
+    if (allowDots) return `${words[0]}${words[1]}.${words[2]}`;
+    if (allowHyphens) return `${words[0]}-${words[1]}-${words[2]}`;
+    return words.join('');
+}
+
+function buildGeneratedSubdomainCandidate(index, options = {}) {
     const words = afraidSubdomainWordPool;
     const first = words[Math.floor(Math.random() * words.length)];
     const second = words[Math.floor(Math.random() * words.length)];
     const third = words[Math.floor(Math.random() * words.length)];
-    const patterns = [
-        `${first}${second}`,
-        `${first}-${second}`,
-        `${first}${second}${third}`,
-        `${first}-${second}-${third}`
-    ];
-    return cleanGeneratedSubdomainLabel(patterns[index % patterns.length]);
+    const compact = joinGeneratedSubdomainWords([first, second, third], options);
+    return cleanGeneratedSubdomainLabel(compact, options);
 }
 
-function generateUniqueManualSubdomain(usedLabels, index) {
+function generateUniqueManualSubdomain(usedLabels, index, options = {}) {
     for (let attempt = 0; attempt < 500; attempt += 1) {
-        const candidate = buildGeneratedSubdomainCandidate(index + attempt);
+        const candidate = buildGeneratedSubdomainCandidate(index + attempt, options);
         if (candidate && !usedLabels.has(candidate)) {
             usedLabels.add(candidate);
             return candidate;
@@ -1209,13 +1235,17 @@ function generateUniqueManualSubdomain(usedLabels, index) {
 function generateManualSubdomains() {
     const input = document.getElementById('manualSubdomainsInput');
     const countInput = document.getElementById('manualSubdomainGenerateCount');
+    const options = {
+        allowDots: Boolean(document.getElementById('manualSubdomainAllowDots')?.checked),
+        allowHyphens: Boolean(document.getElementById('manualSubdomainAllowHyphens')?.checked)
+    };
     const requested = Math.min(5000, Math.max(1, Number(countInput?.value || 0) || 0));
     if (!input || !requested) return;
-    const existing = getManualSubdomains().map(cleanGeneratedSubdomainLabel).filter(Boolean);
-    const used = new Set(existing);
+    const existing = getManualSubdomains();
+    const used = new Set(existing.map(label => label.trim().toLowerCase()).filter(Boolean));
     const generated = [];
     for (let index = 0; index < requested; index += 1) {
-        generated.push(generateUniqueManualSubdomain(used, index));
+        generated.push(generateUniqueManualSubdomain(used, index, options));
     }
     input.value = [...existing, ...generated].join('\n');
     updateManualSubdomainsCount();

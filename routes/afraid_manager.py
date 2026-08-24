@@ -590,8 +590,9 @@ def normalize_subdomain_label(value, base_domain=None):
     label = label.strip('.')
     if not label:
         return ''
-    if not re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?', label):
-        raise ValueError(f"Invalid subdomain '{value}'. Use one label per line, using only letters, numbers, and hyphens.")
+    label_pattern = r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?'
+    if not re.fullmatch(rf'{label_pattern}(?:\.{label_pattern})*', label):
+        raise ValueError(f"Invalid subdomain '{value}'. Use DNS-safe labels with letters, numbers, hyphens, and optional dots.")
     return label
 
 def parse_manual_subdomain_labels(values):
