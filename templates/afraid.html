@@ -221,6 +221,86 @@
         box-shadow: inset 0 0 0 1px #fecaca;
     }
 
+    .manual-subdomain-header {
+        align-items: center;
+        display: flex;
+        gap: 12px;
+        justify-content: space-between;
+        margin-bottom: 10px;
+    }
+
+    .manual-subdomain-tools {
+        align-items: center;
+        display: flex;
+        flex: 0 0 auto;
+        gap: 8px;
+        justify-content: flex-end;
+        overflow-x: auto;
+        padding-bottom: 1px;
+        white-space: nowrap;
+    }
+
+    .manual-subdomain-count {
+        flex: 0 0 104px;
+        min-height: 36px;
+        width: 104px;
+    }
+
+    .manual-subdomain-toggle {
+        align-items: center;
+        background: #f8fafc;
+        border: 1px solid #dbe4f0;
+        border-radius: 10px;
+        color: #334155;
+        cursor: pointer;
+        display: inline-flex;
+        flex: 0 0 auto;
+        gap: 7px;
+        min-height: 36px;
+        padding: 7px 10px;
+        transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease, color .15s ease;
+    }
+
+    .manual-subdomain-toggle .form-check-input {
+        border-color: #94a3b8;
+        box-shadow: none;
+        cursor: pointer;
+        height: 16px;
+        margin: 0;
+        width: 16px;
+    }
+
+    .manual-subdomain-toggle .form-check-input:checked {
+        background-color: #2563eb;
+        border-color: #2563eb;
+        box-shadow: inset 0 0 0 2px #2563eb, 0 0 0 3px rgba(37, 99, 235, 0.16);
+    }
+
+    .manual-subdomain-toggle:has(.form-check-input:checked) {
+        background: #eff6ff;
+        border-color: #93c5fd;
+        box-shadow: 0 8px 20px rgba(37, 99, 235, 0.12);
+        color: #1d4ed8;
+    }
+
+    .manual-subdomain-toggle span {
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1;
+    }
+
+    .manual-subdomain-generate {
+        align-items: center;
+        box-shadow: 0 10px 20px rgba(37, 99, 235, 0.22);
+        display: inline-flex;
+        flex: 0 0 auto;
+        font-weight: 700;
+        gap: 6px;
+        min-height: 36px;
+        padding-left: 14px;
+        padding-right: 14px;
+    }
+
     .afraid-card-account-select {
         border-color: #dbe3ef;
         border-radius: 9px;
@@ -372,21 +452,22 @@
                             </div>
                         </div>
                         <div class="mb-3">
-                            <div class="d-flex align-items-end gap-2 flex-wrap mb-2">
+                            <div class="manual-subdomain-header">
                                 <label for="manualSubdomainsInput" class="form-label fw-semibold mb-0">Manual Subdomains</label>
-                                <label for="manualSubdomainGenerateCount" class="form-label small text-muted mb-0 ms-auto">Generate</label>
-                                <input type="number" class="form-control form-control-sm" id="manualSubdomainGenerateCount" min="1" max="5000" value="25" style="width: 96px;">
-                                <label class="form-check form-check-inline small mb-1">
-                                    <input class="form-check-input" type="checkbox" id="manualSubdomainAllowDots">
-                                    <span class="form-check-label">with dots</span>
-                                </label>
-                                <label class="form-check form-check-inline small mb-1">
-                                    <input class="form-check-input" type="checkbox" id="manualSubdomainAllowHyphens">
-                                    <span class="form-check-label">with -</span>
-                                </label>
-                                <button type="button" class="btn btn-sm btn-primary" id="btnGenerateManualSubdomains">
-                                    <svg class="afraid-svg-icon me-1"><use href="#afraid-icon-wand"></use></svg>Generate
-                                </button>
+                                <div class="manual-subdomain-tools" aria-label="Manual subdomain generator controls">
+                                    <input type="number" class="form-control form-control-sm manual-subdomain-count" id="manualSubdomainGenerateCount" min="1" max="5000" value="25" aria-label="Number of subdomains to generate">
+                                    <label class="manual-subdomain-toggle" for="manualSubdomainAllowDots">
+                                        <input class="form-check-input" type="checkbox" id="manualSubdomainAllowDots">
+                                        <span>with dots</span>
+                                    </label>
+                                    <label class="manual-subdomain-toggle" for="manualSubdomainAllowHyphens">
+                                        <input class="form-check-input" type="checkbox" id="manualSubdomainAllowHyphens">
+                                        <span>with -</span>
+                                    </label>
+                                    <button type="button" class="btn btn-sm btn-primary manual-subdomain-generate" id="btnGenerateManualSubdomains">
+                                        <svg class="afraid-svg-icon"><use href="#afraid-icon-wand"></use></svg>Generate
+                                    </button>
+                                </div>
                             </div>
                             <textarea class="form-control font-monospace" id="manualSubdomainsInput" rows="5" placeholder="mail&#10;shop&#10;support"></textarea>
                             <div class="form-text" id="manualSubdomainsCount">0 manual subdomains</div>
