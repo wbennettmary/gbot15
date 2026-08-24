@@ -6186,14 +6186,25 @@ merge_recipe_id, content_blueprint_id</pre>
     function findAutomatedWorkspaceListOption(token) {
         const select = document.getElementById('automatedWorkspaceListSelect');
         if (!select || !token) return null;
-        const needle = String(token).trim().toLowerCase();
-        const workspaceList = (iiState.workspaceLists || []).find((list) => {
-            const name = String(list.name || '').trim().toLowerCase();
-            const id = String(list.id || '').trim().toLowerCase();
-            return name === needle || id === needle;
-        });
+        const rawNeedle = String(token).trim();
+        const needle = rawNeedle.toLowerCase();
+        const lists = iiState.workspaceLists || [];
+        const optionForList = (list) => Array.from(select.options).find((option) => String(option.value) === String(list.id)) || null;
+        const exactName = lists.find((list) => String(list.name || '').trim().toLowerCase() === needle);
+        if (exactName) return optionForList(exactName);
+        const numericNeedle = rawNeedle.match(/^\d+$/) ? rawNeedle.replace(/^0+/, '') || '0' : '';
+        const workspaceList = numericNeedle
+            ? lists.find((list) => {
+                const name = String(list.name || '').trim().toLowerCase();
+                return new RegExp(`(^|\\D)0*${numericNeedle}(\\D|$)`).test(name);
+            })
+            : lists.find((list) => String(list.name || '').trim().toLowerCase().includes(needle));
         if (workspaceList) {
-            return Array.from(select.options).find((option) => String(option.value) === String(workspaceList.id)) || null;
+            return optionForList(workspaceList);
+        }
+        const exactId = lists.find((list) => String(list.id || '').trim().toLowerCase() === needle);
+        if (exactId) {
+            return optionForList(exactId);
         }
         return Array.from(select.options).find((option) => {
             const value = String(option.value || '').toLowerCase();
