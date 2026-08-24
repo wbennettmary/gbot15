@@ -3060,6 +3060,7 @@ The NightOwl Ranch Team</textarea>
                         <div class="ii-pro-tabs">
                             <button class="ii-pro-tab active" type="button" data-auto-source-tab="list" onclick="switchAutomatedWorkspaceSourceTab('list')">List Management Source</button>
                             <button class="ii-pro-tab" type="button" data-auto-source-tab="manual" onclick="switchAutomatedWorkspaceSourceTab('manual')">Manual Account Lookup</button>
+                            <button class="ii-pro-tab" type="button" data-auto-source-tab="name_test" onclick="switchAutomatedWorkspaceSourceTab('name_test')">Name-change Test Users</button>
                         </div>
                         <div class="ii-workspace-source-pane" id="automatedListSourcePane">
                             <div class="ii-row mb-2">
@@ -3072,6 +3073,16 @@ The NightOwl Ranch Team</textarea>
                             <div class="ii-row mb-2">
                             <input class="ii-input" id="automatedWorkspaceAccountSearchInput" placeholder="Search account name, admin email, or client email">
                             <button class="ii-btn" type="button" onclick="searchAutomatedWorkspaceAccounts()"><i class="fas fa-search"></i> Search</button>
+                            </div>
+                        </div>
+                        <div class="ii-workspace-source-pane" id="automatedNameTestSourcePane" style="display:none;">
+                            <div class="ii-field">
+                                <label>Name-change test users</label>
+                                <textarea class="ii-textarea" id="automatedNameTestUsersInput" placeholder="admin@example.com,user1&#10;admin2@example.com: changeduser@domain.com" oninput="updateNameTestUserPreview()"></textarea>
+                            </div>
+                            <div class="ii-row justify-content-between mt-2">
+                                <div class="ii-muted" id="automatedNameTestUserPreview">One user per line. Use <code>account,user</code> or <code>account: user</code>.</div>
+                                <button class="ii-btn ii-btn-primary" type="button" onclick="applyAutomatedNameTestUsers()"><i class="fas fa-user-check"></i> Apply test users</button>
                             </div>
                         </div>
                         <div id="automatedServiceAccountSelector" class="ii-auto-source-active ii-muted">Search saved Workspace service accounts or choose a List Management source.</div>
@@ -4173,6 +4184,7 @@ merge_recipe_id, content_blueprint_id</pre>
         editingUserInboxTemplateId: null,
         selectedServiceAccountIds: new Set(),
         selectedSenderEmails: new Set(),
+        automatedNameTestUserRows: [],
         selectedInboxIds: new Set(),
         activeExplorerFolder: '',
         automatedQueue: [],
@@ -5954,7 +5966,9 @@ merge_recipe_id, content_blueprint_id</pre>
             .filter((sender) => !isAdminWorkspaceSender(sender)).length;
         const selectedAccounts = iiState.automatedActiveSourceTab === 'list'
             ? (iiState.selectedUserInboxListAccountIds?.size || 0)
-            : (iiState.selectedServiceAccountIds?.size || 0);
+            : iiState.automatedActiveSourceTab === 'name_test'
+                ? new Set(iiState.workspaceSenders.filter((sender) => iiState.selectedSenderEmails.has(sender.email)).map((sender) => sender.service_account_id).filter(Boolean)).size
+                : (iiState.selectedServiceAccountIds?.size || 0);
         const perAccountRaw = (document.getElementById('automatedUsersPerAccountInput')?.value || '').trim();
         const perAccount = perAccountRaw ? Math.max(1, parseInt(perAccountRaw, 10) || 1) : null;
         if (perAccount && selectedAccounts) {
@@ -5971,7 +5985,10 @@ merge_recipe_id, content_blueprint_id</pre>
         const operations = strategy === 'full_matrix' ? emails * users * recipients : emails * users;
         const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
         setText('autoStepEmails', iiState.automatedSelectedSourceIds.size ? `${iiState.automatedSelectedSourceIds.size} selected` : (emails ? 'manual message' : '0 selected'));
-        setText('autoStepSources', `${(iiState.selectedUserInboxListAccountIds?.size || iiState.selectedServiceAccountIds?.size || 0)} sources`);
+        const sourceCount = iiState.automatedActiveSourceTab === 'name_test'
+            ? new Set(iiState.workspaceSenders.filter((sender) => iiState.selectedSenderEmails.has(sender.email)).map((sender) => sender.service_account_id).filter(Boolean)).size
+            : (iiState.selectedUserInboxListAccountIds?.size || iiState.selectedServiceAccountIds?.size || 0);
+        setText('autoStepSources', `${sourceCount} sources`);
         setText('autoStepUsers', `${users} users`);
         setText('autoStepInboxes', `${recipients} inboxes`);
         setText('autoStepOps', `${operations} operations`);
@@ -6081,7 +6098,8 @@ merge_recipe_id, content_blueprint_id</pre>
                 source_ids: [...iiState.automatedSelectedSourceIds],
                 senders: selectedSenders,
                 service_account_ids: automatedServiceAccountPayload(selectedSenders),
-                list_id: document.getElementById('automatedWorkspaceListSelect')?.value || null,
+                list_id: iiState.automatedActiveSourceTab === 'list' ? (document.getElementById('automatedWorkspaceListSelect')?.value || null) : null,
+                workspace_source_mode: iiState.automatedActiveSourceTab,
                 max_per_account: perAccountRaw,
                 inbox_account_ids: [...automatedSelectedInboxIds()],
                 strategy: summary.strategy,
@@ -6259,6 +6277,7 @@ merge_recipe_id, content_blueprint_id</pre>
     function switchAutomatedWorkspaceSourceTab(tab) {
         const listPane = document.getElementById('automatedListSourcePane');
         const manualPane = document.getElementById('automatedManualSourcePane');
+        const nameTestPane = document.getElementById('automatedNameTestSourcePane');
         if (iiState.automatedActiveSourceTab !== tab) {
             clearAutomatedWorkspaceSelection();
             iiState.automatedActiveSourceTab = tab;
@@ -6266,15 +6285,22 @@ merge_recipe_id, content_blueprint_id</pre>
         document.querySelectorAll('[data-auto-source-tab]').forEach((btn) => btn.classList.toggle('active', btn.dataset.autoSourceTab === tab));
         if (listPane) listPane.style.display = tab === 'list' ? '' : 'none';
         if (manualPane) manualPane.style.display = tab === 'manual' ? '' : 'none';
+        if (nameTestPane) nameTestPane.style.display = tab === 'name_test' ? '' : 'none';
         const status = document.getElementById('automatedWorkspaceStatus');
-        if (status) status.textContent = tab === 'list'
-            ? 'Select a List Management source, set Users per account, then Retrieve List.'
-            : 'Search saved Workspace service accounts, retrieve users, then apply Users per account.';
+        if (status) {
+            status.textContent = tab === 'list'
+                ? 'Select a List Management source, set Users per account, then Retrieve List.'
+                : tab === 'name_test'
+                    ? 'Paste exact admin,user rows for name-change testing, then apply them.'
+                    : 'Search saved Workspace service accounts, retrieve users, then apply Users per account.';
+        }
+        if (tab === 'name_test') updateNameTestUserPreview();
     }
 
     function clearAutomatedWorkspaceSelection() {
         iiState.selectedServiceAccountIds = new Set();
         iiState.selectedSenderEmails = new Set();
+        iiState.automatedNameTestUserRows = [];
         iiState.userInboxListAccounts = [];
         iiState.userInboxListAccountOnly = false;
         iiState.selectedUserInboxListAccountIds = new Set();
@@ -6282,6 +6308,97 @@ merge_recipe_id, content_blueprint_id</pre>
         renderAutomatedServiceAccountSelector();
         renderAutomatedWorkspaceUsers();
         updateAutomatedSummary();
+    }
+
+    function parseAutomatedNameTestUserLines() {
+        const raw = document.getElementById('automatedNameTestUsersInput')?.value || '';
+        const rows = [];
+        const errors = [];
+        const seen = new Set();
+        raw.split(/\r?\n/).forEach((rawLine, index) => {
+            const line = rawLine.trim();
+            if (!line) return;
+            const match = line.match(/^([^,:]+)\s*(?:,|:)\s*(.+)$/);
+            if (!match) {
+                errors.push(`Line ${index + 1}: use account,user or account: user`);
+                return;
+            }
+            const account = (match[1] || '').trim().toLowerCase();
+            const user = (match[2] || '').trim().toLowerCase();
+            if (!account || !user) {
+                errors.push(`Line ${index + 1}: account and user are required`);
+                return;
+            }
+            const key = `${account}|${user}`;
+            if (seen.has(key)) return;
+            seen.add(key);
+            rows.push({account, user});
+        });
+        return {rows, errors};
+    }
+
+    function updateNameTestUserPreview() {
+        const preview = document.getElementById('automatedNameTestUserPreview');
+        if (!preview) return;
+        const {rows, errors} = parseAutomatedNameTestUserLines();
+        preview.innerHTML = errors.length
+            ? `<span class="text-danger">${escapeHtml(errors[0])}${errors.length > 1 ? ` · ${errors.length - 1} more` : ''}</span>`
+            : `${rows.length} targeted name-change user(s) ready. Use <code>account,user</code> or <code>account: user</code>.`;
+    }
+
+    async function applyAutomatedNameTestUsers() {
+        const status = document.getElementById('automatedWorkspaceStatus');
+        const {rows, errors} = parseAutomatedNameTestUserLines();
+        updateNameTestUserPreview();
+        if (errors.length) {
+            if (status) status.textContent = errors[0];
+            return;
+        }
+        if (!rows.length) {
+            if (status) status.textContent = 'Paste at least one account,user line for the name-change test.';
+            return;
+        }
+        if (status) status.textContent = `Resolving ${rows.length} targeted name-change user(s)...`;
+        try {
+            const data = await iiFetch('/api/inbox-intelligence/workspace-senders/resolve-targets', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({targets: rows})
+            });
+            const byEmail = {};
+            (iiState.workspaceSenders || []).forEach((sender) => { byEmail[String(sender.email || '').toLowerCase()] = sender; });
+            const selected = [];
+            (data.senders || []).forEach((sender) => {
+                const email = String(sender.email || '').toLowerCase();
+                if (!email) return;
+                byEmail[email] = {...byEmail[email], ...sender, email, source: sender.source || 'name_change_test'};
+                selected.push(email);
+            });
+            iiState.workspaceSenders = Object.values(byEmail).sort((a, b) => a.email.localeCompare(b.email));
+            iiState.selectedSenderEmails = new Set(selected);
+            iiState.selectedServiceAccountIds = new Set((data.service_accounts || []).map((account) => Number(account.id)).filter(Boolean));
+            const byAccountId = {};
+            (iiState.serviceAccounts || []).forEach((account) => { byAccountId[Number(account.id)] = account; });
+            (data.service_accounts || []).forEach((account) => { byAccountId[Number(account.id)] = {...byAccountId[Number(account.id)], ...account}; });
+            iiState.serviceAccounts = Object.values(byAccountId).filter((account) => account && account.id).sort((a, b) => String(a.admin_email || a.name || '').localeCompare(String(b.admin_email || b.name || '')));
+            iiState.selectedUserInboxListAccountIds = new Set();
+            iiState.userInboxListAccounts = data.service_accounts || [];
+            iiState.userInboxListAccountOnly = false;
+            iiState.automatedNameTestUserRows = rows;
+            iiState.userInboxSenderPage = 0;
+            iiState.userInboxAccountFilter = 'all';
+            renderAutomatedServiceAccountSelector();
+            renderAutomatedWorkspaceUsers();
+            renderWorkspaceSenders();
+            renderTestSenderSelector();
+            renderUserInboxSenderSelector();
+            updateAutomatedSummary();
+            const notes = [];
+            if (data.errors?.length) notes.push(`${data.errors.length} skipped`);
+            if (status) status.textContent = `Applied ${selected.length} targeted name-change user(s) from ${data.service_account_count || 0} admin account(s).${notes.length ? ' ' + notes.join(', ') + '.' : ''}`;
+        } catch (err) {
+            if (status) status.textContent = err.message;
+        }
     }
 
     function setAiAgentChatStatus(message, tone = 'info') {
@@ -9280,6 +9397,14 @@ merge_recipe_id, content_blueprint_id</pre>
 
     async function retrieveAutomatedWorkspaceUsers() {
         const status = document.getElementById('automatedWorkspaceStatus');
+        if (iiState.automatedActiveSourceTab === 'name_test') {
+            await applyAutomatedNameTestUsers();
+            return;
+        }
+        if (iiState.automatedActiveSourceTab === 'list') {
+            await retrieveAutomatedWorkspaceListUsers();
+            return;
+        }
         if (status) status.textContent = 'Retrieving Workspace users for Automated Email Tests...';
         await retrieveWorkspaceUsers();
         renderAutomatedServiceAccountSelector();
@@ -9291,6 +9416,12 @@ merge_recipe_id, content_blueprint_id</pre>
         const raw = (document.getElementById('automatedUsersPerAccountInput')?.value || '').trim();
         const perAccount = raw ? Math.max(1, parseInt(raw, 10) || 1) : null;
         const listId = document.getElementById('automatedWorkspaceListSelect')?.value || '';
+        if (iiState.automatedActiveSourceTab === 'name_test') {
+            const status = document.getElementById('automatedWorkspaceStatus');
+            if (status) status.textContent = 'Name-change Test Users uses the exact pasted users; Users per account is ignored for this tab.';
+            updateAutomatedSummary();
+            return;
+        }
         if (iiState.automatedActiveSourceTab === 'list' && listId) {
             window.clearTimeout(iiState.automatedListRetrieveTimer);
             iiState.automatedListRetrieveTimer = window.setTimeout(() => {
@@ -10422,11 +10553,20 @@ merge_recipe_id, content_blueprint_id</pre>
             ...(iiState.userInboxListAccounts || []),
         ];
         const account = accountId ? accounts.find((item) => Number(item.id) === Number(accountId)) : null;
+        const userDomain = String(email || '').split('@').pop().toLowerCase();
+        const domainAccount = !account && userDomain
+            ? accounts.find((item) => {
+                const adminDomain = String(item.admin_email || '').split('@').pop().toLowerCase();
+                return adminDomain && (adminDomain === userDomain || userDomain.endsWith(`.${adminDomain}`));
+            })
+            : null;
         return cleanAdminAccountLabel(
             sender.service_account_admin_email ||
             account?.admin_email ||
+            domainAccount?.admin_email ||
             sender.service_account_name ||
             account?.name ||
+            domainAccount?.name ||
             ''
         );
     }

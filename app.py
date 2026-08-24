@@ -2699,6 +2699,14 @@ def _sender_context_from_message_emails(sender_emails):
         seen.add(email_addr)
         domain = _email_domain(email_addr)
         account = by_domain.get(domain) if domain and domain not in ambiguous_domains else None
+        if not account:
+            matches = [candidate for candidate in accounts if _workspace_domain_matches_user(candidate, email_addr)]
+            if len(matches) == 1:
+                account = matches[0]
+            elif matches:
+                active_matches = [candidate for candidate in matches if getattr(candidate, 'is_active', True)]
+                if len(active_matches) == 1:
+                    account = active_matches[0]
         context.append(_workspace_sender_payload(email_addr, '', account, account.id if account else None))
     return context
 
@@ -2759,6 +2767,32 @@ def _workspace_service_account_payload(sa):
         'is_active': bool(sa.is_active),
     }
 
+def _parse_workspace_target_sender_rows(raw_targets):
+    rows = []
+    errors = []
+    seen = set()
+    for index, item in enumerate(raw_targets or [], start=1):
+        if isinstance(item, dict):
+            account = str(item.get('account') or '').strip()
+            user_key = str(item.get('user') or item.get('email') or '').strip()
+        else:
+            text = str(item or '').strip()
+            match = re.match(r'^([^,:]+)\s*(?:,|:)\s*(.+)$', text)
+            if not match:
+                errors.append(f'Line {index}: expected account,user or account: user')
+                continue
+            account = match.group(1).strip()
+            user_key = match.group(2).strip()
+        if not account or not user_key:
+            errors.append(f'Line {index}: account and user are required')
+            continue
+        dedupe_key = f'{account.lower()}|{user_key.lower()}'
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        rows.append({'account': account, 'user': user_key})
+    return rows, errors
+
 @app.route('/api/inbox-intelligence/workspace-lists', methods=['GET'])
 @login_required
 @permission_required('inbox_intelligence')
@@ -2771,6 +2805,53 @@ def api_inbox_workspace_lists():
         'status': lst.compute_status(),
         'created_at': lst.created_at.isoformat() + 'Z' if lst.created_at else None,
     } for lst in lists]})
+
+@app.route('/api/inbox-intelligence/workspace-senders/resolve-targets', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_resolve_target_workspace_senders():
+    data = request.get_json(silent=True) or {}
+    targets, parse_errors = _parse_workspace_target_sender_rows(data.get('targets') or [])
+    if parse_errors:
+        return jsonify({'success': False, 'error': '; '.join(parse_errors[:5]), 'errors': parse_errors}), 400
+    if not targets:
+        return jsonify({'success': False, 'error': 'Add at least one account,user row.'}), 400
+    senders = []
+    errors = []
+    service_accounts = {}
+    seen = set()
+    for index, target in enumerate(targets, start=1):
+        account_token = target['account']
+        user_email = target['user'].strip().lower()
+        service_account, resolve_error = _resolve_targeted_alias_account(account_token, user_email)
+        if not service_account:
+            errors.append({'line': index, 'account': account_token, 'user': user_email, 'error': resolve_error or 'Service account not found'})
+            continue
+        if '@' not in user_email:
+            user_email = f"{user_email}@{_email_domain(service_account.admin_email)}"
+        if not user_email or '@' not in user_email:
+            errors.append({'line': index, 'account': account_token, 'user': target['user'], 'error': 'Target user must be an email or local-part under the admin domain'})
+            continue
+        if _email_is_reserved_admin_sender(user_email, service_account):
+            errors.append({'line': index, 'account': account_token, 'user': user_email, 'error': 'Admin/reserved users cannot be selected for testing'})
+            continue
+        key = user_email.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        service_accounts[service_account.id] = service_account
+        senders.append(_workspace_sender_payload(user_email, user_email.split('@', 1)[0], service_account))
+    if not senders:
+        message = errors[0]['error'] if errors else 'No valid target users resolved.'
+        return jsonify({'success': False, 'error': message, 'errors': errors}), 400
+    return jsonify({
+        'success': True,
+        'senders': sorted(senders, key=lambda item: item['email']),
+        'service_accounts': [_workspace_service_account_payload(account) for account in service_accounts.values()],
+        'service_account_count': len(service_accounts),
+        'count': len(senders),
+        'errors': errors,
+    })
 
 @app.route('/api/inbox-intelligence/workspace-senders/retrieve-list', methods=['POST'])
 @login_required
