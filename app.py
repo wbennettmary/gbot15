@@ -1894,7 +1894,7 @@ def api_inbox_imap_accounts():
     db.session.add(account)
     db.session.commit()
     if account.is_enabled and data.get('test_connection', True):
-        synced, _folder_results, errors = _sync_mailbox_account(account, folders=['INBOX'], limit=min(int(data.get('sync_limit') or 10), 50))
+        synced, _folder_results, errors = _sync_mailbox_date_range_no_cursor(account, folders=['INBOX'], date_range='current', limit=min(int(data.get('sync_limit') or 10), 50))
         if errors:
             return jsonify({'success': False, 'error': '; '.join(errors), 'account': _serialize_imap_account(account)}), 400
         return _json_no_store({'success': True, 'message': f'Inbox saved and synchronized {synced} message(s).', 'account': _serialize_imap_account(account)})
@@ -1955,7 +1955,11 @@ def api_inbox_sync_account(account_id):
         return jsonify({'success': False, 'error': 'This IMAP account is disabled.'}), 400
     data = request.get_json(silent=True) or {}
     folders = data.get('folders') or None
-    synced, folder_results, errors = _sync_mailbox_account(account, folders=folders, limit=min(200, int(data.get('limit') or 80)), force_full=bool(data.get('force_full')))
+    date_range = (data.get('date_range') or 'current').strip()
+    if date_range and date_range != 'all_recent':
+        synced, folder_results, errors = _sync_mailbox_date_range_no_cursor(account, folders=folders, date_range=date_range, since_date=(data.get('since_date') or '').strip(), limit=min(200, int(data.get('limit') or 80)))
+    else:
+        synced, folder_results, errors = _sync_mailbox_account(account, folders=folders, limit=min(200, int(data.get('limit') or 80)), force_full=bool(data.get('force_full')))
     return _json_no_store({'success': True, 'synced': synced, 'folders': folder_results, 'errors': errors, 'account': _serialize_imap_account(account)})
 
 @app.route('/api/inbox-intelligence/explorer/sync', methods=['POST'])
@@ -1968,21 +1972,52 @@ def api_explorer_bulk_sync():
     folders = data.get('folders') or None
     force_full = bool(data.get('force_full', True))
     date_range = (data.get('date_range') or 'current').strip()
+    since_date = (data.get('since_date') or '').strip()
     if not account_ids:
         accounts = _enabled_imap_accounts_query().all()
     else:
         accounts = _enabled_imap_accounts_query().filter(InboxImapAccount.id.in_(account_ids)).all()
-    if date_range and date_range != 'current':
+    if date_range and date_range != 'all_recent':
         results = []
         all_errors = []
         for account in accounts:
-            synced, folder_results, account_errors = _sync_mailbox_date_range_no_cursor(account, folders=folders, date_range=date_range, limit=max(limit, 500))
+            range_limit = limit if date_range == 'current' else max(limit, 500)
+            synced, folder_results, account_errors = _sync_mailbox_date_range_no_cursor(account, folders=folders, date_range=date_range, since_date=since_date, limit=range_limit)
             results.append({'account_id': account.id, 'email': account.email, 'synced': synced, 'folders': folder_results, 'errors': account_errors})
             all_errors.extend(account_errors)
     else:
         results, all_errors = _sync_mailbox_accounts(accounts, folders=folders, limit=limit, force_full=force_full)
     total_synced = sum(r['synced'] for r in results)
     return _json_no_store({'success': True, 'synced': total_synced, 'results': results, 'errors': all_errors})
+
+@app.route('/api/inbox-intelligence/explorer/sync-cache', methods=['DELETE'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_explorer_wipe_sync_cache():
+    data = request.get_json(silent=True) or {}
+    account_ids = data.get('account_ids') or []
+    if not account_ids:
+        return jsonify({'success': False, 'error': 'Select at least one IMAP account.'}), 400
+    accounts = _enabled_imap_accounts_query().filter(InboxImapAccount.id.in_(account_ids)).all()
+    if not accounts:
+        return jsonify({'success': False, 'error': 'No enabled IMAP accounts found.'}), 404
+    ids = [account.id for account in accounts]
+    try:
+        deleted_messages = InboxEmailMessage.query.filter(InboxEmailMessage.imap_account_id.in_(ids)).delete(synchronize_session=False)
+        deleted_states = ImapFolderSyncState.query.filter(ImapFolderSyncState.imap_account_id.in_(ids)).delete(synchronize_session=False)
+        for account in accounts:
+            account.message_count = 0
+            account.inbox_count = 0
+            account.spam_count = 0
+            account.folder_count = 0
+            account.last_synced_at = None
+            account.last_error = None
+            account.connection_status = 'connected'
+        db.session.commit()
+        return _json_no_store({'success': True, 'deleted_messages': deleted_messages, 'deleted_sync_states': deleted_states, 'account_ids': ids})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/inbox-intelligence/explorer/folders', methods=['GET'])
 @login_required
@@ -2073,6 +2108,8 @@ def api_inbox_toggle_auto_sync(account_id):
 def api_inbox_sync_all():
     data = request.get_json(silent=True) or {}
     account_ids = data.get('account_ids')
+    date_range = (data.get('date_range') or 'current').strip()
+    since_date = (data.get('since_date') or '').strip()
     try:
         limit = min(200, max(10, int(data.get('limit') or 50)))
     except (TypeError, ValueError):
@@ -2083,7 +2120,15 @@ def api_inbox_sync_all():
         accounts = _enabled_imap_accounts_query().filter_by(auto_sync_enabled=True).all()
     if not accounts:
         return _json_no_store({'success': True, 'synced': 0, 'message': 'No enabled accounts to sync.'})
-    results, all_errors = _sync_mailbox_accounts(accounts, folders=None, limit=limit, force_full=bool(data.get('force_full')))
+    if date_range and date_range != 'all_recent':
+        results = []
+        all_errors = []
+        for account in accounts:
+            synced, folder_results, account_errors = _sync_mailbox_date_range_no_cursor(account, folders=None, date_range=date_range, since_date=since_date, limit=limit)
+            results.append({'account_id': account.id, 'email': account.email, 'synced': synced, 'folders': folder_results, 'errors': account_errors})
+            all_errors.extend(account_errors)
+    else:
+        results, all_errors = _sync_mailbox_accounts(accounts, folders=None, limit=limit, force_full=bool(data.get('force_full')))
     total_synced = sum(r['synced'] for r in results)
     return _json_no_store({'success': True, 'synced': total_synced, 'results': results, 'errors': all_errors})
 
@@ -3778,21 +3823,30 @@ def _date_range_to_imap_since(date_range):
         return None
     return dt.strftime('%d-%b-%Y')
 
-def _explorer_date_range_bounds(date_range):
+def _explorer_date_range_bounds(date_range, since_date=None):
     """Return UTC day bounds for Inbox Explorer date-based syncing/filtering."""
     now = datetime.utcnow()
     today = datetime(now.year, now.month, now.day)
+    week_start = today - timedelta(days=today.weekday())
+    if date_range in ('current', 'current_week'):
+        return week_start, today + timedelta(days=1)
     if date_range == 'today':
         return today, today + timedelta(days=1)
     if date_range == 'yesterday':
         return today - timedelta(days=1), today
     if date_range == 'last_week':
-        return today - timedelta(days=7), today + timedelta(days=1)
+        return week_start - timedelta(days=7), week_start
+    if date_range == 'custom_since' and since_date:
+        try:
+            start_dt = datetime.strptime(since_date, '%Y-%m-%d')
+            return start_dt, today + timedelta(days=1)
+        except ValueError:
+            return None, None
     return None, None
 
-def _sync_mailbox_date_range_no_cursor(account, folders=None, date_range=None, limit=500):
+def _sync_mailbox_date_range_no_cursor(account, folders=None, date_range=None, since_date=None, limit=500):
     """Sync messages matching a date window without changing incremental UID cursors."""
-    start_dt, end_dt = _explorer_date_range_bounds(date_range)
+    start_dt, end_dt = _explorer_date_range_bounds(date_range, since_date=since_date)
     if not start_dt or not end_dt:
         return _sync_mailbox_recent_no_cursor(account, folders=folders, limit=limit, wait_for_lock=True)
     conn = None

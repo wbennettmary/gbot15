@@ -290,6 +290,19 @@
         accent-color: #2563eb;
     }
 
+    .ii-btn-danger {
+        background: #fee2e2;
+        border-color: #fecaca;
+        color: #991b1b;
+        box-shadow: 0 8px 18px rgba(220, 38, 38, 0.12);
+    }
+
+    .ii-btn-danger:hover:not(:disabled) {
+        background: #fecaca;
+        border-color: #fca5a5;
+        color: #7f1d1d;
+    }
+
     .ii-textarea {
         min-height: 120px;
         resize: vertical;
@@ -2820,12 +2833,14 @@
                 <hr>
                 <h4>Sync</h4>
                 <div id="explorerAccountCheckboxes" class="mb-2"></div>
-                <select class="ii-select mb-2" id="explorerSyncDateRange" onchange="saveExplorerPreferences()">
-                    <option value="current">Current (latest 50)</option>
+                <select class="ii-select mb-2" id="explorerSyncDateRange" onchange="toggleExplorerSyncSinceDate(); saveExplorerPreferences()">
+                    <option value="current">Current week (latest 50)</option>
                     <option value="today">Today</option>
                     <option value="yesterday">Yesterday</option>
                     <option value="last_week">Last week</option>
+                    <option value="custom_since">From date...</option>
                 </select>
+                <input class="ii-input mb-2 d-none" type="date" id="explorerSyncSinceDate" onchange="saveExplorerPreferences()">
                 <div class="ii-explorer-sync-options">
                     <label class="ii-explorer-sync-check">
                         <input type="checkbox" id="explorerSyncInbox" checked onchange="saveExplorerPreferences()"> INBOX
@@ -2836,6 +2851,9 @@
                 </div>
                 <button class="ii-btn ii-btn-primary mt-2 w-100" type="button" onclick="syncExplorerAccounts()" id="explorerSyncBtn">
                     <i class="fas fa-rotate"></i> Sync Emails
+                </button>
+                <button class="ii-btn ii-btn-danger mt-2 w-100" type="button" onclick="wipeExplorerSyncedEmails()" id="explorerWipeSyncBtn">
+                    <i class="fas fa-trash"></i> Wipe synced emails
                 </button>
                 <div class="ii-muted mt-2" style="font-size:0.8em" id="explorerSyncStatus">Select accounts and sync to browse received emails.</div>
                 <hr>
@@ -5097,19 +5115,32 @@ merge_recipe_id, content_blueprint_id</pre>
             iiState.explorerSelectedAccountIds = new Set((prefs.syncAccountIds || []).map((id) => parseInt(id)).filter(Number.isFinite));
             iiState.activeExplorerFolder = typeof prefs.activeFolder === 'string' ? prefs.activeFolder : '';
             const syncRange = document.getElementById('explorerSyncDateRange');
+            const syncSince = document.getElementById('explorerSyncSinceDate');
             const syncInbox = document.getElementById('explorerSyncInbox');
             const syncSpam = document.getElementById('explorerSyncSpam');
             const search = document.getElementById('messageSearchInput');
             const accountFilter = document.getElementById('messageAccountFilter');
             const dateFilter = document.getElementById('messageDateFilter');
             if (syncRange && prefs.syncDateRange && Array.from(syncRange.options).some((option) => option.value === prefs.syncDateRange)) syncRange.value = prefs.syncDateRange;
+            if (syncSince && typeof prefs.syncSinceDate === 'string') syncSince.value = prefs.syncSinceDate;
             if (syncInbox && typeof prefs.syncInbox === 'boolean') syncInbox.checked = prefs.syncInbox;
             if (syncSpam && typeof prefs.syncSpam === 'boolean') syncSpam.checked = prefs.syncSpam;
             if (search && typeof prefs.search === 'string') search.value = prefs.search;
             if (accountFilter && prefs.accountFilter && Array.from(accountFilter.options).some((option) => option.value === String(prefs.accountFilter))) accountFilter.value = String(prefs.accountFilter);
             if (dateFilter && prefs.dateFilter && Array.from(dateFilter.options).some((option) => option.value === prefs.dateFilter)) dateFilter.value = prefs.dateFilter;
+            toggleExplorerSyncSinceDate();
         } catch (err) {
             console.warn('Failed to load Inbox Explorer preferences', err);
+        }
+    }
+
+    function toggleExplorerSyncSinceDate() {
+        const mode = document.getElementById('explorerSyncDateRange')?.value || 'current';
+        const input = document.getElementById('explorerSyncSinceDate');
+        if (!input) return;
+        input.classList.toggle('d-none', mode !== 'custom_since');
+        if (mode === 'custom_since' && !input.value) {
+            input.value = new Date().toISOString().slice(0, 10);
         }
     }
 
@@ -5125,6 +5156,7 @@ merge_recipe_id, content_blueprint_id</pre>
         const prefs = {
             syncAccountIds: Array.from(iiState.explorerSelectedAccountIds),
             syncDateRange: document.getElementById('explorerSyncDateRange')?.value || 'current',
+            syncSinceDate: document.getElementById('explorerSyncSinceDate')?.value || '',
             syncInbox: document.getElementById('explorerSyncInbox')?.checked !== false,
             syncSpam: document.getElementById('explorerSyncSpam')?.checked !== false,
             accountFilter: document.getElementById('messageAccountFilter')?.value || '',
@@ -5275,7 +5307,7 @@ merge_recipe_id, content_blueprint_id</pre>
             const data = await iiFetch('/api/inbox-intelligence/imap-accounts/sync-all', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({account_ids: iiState.imapAccounts.map(a => a.id), limit: 50, force_full: false})
+                body: JSON.stringify({account_ids: iiState.imapAccounts.map(a => a.id), limit: 50, force_full: false, date_range: 'current'})
             });
             status.textContent = `Sync complete: ${data.synced || 0} message(s) synced.`;
             await refreshInboxExplorer();
@@ -5322,7 +5354,7 @@ merge_recipe_id, content_blueprint_id</pre>
         await iiFetch(`/api/inbox-intelligence/imap-accounts/${id}/sync`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({limit: 50, force_full: false})
+            body: JSON.stringify({limit: 50, force_full: false, date_range: 'current'})
         });
         await refreshInboxExplorer();
     }
@@ -5368,12 +5400,18 @@ merge_recipe_id, content_blueprint_id</pre>
             return;
         }
         const syncDateRange = document.getElementById('explorerSyncDateRange')?.value || 'current';
+        const syncSinceDate = document.getElementById('explorerSyncSinceDate')?.value || '';
+        if (syncDateRange === 'custom_since' && !syncSinceDate) {
+            status.textContent = 'Select the date to sync from.';
+            return;
+        }
         const syncLimit = syncDateRange === 'current' ? 50 : 500;
         const rangeLabel = {
-            current: 'latest 50 emails',
+            current: 'current week latest emails',
             today: 'today',
             yesterday: 'yesterday',
-            last_week: 'last week'
+            last_week: 'last week',
+            custom_since: syncSinceDate ? `from ${syncSinceDate}` : 'custom date'
         }[syncDateRange] || 'selected date';
         if (btn) { btn.disabled = true; btn.innerHTML = '<span class="ii-spinner" aria-hidden="true"></span> Syncing...'; }
         status.textContent = `Syncing ${accountIds.length} account(s), ${folders.length} folder(s), ${rangeLabel}...`;
@@ -5381,7 +5419,7 @@ merge_recipe_id, content_blueprint_id</pre>
             const data = await iiFetch('/api/inbox-intelligence/explorer/sync', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({account_ids: accountIds, folders, limit: syncLimit, force_full: false, date_range: syncDateRange})
+                body: JSON.stringify({account_ids: accountIds, folders, limit: syncLimit, force_full: false, date_range: syncDateRange, since_date: syncSinceDate})
             });
             const totalSynced = data.synced || 0;
             const errCount = (data.errors || []).length;
@@ -5391,6 +5429,38 @@ merge_recipe_id, content_blueprint_id</pre>
             status.textContent = `Sync failed: ${err.message}`;
         } finally {
             if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-rotate"></i> Sync Emails'; }
+        }
+    }
+
+    async function wipeExplorerSyncedEmails() {
+        const status = document.getElementById('explorerSyncStatus');
+        const btn = document.getElementById('explorerWipeSyncBtn');
+        saveExplorerPreferences();
+        const accountIds = Array.from(document.querySelectorAll('.explorer-account-check:checked'))
+            .map((cb) => parseInt(cb.value))
+            .filter(Number.isFinite);
+        if (!accountIds.length) {
+            status.textContent = 'Select at least one account to wipe.';
+            return;
+        }
+        const message = `Delete all synced Explorer emails and sync cursors for ${accountIds.length} selected account(s)? This does not delete emails from the mailbox.`;
+        if (!confirm(message)) return;
+        if (btn) { btn.disabled = true; btn.innerHTML = '<span class="ii-spinner" aria-hidden="true"></span> Wiping...'; }
+        status.textContent = `Wiping synced data for ${accountIds.length} account(s)...`;
+        try {
+            const data = await iiFetch('/api/inbox-intelligence/explorer/sync-cache', {
+                method: 'DELETE',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({account_ids: accountIds})
+            });
+            status.textContent = `Wipe complete: ${data.deleted_messages || 0} synced message(s) removed. Sync again for fresh data.`;
+            iiState.selectedMessageIds.clear();
+            iiState.activeMessageId = null;
+            await refreshInboxExplorer();
+        } catch (err) {
+            status.textContent = `Wipe failed: ${err.message}`;
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-trash"></i> Wipe synced emails'; }
         }
     }
 
