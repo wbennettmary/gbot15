@@ -277,6 +277,7 @@
     <symbol id="afraid-icon-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"></rect><path d="M4 16V6a2 2 0 0 1 2-2h10"></path></symbol>
     <symbol id="afraid-icon-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4Z"></path><path d="m13 7 4 4"></path></symbol>
     <symbol id="afraid-icon-trash" viewBox="0 0 24 24"><path d="M4 7h16"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M6 7l1 14h10l1-14"></path><path d="M9 7V4h6v3"></path></symbol>
+    <symbol id="afraid-icon-wand" viewBox="0 0 24 24"><path d="m15 4 5 5"></path><path d="M3 21 17 7"></path><path d="m6 5 1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2Z"></path><path d="m19 14 .7 1.3 1.3.7-1.3.7L19 18l-.7-1.3L17 16l1.3-.7L19 14Z"></path></symbol>
 </svg>
 <div class="container mt-4">
     <h2 class="mb-1">Afraid (FreeDNS) Management</h2>
@@ -371,7 +372,16 @@
                             </div>
                         </div>
                         <div class="mb-3">
-                            <label for="manualSubdomainsInput" class="form-label fw-semibold">Manual Subdomains</label>
+                            <div class="d-flex justify-content-between align-items-end gap-3 flex-wrap mb-2">
+                                <label for="manualSubdomainsInput" class="form-label fw-semibold mb-0">Manual Subdomains</label>
+                                <div class="d-flex align-items-center gap-2 flex-wrap">
+                                    <label for="manualSubdomainGenerateCount" class="form-label small text-muted mb-0">Generate</label>
+                                    <input type="number" class="form-control form-control-sm" id="manualSubdomainGenerateCount" min="1" max="5000" value="25" style="width: 96px;">
+                                    <button type="button" class="btn btn-sm btn-outline-primary" id="btnGenerateManualSubdomains">
+                                        <svg class="afraid-svg-icon me-1"><use href="#afraid-icon-wand"></use></svg>Generate
+                                    </button>
+                                </div>
+                            </div>
                             <textarea class="form-control font-monospace" id="manualSubdomainsInput" rows="5" placeholder="mail&#10;shop&#10;support"></textarea>
                             <div class="form-text" id="manualSubdomainsCount">0 manual subdomains</div>
                         </div>
@@ -715,6 +725,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('btnDeleteSelectedSubdomains').addEventListener('click', deleteSelectedSubdomains);
     document.getElementById('btnStartProcess').addEventListener('click', startProcess);
     document.getElementById('manualSubdomainsInput').addEventListener('input', updateManualSubdomainsCount);
+    document.getElementById('btnGenerateManualSubdomains').addEventListener('click', generateManualSubdomains);
     document.getElementById('manualBaseDomainsInput').addEventListener('input', updateManualBaseDomainsCount);
     document.getElementById('btnReactivateSelectedDomains').addEventListener('click', reactivateSelectedDomains);
     document.getElementById('btnRefreshAfraidLists').addEventListener('click', loadAfraidLists);
@@ -1148,6 +1159,66 @@ function getManualSubdomains() {
         .split('\n')
         .map(line => line.trim())
         .filter(Boolean);
+}
+
+const afraidSubdomainWordPool = [
+    'atlas','bridge','signal','harbor','summit','anchor','matrix','vertex','nova','orbit','pulse','copper','silver','granite','maple','cedar','river','meadow','field','stone','bright','rapid','clear','steady','prime','north','south','east','west','metro','urban','rural','forest','valley','ridge','canyon','cloud','storm','rain','sun','lunar','solar','ember','flint','slate','coral','amber','jade','onyx','opal','pearl','ruby','sierra','delta','echo','foxtrot','gamma','omega','alpha','vector','relay','proxy','portal','kernel','canvas','thread','pilot','engine','rocket','beacon','magnet','signalbox','mailhub','postline','inboxer','sendgrid','relaybox','dispatch','courier','parcel','packet','stream','pipeline','garden','market','station','office','studio','lab','works','craft','forge','mill','tower','haven','landing','source','native','public','secure','trust','shield','vault','tempo','motion','spark','flame','glow','wave','drift','breeze','trail','path','route','lane','vista','horizon','summitline','clearing','prairie','brook','creek','branch','leaf','root','sprout','seed','harvest','orchard','grove','timber','marble','carbon','iron','nickel','quartz','topaz','cobalt','indigo','violet','scarlet','crimson','golden','ivory','arctic','pacific','atlantic','central','coastal','desert','highland','lowland','midtown','uptown','downtown','crossing','junction','terminal','gateway','node','cluster','origin','corner','square','circle','triangle','apex','zenith','nimbus','stratus','aurora','comet','meteor','nebula','cosmos','saturn','mercury','neptune','apollo','meridian','compass','radar','sonar','optic','prism','lens','focus','pixel','vectorial','binary','cipher','ledger','record','archive','index','queue','stack','cache','buffer','socket','router','switch','server','client','host','domain','zone','record'
+];
+
+function cleanGeneratedSubdomainLabel(value) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, '')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 63);
+}
+
+function buildGeneratedSubdomainCandidate(index) {
+    const words = afraidSubdomainWordPool;
+    const first = words[Math.floor(Math.random() * words.length)];
+    const second = words[Math.floor(Math.random() * words.length)];
+    const third = words[Math.floor(Math.random() * words.length)];
+    const patterns = [
+        `${first}${second}`,
+        `${first}-${second}`,
+        `${first}${second}${third}`,
+        `${first}-${second}-${third}`
+    ];
+    return cleanGeneratedSubdomainLabel(patterns[index % patterns.length]);
+}
+
+function generateUniqueManualSubdomain(usedLabels, index) {
+    for (let attempt = 0; attempt < 500; attempt += 1) {
+        const candidate = buildGeneratedSubdomainCandidate(index + attempt);
+        if (candidate && !usedLabels.has(candidate)) {
+            usedLabels.add(candidate);
+            return candidate;
+        }
+    }
+    let suffix = usedLabels.size + 1;
+    while (true) {
+        const fallback = `node${Date.now().toString(36)}${suffix.toString(36)}`.slice(0, 63);
+        if (!usedLabels.has(fallback)) {
+            usedLabels.add(fallback);
+            return fallback;
+        }
+        suffix += 1;
+    }
+}
+
+function generateManualSubdomains() {
+    const input = document.getElementById('manualSubdomainsInput');
+    const countInput = document.getElementById('manualSubdomainGenerateCount');
+    const requested = Math.min(5000, Math.max(1, Number(countInput?.value || 0) || 0));
+    if (!input || !requested) return;
+    const existing = getManualSubdomains().map(cleanGeneratedSubdomainLabel).filter(Boolean);
+    const used = new Set(existing);
+    const generated = [];
+    for (let index = 0; index < requested; index += 1) {
+        generated.push(generateUniqueManualSubdomain(used, index));
+    }
+    input.value = [...existing, ...generated].join('\n');
+    updateManualSubdomainsCount();
 }
 
 function updateManualSubdomainsCount() {
