@@ -288,7 +288,7 @@
                             <div class="form-text">Paste the full Cookie header value here.</div>
                         </div>
                         <button type="submit" class="btn btn-primary w-100" id="btnSaveCookies">
-                            <i class="fas fa-save me-1"></i> Save & Verify Cookies
+                            <i class="fas fa-floppy-disk me-1"></i> Save & Verify Cookies
                         </button>
                     </form>
                     <div id="configAlert" class="mt-3"></div>
@@ -306,7 +306,7 @@
         <div class="col-12 mb-4">
             <div class="card h-100">
                 <div class="card-header bg-success text-white">
-                    <h5 class="card-title mb-0"><i class="fas fa-plus-circle me-2"></i>Create CNAME Subdomain</h5>
+                    <h5 class="card-title mb-0"><i class="fas fa-circle-plus me-2"></i>Create CNAME Subdomain</h5>
                 </div>
                 <div class="card-body">
                     <form id="createSubdomainForm">
@@ -408,7 +408,7 @@
         <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
             <h5 class="card-title mb-0"><i class="fas fa-list me-2"></i>Managed FreeDNS Domains</h5>
             <button class="btn btn-sm btn-light" id="btnFetchDomains">
-                <i class="fas fa-sync me-1"></i> Fetch Registry
+                <i class="fas fa-rotate me-1"></i> Fetch Registry
             </button>
         </div>
         <div class="card-body">
@@ -472,7 +472,7 @@
                 <div class="card-header bg-light d-flex justify-content-between align-items-center">
                     <h5 class="card-title mb-0"><i class="fas fa-list-check me-2"></i>Afraid Saved Lists</h5>
                     <button class="btn btn-sm btn-outline-secondary" id="btnRefreshAfraidLists">
-                        <i class="fas fa-sync me-1"></i> Refresh
+                        <i class="fas fa-rotate me-1"></i> Refresh
                     </button>
                 </div>
                 <div class="card-body">
@@ -491,7 +491,7 @@
                         </div>
                         <div class="d-flex gap-2">
                             <button type="submit" class="btn btn-primary" id="btnSaveAfraidList">
-                                <i class="fas fa-save me-1"></i> Create List
+                                <i class="fas fa-floppy-disk me-1"></i> Create List
                             </button>
                             <button type="button" class="btn btn-outline-secondary" id="btnCancelAfraidListEdit" style="display:none">
                                 Cancel Edit
@@ -510,7 +510,7 @@
                 <div class="card-header bg-light d-flex justify-content-between align-items-center">
                     <h5 class="card-title mb-0"><i class="fas fa-tags me-2"></i>Used FreeDNS Domains</h5>
                     <button class="btn btn-sm btn-outline-secondary" id="btnRefreshUsedDomains">
-                        <i class="fas fa-sync me-1"></i> Refresh
+                        <i class="fas fa-rotate me-1"></i> Refresh
                     </button>
                 </div>
                 <div class="card-body">
@@ -542,7 +542,7 @@
             <div class="modal-header">
                 <div>
                     <h5 class="modal-title" id="afraidExternalCfModalTitle">
-                        <i class="fas fa-cloud-upload-alt me-2"></i>Add & Verify Saved AFRAID Domains
+                        <i class="fas fa-cloud-arrow-up me-2"></i>Add & Verify Saved AFRAID Domains
                     </h5>
                     <div class="afraid-verify-subtitle" id="afraidExternalCfModalSubtitle">Parse the saved list, add each domain to Workspace, then insert TXT records into Cloudflare.</div>
                 </div>
@@ -601,7 +601,7 @@
                                 <th class="text-center" title="Workspace add"><i class="fas fa-briefcase"></i></th>
                                 <th class="text-center" title="TXT token"><i class="fas fa-fingerprint"></i></th>
                                 <th class="text-center" title="Cloudflare DNS"><i class="fas fa-globe"></i></th>
-                                <th class="text-center" title="Workspace verification"><i class="fas fa-shield-alt"></i></th>
+                                <th class="text-center" title="Workspace verification"><i class="fas fa-shield-halved"></i></th>
                                 <th>Message</th>
                             </tr>
                         </thead>
@@ -700,7 +700,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!cookies_str) {
             showAlert('configAlert', 'Please paste your cookie string first.', 'warning');
             btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-save me-1"></i> Save & Verify Cookies';
+            btn.innerHTML = '<i class="fas fa-floppy-disk me-1"></i> Save & Verify Cookies';
             return;
         }
 
@@ -712,17 +712,17 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             const data = await parseJsonResponse(res);
             if (data.success) {
-                showAlert('configAlert', '<i class="fas fa-check-circle me-1"></i>' + (data.message || 'Cookies saved!'), 'success');
+                showAlert('configAlert', '<i class="fas fa-circle-check me-1"></i>' + (data.message || 'Cookies saved!'), 'success');
                 document.getElementById('cookiesInput').value = '';
                 loadConfig();
             } else {
-                showAlert('configAlert', '<i class="fas fa-exclamation-circle me-1"></i>' + (data.error || 'Error'), 'danger');
+                showAlert('configAlert', '<i class="fas fa-circle-exclamation me-1"></i>' + (data.error || 'Error'), 'danger');
             }
         } catch (err) {
-            showAlert('configAlert', '<i class="fas fa-exclamation-circle me-1"></i>' + escapeHtml(err.message || 'Request failed'), 'danger');
+            showAlert('configAlert', '<i class="fas fa-circle-exclamation me-1"></i>' + escapeHtml(err.message || 'Request failed'), 'danger');
         } finally {
             btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-save me-1"></i> Save & Verify Cookies';
+            btn.innerHTML = '<i class="fas fa-floppy-disk me-1"></i> Save & Verify Cookies';
         }
     });
     }
@@ -737,9 +737,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const res = await fetch('/api/afraid/config/test', {method: 'POST'});
             const data = await parseJsonResponse(res);
             const el = document.getElementById('cookieStatus');
+            const statusIcon = data.success ? 'circle-check' : 'circle-xmark';
             el.style.display = 'block';
             el.innerHTML = `<div class="alert alert-${data.success ? 'success' : 'danger'} py-2 mb-0 small">
-                <i class="fas fa-${data.success ? 'check' : 'times'}-circle me-1"></i>
+                <i class="fas fa-${statusIcon} me-1"></i>
                 ${escapeHtml(data.success ? data.message : data.error)}
             </div>`;
         } catch (err) {
@@ -776,7 +777,7 @@ document.addEventListener('DOMContentLoaded', function() {
             alert('Request failed');
         } finally {
             btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-sync me-1"></i> Fetch from FreeDNS';
+            btn.innerHTML = '<i class="fas fa-rotate me-1"></i> Fetch from FreeDNS';
         }
     });
 
@@ -818,7 +819,7 @@ async function loadConfig() {
         if (data.has_cookies) {
             statusEl.style.display = 'block';
             statusEl.innerHTML = `<div class="alert alert-success py-2 mb-0 small">
-                <i class="fas fa-check-circle me-1"></i> Cookies saved: <code>${data.cookies_preview}</code>
+                <i class="fas fa-circle-check me-1"></i> Cookies saved: <code>${data.cookies_preview}</code>
             </div>`;
         }
     } catch (err) {
@@ -848,7 +849,7 @@ async function loadDomains() {
                     <td>
                         <div class="btn-group btn-group-sm">
                             ${d.used_this_month ? `<button class="btn btn-outline-primary" onclick="reactivateDomains(['${escapeHtml(d.domain_name)}'])" title="Reactivate">
-                                <i class="fas fa-undo"></i></button>` : ''}
+                                <i class="fas fa-rotate-left"></i></button>` : ''}
                             <button class="btn btn-outline-danger" onclick="deleteDomain(${d.id})">
                                 <i class="fas fa-trash"></i></button>
                         </div>
@@ -1229,7 +1230,7 @@ async function startProcess() {
         renderBatchResults(data);
         if (data.quota_reached) {
             alert('FreeDNS quota reached: ' + (data.quota_message || 'Cleanup existing subdomains before continuing.'));
-            showAlert('createAlert', '<i class="fas fa-exclamation-triangle me-1"></i>FreeDNS quota reached. Failed domains were kept available.', 'warning');
+            showAlert('createAlert', '<i class="fas fa-triangle-exclamation me-1"></i>FreeDNS quota reached. Failed domains were kept available.', 'warning');
         }
         loadAfraidLists();
         loadUsedDomains();
@@ -1298,7 +1299,7 @@ async function loadAfraidLists() {
                             </select>
                             <div class="btn-group btn-group-sm afraid-list-card-buttons">
                                 <button class="btn afraid-list-icon-btn verify-all" onclick="openAfraidExternalCfModal(${lst.id}, {autoStart: true})" title="Add and verify domains for all selected list accounts" aria-label="Add and verify domains for all selected list accounts">
-                                    <i class="fas fa-cloud-upload-alt"></i>
+                                    <i class="fas fa-cloud-arrow-up"></i>
                                 </button>
                                 <button class="btn afraid-list-icon-btn verify-specific" onclick="openAfraidExternalCfModal(${lst.id}, {specificAccounts: true})" title="Add and verify domains for pasted accounts only" aria-label="Add and verify domains for pasted accounts only">
                                     <i class="fas fa-filter"></i>
@@ -1307,7 +1308,7 @@ async function loadAfraidLists() {
                                     <i class="fas fa-copy"></i>
                                 </button>
                                 <button class="btn afraid-list-icon-btn edit-list" onclick="editAfraidList(${lst.id})" title="Edit list" aria-label="Edit list">
-                                    <i class="fas fa-edit"></i>
+                                    <i class="fas fa-pen-to-square"></i>
                                 </button>
                                 <button class="btn afraid-list-icon-btn delete-list" onclick="deleteAfraidList(${lst.id})" title="Delete list" aria-label="Delete list">
                                     <i class="fas fa-trash"></i>
@@ -1631,8 +1632,8 @@ function getAfraidExternalCfStatusBadge(status) {
     const statuses = {
         pending: '<i class="fas fa-circle text-muted" style="font-size:8px;opacity:.45"></i>',
         running: '<i class="fas fa-spinner fa-spin text-primary"></i>',
-        success: '<i class="fas fa-check-circle text-success"></i>',
-        failed: '<i class="fas fa-times-circle text-danger"></i>',
+        success: '<i class="fas fa-circle-check text-success"></i>',
+        failed: '<i class="fas fa-circle-xmark text-danger"></i>',
         skipped: '<i class="fas fa-forward text-warning"></i>'
     };
     return statuses[status] || statuses.pending;
@@ -1835,7 +1836,7 @@ async function loadUsedDomains() {
                 </td>
                 <td>
                     <button class="btn btn-sm btn-outline-primary" onclick="reactivateDomains(['${escapeHtml(domain.domain_name)}'])" title="Reactivate">
-                        <i class="fas fa-undo"></i>
+                        <i class="fas fa-rotate-left"></i>
                     </button>
                 </td>`;
             tr.querySelector('.used-domain-status').addEventListener('change', updateUsedDomainStatus);
@@ -1907,7 +1908,7 @@ function editAfraidList(id) {
     document.getElementById('afraidListId').value = list.id;
     document.getElementById('afraidListName').value = list.name;
     document.getElementById('afraidListRaw').value = list.raw_results || '';
-    document.getElementById('btnSaveAfraidList').innerHTML = '<i class="fas fa-save me-1"></i> Update List';
+    document.getElementById('btnSaveAfraidList').innerHTML = '<i class="fas fa-floppy-disk me-1"></i> Update List';
     document.getElementById('btnCancelAfraidListEdit').style.display = 'inline-block';
     updateAfraidListCount();
     document.getElementById('afraidListName').scrollIntoView({behavior: 'smooth', block: 'center'});
@@ -1917,7 +1918,7 @@ function resetAfraidListForm() {
     document.getElementById('afraidListId').value = '';
     document.getElementById('afraidListName').value = '';
     document.getElementById('afraidListRaw').value = '';
-    document.getElementById('btnSaveAfraidList').innerHTML = '<i class="fas fa-save me-1"></i> Create List';
+    document.getElementById('btnSaveAfraidList').innerHTML = '<i class="fas fa-floppy-disk me-1"></i> Create List';
     document.getElementById('btnCancelAfraidListEdit').style.display = 'none';
     updateAfraidListCount();
 }
