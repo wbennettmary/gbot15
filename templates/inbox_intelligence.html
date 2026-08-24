@@ -268,6 +268,28 @@
         font-size: 13px;
     }
 
+    .ii-explorer-sync-options {
+        display: grid;
+        gap: 8px;
+        margin: 10px 0;
+    }
+
+    .ii-explorer-sync-check {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #475569;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .ii-explorer-sync-check input,
+    .explorer-account-check {
+        width: 15px;
+        height: 15px;
+        accent-color: #2563eb;
+    }
+
     .ii-textarea {
         min-height: 120px;
         resize: vertical;
@@ -2798,26 +2820,37 @@
                 <hr>
                 <h4>Sync</h4>
                 <div id="explorerAccountCheckboxes" class="mb-2"></div>
-                <label class="d-block mb-1 ii-muted" style="font-size:0.8em">
-                    <input type="checkbox" id="explorerSyncInbox" checked> INBOX
-                </label>
-                <label class="d-block mb-1 ii-muted" style="font-size:0.8em">
-                    <input type="checkbox" id="explorerSyncSpam" checked> Spam / Junk
-                </label>
+                <select class="ii-select mb-2" id="explorerSyncDateRange" onchange="saveExplorerPreferences()">
+                    <option value="current">Current (latest 50)</option>
+                    <option value="today">Today</option>
+                    <option value="yesterday">Yesterday</option>
+                    <option value="last_week">Last week</option>
+                </select>
+                <div class="ii-explorer-sync-options">
+                    <label class="ii-explorer-sync-check">
+                        <input type="checkbox" id="explorerSyncInbox" checked onchange="saveExplorerPreferences()"> INBOX
+                    </label>
+                    <label class="ii-explorer-sync-check">
+                        <input type="checkbox" id="explorerSyncSpam" checked onchange="saveExplorerPreferences()"> Spam / Junk
+                    </label>
+                </div>
                 <button class="ii-btn ii-btn-primary mt-2 w-100" type="button" onclick="syncExplorerAccounts()" id="explorerSyncBtn">
                     <i class="fas fa-rotate"></i> Sync Emails
                 </button>
                 <div class="ii-muted mt-2" style="font-size:0.8em" id="explorerSyncStatus">Select accounts and sync to browse received emails.</div>
                 <hr>
                 <h4>Filters</h4>
-                <input class="ii-input mb-2" id="messageSearchInput" placeholder="Sender, domain, subject..." oninput="loadExplorerMessages()">
-                <select class="ii-select mb-2" id="messageAccountFilter" onchange="loadExplorerMessages()">
+                <input class="ii-input mb-2" id="messageSearchInput" placeholder="Sender, domain, subject..." oninput="saveExplorerPreferences(); loadExplorerMessages()">
+                <select class="ii-select mb-2" id="messageAccountFilter" onchange="saveExplorerPreferences(); loadExplorerFolders(this.value || undefined); loadExplorerMessages()">
                     <option value="">All accounts</option>
                 </select>
-                <select class="ii-select mb-2" id="messageDateFilter" onchange="loadExplorerMessages()">
+                <select class="ii-select mb-2" id="messageDateFilter" onchange="saveExplorerPreferences(); loadExplorerMessages()">
                     <option value="">Any date</option>
+                    <option value="today">Today</option>
+                    <option value="yesterday">Yesterday</option>
                     <option value="24h">Last 24 hours</option>
                     <option value="7d">Last 7 days</option>
+                    <option value="last_week">Last week</option>
                     <option value="30d">Last 30 days</option>
                 </select>
             </aside>
@@ -4069,6 +4102,8 @@ merge_recipe_id, content_blueprint_id</pre>
 <script>
     const II_AI_ENABLED = '{{ "1" if inbox_ai_enabled else "0" }}' === '1';
     const II_CURRENT_ROLE = '{{ role or "" }}';
+    const II_CURRENT_USER = '{{ user or "user" }}';
+    const II_EXPLORER_PREFS_KEY = `ii_inbox_explorer_prefs_${II_CURRENT_USER || 'user'}`;
 
     function iiAiDisabledHint() {
         return 'AI features are disabled by the INBOX_AI_ENABLED setting.';
@@ -4110,6 +4145,9 @@ merge_recipe_id, content_blueprint_id</pre>
         activeMessageId: null,
         explorerRefreshToken: 0,
         selectedMessageIds: new Set(),
+        explorerSelectedAccountIds: new Set(),
+        explorerPreferencesLoaded: false,
+        explorerHasSavedAccountSelection: false,
         inboxExplorerRefreshTimer: null,
         selectedTemplateId: null,
         selectedTemplateIds: new Set(),
@@ -5048,6 +5086,69 @@ merge_recipe_id, content_blueprint_id</pre>
         updateAutomatedSummary();
     }
 
+    function loadExplorerPreferences() {
+        if (iiState.explorerPreferencesLoaded) return;
+        iiState.explorerPreferencesLoaded = true;
+        try {
+            const raw = localStorage.getItem(II_EXPLORER_PREFS_KEY);
+            if (!raw) return;
+            const prefs = JSON.parse(raw);
+            iiState.explorerHasSavedAccountSelection = Array.isArray(prefs.syncAccountIds);
+            iiState.explorerSelectedAccountIds = new Set((prefs.syncAccountIds || []).map((id) => parseInt(id)).filter(Number.isFinite));
+            iiState.activeExplorerFolder = typeof prefs.activeFolder === 'string' ? prefs.activeFolder : '';
+            const syncRange = document.getElementById('explorerSyncDateRange');
+            const syncInbox = document.getElementById('explorerSyncInbox');
+            const syncSpam = document.getElementById('explorerSyncSpam');
+            const search = document.getElementById('messageSearchInput');
+            const accountFilter = document.getElementById('messageAccountFilter');
+            const dateFilter = document.getElementById('messageDateFilter');
+            if (syncRange && prefs.syncDateRange && Array.from(syncRange.options).some((option) => option.value === prefs.syncDateRange)) syncRange.value = prefs.syncDateRange;
+            if (syncInbox && typeof prefs.syncInbox === 'boolean') syncInbox.checked = prefs.syncInbox;
+            if (syncSpam && typeof prefs.syncSpam === 'boolean') syncSpam.checked = prefs.syncSpam;
+            if (search && typeof prefs.search === 'string') search.value = prefs.search;
+            if (accountFilter && prefs.accountFilter && Array.from(accountFilter.options).some((option) => option.value === String(prefs.accountFilter))) accountFilter.value = String(prefs.accountFilter);
+            if (dateFilter && prefs.dateFilter && Array.from(dateFilter.options).some((option) => option.value === prefs.dateFilter)) dateFilter.value = prefs.dateFilter;
+        } catch (err) {
+            console.warn('Failed to load Inbox Explorer preferences', err);
+        }
+    }
+
+    function saveExplorerPreferences() {
+        loadExplorerPreferences();
+        const checkedIds = Array.from(document.querySelectorAll('.explorer-account-check:checked'))
+            .map((cb) => parseInt(cb.value))
+            .filter(Number.isFinite);
+        if (document.querySelectorAll('.explorer-account-check').length) {
+            iiState.explorerSelectedAccountIds = new Set(checkedIds);
+            iiState.explorerHasSavedAccountSelection = true;
+        }
+        const prefs = {
+            syncAccountIds: Array.from(iiState.explorerSelectedAccountIds),
+            syncDateRange: document.getElementById('explorerSyncDateRange')?.value || 'current',
+            syncInbox: document.getElementById('explorerSyncInbox')?.checked !== false,
+            syncSpam: document.getElementById('explorerSyncSpam')?.checked !== false,
+            accountFilter: document.getElementById('messageAccountFilter')?.value || '',
+            dateFilter: document.getElementById('messageDateFilter')?.value || '',
+            search: document.getElementById('messageSearchInput')?.value || '',
+            activeFolder: iiState.activeExplorerFolder || ''
+        };
+        try {
+            localStorage.setItem(II_EXPLORER_PREFS_KEY, JSON.stringify(prefs));
+        } catch (err) {
+            console.warn('Failed to save Inbox Explorer preferences', err);
+        }
+    }
+
+    function toggleExplorerAccountSelection(id, checked) {
+        loadExplorerPreferences();
+        const numericId = parseInt(id);
+        if (!Number.isFinite(numericId)) return;
+        if (checked) iiState.explorerSelectedAccountIds.add(numericId);
+        else iiState.explorerSelectedAccountIds.delete(numericId);
+        iiState.explorerHasSavedAccountSelection = true;
+        saveExplorerPreferences();
+    }
+
     function renderMessageAccountFilter() {
         const select = document.getElementById('messageAccountFilter');
         if (select) {
@@ -5062,16 +5163,23 @@ merge_recipe_id, content_blueprint_id</pre>
     function renderExplorerAccountCheckboxes() {
         const el = document.getElementById('explorerAccountCheckboxes');
         if (!el) return;
+        loadExplorerPreferences();
         const accounts = iiState.imapAccounts.filter(isEnabledImapAccount);
+        const validIds = new Set(accounts.map((account) => account.id));
+        iiState.explorerSelectedAccountIds = new Set([...iiState.explorerSelectedAccountIds].filter((id) => validIds.has(id)));
+        if (!iiState.explorerHasSavedAccountSelection) {
+            accounts.forEach((account) => iiState.explorerSelectedAccountIds.add(account.id));
+        }
         if (!accounts.length) {
             el.innerHTML = '<p class="ii-muted" style="font-size:0.8em">No accounts connected.</p>';
             return;
         }
         el.innerHTML = accounts.map((account) => `
             <label class="d-block mb-1 ii-muted" style="font-size:0.8em">
-                <input type="checkbox" checked class="explorer-account-check" value="${account.id}">
+                <input type="checkbox" ${iiState.explorerSelectedAccountIds.has(account.id) ? 'checked' : ''} class="explorer-account-check" value="${account.id}" onchange="toggleExplorerAccountSelection(${account.id}, this.checked)">
                 ${escapeHtml(account.email)}
             </label>`).join('');
+        if (!iiState.explorerHasSavedAccountSelection) saveExplorerPreferences();
     }
 
     async function loadExplorerFolders(accountId, refreshToken = iiState.explorerRefreshToken) {
@@ -5118,6 +5226,7 @@ merge_recipe_id, content_blueprint_id</pre>
         document.querySelectorAll('#folderList .ii-folder').forEach((el) => {
             el.classList.toggle('active', el.dataset.folder === folder);
         });
+        saveExplorerPreferences();
         loadExplorerMessages();
     }
 
@@ -5244,6 +5353,7 @@ merge_recipe_id, content_blueprint_id</pre>
     async function syncExplorerAccounts() {
         const status = document.getElementById('explorerSyncStatus');
         const btn = document.getElementById('explorerSyncBtn');
+        saveExplorerPreferences();
         const checkboxes = document.querySelectorAll('.explorer-account-check:checked');
         const accountIds = Array.from(checkboxes).map((cb) => parseInt(cb.value));
         if (!accountIds.length) {
@@ -5257,13 +5367,21 @@ merge_recipe_id, content_blueprint_id</pre>
             status.textContent = 'Select at least one folder type (INBOX or Spam/Junk).';
             return;
         }
+        const syncDateRange = document.getElementById('explorerSyncDateRange')?.value || 'current';
+        const syncLimit = syncDateRange === 'current' ? 50 : 500;
+        const rangeLabel = {
+            current: 'latest 50 emails',
+            today: 'today',
+            yesterday: 'yesterday',
+            last_week: 'last week'
+        }[syncDateRange] || 'selected date';
         if (btn) { btn.disabled = true; btn.innerHTML = '<span class="ii-spinner" aria-hidden="true"></span> Syncing...'; }
-        status.textContent = `Syncing ${accountIds.length} account(s), ${folders.length} folder(s)...`;
+        status.textContent = `Syncing ${accountIds.length} account(s), ${folders.length} folder(s), ${rangeLabel}...`;
         try {
             const data = await iiFetch('/api/inbox-intelligence/explorer/sync', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({account_ids: accountIds, folders, limit: 50, force_full: false})
+                body: JSON.stringify({account_ids: accountIds, folders, limit: syncLimit, force_full: false, date_range: syncDateRange})
             });
             const totalSynced = data.synced || 0;
             const errCount = (data.errors || []).length;
@@ -5295,6 +5413,7 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     async function loadExplorerMessages(refreshToken = iiState.explorerRefreshToken) {
+        loadExplorerPreferences();
         const params = new URLSearchParams({limit: 200});
         params.set('_', refreshToken || Date.now().toString());
         const accountId = document.getElementById('messageAccountFilter')?.value;

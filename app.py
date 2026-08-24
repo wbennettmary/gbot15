@@ -1967,11 +1967,20 @@ def api_explorer_bulk_sync():
     limit = min(200, max(10, int(data.get('limit') or 80)))
     folders = data.get('folders') or None
     force_full = bool(data.get('force_full', True))
+    date_range = (data.get('date_range') or 'current').strip()
     if not account_ids:
         accounts = _enabled_imap_accounts_query().all()
     else:
         accounts = _enabled_imap_accounts_query().filter(InboxImapAccount.id.in_(account_ids)).all()
-    results, all_errors = _sync_mailbox_accounts(accounts, folders=folders, limit=limit, force_full=force_full)
+    if date_range and date_range != 'current':
+        results = []
+        all_errors = []
+        for account in accounts:
+            synced, folder_results, account_errors = _sync_mailbox_date_range_no_cursor(account, folders=folders, date_range=date_range, limit=max(limit, 500))
+            results.append({'account_id': account.id, 'email': account.email, 'synced': synced, 'folders': folder_results, 'errors': account_errors})
+            all_errors.extend(account_errors)
+    else:
+        results, all_errors = _sync_mailbox_accounts(accounts, folders=folders, limit=limit, force_full=force_full)
     total_synced = sum(r['synced'] for r in results)
     return _json_no_store({'success': True, 'synced': total_synced, 'results': results, 'errors': all_errors})
 
@@ -2127,7 +2136,10 @@ def api_inbox_messages():
     if search:
         like = f"%{search}%"
         q = q.filter(or_(InboxEmailMessage.sender.ilike(like), InboxEmailMessage.subject.ilike(like), InboxEmailMessage.sender_domain.ilike(like), InboxEmailMessage.preview.ilike(like)))
-    if date_range == '24h':
+    start_dt, end_dt = _explorer_date_range_bounds(date_range)
+    if start_dt and end_dt:
+        q = q.filter(InboxEmailMessage.received_at >= start_dt, InboxEmailMessage.received_at < end_dt)
+    elif date_range == '24h':
         q = q.filter(InboxEmailMessage.received_at >= datetime.utcnow() - timedelta(hours=24))
     elif date_range == '7d':
         q = q.filter(InboxEmailMessage.received_at >= datetime.utcnow() - timedelta(days=7))
@@ -3765,6 +3777,94 @@ def _date_range_to_imap_since(date_range):
     else:
         return None
     return dt.strftime('%d-%b-%Y')
+
+def _explorer_date_range_bounds(date_range):
+    """Return UTC day bounds for Inbox Explorer date-based syncing/filtering."""
+    now = datetime.utcnow()
+    today = datetime(now.year, now.month, now.day)
+    if date_range == 'today':
+        return today, today + timedelta(days=1)
+    if date_range == 'yesterday':
+        return today - timedelta(days=1), today
+    if date_range == 'last_week':
+        return today - timedelta(days=7), today + timedelta(days=1)
+    return None, None
+
+def _sync_mailbox_date_range_no_cursor(account, folders=None, date_range=None, limit=500):
+    """Sync messages matching a date window without changing incremental UID cursors."""
+    start_dt, end_dt = _explorer_date_range_bounds(date_range)
+    if not start_dt or not end_dt:
+        return _sync_mailbox_recent_no_cursor(account, folders=folders, limit=limit, wait_for_lock=True)
+    conn = None
+    total_synced = 0
+    errors = []
+    folder_results = []
+    lock = _get_account_sync_lock(account.id)
+    if not lock.acquire(timeout=90):
+        return 0, [], ['Sync already in progress for this account']
+    try:
+        account.connection_status = 'syncing'
+        account.last_error = None
+        db.session.commit()
+        conn = _imap_connect(account)
+        try:
+            conn.sock.settimeout(20)
+        except Exception:
+            pass
+        all_folders = _imap_list_folders(conn)
+        target_folders = _resolve_sync_folder_targets(conn, folders, all_folders)
+        per_folder_limit = max(25, min(2000, int(limit or 500)))
+        since_value = start_dt.strftime('%d-%b-%Y')
+        before_value = end_dt.strftime('%d-%b-%Y')
+        for folder in target_folders:
+            try:
+                meta = _imap_select_folder(conn, folder)
+                if not meta:
+                    errors.append(f'{folder}: could not open folder')
+                    continue
+                s, data = conn.uid('search', None, 'SINCE', since_value, 'BEFORE', before_value)
+                if s != 'OK' or not data or not data[0]:
+                    folder_results.append({'folder': folder, 'synced': 0, 'checked': 0, 'date_range_sync': True})
+                    continue
+                uids = sorted(data[0].split(), key=lambda item: int(item))
+                if len(uids) > per_folder_limit:
+                    uids = uids[-per_folder_limit:]
+                messages = _imap_fetch_messages_batch(conn, uids, folder)
+                new_messages = 0
+                for parsed in messages:
+                    _message, created = _upsert_imap_message_full(account, folder, parsed, uid_validity=str(meta.get('uidvalidity') or ''))
+                    if created:
+                        new_messages += 1
+                total_synced += new_messages
+                db.session.commit()
+                folder_results.append({'folder': folder, 'synced': new_messages, 'checked': len(messages), 'date_range_sync': True})
+            except Exception as e:
+                db.session.rollback()
+                errors.append(f'{folder}: {e}')
+        account.last_synced_at = datetime.utcnow()
+        account.connection_status = 'connected'
+        _refresh_account_counts(account)
+        db.session.commit()
+        app.logger.info(f"[SYNC-DATE] {account.email}: +{total_synced} message(s) for {date_range}")
+        return total_synced, folder_results, errors
+    except Exception as e:
+        db.session.rollback()
+        account.connection_status = 'error'
+        account.last_error = str(e)
+        try:
+            db.session.add(account)
+            db.session.commit()
+        except Exception:
+            pass
+        return total_synced, folder_results, errors + [f'connection: {e}']
+    finally:
+        try:
+            if conn:
+                conn.close()
+                conn.logout()
+        except Exception:
+            pass
+        lock.release()
 
 def _message_database_searchable(message):
     try:
