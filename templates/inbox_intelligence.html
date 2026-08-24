@@ -6187,11 +6187,28 @@ merge_recipe_id, content_blueprint_id</pre>
         const select = document.getElementById('automatedWorkspaceListSelect');
         if (!select || !token) return null;
         const needle = String(token).trim().toLowerCase();
+        const workspaceList = (iiState.workspaceLists || []).find((list) => {
+            const name = String(list.name || '').trim().toLowerCase();
+            const id = String(list.id || '').trim().toLowerCase();
+            return name === needle || id === needle;
+        });
+        if (workspaceList) {
+            return Array.from(select.options).find((option) => String(option.value) === String(workspaceList.id)) || null;
+        }
         return Array.from(select.options).find((option) => {
             const value = String(option.value || '').toLowerCase();
             const text = String(option.textContent || '').toLowerCase();
             return value === needle || text.includes(needle);
         }) || null;
+    }
+
+    function parseAiAgentListTokens(rawValue) {
+        const raw = String(rawValue || '').trim();
+        if (!raw) return [];
+        const commaParts = raw.split(',').map((part) => part.trim()).filter(Boolean);
+        if (commaParts.length > 1) return commaParts;
+        if (findAutomatedWorkspaceListOption(raw)) return [raw];
+        return raw.match(/[a-z0-9_-]+/gi) || [];
     }
 
     function selectAutomatedRecipientByEmail(email) {
@@ -6259,7 +6276,7 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     async function applyAiAgentSetupToPage() {
-        const listIds = (document.getElementById('aiAgentListIdsInput')?.value || '').match(/[a-z0-9_-]+/gi) || [];
+        const listIds = parseAiAgentListTokens(document.getElementById('aiAgentListIdsInput')?.value || '');
         const usersEach = (document.getElementById('aiAgentUsersEachInput')?.value || '').trim();
         const recipient = (document.getElementById('aiAgentRecipientEmailInput')?.value || '').trim().toLowerCase();
         const grey = document.getElementById('aiAgentSetupGreyAction')?.checked !== false;
@@ -8121,7 +8138,7 @@ merge_recipe_id, content_blueprint_id</pre>
             if (automatedSelect) automatedSelect.innerHTML = options;
             if (aiAgentListOptions) {
                 aiAgentListOptions.innerHTML = iiState.workspaceLists
-                    .map((list) => `<option value="${list.id}" label="${escapeHtml(list.name)} · ${list.account_count} account(s)"></option>`)
+                    .map((list) => `<option value="${escapeHtml(list.name || '')}" label="${list.account_count} account(s) · ${escapeHtml(list.status || '')}"></option>`)
                     .join('');
             }
             if (status) status.textContent = `${iiState.workspaceLists.length} saved list(s) available.`;
