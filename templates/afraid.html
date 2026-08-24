@@ -103,6 +103,19 @@
         white-space: nowrap;
     }
 
+    .afraid-svg-icon {
+        display: inline-block;
+        flex: 0 0 auto;
+        fill: none;
+        height: 1em;
+        stroke: currentColor;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 2;
+        vertical-align: -0.14em;
+        width: 1em;
+    }
+
     .afraid-list-card-actions {
         align-items: center;
         display: grid;
@@ -138,9 +151,28 @@
         width: 30px;
     }
 
+    .afraid-list-icon-btn.verify-all,
+    .afraid-list-icon-btn.verify-specific {
+        gap: 5px;
+        padding: 0 8px;
+        width: auto;
+    }
+
     .afraid-list-icon-btn i {
         font-size: 12px;
         line-height: 1;
+    }
+
+    .afraid-list-icon-btn .afraid-svg-icon {
+        height: 14px;
+        width: 14px;
+    }
+
+    .afraid-list-icon-label {
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1;
+        white-space: nowrap;
     }
 
     .afraid-list-icon-btn:hover {
@@ -228,6 +260,24 @@
         }
     }
 </style>
+<svg aria-hidden="true" focusable="false" style="position:absolute;width:0;height:0;overflow:hidden">
+    <symbol id="afraid-icon-play" viewBox="0 0 24 24"><polygon points="8 5 19 12 8 19 8 5"></polygon></symbol>
+    <symbol id="afraid-icon-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"></rect></symbol>
+    <symbol id="afraid-icon-cookie" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9 4 4 0 0 0 4 4 4 4 0 0 0 5 5Z"></path><path d="M8 8h.01"></path><path d="M8 15h.01"></path><path d="M13 13h.01"></path></symbol>
+    <symbol id="afraid-icon-list-check" viewBox="0 0 24 24"><path d="M9 6h11"></path><path d="M9 12h11"></path><path d="M9 18h11"></path><path d="m3 6 1.5 1.5L7 4"></path><path d="m3 12 1.5 1.5L7 10"></path><path d="m3 18 1.5 1.5L7 16"></path></symbol>
+    <symbol id="afraid-icon-tags" viewBox="0 0 24 24"><path d="M20 10 12 2H4v8l8 8 8-8Z"></path><path d="M7.5 6.5h.01"></path><path d="m14 20 6-6"></path></symbol>
+    <symbol id="afraid-icon-cloud-upload" viewBox="0 0 24 24"><path d="M16 16 12 12 8 16"></path><path d="M12 12v9"></path><path d="M20 17.5A4.5 4.5 0 0 0 17.5 9a6 6 0 0 0-11.4 1.8A3.5 3.5 0 0 0 7 17.5h13Z"></path></symbol>
+    <symbol id="afraid-icon-filter" viewBox="0 0 24 24"><path d="M4 5h16l-6 7v5l-4 2v-7L4 5Z"></path></symbol>
+    <symbol id="afraid-icon-key" viewBox="0 0 24 24"><circle cx="7.5" cy="14.5" r="4.5"></circle><path d="m11 11 9-9"></path><path d="m16 6 2 2"></path><path d="m14 8 2 2"></path></symbol>
+    <symbol id="afraid-icon-briefcase" viewBox="0 0 24 24"><path d="M10 6V5a2 2 0 0 1 2-2h0a2 2 0 0 1 2 2v1"></path><rect x="3" y="6" width="18" height="14" rx="2"></rect><path d="M3 12h18"></path></symbol>
+    <symbol id="afraid-icon-fingerprint" viewBox="0 0 24 24"><path d="M12 11a3 3 0 0 0-3 3c0 2-1 4-2 5"></path><path d="M15 14c0 2-.5 4-1.5 6"></path><path d="M18 16c0-5-2-8-6-8a6 6 0 0 0-6 6"></path><path d="M4 16c0-6 3-10 8-10 5.5 0 9 4 9 10"></path><path d="M9 20c1-1.5 1.5-3.5 1.5-6"></path></symbol>
+    <symbol id="afraid-icon-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18"></path><path d="M12 3a14 14 0 0 1 0 18"></path><path d="M12 3a14 14 0 0 0 0 18"></path></symbol>
+    <symbol id="afraid-icon-shield" viewBox="0 0 24 24"><path d="M12 3 20 6v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3Z"></path><path d="M12 7v10"></path></symbol>
+    <symbol id="afraid-icon-broom" viewBox="0 0 24 24"><path d="m16 3 5 5"></path><path d="M14 5 4 15l5 5L19 10"></path><path d="m4 15-2 7 7-2"></path></symbol>
+    <symbol id="afraid-icon-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"></rect><path d="M4 16V6a2 2 0 0 1 2-2h10"></path></symbol>
+    <symbol id="afraid-icon-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4Z"></path><path d="m13 7 4 4"></path></symbol>
+    <symbol id="afraid-icon-trash" viewBox="0 0 24 24"><path d="M4 7h16"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M6 7l1 14h10l1-14"></path><path d="M9 7V4h6v3"></path></symbol>
+</svg>
 <div class="container mt-4">
     <h2 class="mb-1">Afraid (FreeDNS) Management</h2>
     <p class="text-muted mb-4">Automate CNAME subdomain creation on FreeDNS using your browser session cookies.</p>
@@ -236,23 +286,23 @@
         {% if session.get('role') == 'admin' %}
         <li class="nav-item" role="presentation">
             <button class="nav-link active" id="cookies-tab" data-bs-toggle="tab" data-bs-target="#cookiesPane" type="button" role="tab">
-                <i class="fas fa-cookie-bite me-1"></i> Session Cookies
+                <svg class="afraid-svg-icon me-1"><use href="#afraid-icon-cookie"></use></svg> Session Cookies
             </button>
         </li>
         {% endif %}
         <li class="nav-item" role="presentation">
             <button class="nav-link {% if session.get('role') != 'admin' %}active{% endif %}" id="process-tab" data-bs-toggle="tab" data-bs-target="#processPane" type="button" role="tab">
-                <i class="fas fa-play me-1"></i> Process
+                <svg class="afraid-svg-icon me-1"><use href="#afraid-icon-play"></use></svg> Process
             </button>
         </li>
         <li class="nav-item" role="presentation">
             <button class="nav-link" id="lists-tab" data-bs-toggle="tab" data-bs-target="#listsPane" type="button" role="tab">
-                <i class="fas fa-list-check me-1"></i> List Management
+                <svg class="afraid-svg-icon me-1"><use href="#afraid-icon-list-check"></use></svg> List Management
             </button>
         </li>
         <li class="nav-item" role="presentation">
             <button class="nav-link" id="used-domains-tab" data-bs-toggle="tab" data-bs-target="#usedDomainsPane" type="button" role="tab">
-                <i class="fas fa-tags me-1"></i> Used Domains
+                <svg class="afraid-svg-icon me-1"><use href="#afraid-icon-tags"></use></svg> Used Domains
             </button>
         </li>
     </ul>
@@ -542,7 +592,7 @@
             <div class="modal-header">
                 <div>
                     <h5 class="modal-title" id="afraidExternalCfModalTitle">
-                        <i class="fas fa-cloud-arrow-up me-2"></i>Add & Verify Saved AFRAID Domains
+                        <svg class="afraid-svg-icon me-2"><use href="#afraid-icon-cloud-upload"></use></svg>Add & Verify Saved AFRAID Domains
                     </h5>
                     <div class="afraid-verify-subtitle" id="afraidExternalCfModalSubtitle">Parse the saved list, add each domain to Workspace, then insert TXT records into Cloudflare.</div>
                 </div>
@@ -580,7 +630,7 @@
                             <div class="form-text mt-0">Paste one account per line. Only accounts that exist in the selected list will be used.</div>
                         </div>
                         <button type="button" class="btn btn-sm btn-outline-primary" id="btnApplyAfraidSpecificAccounts">
-                            <i class="fas fa-filter me-1"></i>Apply accounts
+                            <svg class="afraid-svg-icon me-1"><use href="#afraid-icon-filter"></use></svg>Apply accounts
                         </button>
                     </div>
                     <textarea class="form-control font-monospace" id="afraidSpecificAccountsInput" rows="5" placeholder="admin@example.com&#10;service-account-name&#10;admin2@example.com"></textarea>
@@ -597,11 +647,11 @@
                                 <th>Account</th>
                                 <th>External domain</th>
                                 <th>Cloudflare zone</th>
-                                <th class="text-center" title="Account lookup"><i class="fas fa-key"></i></th>
-                                <th class="text-center" title="Workspace add"><i class="fas fa-briefcase"></i></th>
-                                <th class="text-center" title="TXT token"><i class="fas fa-fingerprint"></i></th>
-                                <th class="text-center" title="Cloudflare DNS"><i class="fas fa-globe"></i></th>
-                                <th class="text-center" title="Workspace verification"><i class="fas fa-shield-halved"></i></th>
+                                <th class="text-center" title="Account lookup"><svg class="afraid-svg-icon"><use href="#afraid-icon-key"></use></svg></th>
+                                <th class="text-center" title="Workspace add"><svg class="afraid-svg-icon"><use href="#afraid-icon-briefcase"></use></svg></th>
+                                <th class="text-center" title="TXT token"><svg class="afraid-svg-icon"><use href="#afraid-icon-fingerprint"></use></svg></th>
+                                <th class="text-center" title="Cloudflare DNS"><svg class="afraid-svg-icon"><use href="#afraid-icon-globe"></use></svg></th>
+                                <th class="text-center" title="Workspace verification"><svg class="afraid-svg-icon"><use href="#afraid-icon-shield"></use></svg></th>
                                 <th>Message</th>
                             </tr>
                         </thead>
@@ -614,7 +664,7 @@
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <div class="fw-semibold small text-muted text-uppercase">Process log</div>
                     <button type="button" class="btn btn-sm btn-outline-secondary" id="btnClearAfraidExternalCfLog">
-                        <i class="fas fa-broom me-1"></i>Clear
+                        <svg class="afraid-svg-icon me-1"><use href="#afraid-icon-broom"></use></svg>Clear
                     </button>
                 </div>
                 <div class="afraid-verify-log" id="afraidExternalCfLog">Ready.</div>
@@ -622,10 +672,10 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
                 <button type="button" class="btn btn-outline-danger" id="btnStopAfraidExternalCf">
-                    <i class="fas fa-stop me-1"></i>Stop
+                    <svg class="afraid-svg-icon me-1"><use href="#afraid-icon-stop"></use></svg>Stop
                 </button>
                 <button type="button" class="btn btn-primary" id="btnStartAfraidExternalCf">
-                    <i class="fas fa-play me-1"></i>Start verification
+                    <svg class="afraid-svg-icon me-1"><use href="#afraid-icon-play"></use></svg>Start verification
                 </button>
             </div>
         </div>
@@ -1299,19 +1349,19 @@ async function loadAfraidLists() {
                             </select>
                             <div class="btn-group btn-group-sm afraid-list-card-buttons">
                                 <button class="btn afraid-list-icon-btn verify-all" onclick="openAfraidExternalCfModal(${lst.id}, {autoStart: true})" title="Add and verify domains for all selected list accounts" aria-label="Add and verify domains for all selected list accounts">
-                                    <i class="fas fa-cloud-arrow-up"></i>
+                                    <svg class="afraid-svg-icon"><use href="#afraid-icon-cloud-upload"></use></svg><span class="afraid-list-icon-label">All</span>
                                 </button>
                                 <button class="btn afraid-list-icon-btn verify-specific" onclick="openAfraidExternalCfModal(${lst.id}, {specificAccounts: true})" title="Add and verify domains for pasted accounts only" aria-label="Add and verify domains for pasted accounts only">
-                                    <i class="fas fa-filter"></i>
+                                    <svg class="afraid-svg-icon"><use href="#afraid-icon-filter"></use></svg><span class="afraid-list-icon-label">Pick</span>
                                 </button>
                                 <button class="btn afraid-list-icon-btn copy-list" onclick="copyAfraidList(${lst.id})" title="Copy list" aria-label="Copy list">
-                                    <i class="fas fa-copy"></i>
+                                    <svg class="afraid-svg-icon"><use href="#afraid-icon-copy"></use></svg>
                                 </button>
                                 <button class="btn afraid-list-icon-btn edit-list" onclick="editAfraidList(${lst.id})" title="Edit list" aria-label="Edit list">
-                                    <i class="fas fa-pen-to-square"></i>
+                                    <svg class="afraid-svg-icon"><use href="#afraid-icon-edit"></use></svg>
                                 </button>
                                 <button class="btn afraid-list-icon-btn delete-list" onclick="deleteAfraidList(${lst.id})" title="Delete list" aria-label="Delete list">
-                                    <i class="fas fa-trash"></i>
+                                    <svg class="afraid-svg-icon"><use href="#afraid-icon-trash"></use></svg>
                                 </button>
                             </div>
                         </div>
@@ -1785,8 +1835,8 @@ function setAfraidExternalCfRunning(isRunning) {
     stopBtn.disabled = !isRunning;
     accountSelect.disabled = isRunning || Boolean(afraidExternalCfMergedSource);
     startBtn.innerHTML = isRunning
-        ? '<i class="fas fa-spinner fa-spin me-1"></i>Running'
-        : '<i class="fas fa-play me-1"></i>Start verification';
+        ? '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Running'
+        : '<svg class="afraid-svg-icon me-1"><use href="#afraid-icon-play"></use></svg>Start verification';
 }
 
 function showAfraidExternalCfAlert(message, type) {
