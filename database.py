@@ -522,6 +522,7 @@ class InboxDeliverabilityTest(db.Model):
     inbox_threshold = db.Column(db.Integer, default=80)
     spam_threshold = db.Column(db.Integer, default=40)
     minimum_observations = db.Column(db.Integer, default=10)
+    workspace_list_id = db.Column(db.Integer, db.ForeignKey('workspace_list.id'), nullable=True, index=True)
     created_by = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
     completed_at = db.Column(db.DateTime, nullable=True)

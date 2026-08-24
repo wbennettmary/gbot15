@@ -366,6 +366,7 @@ with app.app_context():
                 'inbox_threshold': 'INTEGER DEFAULT 80',
                 'spam_threshold': 'INTEGER DEFAULT 40',
                 'minimum_observations': 'INTEGER DEFAULT 10',
+                'workspace_list_id': 'INTEGER',
             }
             with db.engine.connect() as conn:
                 for column_name, column_type in new_columns.items():
@@ -3148,6 +3149,8 @@ def _automated_test_date_bounds(date_filter, custom_start=None, custom_end=None)
     return datetime.combine(start_date, datetime.min.time()), datetime.combine(end_date, datetime.min.time())
 
 def _serialize_automated_test(test):
+    workspace_list_id = getattr(test, 'workspace_list_id', None)
+    workspace_list = WorkspaceList.query.get(workspace_list_id) if workspace_list_id else None
     return {
         'test_id': test.test_id,
         'name': test.name,
@@ -3160,6 +3163,8 @@ def _serialize_automated_test(test):
         'total_email_sources': getattr(test, 'total_email_sources', 0) or 0,
         'total_users': getattr(test, 'total_users', 0) or 0,
         'total_recipients': getattr(test, 'total_recipients', 0) or 0,
+        'workspace_list_id': workspace_list_id,
+        'workspace_list_name': workspace_list.name if workspace_list else '',
         'total_messages': test.total_messages,
         'sent_count': test.sent_count,
         'inbox_count': test.inbox_count,
@@ -3468,6 +3473,10 @@ def api_inbox_automated_tests():
     stored_html_body = custom_html_body if custom_html_body.strip() else ((first_source.html_snapshot if first_source else '') or '')
     stored_text_body = custom_text_body if custom_text_body.strip() else (((first_source.text_snapshot or first_source.preview_snapshot) if first_source else '') or '')
     total_operations = len(source_slots) * len(senders) * len(inboxes) if strategy == 'full_matrix' else len(source_slots) * len(senders)
+    try:
+        workspace_list_id = int(data.get('list_id') or 0) or None
+    except (TypeError, ValueError):
+        workspace_list_id = None
     test = InboxDeliverabilityTest(
         test_id=test_id,
         name=name,
@@ -3490,6 +3499,7 @@ def api_inbox_automated_tests():
         inbox_threshold=inbox_threshold,
         spam_threshold=spam_threshold,
         minimum_observations=minimum_observations,
+        workspace_list_id=workspace_list_id,
         created_by=session.get('user')
     )
     db.session.add(test)
@@ -4080,6 +4090,7 @@ def api_inbox_test_detail(test_id):
             'inbox_account_ids': inbox_account_ids,
             'sender_emails': sender_emails,
             'senders': sender_context,
+            'list_id': getattr(test, 'workspace_list_id', None),
             'strategy': getattr(test, 'strategy', None),
             'inbox_threshold': getattr(test, 'inbox_threshold', 80) or 80,
             'spam_threshold': getattr(test, 'spam_threshold', 40) or 40,

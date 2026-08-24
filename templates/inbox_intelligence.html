@@ -6779,6 +6779,18 @@ merge_recipe_id, content_blueprint_id</pre>
         return `<span class="ii-chip ii-test-origin-chip ${origin}"><i class="fas ${origin === 'ai' ? 'fa-wand-magic-sparkles' : 'fa-hand'}"></i> ${origin === 'ai' ? 'AI' : 'Manual'}</span>`;
     }
 
+    function automatedTestListLabel(test = {}) {
+        const listId = test.workspace_list_id || test.list_id || '';
+        const directName = String(test.workspace_list_name || test.list_name || '').trim();
+        if (directName) return directName;
+        if (listId) {
+            const list = (iiState.workspaceLists || []).find((item) => String(item.id) === String(listId));
+            if (list?.name) return list.name;
+            return `List #${listId}`;
+        }
+        return '';
+    }
+
     async function loadAutomatedTests(pageOrHydrate = 1, hydrateSelected = true) {
         let page = Number(pageOrHydrate);
         if (typeof pageOrHydrate === 'boolean') {
@@ -6823,7 +6835,7 @@ merge_recipe_id, content_blueprint_id</pre>
         const isAll = iiState.automatedTestsPerPage === 'all';
         const pageCount = isAll ? 1 : Math.max(1, Math.ceil((iiState.automatedTestsTotal || 0) / (iiState.automatedTestsPerPage || 5)));
         el.innerHTML = `<div class="ii-responsive-table"><table class="ii-pro-compact-table">
-            <tr><th><input type="checkbox" aria-label="Select visible tests" onchange="toggleVisibleAutomatedTests(this.checked)"></th><th>Test ID</th><th>Date</th><th>Started</th><th>Origin</th><th>Status</th><th>Progress</th><th>Users</th><th>Recipients</th><th>Operations</th><th>Actions</th></tr>
+            <tr><th><input type="checkbox" aria-label="Select visible tests" onchange="toggleVisibleAutomatedTests(this.checked)"></th><th>Test ID</th><th>Date</th><th>Started</th><th>Origin</th><th>List</th><th>Status</th><th>Progress</th><th>Users</th><th>Recipients</th><th>Operations</th><th>Actions</th></tr>
             ${iiState.automatedTests.map((test) => {
             const sent = test.sent_count || 0;
             const total = test.total_messages || sent;
@@ -6832,6 +6844,7 @@ merge_recipe_id, content_blueprint_id</pre>
             const pending = test.pending_count || 0;
             const failed = test.failed_count || 0;
             const sendW = total ? Math.round((sent / total) * 100) : 0;
+            const listLabel = automatedTestListLabel(test);
             return `
             <tr onclick="viewAutomatedEmailTest('${escapeHtml(test.test_id)}')" style="cursor:pointer; ${iiState.automatedSelectedTestId === test.test_id ? 'background:#eff6ff;' : ''}">
                 <td onclick="event.stopPropagation()"><input type="checkbox" aria-label="Select ${escapeHtml(test.test_id)}" ${iiState.selectedAutomatedTestIds.has(test.test_id) ? 'checked' : ''} onchange="toggleAutomatedTestSelection('${escapeHtml(test.test_id)}', this.checked)"></td>
@@ -6839,6 +6852,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 <td>${test.created_at ? new Date(test.created_at).toLocaleDateString() : ''}</td>
                 <td>${test.created_at ? new Date(test.created_at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : ''}</td>
                 <td>${automatedTestOriginChip(test)}</td>
+                <td>${listLabel ? `<span class="ii-chip blue" title="${escapeHtml(listLabel)}"><i class="fas fa-list-check"></i> ${escapeHtml(listLabel)}</span>` : '<span class="ii-muted">-</span>'}</td>
                 <td><span class="ii-chip ${statusClass(test.status)}">${escapeHtml(test.status)}</span></td>
                 <td><div class="ii-auto-test-progress" title="Send progress ${sendW}%"><div class="seg sent" style="width:${sendW}%;"></div></div><span class="ii-muted">${sendW}%</span></td>
                 <td>${test.total_users || 0}</td>

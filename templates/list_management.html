@@ -67,6 +67,76 @@
     </div>
 </div>
 
+<!-- Delete List Users Modal -->
+<div id="deleteUsersModal" class="modal" style="display: none;">
+    <div class="modal-content glass-panel"
+        style="width: 92%; max-width: 760px; max-height: 90vh; overflow-y: auto; padding: 24px;">
+        <div class="d-flex justify-content-between align-items-start mb-4">
+            <div>
+                <h4 class="m-0 d-flex align-items-center">
+                    <i class="fas fa-user-slash me-2" style="color: #ef4444;"></i>
+                    Delete Workspace Users
+                </h4>
+                <p class="text-muted small mb-0 mt-1" id="deleteUsersSubtitle">Authenticate accounts and delete non-admin users in this list.</p>
+            </div>
+            <button id="deleteUsersCloseX" onclick="closeDeleteUsersModal()" class="glass-button" style="padding: 8px 12px;">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <div id="deleteUsersConfirmPane">
+            <div class="glass-error-box p-3 mb-3">
+                <div class="fw-semibold mb-1">This will delete users from Google Workspace accounts.</div>
+                <div class="small">The saved List Management card will stay. Only non-admin Workspace users under the listed admin accounts are targeted by the existing bulk deletion process.</div>
+            </div>
+            <div class="row g-3 mb-3">
+                <div class="col-md-4">
+                    <div class="stat-item">
+                        <div class="stat-value" id="deleteUsersAccountCount">0</div>
+                        <div class="stat-label">Accounts</div>
+                    </div>
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label text-muted small">LIST</label>
+                    <input id="deleteUsersListName" class="glass-input w-100" readonly>
+                </div>
+            </div>
+            <label class="form-label text-muted small">ACCOUNTS TO AUTHENTICATE</label>
+            <textarea id="deleteUsersAccountsPreview" class="glass-input w-100 font-monospace mb-3" rows="7" readonly></textarea>
+            <label class="d-flex align-items-center gap-2 mb-3">
+                <input id="deleteUsersConfirmCheckbox" type="checkbox">
+                <span class="small">I understand this will authenticate these accounts and delete their non-admin Workspace users.</span>
+            </label>
+            <div class="d-flex gap-2 justify-content-end">
+                <button type="button" onclick="closeDeleteUsersModal()" class="glass-button">Cancel</button>
+                <button type="button" id="deleteUsersStartBtn" onclick="startDeleteUsersForCurrentList()" class="glass-button glass-button-danger">
+                    <i class="fas fa-user-slash me-2"></i>Authenticate & Delete Users
+                </button>
+            </div>
+        </div>
+
+        <div id="deleteUsersProgressPane" style="display: none;">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="text-muted small" id="deleteUsersStage">Preparing...</span>
+                <span class="fw-semibold" id="deleteUsersPercent">0%</span>
+            </div>
+            <div class="progress mb-3" style="height: 12px; background: rgba(255,255,255,0.08);">
+                <div id="deleteUsersProgressBar" class="progress-bar bg-danger" style="width: 0%;"></div>
+            </div>
+            <div id="deleteUsersProgressMessage" class="glass-info-box p-3 mb-3">Waiting to start...</div>
+            <div id="deleteUsersResultSummary" class="row g-3 mb-3" style="display: none;">
+                <div class="col-md-4"><div class="stat-item"><div class="stat-value" id="deleteUsersDoneAccounts">0</div><div class="stat-label">Processed</div></div></div>
+                <div class="col-md-4"><div class="stat-item"><div class="stat-value" id="deleteUsersDeletedCount">0</div><div class="stat-label">Deleted</div></div></div>
+                <div class="col-md-4"><div class="stat-item"><div class="stat-value" id="deleteUsersFailedCount">0</div><div class="stat-label">Failed</div></div></div>
+            </div>
+            <textarea id="deleteUsersResultLog" class="glass-input w-100 font-monospace" rows="9" readonly></textarea>
+            <div class="d-flex gap-2 justify-content-end mt-3">
+                <button type="button" id="deleteUsersDoneBtn" onclick="closeDeleteUsersModal()" class="glass-button" disabled>Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Add/Edit Modal -->
 <div id="listModal" class="modal" style="display: none;">
     <div class="modal-content glass-panel"
@@ -370,10 +440,21 @@
         border-color: rgba(59, 130, 246, 0.3);
     }
 
+    .card-action-btn.delete-users-btn:hover {
+        background: rgba(244, 63, 94, 0.16);
+        color: #fb7185;
+        border-color: rgba(244, 63, 94, 0.36);
+    }
+
     .card-action-btn.expire-btn:hover {
         background: rgba(156, 163, 175, 0.15);
         color: #9ca3af;
         border-color: rgba(156, 163, 175, 0.3);
+    }
+
+    #deleteUsersResultLog {
+        min-height: 180px;
+        white-space: pre;
     }
 
     /* Modal Overlay */
@@ -429,6 +510,8 @@
     let lists = [];
     let editingListId = null;
     let countdownIntervals = {};
+    let deleteUsersListId = null;
+    let deleteUsersPollTimer = null;
 
     // Initialize
     document.addEventListener('DOMContentLoaded', () => {
@@ -575,6 +658,9 @@
                     </button>
                     <button class="card-action-btn email-btn" onclick="quickCopyEmailsOnly(${list.id})" title="Copy Emails Only (no passwords)">
                         <i class="fas fa-envelope"></i>
+                    </button>
+                    <button class="card-action-btn delete-users-btn" onclick="openDeleteUsersModal(${list.id})" title="Authenticate & Delete All Users in List">
+                        <i class="fas fa-user-slash"></i>
                     </button>
                     <button class="card-action-btn delete-btn" onclick="quickDelete(${list.id})" title="Delete List">
                         <i class="fas fa-trash"></i>
@@ -861,6 +947,155 @@
         }).catch(() => {
             showToast('Failed to copy', 'error');
         });
+    }
+
+    function parseListAccountEmails(rawAccounts) {
+        const seen = new Set();
+        return String(rawAccounts || '')
+            .split('\n')
+            .map(line => {
+                const trimmed = line.trim();
+                if (!trimmed) return '';
+                const commaIdx = trimmed.indexOf(',');
+                const colonIdx = trimmed.indexOf(':');
+                let cutIdx = -1;
+                if (commaIdx !== -1 && colonIdx !== -1) cutIdx = Math.min(commaIdx, colonIdx);
+                else if (commaIdx !== -1) cutIdx = commaIdx;
+                else if (colonIdx !== -1) cutIdx = colonIdx;
+                return (cutIdx !== -1 ? trimmed.substring(0, cutIdx) : trimmed).trim();
+            })
+            .filter(account => account && account.includes('@'))
+            .filter(account => {
+                const key = account.toLowerCase();
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
+    }
+
+    function openDeleteUsersModal(listId) {
+        const list = lists.find(l => l.id === listId);
+        if (!list) return;
+        const accounts = parseListAccountEmails(list.raw_accounts);
+        deleteUsersListId = listId;
+        if (deleteUsersPollTimer) {
+            clearTimeout(deleteUsersPollTimer);
+            deleteUsersPollTimer = null;
+        }
+        document.getElementById('deleteUsersSubtitle').textContent = 'Authenticate accounts and delete non-admin users in this list.';
+        document.getElementById('deleteUsersListName').value = list.name;
+        document.getElementById('deleteUsersAccountCount').textContent = accounts.length;
+        document.getElementById('deleteUsersAccountsPreview').value = accounts.join('\n');
+        document.getElementById('deleteUsersConfirmCheckbox').checked = false;
+        document.getElementById('deleteUsersConfirmPane').style.display = 'block';
+        document.getElementById('deleteUsersProgressPane').style.display = 'none';
+        document.getElementById('deleteUsersProgressBar').style.width = '0%';
+        document.getElementById('deleteUsersPercent').textContent = '0%';
+        document.getElementById('deleteUsersStage').textContent = 'Preparing...';
+        document.getElementById('deleteUsersProgressMessage').textContent = 'Waiting to start...';
+        document.getElementById('deleteUsersResultSummary').style.display = 'none';
+        document.getElementById('deleteUsersResultLog').value = '';
+        document.getElementById('deleteUsersDoneBtn').disabled = true;
+        document.getElementById('deleteUsersStartBtn').disabled = accounts.length === 0;
+        document.getElementById('deleteUsersCloseX').disabled = false;
+        document.getElementById('deleteUsersModal').style.display = 'flex';
+        if (!accounts.length) {
+            showToast('No account emails found in this list', 'error');
+        }
+    }
+
+    function closeDeleteUsersModal() {
+        if (deleteUsersPollTimer) {
+            clearTimeout(deleteUsersPollTimer);
+            deleteUsersPollTimer = null;
+        }
+        document.getElementById('deleteUsersModal').style.display = 'none';
+        deleteUsersListId = null;
+    }
+
+    async function startDeleteUsersForCurrentList() {
+        const list = lists.find(l => l.id === deleteUsersListId);
+        if (!list) return;
+        const accounts = parseListAccountEmails(list.raw_accounts);
+        if (!accounts.length) {
+            showToast('No account emails found in this list', 'error');
+            return;
+        }
+        if (!document.getElementById('deleteUsersConfirmCheckbox').checked) {
+            showToast('Confirm the deletion before starting', 'error');
+            return;
+        }
+        document.getElementById('deleteUsersConfirmPane').style.display = 'none';
+        document.getElementById('deleteUsersProgressPane').style.display = 'block';
+        document.getElementById('deleteUsersCloseX').disabled = true;
+        document.getElementById('deleteUsersProgressMessage').textContent = `Starting deletion task for ${accounts.length} account(s)...`;
+        document.getElementById('deleteUsersResultLog').value = accounts.map(account => `queued: ${account}`).join('\n');
+        try {
+            const response = await fetch('/api/bulk-delete-account-users', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({accounts})
+            });
+            const data = await response.json();
+            if (!data.success || !data.task_id) {
+                throw new Error(data.error || 'Could not start deletion task');
+            }
+            pollDeleteUsersProgress(data.task_id);
+        } catch (error) {
+            document.getElementById('deleteUsersCloseX').disabled = false;
+            document.getElementById('deleteUsersDoneBtn').disabled = false;
+            document.getElementById('deleteUsersProgressMessage').textContent = `Failed to start: ${error.message}`;
+            showToast(`Failed to start deletion: ${error.message}`, 'error');
+        }
+    }
+
+    function pollDeleteUsersProgress(taskId) {
+        fetch(`/api/task-progress/${taskId}`)
+            .then(response => response.json())
+            .then(progress => {
+                const pct = Math.max(0, Math.min(100, Number(progress.percentage || 0)));
+                document.getElementById('deleteUsersProgressBar').style.width = `${pct}%`;
+                document.getElementById('deleteUsersPercent').textContent = `${pct}%`;
+                document.getElementById('deleteUsersStage').textContent = progress.status || 'processing';
+                document.getElementById('deleteUsersProgressMessage').textContent = progress.message || 'Processing...';
+                if (progress.status === 'completed') {
+                    renderDeleteUsersFinalResults(progress.result_data || {});
+                    document.getElementById('deleteUsersCloseX').disabled = false;
+                    document.getElementById('deleteUsersDoneBtn').disabled = false;
+                    showToast('List user deletion finished', 'success');
+                    return;
+                }
+                if (progress.status === 'error') {
+                    document.getElementById('deleteUsersCloseX').disabled = false;
+                    document.getElementById('deleteUsersDoneBtn').disabled = false;
+                    document.getElementById('deleteUsersResultLog').value += `\nERROR: ${progress.message || 'Task failed'}`;
+                    showToast(progress.message || 'Deletion task failed', 'error');
+                    return;
+                }
+                deleteUsersPollTimer = setTimeout(() => pollDeleteUsersProgress(taskId), 1200);
+            })
+            .catch(error => {
+                document.getElementById('deleteUsersProgressMessage').textContent = `Polling interrupted: ${error.message}. Retrying...`;
+                deleteUsersPollTimer = setTimeout(() => pollDeleteUsersProgress(taskId), 3000);
+            });
+    }
+
+    function renderDeleteUsersFinalResults(data) {
+        const results = data.results || [];
+        document.getElementById('deleteUsersResultSummary').style.display = 'flex';
+        document.getElementById('deleteUsersDoneAccounts').textContent = data.total_accounts || results.length || 0;
+        document.getElementById('deleteUsersDeletedCount').textContent = data.total_deleted || 0;
+        document.getElementById('deleteUsersFailedCount').textContent = data.total_failed || 0;
+        const lines = results.map(item => {
+            if (item.authenticated === false) {
+                return `${item.account}: AUTH FAILED - ${item.error || 'Authentication failed'}`;
+            }
+            if (item.error) {
+                return `${item.account}: ERROR - ${item.error}`;
+            }
+            return `${item.account}: deleted ${item.deleted_count || 0}, failed ${item.failed_count || 0}`;
+        });
+        document.getElementById('deleteUsersResultLog').value = lines.join('\n') || 'No result rows returned.';
     }
 
     // Quick delete from card
