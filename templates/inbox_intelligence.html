@@ -6102,6 +6102,10 @@ merge_recipe_id, content_blueprint_id</pre>
         el.className = `ii-agent-chat-status ${tone}`;
     }
 
+    function paintAiAgentUi() {
+        return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    }
+
     function getAiAgentRunScope() {
         return document.getElementById('aiAgentRunScope')?.value
             || (document.getElementById('aiAgentSetupContinueAll')?.checked ? 'all' : 'one');
@@ -6185,6 +6189,38 @@ merge_recipe_id, content_blueprint_id</pre>
         return applyAiAgentSetupToPage();
     }
 
+    function normalizeWorkspaceListMatchText(value) {
+        return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+    }
+
+    function workspaceListNumberPattern(value) {
+        const cleaned = String(value || '').replace(/^0+/, '') || '0';
+        return new RegExp(`(^|\\D)0*${cleaned}(\\D|$)`);
+    }
+
+    function scoreWorkspaceListMatch(list, rawNeedle) {
+        const name = String(list?.name || '').trim().toLowerCase();
+        const id = String(list?.id || '').trim().toLowerCase();
+        const needle = String(rawNeedle || '').trim().toLowerCase();
+        const normalizedName = normalizeWorkspaceListMatchText(name);
+        const normalizedNeedle = normalizeWorkspaceListMatchText(needle);
+        if (!needle || !normalizedNeedle) return 0;
+        if (name === needle) return 1000;
+        if (normalizedName === normalizedNeedle) return 950;
+        const numericNeedle = /^\d+$/.test(needle) ? needle.replace(/^0+/, '') || '0' : '';
+        if (numericNeedle) {
+            if (!workspaceListNumberPattern(numericNeedle).test(name)) return id === needle ? 10 : 0;
+            let score = 700;
+            if (new RegExp(`^\\D*0*${numericNeedle}(\\D|$)`).test(name)) score += 80;
+            if (/(^|[^a-z])(sending|send|sent)([^a-z]|$)/i.test(name)) score += 60;
+            if (/(^|[^a-z])(pending|old|archive|archived|failed)([^a-z]|$)/i.test(name)) score -= 80;
+            score += Math.max(0, 40 - name.length);
+            return score;
+        }
+        if (normalizedName.includes(normalizedNeedle)) return 500 + Math.max(0, 80 - normalizedName.length);
+        return 0;
+    }
+
     function findAutomatedWorkspaceListOption(token) {
         const select = document.getElementById('automatedWorkspaceListSelect');
         if (!select || !token) return null;
@@ -6192,27 +6228,14 @@ merge_recipe_id, content_blueprint_id</pre>
         const needle = rawNeedle.toLowerCase();
         const lists = iiState.workspaceLists || [];
         const optionForList = (list) => Array.from(select.options).find((option) => String(option.value) === String(list.id)) || null;
-        const exactName = lists.find((list) => String(list.name || '').trim().toLowerCase() === needle);
-        if (exactName) return optionForList(exactName);
-        const numericNeedle = rawNeedle.match(/^\d+$/) ? rawNeedle.replace(/^0+/, '') || '0' : '';
-        const workspaceList = numericNeedle
-            ? lists.find((list) => {
-                const name = String(list.name || '').trim().toLowerCase();
-                return new RegExp(`(^|\\D)0*${numericNeedle}(\\D|$)`).test(name);
-            })
-            : lists.find((list) => String(list.name || '').trim().toLowerCase().includes(needle));
-        if (workspaceList) {
-            return optionForList(workspaceList);
-        }
+        const workspaceList = lists
+            .map((list) => ({list, score: scoreWorkspaceListMatch(list, rawNeedle)}))
+            .filter((item) => item.score > 0)
+            .sort((a, b) => b.score - a.score || String(b.list.created_at || '').localeCompare(String(a.list.created_at || '')))[0]?.list || null;
+        if (workspaceList) return optionForList(workspaceList);
         const exactId = lists.find((list) => String(list.id || '').trim().toLowerCase() === needle);
-        if (exactId) {
-            return optionForList(exactId);
-        }
-        return Array.from(select.options).find((option) => {
-            const value = String(option.value || '').toLowerCase();
-            const text = String(option.textContent || '').toLowerCase();
-            return value === needle || text.includes(needle);
-        }) || null;
+        if (exactId) return optionForList(exactId);
+        return null;
     }
 
     function parseAiAgentListTokens(rawValue) {
@@ -6315,6 +6338,9 @@ merge_recipe_id, content_blueprint_id</pre>
             const option = findAutomatedWorkspaceListOption(firstList);
             if (select && option) {
                 select.value = option.value;
+                const matchedList = (iiState.workspaceLists || []).find((list) => String(list.id) === String(option.value));
+                const agentListInput = document.getElementById('aiAgentListIdsInput');
+                if (agentListInput && matchedList?.name) agentListInput.value = matchedList.name;
                 await mirrorAutomatedListSelection();
                 messages.push(`List ${option.textContent.trim()} selected${listIds.length > 1 ? `; queued note includes ${listIds.slice(1).join(', ')} for follow-up runs` : ''}.`);
             } else {
@@ -6363,8 +6389,11 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     async function startAiAgentFromChat() {
+        iiState.aiAgentStopRequested = false;
+        setAiAgentRunning(true);
         setAiAgentChatStatus('Starting AI Test Agent and applying setup...');
         renderAiAgentState('loading', {message: 'Starting AI Test Agent', detail: 'Applying the selected list, template, and receiving inbox.'});
+        await paintAiAgentUi();
         const promptPaneActive = document.getElementById('aiAgentPromptPane')?.classList.contains('active');
         if (promptPaneActive && (document.getElementById('aiAgentPromptInput')?.value || '').trim()) {
             await applyAiAgentPrompt();
@@ -7558,7 +7587,9 @@ merge_recipe_id, content_blueprint_id</pre>
                 accounts_only: false
             })
         });
-        return (data.senders || []).filter((sender) => sender.service_account_id && !isAdminWorkspaceSender(sender));
+        const senders = (data.senders || []).filter((sender) => sender.service_account_id && !isAdminWorkspaceSender(sender));
+        senders._meta = data;
+        return senders;
     }
 
     async function retrieveAutomatedAccountBatch(accountIds, perAccount, offsetPerAccount) {
@@ -7605,6 +7636,9 @@ merge_recipe_id, content_blueprint_id</pre>
                 if (listSelect && option) {
                     listSelect.value = option.value;
                     listId = option.value;
+                    const matchedList = (iiState.workspaceLists || []).find((list) => String(list.id) === String(option.value));
+                    const agentListInput = document.getElementById('aiAgentListIdsInput');
+                    if (agentListInput && matchedList?.name) agentListInput.value = matchedList.name;
                     switchAutomatedWorkspaceSourceTab('list');
                 }
             }
@@ -7612,10 +7646,19 @@ merge_recipe_id, content_blueprint_id</pre>
         if (selectedAutomatedSenderPayload().length) return;
         if (listId) {
             if (perAccount) {
-                setAiAgentChatStatus(`Fetching ${perAccount} user(s) per account from selected list...`);
+                const selectedListLabel = listSelect?.selectedOptions?.[0]?.textContent?.trim() || `list ${listId}`;
+                setAiAgentChatStatus(`Fetching ${perAccount} user(s) per account from ${selectedListLabel}...`);
                 const senders = await retrieveAutomatedListBatch(listId, perAccount, 0);
                 mergeAndSelectAutomatedSenders(senders);
-                if (!senders.length) throw new Error('The selected list did not return non-admin Workspace users.');
+                if (!senders.length) {
+                    const meta = senders._meta || {};
+                    const notes = [];
+                    if (meta.service_account_count !== undefined) notes.push(`${meta.service_account_count} matched account(s)`);
+                    if (meta.unmatched?.length) notes.push(`${meta.unmatched.length} unmatched list line(s)`);
+                    if (meta.ambiguous?.length) notes.push(`${meta.ambiguous.length} ambiguous list line(s)`);
+                    if (meta.errors?.length) notes.push(`${meta.errors.length} Google API error(s)`);
+                    throw new Error(`${selectedListLabel} did not return non-admin Workspace users${notes.length ? ` (${notes.join(', ')})` : ''}.`);
+                }
                 return;
             }
             setAiAgentChatStatus('Fetching selected list account tabs for all-user execution...');
@@ -7783,7 +7826,7 @@ merge_recipe_id, content_blueprint_id</pre>
             setAiAgentChatStatus('Starting AI Test Agent and checking setup...');
             renderAiAgentState('loading', {message: 'Starting AI Test Agent', detail: 'Checking list, users, template, and receiving inbox before sending.'});
             if (status) status.textContent = 'AI Test Agent is starting...';
-            await new Promise((resolve) => requestAnimationFrame(resolve));
+            await paintAiAgentUi();
             if (!options.setupAlreadyApplied && document.getElementById('aiAgentChatDrawer')?.classList.contains('open')) {
                 const promptPaneActive = document.getElementById('aiAgentPromptPane')?.classList.contains('active');
                 if (promptPaneActive && (document.getElementById('aiAgentPromptInput')?.value || '').trim()) {
