@@ -2967,7 +2967,7 @@ The NightOwl Ranch Team</textarea>
                         </div>
                     </div>
                     <div class="ii-row flex-wrap align-items-center mt-3">
-                        <span class="ii-muted" id="automatedAiStatus">Template editing is manual. The AI agent runs the test, reads IMAP results, fixes grey users, and retests.</span>
+                        <span class="ii-muted" id="automatedAiStatus">The app prepares, sends, syncs, and validates. The AI reads synced analytics and decides whether grey-user updates should run.</span>
                     </div>
                     <div id="automatedAiSuggestions" style="display:none;"></div>
                 </div>
@@ -3167,7 +3167,7 @@ The NightOwl Ranch Team</textarea>
                         <div class="ii-row justify-content-between mb-3" id="aiAgentPanel">
                             <div>
                                 <h4><i class="fas fa-comments text-primary"></i> AI Test Agent</h4>
-                                <p class="ii-muted mb-0">Runs the configured Automated Email Test, syncs IMAP results, classifies inbox/spam/grey users, changes grey-user names, then retests.</p>
+                                <p class="ii-muted mb-0">The app runs the test and syncs IMAP. After that, AI reviews analytics and decides whether validated grey-user updates and retests should run.</p>
                             </div>
                             <div class="ii-row">
                                 <button class="ii-btn ii-btn-primary" type="button" id="aiAgentStartButton" data-ii-ai="1" onclick="startAutomatedAiAgent()"><i class="fas fa-play"></i> Start AI Agent</button>
@@ -3183,7 +3183,7 @@ The NightOwl Ranch Team</textarea>
                         <div class="ii-ai-placeholder">
                             <i class="fas fa-comments"></i>
                             <h4>Ready to run the configured process</h4>
-                            <p>Use the selected/prompted template, list or accounts, users-per-test value, receiving inboxes, and grey-user action. Results are stored in the Agent Results tab.</p>
+                            <p>Use the selected setup for app-owned sending and syncing, then let AI decide the post-sync grey-user action. Results are stored in the Agent Results tab.</p>
                             <span class="ii-chip blue" id="analyticsAiEnabledChip">Agent ready</span>
                         </div>
                     </div>
@@ -3202,7 +3202,7 @@ The NightOwl Ranch Team</textarea>
                             <div class="ii-ai-placeholder">
                                 <i class="fas fa-list-check"></i>
                                 <h4>No agent result stored yet</h4>
-                                <p>Start the agent or run from an existing/manual test. Inbox users, spam users, grey users, name changes, and copy-ready lists will appear here.</p>
+                                <p>Start the workflow or run from an existing test. Inbox users, spam users, grey users, AI decisions, name changes, and copy-ready lists will appear here.</p>
                             </div>
                         </div>
                     </div>
@@ -3230,7 +3230,7 @@ The NightOwl Ranch Team</textarea>
                     <div class="ii-agent-chat-head">
                         <div>
                             <h3 id="aiAgentChatTitle"><i class="fas fa-comments"></i> AI Test Agent</h3>
-                            <p>Tell the agent what to test, or use setup mode for exact control.</p>
+                            <p>Configure the app-run test. AI only takes over after sync to decide grey-user actions.</p>
                         </div>
                         <button class="ii-btn" type="button" onclick="closeAiAgentChat()" aria-label="Close AI Test Agent"><i class="fas fa-xmark"></i></button>
                     </div>
@@ -3309,7 +3309,7 @@ The NightOwl Ranch Team</textarea>
                             </div>
                             <button class="ii-btn w-100 mt-2" type="button" onclick="applyAiAgentSetupToPage()"><i class="fas fa-sliders"></i> Apply setup to page</button>
                         </div>
-                        <div class="ii-agent-chat-status" id="aiAgentChatStatus">Ready. Configure the test, then start the agent.</div>
+                        <div class="ii-agent-chat-status" id="aiAgentChatStatus">Ready. Configure the app-run test; AI will review analytics after sync.</div>
                     </div>
                     <div class="ii-agent-chat-foot">
                         <button class="ii-btn" type="button" onclick="closeAiAgentChat()">Close</button>
@@ -7069,7 +7069,7 @@ merge_recipe_id, content_blueprint_id</pre>
             panel.innerHTML = `<div class="ii-ai-placeholder">
                 <i class="fas fa-comments"></i>
                 <h4>${testId ? 'Agent monitor ready' : 'Start from the floating AI Agent chat'}</h4>
-                <p>The floating AI Agent runs the configured test, syncs IMAP, classifies users, handles grey-user name changes, and shows the final lists here.</p>
+                <p>The app runs and syncs the configured test. After sync, the AI Agent reads analytics, decides grey-user actions, and the app validates any updates or retests.</p>
                 <span class="ii-chip blue">Agent workflow</span>
             </div>`;
             return;
@@ -7351,7 +7351,15 @@ merge_recipe_id, content_blueprint_id</pre>
                     <div class="ii-insight-card">
                         <div class="ii-row justify-content-between mb-2"><h4>Executions & name changes</h4><span class="ii-chip blue">${agentRunTestIds(payload).length} test ID(s)</span></div>
                         ${(payload.batches || []).length ? (payload.batches || []).map((batch, index) => `<div class="ii-insight-row"><span>Batch ${index + 1}</span><span class="ii-chip blue">${escapeHtml(batch.test_id || '-')}</span>${batch.retry?.test_id ? `<span class="ii-chip green">Retry ${escapeHtml(batch.retry.test_id)}</span>` : ''}</div>`).join('') : `<div class="ii-insight-row"><span>First run</span><span class="ii-chip blue">${escapeHtml(first.test_id || '-')}</span>${retry?.test_id ? `<span class="ii-chip green">Retry ${escapeHtml(retry.test_id)}</span>` : ''}</div>`}
-                        <h4 class="mt-3">Grey users changed</h4>
+                            <h4 class="mt-3">Grey users changed</h4>
+                        ${payload.ai_decision ? `<div class="ii-card mb-3">
+                            <div class="ii-row justify-content-between mb-2">
+                                <strong>Post-sync AI decision</strong>
+                                <span class="ii-chip ${payload.ai_decision.change_grey_names ? 'green' : 'gray'}">${escapeHtml((payload.ai_decision.next_action || 'review_only').replace(/_/g, ' '))}</span>
+                            </div>
+                            <div class="ii-muted">${escapeHtml(payload.ai_decision.summary || 'The AI reviewed synced analytics before any grey-user action.')}</div>
+                            ${(payload.ai_decision.safeguards || []).length ? `<div class="ii-muted mt-2">${(payload.ai_decision.safeguards || []).slice(0, 2).map((item) => escapeHtml(item)).join(' ')}</div>` : ''}
+                        </div>` : ''}
                         ${(payload.name_changes?.changed || []).map((item) => `<div class="ii-agent-list-row"><span class="ii-email-text">${escapeHtml(item.email)}</span><span class="ii-chip green">${escapeHtml(item.new_name || 'Name changed')}</span><span></span></div>`).join('') || '<div class="ii-muted">No grey-user name changes were needed or completed.</div>'}
                         ${(payload.name_changes?.failed || []).map((item) => `<div class="ii-agent-list-row"><span class="ii-email-text">${escapeHtml(item.email || 'unknown')}</span><span class="ii-chip red">${escapeHtml(item.error || 'Failed')}</span><span></span></div>`).join('')}
                     </div>
@@ -7372,6 +7380,7 @@ merge_recipe_id, content_blueprint_id</pre>
             retry: payload.retry || null,
             batches: payload.batches || [],
             name_changes: payload.name_changes || {changed: [], failed: []},
+            ai_decision: payload.ai_decision || null,
         };
         const key = entry.retry?.test_id || entry.first?.test_id || `agent-${Date.now()}`;
         iiState.automatedAgentResults = [entry, ...(iiState.automatedAgentResults || []).filter((item) => (item.retry?.test_id || item.first?.test_id) !== key)].slice(0, 20);
@@ -7398,6 +7407,18 @@ merge_recipe_id, content_blueprint_id</pre>
             body: JSON.stringify({test_id: testId, sender_context: senderContext || []})
         });
         return data.classification || {};
+    }
+
+    async function requestAiAgentPostSyncDecision(testId, senderContext, greyUpdateEnabled) {
+        return iiFetch('/api/inbox-intelligence/ai-test-agent/post-sync-decision', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                test_id: testId,
+                sender_context: senderContext || [],
+                grey_update_enabled: Boolean(greyUpdateEnabled)
+            })
+        });
     }
 
     async function changeAiAgentGreyNames(greyUsers) {
@@ -7578,19 +7599,21 @@ merge_recipe_id, content_blueprint_id</pre>
         await syncAutomatedTestUntilComplete(firstRun.test_id, aiAgentSyncOptions());
         assertAiAgentNotStopped();
         await viewAutomatedEmailTest(firstRun.test_id);
-        const firstClassification = await classifyAutomatedAgentTest(firstRun.test_id, senderContext);
-        assertAiAgentNotStopped();
         const autoRename = isAiAgentAutoRenameEnabled();
-        const greyUsers = ((firstClassification.lists || {}).grey_users || []).filter((user) => user.service_account_id);
-        const cycle = {test_id: firstRun.test_id, classification: firstClassification, name_changes: {changed: [], failed: []}, retry: null};
-        if (autoRename && greyUsers.length) {
+        const decisionData = await requestAiAgentPostSyncDecision(firstRun.test_id, senderContext, autoRename);
+        const firstClassification = decisionData.classification || {};
+        const aiDecision = decisionData.decision || {};
+        assertAiAgentNotStopped();
+        const greyUsers = (aiDecision.grey_user_targets || []).filter((user) => user.service_account_id);
+        const cycle = {test_id: firstRun.test_id, classification: firstClassification, ai_decision: aiDecision, name_changes: {changed: [], failed: []}, retry: null};
+        if (aiDecision.change_grey_names && greyUsers.length) {
             cycle.name_changes = await changeAiAgentGreyNames(greyUsers);
             assertAiAgentNotStopped();
             const changedEmails = new Set((cycle.name_changes.changed || []).map((item) => item.email));
             const retrySenders = greyUsers
                 .filter((user) => changedEmails.has(user.email))
                 .map((user) => ({email: user.email, name: (cycle.name_changes.changed || []).find((item) => item.email === user.email)?.new_name || user.name || '', service_account_id: user.service_account_id}));
-            if (retrySenders.length) {
+            if (aiDecision.retry_after_changes && retrySenders.length) {
                 const retryPayload = {...config.payload, senders: retrySenders, service_account_ids: [], max_per_account: '', name: `${label} Retest`};
                 const retryRun = await createAutomatedTestBatch(retryPayload);
                 assertAiAgentNotStopped();
@@ -7629,7 +7652,19 @@ merge_recipe_id, content_blueprint_id</pre>
             nameChanges.changed.push(...(batch.name_changes?.changed || []));
             nameChanges.failed.push(...(batch.name_changes?.failed || []));
         });
-        renderAiAgentState('complete', {batches, first: {test_id: batches[0].test_id, classification: combined}, name_changes: nameChanges, retry: null});
+        renderAiAgentState('complete', {
+            batches,
+            first: {test_id: batches[0].test_id, classification: combined},
+            ai_decision: {
+                summary: `AI reviewed synced analytics for ${batches.length} batch(es); the app executed only validated grey-user actions.`,
+                next_action: nameChanges.changed.length ? 'change_grey_names' : 'review_only',
+                change_grey_names: Boolean(nameChanges.changed.length),
+                retry_after_changes: Boolean(batches.some((batch) => batch.retry?.test_id)),
+                safeguards: ['Each batch was sent and synced by the app before AI decisioning.', 'Only validated grey users were eligible for name changes.']
+            },
+            name_changes: nameChanges,
+            retry: null
+        });
         setAiAgentChatStatus(`AI Test Agent completed ${batches.length} batch(es). Final lists are ready to copy.`, 'success');
     }
 
@@ -7659,7 +7694,19 @@ merge_recipe_id, content_blueprint_id</pre>
             nameChanges.changed.push(...(batch.name_changes?.changed || []));
             nameChanges.failed.push(...(batch.name_changes?.failed || []));
         });
-        renderAiAgentState('complete', {batches, first: {test_id: batches[0].test_id, classification: combined}, name_changes: nameChanges, retry: null});
+        renderAiAgentState('complete', {
+            batches,
+            first: {test_id: batches[0].test_id, classification: combined},
+            ai_decision: {
+                summary: `AI reviewed synced analytics for ${batches.length} account batch(es); the app executed only validated grey-user actions.`,
+                next_action: nameChanges.changed.length ? 'change_grey_names' : 'review_only',
+                change_grey_names: Boolean(nameChanges.changed.length),
+                retry_after_changes: Boolean(batches.some((batch) => batch.retry?.test_id)),
+                safeguards: ['Each batch was sent and synced by the app before AI decisioning.', 'Only validated grey users were eligible for name changes.']
+            },
+            name_changes: nameChanges,
+            retry: null
+        });
         setAiAgentChatStatus(`AI Test Agent completed ${batches.length} account batch(es). Final lists are ready to copy.`, 'success');
     }
 
@@ -7697,9 +7744,9 @@ merge_recipe_id, content_blueprint_id</pre>
                 await startAutomatedAiAgentAccountsBatched(config, accountIds, perAccount);
                 return;
             }
-            setAiAgentChatStatus('Step 1/5: starting configured test...');
-            renderAiAgentState('loading', {message: 'Step 1/5: starting configured test', detail: 'Using the selected queue, list/account source, users-per-account value, inboxes, and thresholds.'});
-            if (status) status.textContent = 'AI Test Agent started the configured automated test.';
+            setAiAgentChatStatus('Step 1/5: app is starting the configured test...');
+            renderAiAgentState('loading', {message: 'Step 1/5: app is starting the configured test', detail: 'The app owns preparation and sending. The AI will read analytics after sync.'});
+            if (status) status.textContent = 'The app started the configured automated test.';
             const firstRun = await createAutomatedTestBatch(config.payload);
             assertAiAgentNotStopped();
             const firstSenderContext = firstRun.senders || config.selectedSenders;
@@ -7713,26 +7760,28 @@ merge_recipe_id, content_blueprint_id</pre>
             assertAiAgentNotStopped();
             await viewAutomatedEmailTest(firstRun.test_id);
 
-            setAiAgentChatStatus('Step 3/5: classifying inbox, spam, and grey users...');
-            renderAiAgentState('loading', {message: 'Step 3/5: classifying inbox, spam, and grey users', detail: firstRun.test_id});
-            const firstClassification = await classifyAutomatedAgentTest(firstRun.test_id, firstSenderContext);
-            assertAiAgentNotStopped();
             const autoRename = isAiAgentAutoRenameEnabled();
-            const greyUsers = ((firstClassification.lists || {}).grey_users || []).filter((user) => user.service_account_id);
-            const agentResult = {first: {test_id: firstRun.test_id, classification: firstClassification}, name_changes: {changed: [], failed: []}, retry: null};
+            setAiAgentChatStatus('Step 3/5: AI is reading synced analytics and deciding the grey-user action...');
+            renderAiAgentState('loading', {message: 'Step 3/5: AI decision after sync', detail: firstRun.test_id});
+            const decisionData = await requestAiAgentPostSyncDecision(firstRun.test_id, firstSenderContext, autoRename);
+            const firstClassification = decisionData.classification || {};
+            const aiDecision = decisionData.decision || {};
+            assertAiAgentNotStopped();
+            const greyUsers = (aiDecision.grey_user_targets || []).filter((user) => user.service_account_id);
+            const agentResult = {first: {test_id: firstRun.test_id, classification: firstClassification}, ai_decision: aiDecision, name_changes: {changed: [], failed: []}, retry: null};
 
-            if (autoRename && greyUsers.length) {
-                setAiAgentChatStatus(`Step 4/5: changing ${greyUsers.length} grey-user name(s)...`);
-                renderAiAgentState('loading', {message: 'Step 4/5: changing grey-user names', detail: `${greyUsers.length} grey user(s) will be updated before retest.`});
+            if (aiDecision.change_grey_names && greyUsers.length) {
+                setAiAgentChatStatus(`Step 4/5: app is changing ${greyUsers.length} AI-approved grey-user name(s)...`);
+                renderAiAgentState('loading', {message: 'Step 4/5: app is changing AI-approved grey-user names', detail: `${greyUsers.length} grey user(s) were validated before update.`});
                 agentResult.name_changes = await changeAiAgentGreyNames(greyUsers);
                 assertAiAgentNotStopped();
                 const changedEmails = new Set((agentResult.name_changes.changed || []).map((item) => item.email));
                 const retrySenders = greyUsers
                     .filter((user) => changedEmails.has(user.email))
                     .map((user) => ({email: user.email, name: (agentResult.name_changes.changed || []).find((item) => item.email === user.email)?.new_name || user.name || '', service_account_id: user.service_account_id}));
-                if (retrySenders.length) {
-                    setAiAgentChatStatus(`Step 5/5: retesting ${retrySenders.length} changed grey user(s)...`);
-                    renderAiAgentState('loading', {message: 'Step 5/5: retesting changed grey users', detail: `${retrySenders.length} changed user(s) selected for retry.`});
+                if (aiDecision.retry_after_changes && retrySenders.length) {
+                    setAiAgentChatStatus(`Step 5/5: app is retesting ${retrySenders.length} changed grey user(s)...`);
+                    renderAiAgentState('loading', {message: 'Step 5/5: app is retesting changed grey users', detail: `${retrySenders.length} changed user(s) selected for retry by AI decision.`});
                     const retryPayload = {...config.payload, senders: retrySenders, service_account_ids: [], max_per_account: '', name: `AI Agent Retest: ${new Date().toLocaleString()}`};
                     const retryRun = await createAutomatedTestBatch(retryPayload);
                     assertAiAgentNotStopped();
@@ -7784,20 +7833,25 @@ merge_recipe_id, content_blueprint_id</pre>
             const senderContext = senderContextForTest(sourceTest);
             cacheTestSenderContext(sourceTestId, senderContext);
 
-            setAiAgentChatStatus('Classifying grey users from existing test...');
-            renderAiAgentState('loading', {message: 'Classifying grey users from existing test', detail: sourceTestId});
-            const firstClassification = await classifyAutomatedAgentTest(sourceTestId, senderContext);
+            const autoRename = isAiAgentAutoRenameEnabled();
+            setAiAgentChatStatus('AI is reading synced analytics from the existing test...');
+            renderAiAgentState('loading', {message: 'AI decision after existing-test sync', detail: sourceTestId});
+            const decisionData = await requestAiAgentPostSyncDecision(sourceTestId, senderContext, autoRename);
+            const firstClassification = decisionData.classification || {};
+            const aiDecision = decisionData.decision || {};
             assertAiAgentNotStopped();
 
             const allGreyUsers = ((firstClassification.lists || {}).grey_users || []);
-            const greyUsers = allGreyUsers.filter((user) => user.service_account_id);
+            const greyUsers = (aiDecision.grey_user_targets || []).filter((user) => user.service_account_id);
             const missingGreyUsers = allGreyUsers.filter((user) => !user.service_account_id);
+            const reportMissingGreyUsers = aiDecision.change_grey_names ? missingGreyUsers : [];
             const agentResult = {
                 source_mode: 'existing_test',
                 first: {test_id: sourceTestId, classification: firstClassification},
+                ai_decision: aiDecision,
                 name_changes: {
                     changed: [],
-                    failed: missingGreyUsers.map((user) => ({
+                    failed: reportMissingGreyUsers.map((user) => ({
                         email: user.email,
                         error: 'Workspace service account is not loaded for name change.',
                     })),
@@ -7809,14 +7863,19 @@ merge_recipe_id, content_blueprint_id</pre>
                 setAiAgentChatStatus(`No grey users found in ${sourceTestId}.`, 'success');
                 return;
             }
-            if (missingGreyUsers.length) {
+            if (reportMissingGreyUsers.length) {
                 renderAiAgentState('complete', agentResult);
-                setAiAgentChatStatus(`Found ${missingGreyUsers.length} grey user(s), but their Workspace account is not loaded for name changes. Retrieve those Workspace users/account tabs, then run from this existing test again.`, 'error');
+                setAiAgentChatStatus(`Found ${reportMissingGreyUsers.length} grey user(s), but their Workspace account is not loaded for name changes. Retrieve those Workspace users/account tabs, then run from this existing test again.`, 'error');
                 if (!greyUsers.length) return;
             }
+            if (!aiDecision.change_grey_names || !greyUsers.length) {
+                renderAiAgentState('complete', agentResult);
+                setAiAgentChatStatus(aiDecision.summary || `AI reviewed ${sourceTestId}; no grey-user change will run.`, 'success');
+                return;
+            }
 
-            setAiAgentChatStatus(`Changing ${greyUsers.length} grey-user name(s) from ${sourceTestId}...`);
-            renderAiAgentState('loading', {message: 'Changing grey-user names', detail: `${greyUsers.length} grey user(s) found in ${sourceTestId}.`});
+            setAiAgentChatStatus(`App is changing ${greyUsers.length} AI-approved grey-user name(s) from ${sourceTestId}...`);
+            renderAiAgentState('loading', {message: 'Changing AI-approved grey-user names', detail: `${greyUsers.length} grey user(s) found in ${sourceTestId}.`});
             const missingNameChanges = agentResult.name_changes.failed || [];
             agentResult.name_changes = await changeAiAgentGreyNames(greyUsers);
             agentResult.name_changes.failed = [
@@ -7839,8 +7898,14 @@ merge_recipe_id, content_blueprint_id</pre>
                 return;
             }
 
-            setAiAgentChatStatus(`Retesting ${retrySenders.length} changed grey user(s) with the same template...`);
-            renderAiAgentState('loading', {message: 'Creating grey-user retest', detail: `Template and receiving inboxes copied from ${sourceTestId}.`});
+            if (!aiDecision.retry_after_changes) {
+                renderAiAgentState('complete', agentResult);
+                setAiAgentChatStatus('AI approved grey-user changes but did not recommend a retest.', 'success');
+                return;
+            }
+
+            setAiAgentChatStatus(`App is retesting ${retrySenders.length} changed grey user(s) with the same template...`);
+            renderAiAgentState('loading', {message: 'Creating AI-approved grey-user retest', detail: `Template and receiving inboxes copied from ${sourceTestId}.`});
             const retryRun = await createDeliverabilityRetestBatch(sourceTest, retrySenders, `AI Agent Existing Test Retest: ${sourceTestId}`);
             assertAiAgentNotStopped();
             await syncAutomatedTestUntilComplete(retryRun.test_id, aiAgentSyncOptions());

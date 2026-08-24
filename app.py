@@ -4294,6 +4294,72 @@ def api_inbox_ai_test_agent_classify():
         return jsonify({'success': False, 'error': 'Automated test not found'}), 404
     return jsonify({'success': True, 'classification': payload})
 
+@app.route('/api/inbox-intelligence/ai-test-agent/post-sync-decision', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_ai_test_agent_post_sync_decision():
+    """Let AI decide the post-sync grey-user action; backend validates/executes."""
+    data = request.get_json(silent=True) or {}
+    test_id = (data.get('test_id') or '').strip()
+    if not test_id:
+        return jsonify({'success': False, 'error': 'test_id is required'}), 400
+    classification = _agent_classify_test_payload(test_id, data.get('sender_context') or [])
+    if not classification:
+        return jsonify({'success': False, 'error': 'Automated test not found'}), 404
+
+    grey_update_enabled = bool(data.get('grey_update_enabled'))
+    from services.inbox_ai_gateway import generate_post_sync_agent_decision
+    result = generate_post_sync_agent_decision(
+        {
+            'test_id': test_id,
+            'test_status': classification.get('status'),
+            'classification': classification,
+            'grey_update_enabled': grey_update_enabled,
+        },
+        decrypt_secret=_unprotect_secret,
+        referer=request.host_url.rstrip('/'),
+        user_key=session.get('user'),
+    )
+    decision = result.data.get('decision') or {}
+    allowed_target_emails = {
+        (item.get('email') or '').strip().lower()
+        for item in (((classification.get('lists') or {}).get('grey_users') or []))
+        if isinstance(item, dict) and item.get('service_account_id')
+    }
+    decision_targets = []
+    seen = set()
+    for item in decision.get('grey_user_targets') or []:
+        email_addr = (item.get('email') if isinstance(item, dict) else item or '').strip().lower()
+        if email_addr in allowed_target_emails and email_addr not in seen:
+            source = next(
+                (user for user in ((classification.get('lists') or {}).get('grey_users') or [])
+                 if isinstance(user, dict) and (user.get('email') or '').strip().lower() == email_addr),
+                None,
+            )
+            if source:
+                decision_targets.append(source)
+                seen.add(email_addr)
+    decision['grey_user_targets'] = decision_targets
+    decision['change_grey_names'] = bool(grey_update_enabled and decision.get('change_grey_names') and decision_targets)
+    decision['retry_after_changes'] = bool(decision.get('change_grey_names') and decision.get('retry_after_changes'))
+    if not decision.get('change_grey_names') and decision.get('next_action') == 'change_grey_names':
+        decision['next_action'] = 'review_only' if not grey_update_enabled else 'skip_grey_changes'
+    response = {
+        'success': True,
+        'provider': result.provider,
+        'classification': classification,
+        'decision': decision,
+        'automation_contract': {
+            'app_handles': ['prepare', 'send', 'sync_imap', 'classify', 'validate_targets', 'mutate_workspace', 'retry'],
+            'ai_handles': ['read_synced_analytics', 'decide_grey_action'],
+        },
+    }
+    if result.model and result.provider == 'openrouter':
+        response['model'] = result.model
+    if result.message:
+        response['message'] = result.message
+    return jsonify(response)
+
 def _clean_agent_user_item(item):
     if isinstance(item, str):
         email_addr = item.strip().lower()
