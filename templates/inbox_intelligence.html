@@ -2926,7 +2926,7 @@
                         <div class="ii-header-editor-wrap">
                             <div class="ii-field">
                                 <label>Custom Header <i class="fas fa-circle-info text-primary"></i></label>
-                                <textarea class="ii-input ii-textarea ii-pro-textarea" id="automatedHeaderInput" oninput="updateAutomatedMessageSetup()" placeholder="Date: [date]&#10;To: [to]&#10;From: [from]&#10;Message-ID: &lt;custom-[test_id]@example.com&gt;&#10;Subject: [subject]">Date: [date]
+                                <textarea class="ii-input ii-textarea ii-pro-textarea" id="automatedHeaderInput" oninput="updateAutomatedMessageSetup('manual')" placeholder="Date: [date]&#10;To: [to]&#10;From: [from]&#10;Message-ID: &lt;custom-[test_id]@example.com&gt;&#10;Subject: [subject]">Date: [date]
 To: [to]
 From: [from]
 Message-ID: &lt;custom-[test_id]@example.com&gt;
@@ -2957,7 +2957,7 @@ Subject: [subject]</textarea>
                                 <button class="ii-btn" type="button" onclick="insertAutomatedBodyText('<br>')"><i class="fas fa-turn-down"></i></button>
                                 <button class="ii-btn ms-auto" type="button" onclick="clearAutomatedBody()"><i class="fas fa-rotate-left"></i></button>
                             </div>
-                            <textarea class="ii-input ii-textarea ii-pro-body-input" id="automatedBodyInput" spellcheck="false" wrap="off" oninput="updateAutomatedMessageSetup()" placeholder="Paste or edit the full HTML/plain-text body here.">Hi there,
+                            <textarea class="ii-input ii-textarea ii-pro-body-input" id="automatedBodyInput" spellcheck="false" wrap="off" oninput="updateAutomatedMessageSetup('manual')" placeholder="Paste or edit the full HTML/plain-text body here.">Hi there,
 
 We're excited to announce the launch of our new product. It's faster, smarter, and built to help you achieve more in less time.
 
@@ -3256,7 +3256,8 @@ The NightOwl Ranch Team</textarea>
                                     </div>
                                     <label class="ii-field">
                                         <span>List number(s)</span>
-                                        <input class="ii-input" id="aiAgentListIdsInput" placeholder="40, 25">
+                                        <input class="ii-input" id="aiAgentListIdsInput" list="aiAgentWorkspaceListOptions" placeholder="Choose a list or type 40, 25">
+                                        <datalist id="aiAgentWorkspaceListOptions"></datalist>
                                     </label>
                                     <div class="ii-form-grid">
                                         <label class="ii-field">
@@ -4173,7 +4174,10 @@ merge_recipe_id, content_blueprint_id</pre>
         }[char]));
     }
 
-    function updateAutomatedMessageSetup() {
+    function updateAutomatedMessageSetup(source = '') {
+        if (source === 'manual') {
+            iiState.aiAgentTemplateSource = {type: 'manual'};
+        }
         const header = document.getElementById('automatedHeaderInput')?.value || '';
         const body = document.getElementById('automatedBodyInput')?.value || '';
         const headerLines = header.split(/\r?\n/).filter((line) => line.trim()).length;
@@ -5531,6 +5535,7 @@ merge_recipe_id, content_blueprint_id</pre>
         const template = iiState.userInboxTemplates.find((item) => Number(item.id) === Number(templateId));
         if (!template) return;
         iiState.automatedSelectedSourceIds = new Set();
+        iiState.aiAgentTemplateSource = {type: 'saved', id: Number(template.id)};
         const headerInput = document.getElementById('automatedHeaderInput');
         const bodyInput = document.getElementById('automatedBodyInput');
         const modeInput = document.getElementById('automatedBodyMode');
@@ -5651,6 +5656,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 if (mode) mode.value = 'text';
             }
         }
+        iiState.aiAgentTemplateSource = {type: 'pushed', id: Number(source.id)};
         if (templateLabel) templateLabel.textContent = `Loaded: ${source.original_subject || 'Untitled'} (${source.source_sender || 'Unknown sender'})`;
         updateAutomatedMessageSetup();
     }
@@ -6115,6 +6121,7 @@ merge_recipe_id, content_blueprint_id</pre>
         drawer.setAttribute('aria-hidden', 'false');
         document.querySelector('.ii-floating-command-stack')?.classList.add('is-hidden');
         if (!iiState.automatedQueue.length) loadAiAgentPushedTemplates(iiState.automatedQueuePage || 1).catch((err) => console.warn(err));
+        if (!iiState.workspaceLists?.length) loadWorkspaceLists().catch((err) => console.warn(err));
         renderAiAgentTemplateOptions();
         refreshAiAgentConfigLabels();
         setAiAgentChatStatus('Ready. Type a prompt or review setup, then start the agent.');
@@ -6226,12 +6233,15 @@ merge_recipe_id, content_blueprint_id</pre>
 
     async function ensureFirstAutomatedQueueSourceSelected() {
         if (iiState.automatedSelectedSourceIds?.size) return null;
+        if (['saved', 'manual'].includes(iiState.aiAgentTemplateSource?.type)) return null;
+        if (document.getElementById('aiAgentUseSavedTemplate')?.checked === true) return null;
         if (!iiState.automatedQueue.length) {
             await loadAutomatedQueue(1);
         }
         const source = iiState.automatedQueue[0] || null;
         if (!source) return null;
         iiState.automatedSelectedSourceIds = new Set([source.id]);
+        iiState.aiAgentTemplateSource = {type: 'pushed', id: Number(source.id)};
         renderAutomatedQueue();
         syncMessageSetupFromQueue();
         updateAutomatedSummary();
@@ -6291,12 +6301,14 @@ merge_recipe_id, content_blueprint_id</pre>
             } else {
                 messages.push('Select a saved User Inbox template or uncheck Use saved template.');
                 if (templateStatus) templateStatus.textContent = 'Choose a saved template before applying.';
+                throw new Error('Select a saved User Inbox template before starting, or uncheck Use saved template.');
             }
         } else if (savedTemplateId) {
             const source = (iiState.automatedQueue || []).find((item) => String(item.id) === String(savedTemplateId));
             const templateStatus = document.getElementById('aiAgentSavedTemplateStatus');
             if (source) {
                 iiState.automatedSelectedSourceIds = new Set([source.id]);
+                iiState.aiAgentTemplateSource = {type: 'pushed', id: Number(source.id)};
                 renderAutomatedQueue();
                 syncMessageSetupFromQueue();
                 messages.push(`Pushed template "${source.original_subject || source.id}" selected.`);
@@ -8084,10 +8096,12 @@ merge_recipe_id, content_blueprint_id</pre>
         const select = document.getElementById('workspaceListSelect');
         const userInboxSelect = document.getElementById('userInboxWorkspaceListSelect');
         const automatedSelect = document.getElementById('automatedWorkspaceListSelect');
+        const aiAgentListOptions = document.getElementById('aiAgentWorkspaceListOptions');
         const status = document.getElementById('workspaceListStatus');
         if (select) select.innerHTML = '<option value="">Loading saved lists...</option>';
         if (userInboxSelect) userInboxSelect.innerHTML = '<option value="">Loading saved lists...</option>';
         if (automatedSelect) automatedSelect.innerHTML = '<option value="">Loading saved lists...</option>';
+        if (aiAgentListOptions) aiAgentListOptions.innerHTML = '';
         try {
             const data = await iiFetch('/api/inbox-intelligence/workspace-lists');
             iiState.workspaceLists = data.lists || [];
@@ -8095,6 +8109,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 if (select) select.innerHTML = '<option value="">No saved lists found</option>';
                 if (userInboxSelect) userInboxSelect.innerHTML = '<option value="">No saved lists found</option>';
                 if (automatedSelect) automatedSelect.innerHTML = '<option value="">No saved lists found</option>';
+                if (aiAgentListOptions) aiAgentListOptions.innerHTML = '';
                 if (status) status.textContent = 'Create a list in List Management first.';
                 const userStatus = document.getElementById('userInboxWorkspaceListStatus');
                 if (userStatus) userStatus.textContent = 'Create a list in List Management first.';
@@ -8104,6 +8119,11 @@ merge_recipe_id, content_blueprint_id</pre>
             if (select) select.innerHTML = options;
             if (userInboxSelect) userInboxSelect.innerHTML = options;
             if (automatedSelect) automatedSelect.innerHTML = options;
+            if (aiAgentListOptions) {
+                aiAgentListOptions.innerHTML = iiState.workspaceLists
+                    .map((list) => `<option value="${list.id}" label="${escapeHtml(list.name)} · ${list.account_count} account(s)"></option>`)
+                    .join('');
+            }
             if (status) status.textContent = `${iiState.workspaceLists.length} saved list(s) available.`;
             const userStatus = document.getElementById('userInboxWorkspaceListStatus');
             if (userStatus) userStatus.textContent = `${iiState.workspaceLists.length} saved list(s) available.`;
@@ -8111,6 +8131,7 @@ merge_recipe_id, content_blueprint_id</pre>
             if (select) select.innerHTML = '<option value="">Could not load lists</option>';
             if (userInboxSelect) userInboxSelect.innerHTML = '<option value="">Could not load lists</option>';
             if (automatedSelect) automatedSelect.innerHTML = '<option value="">Could not load lists</option>';
+            if (aiAgentListOptions) aiAgentListOptions.innerHTML = '';
             if (status) status.textContent = err.message;
             const userStatus = document.getElementById('userInboxWorkspaceListStatus');
             if (userStatus) userStatus.textContent = err.message;
