@@ -7486,16 +7486,50 @@ merge_recipe_id, content_blueprint_id</pre>
         return data.classification || {};
     }
 
+    function localAiAgentPostSyncDecision(testId, classification = {}, greyUpdateEnabled = false, reason = '') {
+        const greyUsers = (((classification.lists || {}).grey_users || []))
+            .filter((user) => user && user.email && user.service_account_id);
+        const changeGreyNames = Boolean(greyUpdateEnabled && greyUsers.length);
+        return {
+            summary: reason
+                ? `AI decision endpoint failed (${reason}); using synced analytics fallback for ${testId}.`
+                : `Using synced analytics fallback for ${testId}.`,
+            next_action: changeGreyNames ? 'change_grey_names' : (greyUpdateEnabled ? 'complete' : 'review_only'),
+            change_grey_names: changeGreyNames,
+            retry_after_changes: changeGreyNames,
+            grey_user_targets: greyUsers,
+            rationale: [
+                'The app already synced and classified the test successfully.',
+                'Fallback keeps Agent Results usable when the AI decision request fails.',
+            ],
+            safeguards: [
+                'Only grey users with a loaded Workspace account can be changed.',
+                'The app still performs every Workspace mutation and retest.',
+            ],
+        };
+    }
+
     async function requestAiAgentPostSyncDecision(testId, senderContext, greyUpdateEnabled) {
-        return iiFetch('/api/inbox-intelligence/ai-test-agent/post-sync-decision', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                test_id: testId,
-                sender_context: senderContext || [],
-                grey_update_enabled: Boolean(greyUpdateEnabled)
-            })
-        });
+        try {
+            return await iiFetch('/api/inbox-intelligence/ai-test-agent/post-sync-decision', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    test_id: testId,
+                    sender_context: senderContext || [],
+                    grey_update_enabled: Boolean(greyUpdateEnabled)
+                })
+            });
+        } catch (err) {
+            const classification = await classifyAutomatedAgentTest(testId, senderContext);
+            return {
+                success: true,
+                provider: 'local_fallback',
+                message: `AI decision request failed: ${err.message}`,
+                classification,
+                decision: localAiAgentPostSyncDecision(testId, classification, greyUpdateEnabled, err.message),
+            };
+        }
     }
 
     async function changeAiAgentGreyNames(greyUsers) {

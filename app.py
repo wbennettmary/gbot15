@@ -4396,19 +4396,26 @@ def api_inbox_ai_test_agent_post_sync_decision():
         return jsonify({'success': False, 'error': 'Automated test not found'}), 404
 
     grey_update_enabled = bool(data.get('grey_update_enabled'))
-    from services.inbox_ai_gateway import generate_post_sync_agent_decision
-    result = generate_post_sync_agent_decision(
-        {
-            'test_id': test_id,
-            'test_status': classification.get('status'),
-            'classification': classification,
-            'grey_update_enabled': grey_update_enabled,
-        },
-        decrypt_secret=_unprotect_secret,
-        referer=request.host_url.rstrip('/'),
-        user_key=session.get('user'),
-    )
-    decision = result.data.get('decision') or {}
+    decision_facts = {
+        'test_id': test_id,
+        'test_status': classification.get('status'),
+        'classification': classification,
+        'grey_update_enabled': grey_update_enabled,
+    }
+    result = None
+    try:
+        from services.inbox_ai_gateway import generate_post_sync_agent_decision
+        result = generate_post_sync_agent_decision(
+            decision_facts,
+            decrypt_secret=_unprotect_secret,
+            referer=request.host_url.rstrip('/'),
+            user_key=session.get('user'),
+        )
+        decision = ((result.data or {}).get('decision') or {}) if result else {}
+    except Exception as exc:
+        app.logger.exception('AI post-sync decision failed for %s; using local fallback', test_id)
+        from services.inbox_ai_schemas import local_post_sync_decision
+        decision = local_post_sync_decision(decision_facts)
     allowed_target_emails = {
         (item.get('email') or '').strip().lower()
         for item in (((classification.get('lists') or {}).get('grey_users') or []))
@@ -4434,7 +4441,7 @@ def api_inbox_ai_test_agent_post_sync_decision():
         decision['next_action'] = 'review_only' if not grey_update_enabled else 'skip_grey_changes'
     response = {
         'success': True,
-        'provider': result.provider,
+        'provider': result.provider if result else 'local_fallback',
         'classification': classification,
         'decision': decision,
         'automation_contract': {
@@ -4442,10 +4449,12 @@ def api_inbox_ai_test_agent_post_sync_decision():
             'ai_handles': ['read_synced_analytics', 'decide_grey_action'],
         },
     }
-    if result.model and result.provider == 'openrouter':
+    if result and result.model and result.provider == 'openrouter':
         response['model'] = result.model
-    if result.message:
+    if result and result.message:
         response['message'] = result.message
+    elif not result:
+        response['message'] = 'Post-sync AI decision failed; backend used local classification fallback.'
     return jsonify(response)
 
 def _clean_agent_user_item(item):
