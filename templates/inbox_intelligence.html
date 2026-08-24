@@ -6429,7 +6429,7 @@ merge_recipe_id, content_blueprint_id</pre>
             setAutomatedSyncing(true, 'Importing recent IMAP messages...');
             const pollPayload = {
                 sync_mode: options.syncMode || 'targeted',
-                recent_limit: options.recentLimit ?? 60,
+                recent_limit: options.recentLimit ?? 500,
                 targeted_only: options.targetedOnly !== undefined ? options.targetedOnly : true,
                 include_text_search: options.includeTextSearch === true,
                 skip_deep_scan: options.skipDeepScan !== undefined ? options.skipDeepScan : true,
@@ -6507,9 +6507,9 @@ merge_recipe_id, content_blueprint_id</pre>
         });
         const jobId = started.job_id;
         const syncLabel = document.getElementById('automatedLastSync');
-        const maxAttempts = Number(payload?.max_poll_attempts || 60);
+        const maxAttempts = Number(payload?.max_poll_attempts || 240);
         for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-            if (syncLabel) syncLabel.textContent = `Fast sync running... ${attempt + 1}/${maxAttempts}`;
+            if (syncLabel) syncLabel.textContent = `IMAP sync running... ${attempt + 1}/${maxAttempts}`;
             await new Promise((resolve) => setTimeout(resolve, attempt < 5 ? 1000 : 1500));
             const data = await iiFetch(`/api/inbox-intelligence/poll-jobs/${jobId}`);
             const job = data.job || {};
@@ -6605,14 +6605,15 @@ merge_recipe_id, content_blueprint_id</pre>
         const intervalMs = options.intervalMs || 5000;
         const requireComplete = options.requireComplete !== false;
         let test = await fetchAutomatedTestDetail(testId, true);
-        if (options.skipIfObserved && automatedTestHasObservedEvidence(test)) {
+        const canUsePartialCachedResults = options.allowPartialCachedResults === true;
+        if (options.skipIfObserved && automatedTestHasObservedEvidence(test) && (canUsePartialCachedResults || automatedTestHasCompleteEvidence(test))) {
             const summary = automatedTestSummary(test);
             setAiAgentChatStatus(`${testId}: using saved results (${summary.inbox} inbox, ${summary.spam} spam, ${summary.pending} missing).`, 'success');
             return test;
         }
         if (!options.skipSendWait) {
             test = await waitForAutomatedSendingComplete(testId, options.sendWait || {});
-            if (options.skipIfObserved && automatedTestHasObservedEvidence(test)) {
+            if (options.skipIfObserved && automatedTestHasObservedEvidence(test) && (canUsePartialCachedResults || automatedTestHasCompleteEvidence(test))) {
                 const summary = automatedTestSummary(test);
                 setAiAgentChatStatus(`${testId}: using saved results (${summary.inbox} inbox, ${summary.spam} spam, ${summary.pending} missing).`, 'success');
                 return test;
@@ -6630,7 +6631,7 @@ merge_recipe_id, content_blueprint_id</pre>
             });
             await runAutomatedSyncJob(testId, {
                 sync_mode: 'targeted',
-                recent_limit: options.recentLimit ?? 200,
+                recent_limit: options.recentLimit ?? 500,
                 targeted_only: options.targetedOnly !== undefined ? options.targetedOnly : true,
                 include_text_search: options.includeTextSearch === true,
                 skip_deep_scan: options.skipDeepScan !== undefined ? options.skipDeepScan : true,
@@ -7434,7 +7435,7 @@ merge_recipe_id, content_blueprint_id</pre>
             timeoutMs: 15 * 60 * 1000,
             sendWait: {timeoutMs: 8 * 60 * 1000, intervalMs: 2500},
             intervalMs: 5000,
-            recentLimit: 200,
+            recentLimit: 500,
             targetedOnly: true,
             skipDeepScan: true,
             maxPollAttempts: 360,
@@ -7448,12 +7449,12 @@ merge_recipe_id, content_blueprint_id</pre>
             requireComplete: false,
             skipIfObserved: true,
             skipSendWait: true,
-            timeoutMs: 90 * 1000,
+            timeoutMs: 10 * 60 * 1000,
             sendWait: {timeoutMs: 45 * 1000, intervalMs: 2000},
             intervalMs: 3000,
-            recentLimit: 80,
-            maxPollAttempts: 30,
-            staleMinutes: 10,
+            recentLimit: 500,
+            maxPollAttempts: 240,
+            staleMinutes: 20,
             ...overrides,
         });
     }

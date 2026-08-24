@@ -1700,8 +1700,13 @@ def _sync_mailbox_account(account, folders=None, limit=200, force_full=False, wa
                     db.session.commit()
                     folder_results.append({'folder': folder, 'synced': 0, 'new': 0, 'checked': 0, 'unread': _folder_unread_count(account.id, folder), 'total': _folder_message_count(account.id, folder)})
                     continue
-                if limit and len(uids) > int(limit):
-                    uids = uids[-int(limit):]
+                uids = sorted(uids, key=lambda item: int(item))
+                limited = bool(limit and len(uids) > int(limit))
+                if limited:
+                    # Process the oldest unseen chunk first. Advancing the cursor
+                    # after fetching only the newest UIDs permanently skips older
+                    # unseen mail, which makes later analytics incomplete.
+                    uids = uids[:int(limit)]
                 messages = _imap_fetch_messages_batch(conn, uids, folder)
                 new_messages = 0
                 for parsed in messages:
@@ -1745,6 +1750,74 @@ def _sync_mailbox_account(account, folders=None, limit=200, force_full=False, wa
             db.session.commit()
         except Exception:
             pass
+        return total_synced, folder_results, errors + [f'connection: {e}']
+    finally:
+        try:
+            if conn:
+                conn.close()
+                conn.logout()
+        except Exception:
+            pass
+        lock.release()
+
+def _sync_mailbox_recent_no_cursor(account, folders=None, limit=500, wait_for_lock=True):
+    """Fetch newest messages from result folders without moving UID cursors.
+
+    Test analytics cannot rely only on the incremental cursor: another sync may
+    have moved it, and provider HEADER search may miss custom test headers.
+    This fallback mirrors Inbox Explorer's broad folder fetch but leaves cursor
+    state untouched so it cannot skip older mail.
+    """
+    conn = None
+    total_synced = 0
+    errors = []
+    folder_results = []
+    lock = _get_account_sync_lock(account.id)
+    if wait_for_lock:
+        if not lock.acquire(timeout=90):
+            return 0, [], ['Sync already in progress for this account']
+    elif not lock.acquire(blocking=False):
+        return 0, [], ['Sync already in progress for this account']
+    try:
+        conn = _imap_connect(account)
+        try:
+            conn.sock.settimeout(20)
+        except Exception:
+            pass
+        all_folders = _imap_list_folders(conn)
+        target_folders = _resolve_sync_folder_targets(conn, folders, all_folders) if folders else _real_result_folders(conn)
+        per_folder_limit = max(25, min(2000, int(limit or 500)))
+        for folder in target_folders:
+            try:
+                meta = _imap_select_folder(conn, folder)
+                if not meta:
+                    continue
+                s, data = conn.uid('search', None, 'ALL')
+                if s != 'OK' or not data or not data[0]:
+                    folder_results.append({'folder': folder, 'synced': 0, 'checked': 0, 'recent_fallback': True})
+                    continue
+                uids = sorted(data[0].split(), key=lambda item: int(item))
+                uids = uids[-per_folder_limit:]
+                messages = _imap_fetch_messages_batch(conn, uids, folder)
+                new_messages = 0
+                for parsed in messages:
+                    _message, created = _upsert_imap_message_full(account, folder, parsed, uid_validity=str(meta.get('uidvalidity') or ''))
+                    if created:
+                        new_messages += 1
+                total_synced += new_messages
+                db.session.commit()
+                folder_results.append({'folder': folder, 'synced': new_messages, 'checked': len(messages), 'recent_fallback': True})
+            except Exception as e:
+                db.session.rollback()
+                errors.append(f'{folder}: {e}')
+        account.last_synced_at = datetime.utcnow()
+        account.connection_status = 'connected'
+        _refresh_account_counts(account)
+        db.session.commit()
+        app.logger.info(f"[SYNC-RECENT] {account.email}: +{total_synced} message(s) across {len(folder_results)} folder(s)")
+        return total_synced, folder_results, errors
+    except Exception as e:
+        db.session.rollback()
         return total_synced, folder_results, errors + [f'connection: {e}']
     finally:
         try:
@@ -3641,6 +3714,21 @@ def _sync_test_inbox_folders(inbox, limit=200, since=None, identifiers=None, tar
         synced_total += target_found
         errors.extend(target_errors)
         if targeted_only:
+            expected = len(set(identifiers))
+            if len(placements) >= expected:
+                return synced_total, errors
+            fallback_limit = max(
+                int(limit or 200),
+                min(2000, max(500, expected * 4)),
+            )
+            recent_synced, _recent_results, recent_errors = _sync_mailbox_recent_no_cursor(
+                inbox,
+                folders=None,
+                limit=fallback_limit,
+                wait_for_lock=True,
+            )
+            synced_total += recent_synced
+            errors.extend(recent_errors)
             return synced_total, errors
     folder_synced, _folder_results, sync_errors = _sync_mailbox_account(
         inbox,
@@ -3751,9 +3839,9 @@ def _poll_inbox_test_payload(test_id, data=None):
     cursor state, then match test messages, update placements and counts."""
     data = data or {}
     try:
-        sync_limit = min(500, max(10, int(data.get('recent_limit') or data.get('limit') or 200)))
+        sync_limit = min(2000, max(25, int(data.get('recent_limit') or data.get('limit') or 500)))
     except (TypeError, ValueError):
-        sync_limit = 200
+        sync_limit = 500
     targeted_only = data.get('targeted_only')
     if targeted_only is None:
         targeted_only = True
