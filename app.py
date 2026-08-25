@@ -34,7 +34,7 @@ import re
 import unicodedata
 from collections import deque
 
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash, make_response
 from google_auth_oauthlib.flow import InstalledAppFlow
 from faker import Faker
 from email.mime.text import MIMEText
@@ -1274,8 +1274,12 @@ def list_management():
 def inbox_intelligence():
     """Inbox Intelligence workspace for mailbox analysis and controlled deliverability testing."""
     inbox_ai_enabled = (os.environ.get('INBOX_AI_ENABLED') or '1').strip().lower() not in ('0', 'false', 'no', 'off')
-    return render_template('inbox_intelligence.html', user=session.get('user'), role=session.get('role'),
-                           inbox_ai_enabled=inbox_ai_enabled)
+    response = make_response(render_template('inbox_intelligence.html', user=session.get('user'), role=session.get('role'),
+                                              inbox_ai_enabled=inbox_ai_enabled))
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
 
 INBOX_PROVIDER_DEFAULTS = {
     'gmail': ('imap.gmail.com', 993),
