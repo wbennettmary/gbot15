@@ -1405,6 +1405,56 @@ def _truthy_setting(value, default=True):
         return value.strip().lower() not in ('0', 'false', 'no', 'off', 'disabled')
     return bool(value)
 
+_INBOX_SYNC_PAUSE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.inbox_sync_paused.json')
+_INBOX_SYNC_PAUSED_MESSAGE = 'Inbox sync is paused from Synced status. Resume sync to start new IMAP sync jobs.'
+
+def _inbox_sync_pause_state():
+    try:
+        with open(_INBOX_SYNC_PAUSE_FILE, 'r') as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        data = {}
+    except Exception:
+        data = {'paused': True, 'reason': 'Pause state file could not be read safely.'}
+    paused = bool(data.get('paused'))
+    return {
+        'paused': paused,
+        'paused_at': data.get('paused_at') if paused else None,
+        'paused_by': data.get('paused_by') if paused else None,
+        'message': _INBOX_SYNC_PAUSED_MESSAGE if paused else 'Inbox sync is running.',
+    }
+
+def _set_inbox_sync_paused(paused, paused_by=None):
+    paused = bool(paused)
+    if paused:
+        payload = {
+            'paused': True,
+            'paused_at': datetime.utcnow().isoformat() + 'Z',
+            'paused_by': paused_by or '',
+        }
+        tmp_path = f'{_INBOX_SYNC_PAUSE_FILE}.tmp_{uuid.uuid4().hex}'
+        with open(tmp_path, 'w') as f:
+            json.dump(payload, f)
+        os.replace(tmp_path, _INBOX_SYNC_PAUSE_FILE)
+    else:
+        try:
+            os.remove(_INBOX_SYNC_PAUSE_FILE)
+        except FileNotFoundError:
+            pass
+    return _inbox_sync_pause_state()
+
+def _inbox_sync_paused():
+    return _inbox_sync_pause_state()['paused']
+
+def _inbox_sync_paused_response():
+    state = _inbox_sync_pause_state()
+    return _json_no_store({
+        'success': False,
+        'error': state['message'],
+        'sync_paused': True,
+        'control': state,
+    }, 409)
+
 def _serialize_imap_account(account):
     _refresh_account_counts(account)
     return {
@@ -1704,6 +1754,8 @@ def _sync_mailbox_account(account, folders=None, limit=200, force_full=False, wa
     When wait_for_lock=True (test polling) the call blocks until the per-account lock
     is free instead of being skipped by a concurrent auto/explorer sync.
     Returns (total_synced, folder_results, errors)."""
+    if _inbox_sync_paused():
+        return 0, [], [_INBOX_SYNC_PAUSED_MESSAGE]
     conn = None
     total_synced = 0
     errors = []
@@ -1727,6 +1779,9 @@ def _sync_mailbox_account(account, folders=None, limit=200, force_full=False, wa
         account.folder_count = len(all_folders)
         target_folders = _resolve_sync_folder_targets(conn, folders, all_folders)
         for folder in target_folders:
+            if _inbox_sync_paused():
+                errors.append(_INBOX_SYNC_PAUSED_MESSAGE)
+                break
             try:
                 meta = _imap_select_folder(conn, folder)
                 if not meta:
@@ -1823,6 +1878,8 @@ def _sync_mailbox_recent_no_cursor(account, folders=None, limit=500, wait_for_lo
     This fallback mirrors Inbox Explorer's broad folder fetch but leaves cursor
     state untouched so it cannot skip older mail.
     """
+    if _inbox_sync_paused():
+        return 0, [], [_INBOX_SYNC_PAUSED_MESSAGE]
     conn = None
     total_synced = 0
     errors = []
@@ -1843,6 +1900,9 @@ def _sync_mailbox_recent_no_cursor(account, folders=None, limit=500, wait_for_lo
         target_folders = _resolve_sync_folder_targets(conn, folders, all_folders) if folders else _real_result_folders(conn)
         per_folder_limit = max(25, min(2000, int(limit or 500)))
         for folder in target_folders:
+            if _inbox_sync_paused():
+                errors.append(_INBOX_SYNC_PAUSED_MESSAGE)
+                break
             try:
                 meta = _imap_select_folder(conn, folder)
                 if not meta:
@@ -2002,6 +2062,8 @@ def api_inbox_update_account_settings(account_id):
 @login_required
 @permission_required('inbox_intelligence')
 def api_inbox_sync_account(account_id):
+    if _inbox_sync_paused():
+        return _inbox_sync_paused_response()
     account = _get_owned_imap_account(account_id)
     if not account:
         return jsonify({'success': False, 'error': 'IMAP account not found'}), 404
@@ -2020,6 +2082,8 @@ def api_inbox_sync_account(account_id):
 @login_required
 @permission_required('inbox_intelligence')
 def api_explorer_bulk_sync():
+    if _inbox_sync_paused():
+        return _inbox_sync_paused_response()
     data = request.get_json(silent=True) or {}
     account_ids = data.get('account_ids') or []
     limit = min(200, max(10, int(data.get('limit') or 80)))
@@ -2156,10 +2220,37 @@ def api_inbox_toggle_auto_sync(account_id):
     db.session.commit()
     return jsonify({'success': True, 'account': _serialize_imap_account(account)})
 
+@app.route('/api/inbox-intelligence/sync-control', methods=['GET', 'POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_sync_control():
+    if request.method == 'GET':
+        return _json_no_store({'success': True, 'control': _inbox_sync_pause_state()})
+    data = request.get_json(silent=True) or {}
+    if 'paused' in data:
+        paused = _truthy_setting(data.get('paused'), False)
+    else:
+        paused = str(data.get('action') or '').strip().lower() in {'pause', 'stop'}
+    state = _set_inbox_sync_paused(paused, paused_by=session.get('user') or '')
+    if state['paused']:
+        try:
+            InboxPollJob.query.filter_by(status='running').update({
+                'status': 'error',
+                'message': 'Sync stopped from Synced status.',
+                'progress_stage': 'paused',
+                'finished_at': datetime.utcnow(),
+            }, synchronize_session=False)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+    return _json_no_store({'success': True, 'control': state})
+
 @app.route('/api/inbox-intelligence/imap-accounts/sync-all', methods=['POST'])
 @login_required
 @permission_required('inbox_intelligence')
 def api_inbox_sync_all():
+    if _inbox_sync_paused():
+        return _inbox_sync_paused_response()
     data = request.get_json(silent=True) or {}
     account_ids = data.get('account_ids')
     date_range = (data.get('date_range') or 'current').strip()
@@ -3943,6 +4034,9 @@ def _imap_fetch_by_identifiers(account, identifiers, folders=None, include_text_
             pass
         target_folders = folders if folders else _real_result_folders(conn)
         for folder in target_folders:
+            if _inbox_sync_paused():
+                errors.append(_INBOX_SYNC_PAUSED_MESSAGE)
+                break
             if deadline and time.monotonic() >= deadline:
                 errors.append('identifier search stopped at sync time limit')
                 break
@@ -4052,6 +4146,9 @@ def _imap_fetch_by_senders(account, sender_emails, folders=None, date_range=None
         target_folders = folders if folders else _real_result_folders(conn)
         per_folder_limit = max(25, min(1500, int(limit or 1000)))
         for folder in target_folders:
+            if _inbox_sync_paused():
+                errors.append(_INBOX_SYNC_PAUSED_MESSAGE)
+                break
             if deadline and time.monotonic() >= deadline:
                 errors.append('sender fallback stopped at sync time limit')
                 break
@@ -4105,6 +4202,8 @@ def _sync_test_inbox_folders(inbox, limit=200, since=None, identifiers=None, tar
     targeted X-Test-ID search that guarantees the exact test messages are fetched even
     if the incremental cursor has already advanced past them.
     Returns (synced_total, errors) for backward compatibility with the poll flow."""
+    if _inbox_sync_paused():
+        return 0, [_INBOX_SYNC_PAUSED_MESSAGE], {}
     identifiers = [i for i in (identifiers or ()) if i]
     errors = []
     synced_total = 0
@@ -4198,6 +4297,8 @@ def _explorer_date_range_bounds(date_range, since_date=None):
 
 def _sync_mailbox_date_range_no_cursor(account, folders=None, date_range=None, since_date=None, limit=500):
     """Sync messages matching a date window without changing incremental UID cursors."""
+    if _inbox_sync_paused():
+        return 0, [], [_INBOX_SYNC_PAUSED_MESSAGE]
     start_dt, end_dt = _explorer_date_range_bounds(date_range, since_date=since_date)
     if not start_dt or not end_dt:
         return _sync_mailbox_recent_no_cursor(account, folders=folders, limit=limit, wait_for_lock=True)
@@ -4223,6 +4324,9 @@ def _sync_mailbox_date_range_no_cursor(account, folders=None, date_range=None, s
         since_value = start_dt.strftime('%d-%b-%Y')
         before_value = end_dt.strftime('%d-%b-%Y')
         for folder in target_folders:
+            if _inbox_sync_paused():
+                errors.append(_INBOX_SYNC_PAUSED_MESSAGE)
+                break
             try:
                 meta = _imap_select_folder(conn, folder)
                 if not meta:
@@ -4437,6 +4541,8 @@ def _poll_inbox_test_payload(test_id, data=None, progress_callback=None):
     test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
     if not test:
         return {'success': False, 'error': 'Test not found'}, 404
+    if _inbox_sync_paused():
+        return {'success': False, 'error': _INBOX_SYNC_PAUSED_MESSAGE, 'sync_paused': True, 'control': _inbox_sync_pause_state()}, 409
     raw_mark_missing_minutes = data.get('mark_missing_after_minutes')
     if raw_mark_missing_minutes is None:
         mark_missing_after_minutes = 30 if (getattr(test, 'test_type', None) == 'automated' or str(test.test_id or '').startswith('AT-')) else 0
@@ -4493,6 +4599,10 @@ def _poll_inbox_test_payload(test_id, data=None, progress_callback=None):
         f'{diagnostic["skipped_completed"]} already classified row(s) skipped.'
     )
     for inbox_index, (inbox_id, rows) in enumerate(pending_by_inbox.items(), start=1):
+        if _inbox_sync_paused():
+            sync_errors.append(_INBOX_SYNC_PAUSED_MESSAGE)
+            emit_progress(96, 'paused', 'Sync stopped from Synced status.', 'Resume sync to allow new jobs.')
+            break
         if time.monotonic() >= sync_deadline:
             message = f'Sync stopped at {max_sync_seconds}s limit before inbox {inbox_index}/{total_inboxes}.'
             sync_errors.append(message)
@@ -4590,6 +4700,8 @@ def _poll_inbox_test_payload(test_id, data=None, progress_callback=None):
 @login_required
 @permission_required('inbox_intelligence')
 def api_inbox_poll_test_async(test_id):
+    if _inbox_sync_paused():
+        return _inbox_sync_paused_response()
     payload = request.get_json(silent=True) or {}
     try:
         stale_minutes = min(30, max(5, int(payload.get('stale_minutes') or 15)))
@@ -4657,10 +4769,11 @@ def api_inbox_poll_test_async(test_id):
                 if not j:
                     j = InboxPollJob(job_id=job_id, test_id=test_id, status='running')
                     db.session.add(j)
-                j.status = 'completed' if status_code < 400 and result.get('success') else 'error'
-                j.message = 'Sync completed.' if result.get('success') else result.get('error', 'Sync failed.')
+                stopped_by_pause = _inbox_sync_paused()
+                j.status = 'error' if stopped_by_pause else ('completed' if status_code < 400 and result.get('success') else 'error')
+                j.message = 'Sync stopped from Synced status.' if stopped_by_pause else ('Sync completed.' if result.get('success') else result.get('error', 'Sync failed.'))
                 j.progress_percent = 100 if j.status == 'completed' else (j.progress_percent or 0)
-                j.progress_stage = 'completed' if j.status == 'completed' else 'error'
+                j.progress_stage = 'completed' if j.status == 'completed' else ('paused' if stopped_by_pause else 'error')
                 if j.status == 'completed':
                     diagnostic = result.get('diagnostic') or {}
                     j.progress_detail = f"Matched {diagnostic.get('matched_rows', 0)}/{diagnostic.get('checked_rows', 0)} observation(s); fetched {diagnostic.get('headers_fetched', 0)} IMAP message(s)."
@@ -19853,6 +19966,9 @@ def _inbox_auto_sync_loop():
         try:
             time.sleep(_INBOX_AUTO_SYNC_INTERVAL)
             with app.app_context():
+                if _inbox_sync_paused():
+                    app.logger.info("[AUTO-SYNC] Skipped because inbox sync is paused")
+                    continue
                 accounts = InboxImapAccount.query.filter(
                     InboxImapAccount.auto_sync_enabled.is_(True),
                     or_(InboxImapAccount.is_enabled.is_(True), InboxImapAccount.is_enabled.is_(None)),

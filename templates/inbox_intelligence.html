@@ -1810,7 +1810,7 @@
 
     .ii-sync-status-grid {
         display: grid;
-        grid-template-columns: minmax(220px, 1fr) auto;
+        grid-template-columns: minmax(220px, 1fr) auto auto;
         gap: 10px;
         align-items: end;
     }
@@ -3132,13 +3132,14 @@ The NightOwl Ranch Team</textarea>
                             </div>
                             <div class="ii-card">
                                 <h4>Synced status</h4>
-                                <div class="ii-row mb-2"><i class="fas fa-arrows-rotate text-primary"></i><span class="ii-muted" id="automatedLastSync">No sync yet</span></div>
+                                <div class="ii-row mb-2"><i class="fas fa-arrows-rotate text-primary"></i><span class="ii-muted" id="automatedLastSync">No sync yet</span><span class="ii-chip green" id="automatedSyncPauseStatus">Sync running</span></div>
                                 <div class="ii-sync-status-grid">
                                     <div class="ii-field mb-0">
                                         <label>Test ID to sync</label>
                                         <input class="ii-input" id="automatedManualTestIdInput" placeholder="AT-6C57D4E9">
                                     </div>
                                     <button class="ii-btn" id="automatedSyncButton" type="button" onclick="syncAutomatedEmailTest()"><i class="fas fa-arrows-rotate"></i> Sync now</button>
+                                    <button class="ii-btn ii-btn-danger" id="automatedSyncPauseButton" type="button" onclick="toggleInboxSyncPause()"><i class="fas fa-stop"></i> Stop sync</button>
                                 </div>
                             </div>
                         </div>
@@ -4203,6 +4204,8 @@ merge_recipe_id, content_blueprint_id</pre>
         automatedTests: [],
         automatedSelectedTestId: null,
         automatedPollTimers: {},
+        inboxSyncPaused: false,
+        inboxSyncPauseUpdating: false,
         automatedCopyBuckets: {inboxUsers: [], inboxDomains: [], spamUsers: [], spamDomains: [], inboxUserAccountLines: [], spamUserAccountLines: [], greyDomainNameChangeUsers: []},
         automatedAiResultCopyBuckets: {inbox_users: [], spam_users: [], inbox_domains: [], spam_domains: []},
         automatedAiResultAnalysis: null,
@@ -5309,6 +5312,10 @@ merge_recipe_id, content_blueprint_id</pre>
     async function syncAllInboxes() {
         const status = document.getElementById('syncAllInboxesStatus');
         const btn = document.getElementById('syncAllInboxesBtn');
+        if (iiState.inboxSyncPaused) {
+            status.textContent = 'Inbox sync is paused. Resume sync from Synced status first.';
+            return;
+        }
         if (!iiState.imapAccounts.length) {
             status.textContent = 'No accounts connected. Add one first.';
             return;
@@ -5363,6 +5370,11 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     async function syncImapAccount(id) {
+        if (iiState.inboxSyncPaused) {
+            const status = document.getElementById('syncAllInboxesStatus') || document.getElementById('explorerSyncStatus');
+            if (status) status.textContent = 'Inbox sync is paused. Resume sync from Synced status first.';
+            return;
+        }
         await iiFetch(`/api/inbox-intelligence/imap-accounts/${id}/sync`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -5397,6 +5409,10 @@ merge_recipe_id, content_blueprint_id</pre>
     async function syncExplorerAccounts() {
         const status = document.getElementById('explorerSyncStatus');
         const btn = document.getElementById('explorerSyncBtn');
+        if (iiState.inboxSyncPaused) {
+            status.textContent = 'Inbox sync is paused. Resume sync from Synced status first.';
+            return;
+        }
         saveExplorerPreferences();
         const checkboxes = document.querySelectorAll('.explorer-account-check:checked');
         const accountIds = Array.from(checkboxes).map((cb) => parseInt(cb.value));
@@ -6757,20 +6773,95 @@ merge_recipe_id, content_blueprint_id</pre>
         return match ? match[1] : text;
     }
 
+    function clearAutomatedPollTimers() {
+        Object.values(iiState.automatedPollTimers || {}).forEach((timerId) => window.clearTimeout(timerId));
+        iiState.automatedPollTimers = {};
+    }
+
+    function renderInboxSyncPauseState(control = {}) {
+        iiState.inboxSyncPaused = Boolean(control.paused);
+        const pauseButton = document.getElementById('automatedSyncPauseButton');
+        const pauseStatus = document.getElementById('automatedSyncPauseStatus');
+        const syncButton = document.getElementById('automatedSyncButton');
+        const syncLabel = document.getElementById('automatedLastSync');
+        if (pauseStatus) {
+            pauseStatus.className = `ii-chip ${iiState.inboxSyncPaused ? 'red' : 'green'}`;
+            pauseStatus.textContent = iiState.inboxSyncPaused ? 'Sync paused' : 'Sync running';
+            pauseStatus.title = control.message || '';
+        }
+        if (pauseButton) {
+            pauseButton.disabled = iiState.inboxSyncPauseUpdating;
+            pauseButton.className = iiState.inboxSyncPaused ? 'ii-btn ii-btn-primary' : 'ii-btn ii-btn-danger';
+            pauseButton.innerHTML = iiState.inboxSyncPauseUpdating
+                ? '<span class="ii-spinner" aria-hidden="true"></span> Updating'
+                : iiState.inboxSyncPaused
+                    ? '<i class="fas fa-play"></i> Resume sync'
+                    : '<i class="fas fa-stop"></i> Stop sync';
+            pauseButton.title = iiState.inboxSyncPaused ? 'Allow new sync jobs again' : 'Pause all new inbox sync jobs';
+        }
+        if (syncButton) {
+            syncButton.disabled = iiState.inboxSyncPaused || syncButton.dataset.busy === 'true';
+            syncButton.title = iiState.inboxSyncPaused ? 'Resume sync before starting a new sync job' : 'Sync selected automated test now';
+        }
+        if (iiState.inboxSyncPaused && syncLabel) {
+            const pausedBy = control.paused_by ? ` by ${control.paused_by}` : '';
+            syncLabel.textContent = `Sync paused${pausedBy}. Press Resume sync to allow new jobs.`;
+        }
+    }
+
+    async function loadInboxSyncControl() {
+        try {
+            const data = await iiFetch('/api/inbox-intelligence/sync-control');
+            renderInboxSyncPauseState(data.control || {});
+        } catch (err) {
+            console.warn('Could not load sync control state', err);
+        }
+    }
+
+    async function toggleInboxSyncPause() {
+        const status = document.getElementById('automatedStatusText');
+        iiState.inboxSyncPauseUpdating = true;
+        renderInboxSyncPauseState({paused: iiState.inboxSyncPaused});
+        try {
+            const data = await iiFetch('/api/inbox-intelligence/sync-control', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({paused: !iiState.inboxSyncPaused})
+            });
+            const control = data.control || {};
+            if (control.paused) clearAutomatedPollTimers();
+            renderInboxSyncPauseState(control);
+            if (status) status.textContent = control.paused
+                ? 'Inbox sync paused. New auto-sync and test sync jobs will not start until you resume.'
+                : 'Inbox sync resumed. New sync jobs can start again.';
+        } catch (err) {
+            if (status) status.textContent = `Could not update sync stop: ${err.message}`;
+        } finally {
+            iiState.inboxSyncPauseUpdating = false;
+            await loadInboxSyncControl();
+        }
+    }
+
     function setAutomatedSyncing(isSyncing, label = 'Syncing fresh automated test data...') {
         const button = document.getElementById('automatedSyncButton');
         const syncLabel = document.getElementById('automatedLastSync');
         if (button) {
-            button.disabled = isSyncing;
+            button.dataset.busy = isSyncing ? 'true' : 'false';
+            button.disabled = isSyncing || iiState.inboxSyncPaused;
             button.innerHTML = isSyncing
                 ? '<span class="ii-spinner" aria-hidden="true"></span> Syncing...'
                 : '<i class="fas fa-arrows-rotate"></i> Sync fresh data';
         }
         if (isSyncing && syncLabel) syncLabel.textContent = label;
+        renderInboxSyncPauseState({paused: iiState.inboxSyncPaused});
     }
 
     async function syncAutomatedEmailTest() {
         const status = document.getElementById('automatedStatusText');
+        if (iiState.inboxSyncPaused) {
+            if (status) status.textContent = 'Inbox sync is paused. Press Resume sync before starting a new sync.';
+            return;
+        }
         const manualInput = document.getElementById('automatedManualTestIdInput');
         const manualTestId = normalizeAutomatedTestId(manualInput?.value || '');
         const testId = manualTestId || iiState.automatedSelectedTestId;
@@ -6795,9 +6886,11 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     function scheduleAutomatedPoll(testId) {
+        if (iiState.inboxSyncPaused) return;
         if (!testId || iiState.automatedPollTimers[testId]) return;
         iiState.automatedPollTimers[testId] = window.setTimeout(() => {
             delete iiState.automatedPollTimers[testId];
+            if (iiState.inboxSyncPaused) return;
             pollAutomatedEmailTest(testId, true, {background: true});
         }, 20000);
     }
@@ -6805,6 +6898,11 @@ merge_recipe_id, content_blueprint_id</pre>
     async function pollAutomatedEmailTest(testId, keepWatching = false, options = {}) {
         const status = document.getElementById('automatedStatusText');
         const runStatus = document.getElementById('automatedRunStatus');
+        if (iiState.inboxSyncPaused) {
+            if (status) status.textContent = 'Inbox sync is paused. Press Resume sync to allow new automated test sync jobs.';
+            if (runStatus) runStatus.textContent = 'Sync paused';
+            return;
+        }
         if (status) status.textContent = `Syncing automated test ${testId} with IMAP/database messages...`;
         if (runStatus) runStatus.textContent = 'Syncing';
         try {
@@ -6883,6 +6981,9 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     async function runAutomatedSyncJob(testId, payload) {
+        if (iiState.inboxSyncPaused) {
+            throw new Error('Inbox sync is paused. Press Resume sync before starting a new sync job.');
+        }
         const started = await iiFetch(`/api/inbox-intelligence/tests/${testId}/poll-async`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -11204,6 +11305,7 @@ merge_recipe_id, content_blueprint_id</pre>
         updateUserInboxDiagnostics();
 
         Promise.allSettled([
+            loadInboxSyncControl(),
             loadImapAccounts(),
             loadStaticTemplates(),
             loadUserInboxTemplates(),
