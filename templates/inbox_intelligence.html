@@ -8263,6 +8263,8 @@ merge_recipe_id, content_blueprint_id</pre>
         const a = row.analytics || {};
         const totals = a.totals || {};
         const domains = a.best_domains || [];
+        const inboxDomains = domains.filter((item) => Number(item.inbox || 0) > 0).map((item) => String(item.domain || '').toLowerCase()).filter(Boolean);
+        const spamDomains = domains.filter((item) => Number(item.spam || 0) > 0).map((item) => String(item.domain || '').toLowerCase()).filter(Boolean);
         const inboxAccountUserLines = savedAnalysisAccountUserLines(a, 'inbox_account_user_lines', 'inbox_users');
         const spamAccountUserLines = savedAnalysisAccountUserLines(a, 'spam_account_user_lines', 'spam_users');
         const domainStatuses = a.domain_statuses || {};
@@ -8319,9 +8321,13 @@ merge_recipe_id, content_blueprint_id</pre>
             </div>
             <section class="ii-saved-domain-section">
                 <div class="ii-row justify-content-between mb-2"><div><h4>Best domains</h4><div class="ii-muted">Ranked by inbox rate, then observation volume. Assign a saved status for follow-up lists.</div></div><button class="ii-btn" type="button" onclick="copySavedAnalysisBucket('best_domains', 'domain')"><i class="fas fa-copy"></i> Copy all domains</button></div>
+                <div class="ii-analytics-copy-grid mb-2">
+                    <button class="ii-btn ii-copy-stat-button inbox" type="button" onclick="copySavedAnalysisDomainBucket('inbox')"><i class="fas fa-inbox"></i><strong>${inboxDomains.length}</strong><span>Copy inbox domains</span></button>
+                    <button class="ii-btn ii-copy-stat-button spam" type="button" onclick="copySavedAnalysisDomainBucket('spam')"><i class="fas fa-triangle-exclamation"></i><strong>${spamDomains.length}</strong><span>Copy spam domains</span></button>
+                </div>
                 <div class="ii-saved-domain-summary">
-                    <div class="ii-saved-domain-summary-item inbox"><span class="ii-muted">Saved inbox domains</span><strong>${savedInboxDomains.length}</strong><button class="ii-btn" type="button" onclick="copySavedDomainDecisions('inbox')"><i class="fas fa-copy"></i> Copy inbox</button></div>
-                    <div class="ii-saved-domain-summary-item spam"><span class="ii-muted">Saved spam domains</span><strong>${savedSpamDomains.length}</strong><button class="ii-btn" type="button" onclick="copySavedDomainDecisions('spam')"><i class="fas fa-copy"></i> Copy spam</button></div>
+                    <div class="ii-saved-domain-summary-item inbox"><span class="ii-muted">Saved inbox domains</span><strong>${savedInboxDomains.length}</strong><button class="ii-btn" type="button" onclick="copySavedDomainDecisions('inbox')"><i class="fas fa-copy"></i> Copy saved inbox</button></div>
+                    <div class="ii-saved-domain-summary-item spam"><span class="ii-muted">Saved spam domains</span><strong>${savedSpamDomains.length}</strong><button class="ii-btn" type="button" onclick="copySavedDomainDecisions('spam')"><i class="fas fa-copy"></i> Copy saved spam</button></div>
                     <div class="ii-saved-domain-summary-item"><span class="ii-muted">Unassigned</span><strong>${unassignedDomains}</strong></div>
                 </div>
                 <div class="ii-saved-domain-bulkbar" aria-live="polite">
@@ -8447,6 +8453,24 @@ merge_recipe_id, content_blueprint_id</pre>
         }
         await copyTextToClipboard(`${values.join('\r\n')}\r\n`);
         if (message) message.textContent = `Copied ${values.length} saved ${status} domain(s).`;
+    }
+
+    async function copySavedAnalysisDomainBucket(status) {
+        const row = (iiState.savedAnalyses || []).find((item) => Number(item.id) === Number(iiState.activeSavedAnalysisId));
+        const domains = row?.analytics?.best_domains || [];
+        const values = domains
+            .filter((item) => Number(item?.[status] || 0) > 0)
+            .map((item) => String(item?.domain || '').trim().toLowerCase())
+            .filter(Boolean)
+            .filter((domain, index, items) => items.indexOf(domain) === index)
+            .sort((a, b) => a.localeCompare(b));
+        const message = document.getElementById('savedAnalysisStatus');
+        if (!values.length) {
+            if (message) message.textContent = `No ${status} domains are available in this analysis.`;
+            return;
+        }
+        await copyTextToClipboard(`${values.join('\r\n')}\r\n`);
+        if (message) message.textContent = `Copied ${values.length} ${status} domain(s).`;
     }
 
     function changeSavedBestDomainsPageSize(value) {
