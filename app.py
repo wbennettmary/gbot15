@@ -3343,6 +3343,7 @@ def _automated_test_date_bounds(date_filter, custom_start=None, custom_end=None)
 def _serialize_automated_test(test):
     workspace_list_id = getattr(test, 'workspace_list_id', None)
     workspace_list = WorkspaceList.query.get(workspace_list_id) if workspace_list_id else None
+    running_poll_job = InboxPollJob.query.filter_by(test_id=test.test_id, status='running').order_by(InboxPollJob.created_at.desc()).first()
     return {
         'test_id': test.test_id,
         'name': test.name,
@@ -3363,6 +3364,14 @@ def _serialize_automated_test(test):
         'spam_count': test.spam_count,
         'pending_count': test.pending_count,
         'failed_count': test.failed_count,
+        'sync_job': {
+            'job_id': running_poll_job.job_id,
+            'status': running_poll_job.status,
+            'progress_percent': running_poll_job.progress_percent or 0,
+            'progress_stage': running_poll_job.progress_stage or '',
+            'progress_detail': running_poll_job.progress_detail or '',
+            'message': running_poll_job.message or '',
+        } if running_poll_job else None,
         'created_at': test.created_at.isoformat() + 'Z' if test.created_at else None,
         'source_results': _automated_source_rollups(test.test_id),
     }

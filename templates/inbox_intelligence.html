@@ -6904,7 +6904,7 @@ merge_recipe_id, content_blueprint_id</pre>
             if (runStatus) runStatus.textContent = `${percent}%`;
             if (attempt % 4 === 3) {
                 try {
-                    await fetchAutomatedTestDetail(testId, true);
+                    await loadAutomatedTests(false);
                 } catch (_) {}
             }
             if (job.status === 'completed') return job.result || {success: true, diagnostic: {}};
@@ -7163,16 +7163,23 @@ merge_recipe_id, content_blueprint_id</pre>
             const failed = test.failed_count || 0;
             const statusText = String(test.status || '').toUpperCase();
             const isSending = ['QUEUED', 'SENDING'].includes(statusText);
+            const syncJob = test.sync_job || null;
+            const hasSyncJob = syncJob && String(syncJob.status || '').toLowerCase() === 'running';
+            const syncPercent = Math.max(0, Math.min(99, Number(syncJob?.progress_percent || 0)));
             const observed = inbox + spam + failed;
-            const progressW = total ? Math.round(((isSending ? sent : observed) / total) * 100) : 0;
+            const progressW = hasSyncJob ? syncPercent : (total ? Math.round(((isSending ? sent : observed) / total) * 100) : 0);
             const inboxW = total ? Math.round((inbox / total) * 100) : 0;
             const spamW = total ? Math.round((spam / total) * 100) : 0;
             const failedW = total ? Math.round((failed / total) * 100) : 0;
-            const progressTitle = isSending
+            const progressTitle = hasSyncJob
+                ? `${syncJob.message || 'IMAP sync running'} (${syncPercent}%) - ${syncJob.progress_detail || syncJob.progress_stage || ''}`
+                : isSending
                 ? `Send progress ${progressW}%`
-                : `Observed ${observed}/${total} (${progressW}%) · ${inbox} inbox, ${spam} spam, ${pending} pending`;
+                : `Observed ${observed}/${total} (${progressW}%) - ${inbox} inbox, ${spam} spam, ${pending} pending`;
             const listLabel = automatedTestListLabel(test);
-            const progressSegments = isSending
+            const progressSegments = hasSyncJob
+                ? `<div class="seg sent" style="width:${progressW}%;"></div>`
+                : isSending
                 ? `<div class="seg sent" style="width:${progressW}%;"></div>`
                 : `<div class="seg inbox" style="width:${inboxW}%;"></div><div class="seg spam" style="width:${spamW}%;"></div><div class="seg pending" style="width:${failedW}%;"></div>`;
             return `
