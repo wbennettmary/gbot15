@@ -8166,6 +8166,12 @@ merge_recipe_id, content_blueprint_id</pre>
             </div>`).join('')}</div>`;
     }
 
+    function savedAnalysisLineRows(lines, emptyText) {
+        if (!(lines || []).length) return `<div class="ii-muted">${escapeHtml(emptyText)}</div>`;
+        return `<div class="ii-saved-action-list">${lines.map((line) => `
+            <div class="ii-saved-action-row ii-saved-line-row"><span>${escapeHtml(line)}</span></div>`).join('')}</div>`;
+    }
+
     function renderSavedAnalysisDetail() {
         const detail = document.getElementById('savedAnalysisDetail');
         if (!detail) return;
@@ -8177,6 +8183,8 @@ merge_recipe_id, content_blueprint_id</pre>
         const a = row.analytics || {};
         const totals = a.totals || {};
         const domains = a.best_domains || [];
+        const inboxAccountUserLines = a.inbox_account_user_lines || (a.inbox_users || []).map((item) => item.name_change_line || `${item.account || ''},${item.email || ''}`).filter(Boolean);
+        const spamAccountUserLines = a.spam_account_user_lines || (a.spam_users || []).map((item) => item.name_change_line || `${item.account || ''},${item.email || ''}`).filter(Boolean);
         const domainStatuses = a.domain_statuses || {};
         const savedInboxDomains = domains.filter((item) => domainStatuses[String(item.domain || '').toLowerCase()] === 'inbox');
         const savedSpamDomains = domains.filter((item) => domainStatuses[String(item.domain || '').toLowerCase()] === 'spam');
@@ -8208,6 +8216,11 @@ merge_recipe_id, content_blueprint_id</pre>
                     ${savedAnalysisActionRows(a.inbox_accounts, 'account', 'No inbox-only accounts in this analysis.')}
                     <button class="ii-btn" type="button" onclick="copySavedAnalysisBucket('inbox_accounts', 'account')"><i class="fas fa-copy"></i> Copy inbox accounts</button>
                 </section>
+                <section class="ii-saved-action-section inbox">
+                    <div class="ii-row justify-content-between"><div><h4>Inbox account,user</h4><div class="ii-muted">Account and user pairs ready to reuse</div></div><span class="ii-chip green">${inboxAccountUserLines.length}</span></div>
+                    ${savedAnalysisLineRows(inboxAccountUserLines, 'No Inbox account,user rows in this analysis.')}
+                    <button class="ii-btn" type="button" onclick="copySavedAnalysisAccountUserLines('inbox_account_user_lines', 'inbox_users', 'Inbox account,user')"><i class="fas fa-copy"></i> Copy Inbox account,user</button>
+                </section>
                 <section class="ii-saved-action-section grey">
                     <div class="ii-row justify-content-between"><div><h4>Grey users</h4><div class="ii-muted">Change names in Workspace</div></div><span class="ii-chip yellow">${(a.grey_users || []).length}</span></div>
                     ${savedAnalysisActionRows(a.grey_users, 'email', 'No mixed-placement users in this analysis.')}
@@ -8217,6 +8230,11 @@ merge_recipe_id, content_blueprint_id</pre>
                     <div class="ii-row justify-content-between"><div><h4>Spam accounts</h4><div class="ii-muted">Change sending domains</div></div><span class="ii-chip red">${(a.spam_accounts || []).length}</span></div>
                     ${savedAnalysisActionRows(a.spam_accounts, 'account', 'No spam-only accounts in this analysis.')}
                     <button class="ii-btn ii-btn-danger" type="button" onclick="copySavedAnalysisBucket('spam_accounts', 'account')"><i class="fas fa-copy"></i> Spam account</button>
+                </section>
+                <section class="ii-saved-action-section spam">
+                    <div class="ii-row justify-content-between"><div><h4>Spam account,user</h4><div class="ii-muted">Account and user pairs ready to modify</div></div><span class="ii-chip red">${spamAccountUserLines.length}</span></div>
+                    ${savedAnalysisLineRows(spamAccountUserLines, 'No Spam account,user rows in this analysis.')}
+                    <button class="ii-btn ii-btn-danger" type="button" onclick="copySavedAnalysisAccountUserLines('spam_account_user_lines', 'spam_users', 'Spam account,user')"><i class="fas fa-copy"></i> Copy Spam account,user</button>
                 </section>
             </div>
             <section class="ii-saved-domain-section">
@@ -8372,6 +8390,22 @@ merge_recipe_id, content_blueprint_id</pre>
         }
         await copyTextToClipboard(`${values.join('\r\n')}\r\n`);
         if (status) status.textContent = `Copied ${values.length} item(s).`;
+    }
+
+    async function copySavedAnalysisAccountUserLines(bucket, fallbackBucket, label) {
+        const row = (iiState.savedAnalyses || []).find((item) => Number(item.id) === Number(iiState.activeSavedAnalysisId));
+        const analytics = row?.analytics || {};
+        const savedLines = Array.isArray(analytics[bucket]) ? analytics[bucket] : [];
+        const values = savedLines.length
+            ? savedLines.map((line) => String(line || '').trim()).filter(Boolean)
+            : (analytics[fallbackBucket] || []).map((item) => String(item.name_change_line || `${item.account || ''},${item.email || ''}`).trim()).filter(Boolean);
+        const status = document.getElementById('savedAnalysisStatus');
+        if (!values.length) {
+            if (status) status.textContent = `There are no ${label} rows to copy.`;
+            return;
+        }
+        await copyTextToClipboard(`${values.join('\r\n')}\r\n`);
+        if (status) status.textContent = `Copied ${values.length} ${label} row(s).`;
     }
 
     async function deleteSavedAnalysis(id) {

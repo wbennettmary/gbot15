@@ -5962,6 +5962,23 @@ def _build_saved_analysis(test_ids):
     inbox_users = sorted((item for item in users if item['inbox'] and not item['spam']), key=lambda item: item['email'])
     spam_users = sorted((item for item in users if item['spam'] and not item['inbox']), key=lambda item: (-item['spam'], item['email']))
     grey_users = sorted((item for item in users if item['inbox'] and item['spam']), key=lambda item: (-item['spam'], item['email']))
+    def account_user_lines(items):
+        seen = set()
+        lines = []
+        for item in items:
+            line = str(item.get('name_change_line') or '').strip()
+            if not line:
+                account = str(item.get('account') or '').strip()
+                email = str(item.get('email') or '').strip().lower()
+                line = f'{account},{email}' if account and email else ''
+            key = line.lower()
+            if line and key not in seen:
+                seen.add(key)
+                lines.append(line)
+        return sorted(lines, key=str.lower)
+
+    inbox_account_user_lines = account_user_lines(inbox_users)
+    spam_account_user_lines = account_user_lines(spam_users)
     waiting_users = sorted((item for item in users if not item['observed']), key=lambda item: item['email'])
     inbox_accounts = sorted((item for item in account_rows if item['inbox'] and not item['spam']), key=lambda item: (-item['inbox_rate'], item['account']))
     spam_accounts = sorted((item for item in account_rows if item['spam'] and not item['inbox']), key=lambda item: (-item['spam'], item['account']))
@@ -5991,6 +6008,8 @@ def _build_saved_analysis(test_ids):
         'grey_accounts': grey_accounts,
         'inbox_users': inbox_users,
         'spam_users': spam_users,
+        'inbox_account_user_lines': inbox_account_user_lines,
+        'spam_account_user_lines': spam_account_user_lines,
         'grey_users': grey_users,
         'waiting_users': waiting_users,
         'best_domains': best_domains,
