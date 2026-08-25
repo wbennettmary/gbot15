@@ -409,6 +409,33 @@ with app.app_context():
             db.session.rollback()
         except:
             pass
+
+    # Auto-migration: Add live progress fields for background IMAP poll jobs.
+    try:
+        from sqlalchemy import inspect
+        inspector = inspect(db.engine)
+        table_names = inspector.get_table_names()
+        if 'inbox_poll_job' in table_names:
+            columns = [col['name'] for col in inspector.get_columns('inbox_poll_job')]
+            new_columns = {
+                'progress_percent': 'INTEGER DEFAULT 0',
+                'progress_stage': "VARCHAR(80) DEFAULT 'queued'",
+                'progress_detail': 'TEXT',
+            }
+            with db.engine.connect() as conn:
+                for column_name, column_type in new_columns.items():
+                    if column_name not in columns:
+                        if 'postgresql' in str(db.engine.url):
+                            conn.execute(text(f'ALTER TABLE "inbox_poll_job" ADD COLUMN {column_name} {column_type}'))
+                        else:
+                            conn.execute(text(f"ALTER TABLE inbox_poll_job ADD COLUMN {column_name} {column_type}"))
+                conn.commit()
+    except Exception as e:
+        logging.warning(f"Could not auto-migrate inbox poll job progress fields: {e}")
+        try:
+            db.session.rollback()
+        except:
+            pass
      
     # Auto-migration: Add ever_used column if it doesn't exist
     # Auto-migration: Add ever_used column if it doesn't exist
@@ -3807,7 +3834,7 @@ def _resolve_sync_folder_targets(conn, folders, all_folders=None):
                 targets.append(match)
     return targets or all_folders or ['INBOX']
 
-def _imap_fetch_by_identifiers(account, identifiers, folders=None, include_text_search=False):
+def _imap_fetch_by_identifiers(account, identifiers, folders=None, include_text_search=False, batch_test_id=None):
     """Targeted sync for test polling: connect once, search every relevant real folder
     for each test identifier (HEADER X-Test-ID plus RESULT-marking header fallback), then
     fetch and persist the full bodies. Works regardless of how far the incremental UID
@@ -3819,7 +3846,7 @@ def _imap_fetch_by_identifiers(account, identifiers, folders=None, include_text_
     found_count = 0
     errors = []
     placements = {}
-    match_modes = {'x_test_id': 0, 'message_id': 0}
+    match_modes = {'batch_id': 0, 'x_test_id': 0, 'message_id': 0}
     lock = _get_account_sync_lock(account.id)
     if not lock.acquire(timeout=90):
         return 0, ['Sync already in progress for this account'], {}
@@ -3836,11 +3863,8 @@ def _imap_fetch_by_identifiers(account, identifiers, folders=None, include_text_
                 if not meta:
                     continue
                 uid_set = set()
-                for identifier in identifiers:
-                    search_terms = [f'HEADER X-Test-ID "{identifier}"', f'HEADER Message-ID "{identifier}"']
-                    if include_text_search:
-                        search_terms.append(f'TEXT "{identifier}"')
-                    for search_term in search_terms:
+                if batch_test_id:
+                    for search_term in (f'HEADER X-Test-Batch-ID "{batch_test_id}"', f'HEADER Message-ID "{batch_test_id}"'):
                         try:
                             s, data = conn.uid('search', None, search_term)
                         except Exception:
@@ -3849,7 +3873,23 @@ def _imap_fetch_by_identifiers(account, identifiers, folders=None, include_text_
                             continue
                         for u in data[0].split():
                             uid_set.add(u)
+                        match_modes['batch_id'] += len(data[0].split())
                         break
+                if not uid_set or include_text_search:
+                    for identifier in identifiers:
+                        search_terms = [f'HEADER X-Test-ID "{identifier}"', f'HEADER Message-ID "{identifier}"']
+                        if include_text_search:
+                            search_terms.append(f'TEXT "{identifier}"')
+                        for search_term in search_terms:
+                            try:
+                                s, data = conn.uid('search', None, search_term)
+                            except Exception:
+                                continue
+                            if s != 'OK' or not data or not data[0]:
+                                continue
+                            for u in data[0].split():
+                                uid_set.add(u)
+                            break
                 if not uid_set:
                     continue
                 messages = _imap_fetch_messages_batch(conn, list(uid_set), folder)
@@ -3888,7 +3928,7 @@ def _imap_fetch_by_identifiers(account, identifiers, folders=None, include_text_
             pass
         lock.release()
 
-def _sync_test_inbox_folders(inbox, limit=200, since=None, identifiers=None, targeted_only=True, include_text_search=False):
+def _sync_test_inbox_folders(inbox, limit=200, since=None, identifiers=None, targeted_only=True, include_text_search=False, batch_test_id=None):
     """Sync an inbox (used by test polling / User Inbox Test) using the new UID-cursor
     engine across ALL real result folders (INBOX, Spam/Junk/Bulk, Gmail tabs), plus a
     targeted X-Test-ID search that guarantees the exact test messages are fetched even
@@ -3898,7 +3938,12 @@ def _sync_test_inbox_folders(inbox, limit=200, since=None, identifiers=None, tar
     errors = []
     synced_total = 0
     if identifiers:
-        target_found, target_errors, placements = _imap_fetch_by_identifiers(inbox, identifiers, include_text_search=include_text_search)
+        target_found, target_errors, placements = _imap_fetch_by_identifiers(
+            inbox,
+            identifiers,
+            include_text_search=include_text_search,
+            batch_test_id=batch_test_id,
+        )
         target_match_modes = placements.pop('_match_modes', {}) if isinstance(placements, dict) else {}
         synced_total += target_found
         errors.extend(target_errors)
@@ -4123,7 +4168,7 @@ def api_inbox_poll_test(test_id):
     result, status_code = _poll_inbox_test_payload(test_id, request.get_json(silent=True) or {})
     return jsonify(result), status_code
 
-def _poll_inbox_test_payload(test_id, data=None):
+def _poll_inbox_test_payload(test_id, data=None, progress_callback=None):
     """Master orchestrator for test sync: sync the real result folders (incremental UID
     cursor) plus a targeted X-Test-ID search so test emails are found no matter the
     cursor state, then match test messages, update placements and counts."""
@@ -4143,6 +4188,15 @@ def _poll_inbox_test_payload(test_id, data=None):
     test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
     if not test:
         return {'success': False, 'error': 'Test not found'}, 404
+    def emit_progress(percent, stage, message, detail=None):
+        if not progress_callback:
+            return
+        try:
+            progress_callback(percent=percent, stage=stage, message=message, detail=detail)
+        except Exception:
+            app.logger.debug("[POLL] Progress callback failed", exc_info=True)
+
+    emit_progress(2, 'loading', f'Loading expected messages for {test_id}...', None)
     deleted_old = _cleanup_old_inbox_email_messages() if _truthy_setting(data.get('cleanup_old'), False) else 0
     try:
         InboxPollJob.query.filter(InboxPollJob.created_at < datetime.utcnow() - timedelta(hours=2)).delete(synchronize_session=False)
@@ -4155,7 +4209,7 @@ def _poll_inbox_test_payload(test_id, data=None):
     diagnostic = {
         'checked_rows': 0, 'matched_rows': 0,
         'headers_fetched': 0, 'deleted_old_messages': deleted_old,
-        'match_modes': {'x_test_id': 0, 'message_id': 0, 'exact': 0},
+        'match_modes': {'batch_id': 0, 'x_test_id': 0, 'message_id': 0, 'exact': 0},
         'accounts_synced': 0,
         'skipped_completed': 0,
         'sync_mode': 'targeted' if targeted_only else 'targeted_plus_recent',
@@ -4173,32 +4227,55 @@ def _poll_inbox_test_payload(test_id, data=None):
             continue
         pending_by_inbox.setdefault(row.imap_account_id, []).append(row)
 
-    for inbox_id, rows in pending_by_inbox.items():
+    total_inboxes = max(1, len(pending_by_inbox))
+    emit_progress(
+        8,
+        'prepared',
+        f'Prepared {diagnostic["checked_rows"]} expected observation(s) across {len(pending_by_inbox)} inbox account(s).',
+        f'{diagnostic["skipped_completed"]} already classified row(s) skipped.'
+    )
+    for inbox_index, (inbox_id, rows) in enumerate(pending_by_inbox.items(), start=1):
         inbox = InboxImapAccount.query.get(inbox_id)
+        start_percent = 10 + int(((inbox_index - 1) / total_inboxes) * 78)
         if not inbox:
             for row in rows:
                 row.status = 'FAILED'
                 row.placement = 'FAILED'
                 row.error_message = 'Receiving inbox no longer exists.'
+            emit_progress(start_percent, 'missing_inbox', f'Inbox {inbox_index}/{total_inboxes} no longer exists.', f'{len(rows)} row(s) marked failed.')
             continue
         try:
             row_identifiers = {row.test_identifier for row in rows if row.test_identifier}
             app.logger.info(f"[POLL] Syncing {inbox.email} for test {test_id} ({len(rows)} rows, {len(row_identifiers)} identifiers, mode={diagnostic['sync_mode']})")
+            emit_progress(
+                start_percent,
+                'syncing',
+                f'Syncing inbox {inbox_index}/{total_inboxes}: {inbox.email}',
+                f'Looking for {len(row_identifiers)} expected message(s).'
+            )
             matched_count, recent_errors, fetch_match_modes = _sync_test_inbox_folders(
                 inbox,
                 limit=sync_limit,
                 identifiers=row_identifiers,
                 targeted_only=targeted_only,
                 include_text_search=include_text_search,
+                batch_test_id=test.test_id,
             )
             diagnostic['headers_fetched'] += matched_count
             diagnostic['accounts_synced'] += 1
             sync_errors.extend([f'{inbox.email}: {error}' for error in recent_errors])
             for mode, count in (fetch_match_modes or {}).items():
                 diagnostic['match_modes'][mode] = diagnostic['match_modes'].get(mode, 0) + count
+            emit_progress(
+                min(92, start_percent + max(4, int(36 / total_inboxes))),
+                'matching',
+                f'Matching synced messages for {inbox.email}',
+                f'Fetched {matched_count} message(s) from IMAP for this inbox.'
+            )
             placements, scan_info = _detect_message_placements_from_synced(inbox.id, rows, test_id=test.test_id, allow_deep_scan=allow_deep_scan)
             for mode, count in (scan_info.get('match_modes') or {}).items():
                 diagnostic['match_modes'][mode] = diagnostic['match_modes'].get(mode, 0) + count
+            inbox_matched = 0
             for row in rows:
                 placement, folder = placements.get(row.test_identifier, ('PENDING', None))
                 row.placement = placement
@@ -4209,10 +4286,27 @@ def _poll_inbox_test_payload(test_id, data=None):
                     row.detected_at = datetime.utcnow()
                     row.status = 'COMPLETED'
                     diagnostic['matched_rows'] += 1
+                    inbox_matched += 1
+            _refresh_deliverability_counts(test)
+            db.session.commit()
+            emit_progress(
+                min(96, 10 + int((inbox_index / total_inboxes) * 78)),
+                'classified',
+                f'Classified {inbox_matched}/{len(rows)} row(s) from {inbox.email}',
+                f'{diagnostic["matched_rows"]}/{diagnostic["checked_rows"]} total observations matched so far.'
+            )
         except Exception as e:
             app.logger.warning(f"[POLL] Error syncing {inbox.email}: {e}", exc_info=True)
             for row in rows:
                 row.error_message = str(e)
+            db.session.commit()
+            emit_progress(
+                min(96, 10 + int((inbox_index / total_inboxes) * 78)),
+                'warning',
+                f'Could not fully sync {inbox.email}',
+                str(e)[:500]
+            )
+    emit_progress(97, 'finalizing', f'Finalizing analytics for {test_id}...', f'{diagnostic["matched_rows"]}/{diagnostic["checked_rows"]} observations matched.')
     _refresh_deliverability_counts(test)
     _update_automated_source_statuses(test.test_id)
     db.session.commit()
@@ -4255,20 +4349,52 @@ def api_inbox_poll_test_async(test_id):
         except Exception:
             db.session.rollback()
     job_id = uuid.uuid4().hex
-    job = InboxPollJob(job_id=job_id, test_id=test_id, status='running', message=f'Syncing {test_id} in background...')
+    job = InboxPollJob(
+        job_id=job_id,
+        test_id=test_id,
+        status='running',
+        progress_percent=0,
+        progress_stage='queued',
+        progress_detail='Waiting for the background worker to start.',
+        message=f'Syncing {test_id} in background...'
+    )
     db.session.add(job)
     db.session.commit()
 
     def run_job():
         with app.app_context():
+            def update_job_progress(percent=None, stage=None, message=None, detail=None):
+                try:
+                    j = InboxPollJob.query.filter_by(job_id=job_id).first()
+                    if not j:
+                        return
+                    if percent is not None:
+                        j.progress_percent = max(0, min(99, int(percent)))
+                    if stage is not None:
+                        j.progress_stage = str(stage)[:80]
+                    if message is not None:
+                        j.message = str(message)[:1000]
+                    if detail is not None:
+                        j.progress_detail = str(detail)[:2000]
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+                    app.logger.debug(f"[POLL-ASYNC] Could not update progress for job {job_id}", exc_info=True)
+
             try:
-                result, status_code = _poll_inbox_test_payload(test_id, payload)
+                update_job_progress(1, 'starting', f'Starting IMAP sync for {test_id}...', 'Preparing targeted lookup.')
+                result, status_code = _poll_inbox_test_payload(test_id, payload, progress_callback=update_job_progress)
                 j = InboxPollJob.query.filter_by(job_id=job_id).first()
                 if not j:
                     j = InboxPollJob(job_id=job_id, test_id=test_id, status='running')
                     db.session.add(j)
                 j.status = 'completed' if status_code < 400 and result.get('success') else 'error'
                 j.message = 'Sync completed.' if result.get('success') else result.get('error', 'Sync failed.')
+                j.progress_percent = 100 if j.status == 'completed' else (j.progress_percent or 0)
+                j.progress_stage = 'completed' if j.status == 'completed' else 'error'
+                if j.status == 'completed':
+                    diagnostic = result.get('diagnostic') or {}
+                    j.progress_detail = f"Matched {diagnostic.get('matched_rows', 0)}/{diagnostic.get('checked_rows', 0)} observation(s); fetched {diagnostic.get('headers_fetched', 0)} IMAP message(s)."
                 try:
                     j.result_json = json.dumps(result)
                 except Exception:
@@ -4287,6 +4413,9 @@ def api_inbox_poll_test_async(test_id):
                     db.session.add(j)
                 j.status = 'error'
                 j.message = str(e)[:500]
+                j.progress_stage = 'error'
+                if not j.progress_detail:
+                    j.progress_detail = 'The background worker stopped before finishing sync.'
                 j.error = str(e)[:2000]
                 j.finished_at = datetime.utcnow()
                 try:
@@ -4307,6 +4436,9 @@ def api_inbox_poll_job_status(job_id):
     result = {
         'job_id': job.job_id,
         'status': job.status,
+        'progress_percent': job.progress_percent if job.progress_percent is not None else (100 if job.status == 'completed' else 0),
+        'progress_stage': job.progress_stage,
+        'progress_detail': job.progress_detail,
         'message': job.message,
         'created_at': job.created_at.isoformat() + 'Z' if job.created_at else None,
         'finished_at': job.finished_at.isoformat() + 'Z' if job.finished_at else None,

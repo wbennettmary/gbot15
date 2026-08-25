@@ -6781,7 +6781,7 @@ merge_recipe_id, content_blueprint_id</pre>
         iiState.automatedSelectedTestId = testId;
         if (manualInput) manualInput.value = testId;
         localStorage.setItem('ii_automated_last_test_id', testId);
-        await pollAutomatedEmailTest(testId, false, {syncMode: 'targeted', skipDeepScan: false, includeTextSearch: true, background: true});
+        await pollAutomatedEmailTest(testId, false, {syncMode: 'targeted', skipDeepScan: false, includeTextSearch: false, background: true});
     }
 
     function automatedSyncDateRange() {
@@ -6889,12 +6889,24 @@ merge_recipe_id, content_blueprint_id</pre>
         });
         const jobId = started.job_id;
         const syncLabel = document.getElementById('automatedLastSync');
+        const runStatus = document.getElementById('automatedRunStatus');
         const maxAttempts = Number(payload?.max_poll_attempts || 240);
+        if (syncLabel) syncLabel.textContent = started.message || `Starting IMAP sync for ${testId}...`;
+        if (runStatus) runStatus.textContent = 'Syncing';
         for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-            if (syncLabel) syncLabel.textContent = `IMAP sync running... ${attempt + 1}/${maxAttempts}`;
             await new Promise((resolve) => setTimeout(resolve, attempt < 5 ? 1000 : 1500));
             const data = await iiFetch(`/api/inbox-intelligence/poll-jobs/${jobId}`);
             const job = data.job || {};
+            const percent = Number.isFinite(Number(job.progress_percent)) ? Number(job.progress_percent) : 0;
+            const message = job.message || `IMAP sync running... ${attempt + 1}/${maxAttempts}`;
+            const detail = job.progress_detail ? ` ${job.progress_detail}` : '';
+            if (syncLabel) syncLabel.textContent = `${message} ${percent}%${detail}`.trim();
+            if (runStatus) runStatus.textContent = `${percent}%`;
+            if (attempt % 4 === 3) {
+                try {
+                    await fetchAutomatedTestDetail(testId, true);
+                } catch (_) {}
+            }
             if (job.status === 'completed') return job.result || {success: true, diagnostic: {}};
             if (job.status === 'error') throw new Error(job.message || job.error || 'Background sync failed');
         }
@@ -7016,7 +7028,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 recent_limit: options.recentLimit ?? 500,
                 targeted_only: options.targetedOnly !== undefined ? options.targetedOnly : true,
                 include_text_search: options.includeTextSearch === true,
-                skip_deep_scan: options.skipDeepScan !== undefined ? options.skipDeepScan : true,
+                skip_deep_scan: options.skipDeepScan !== undefined ? options.skipDeepScan : false,
                 date_range: automatedSyncDateRange(),
                 max_poll_attempts: options.maxPollAttempts || 360,
                 stale_minutes: options.staleMinutes || 15
@@ -7149,8 +7161,20 @@ merge_recipe_id, content_blueprint_id</pre>
             const spam = test.spam_count || 0;
             const pending = test.pending_count || 0;
             const failed = test.failed_count || 0;
-            const sendW = total ? Math.round((sent / total) * 100) : 0;
+            const statusText = String(test.status || '').toUpperCase();
+            const isSending = ['QUEUED', 'SENDING'].includes(statusText);
+            const observed = inbox + spam + failed;
+            const progressW = total ? Math.round(((isSending ? sent : observed) / total) * 100) : 0;
+            const inboxW = total ? Math.round((inbox / total) * 100) : 0;
+            const spamW = total ? Math.round((spam / total) * 100) : 0;
+            const failedW = total ? Math.round((failed / total) * 100) : 0;
+            const progressTitle = isSending
+                ? `Send progress ${progressW}%`
+                : `Observed ${observed}/${total} (${progressW}%) · ${inbox} inbox, ${spam} spam, ${pending} pending`;
             const listLabel = automatedTestListLabel(test);
+            const progressSegments = isSending
+                ? `<div class="seg sent" style="width:${progressW}%;"></div>`
+                : `<div class="seg inbox" style="width:${inboxW}%;"></div><div class="seg spam" style="width:${spamW}%;"></div><div class="seg pending" style="width:${failedW}%;"></div>`;
             return `
             <tr onclick="viewAutomatedEmailTest('${escapeHtml(test.test_id)}')" style="cursor:pointer; ${iiState.automatedSelectedTestId === test.test_id ? 'background:#eff6ff;' : ''}">
                 <td onclick="event.stopPropagation()"><input type="checkbox" aria-label="Select ${escapeHtml(test.test_id)}" ${iiState.selectedAutomatedTestIds.has(test.test_id) ? 'checked' : ''} onchange="toggleAutomatedTestSelection('${escapeHtml(test.test_id)}', this.checked)"></td>
@@ -7160,7 +7184,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 <td>${automatedTestOriginChip(test)}</td>
                 <td>${listLabel ? `<span class="ii-chip blue" title="${escapeHtml(listLabel)}"><i class="fas fa-list-check"></i> ${escapeHtml(listLabel)}</span>` : '<span class="ii-muted">-</span>'}</td>
                 <td><span class="ii-chip ${statusClass(test.status)}">${escapeHtml(test.status)}</span></td>
-                <td><div class="ii-auto-test-progress" title="Send progress ${sendW}%"><div class="seg sent" style="width:${sendW}%;"></div></div><span class="ii-muted">${sendW}%</span></td>
+                <td><div class="ii-auto-test-progress" title="${escapeHtml(progressTitle)}">${progressSegments}</div><span class="ii-muted">${progressW}%</span></td>
                 <td>${test.total_users || 0}</td>
                 <td>${test.total_recipients || 0}</td>
                 <td>${total}</td>
@@ -7867,7 +7891,7 @@ merge_recipe_id, content_blueprint_id</pre>
             intervalMs: 5000,
             recentLimit: 500,
             targetedOnly: true,
-            includeTextSearch: true,
+            includeTextSearch: false,
             skipDeepScan: false,
             maxPollAttempts: 360,
             staleMinutes: 15,
@@ -7884,7 +7908,7 @@ merge_recipe_id, content_blueprint_id</pre>
             sendWait: {timeoutMs: 45 * 1000, intervalMs: 2000},
             intervalMs: 3000,
             recentLimit: 500,
-            includeTextSearch: true,
+            includeTextSearch: false,
             skipDeepScan: false,
             maxPollAttempts: 240,
             staleMinutes: 20,
@@ -10100,7 +10124,7 @@ merge_recipe_id, content_blueprint_id</pre>
         try {
             setUserInboxSyncing(true, 'Syncing recent IMAP messages...');
             const dateRange = document.getElementById('userInboxDateFilter')?.value || '2d';
-            const pollPayload = {sync_mode: 'targeted', recent_limit: 500, targeted_only: true, include_text_search: true, skip_deep_scan: false, date_range: dateRange};
+            const pollPayload = {sync_mode: 'targeted', recent_limit: 500, targeted_only: true, include_text_search: false, skip_deep_scan: false, date_range: dateRange};
             const pollData = await runAutomatedSyncJob(testId, pollPayload);
             const data = await iiFetch(`/api/inbox-intelligence/tests/${testId}`);
             const rows = data.test.messages || [];
@@ -10162,7 +10186,7 @@ merge_recipe_id, content_blueprint_id</pre>
 
     async function pollDeliverabilityTest(testId) {
         const dateRange = automatedSyncDateRange();
-        await runAutomatedSyncJob(testId, {sync_mode: 'targeted', recent_limit: 500, targeted_only: true, include_text_search: true, skip_deep_scan: false, date_range: dateRange});
+        await runAutomatedSyncJob(testId, {sync_mode: 'targeted', recent_limit: 500, targeted_only: true, include_text_search: false, skip_deep_scan: false, date_range: dateRange});
         await loadTests();
         await loadTestDetail(testId);
     }
