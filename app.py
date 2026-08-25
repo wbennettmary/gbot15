@@ -3571,15 +3571,56 @@ def api_inbox_automated_tests():
                 ids.append(test_id)
         if not ids:
             return jsonify({'success': False, 'error': 'Select at least one test to delete'}), 400
-        active_statuses = {'QUEUED', 'SENDING', 'WAITING_FOR_DELIVERY', 'CHECKING_INBOX', 'RUNNING'}
+        active_statuses = {'QUEUED', 'SENDING', 'RUNNING'}
         tests = InboxDeliverabilityTest.query.filter(InboxDeliverabilityTest.test_id.in_(ids)).all()
-        skipped = [test.test_id for test in tests if (test.status or '').upper() in active_statuses]
+        running_poll_test_ids = {
+            job.test_id for job in InboxPollJob.query.filter(
+                InboxPollJob.test_id.in_(ids),
+                InboxPollJob.status == 'running',
+            ).all()
+        }
+        skipped = [
+            test.test_id for test in tests
+            if (test.status or '').upper() in active_statuses or test.test_id in running_poll_test_ids
+        ]
         deletable = [test for test in tests if test.test_id not in skipped]
-        for test in deletable:
-            InboxDeliverabilityMessage.query.filter_by(test_id=test.test_id).delete(synchronize_session=False)
-            db.session.delete(test)
-        db.session.commit()
-        return jsonify({'success': True, 'deleted': len(deletable), 'skipped': skipped, 'message': f'Deleted {len(deletable)} completed test(s).' + (f' Skipped active: {", ".join(skipped)}.' if skipped else '')})
+        deletable_ids = [test.test_id for test in deletable]
+        try:
+            if deletable_ids:
+                ai_job_ids = [
+                    row[0] for row in InboxAiJob.query
+                    .filter(InboxAiJob.test_id.in_(deletable_ids))
+                    .with_entities(InboxAiJob.job_id)
+                    .all()
+                ]
+                suggestion_filters = [InboxAiSuggestion.test_id.in_(deletable_ids)]
+                audit_filters = [InboxAiAuditEvent.test_id.in_(deletable_ids)]
+                if ai_job_ids:
+                    suggestion_filters.append(InboxAiSuggestion.job_id.in_(ai_job_ids))
+                    audit_filters.append(InboxAiAuditEvent.job_id.in_(ai_job_ids))
+                InboxAiSuggestion.query.filter(or_(*suggestion_filters)).delete(synchronize_session=False)
+                InboxAiAuditEvent.query.filter(or_(*audit_filters)).delete(synchronize_session=False)
+                InboxAiJob.query.filter(InboxAiJob.test_id.in_(deletable_ids)).delete(synchronize_session=False)
+                InboxPollJob.query.filter(InboxPollJob.test_id.in_(deletable_ids)).delete(synchronize_session=False)
+                InboxAgentSavedList.query.filter(InboxAgentSavedList.last_test_id.in_(deletable_ids)).delete(synchronize_session=False)
+                TestEmailSource.query.filter(TestEmailSource.last_test_id.in_(deletable_ids)).update(
+                    {'status': 'AVAILABLE', 'last_test_id': None},
+                    synchronize_session=False,
+                )
+            for test in deletable:
+                InboxDeliverabilityMessage.query.filter_by(test_id=test.test_id).delete(synchronize_session=False)
+                db.session.delete(test)
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'success': False, 'error': f'Delete failed: {e}'}), 500
+        missing = [test_id for test_id in ids if test_id not in {test.test_id for test in tests}]
+        details = []
+        if skipped:
+            details.append(f'Skipped active/running: {", ".join(skipped)}.')
+        if missing:
+            details.append(f'Not found: {", ".join(missing)}.')
+        return jsonify({'success': True, 'deleted': len(deletable), 'skipped': skipped, 'missing': missing, 'message': f'Deleted {len(deletable)} selected test(s).' + (' ' + ' '.join(details) if details else '')})
 
     data = request.get_json(silent=True) or {}
     source_ids = []
@@ -3937,7 +3978,7 @@ def _imap_fetch_by_identifiers(account, identifiers, folders=None, include_text_
             pass
         lock.release()
 
-def _sync_test_inbox_folders(inbox, limit=200, since=None, identifiers=None, targeted_only=True, include_text_search=False, batch_test_id=None):
+def _sync_test_inbox_folders(inbox, limit=200, since=None, identifiers=None, targeted_only=True, include_text_search=False, batch_test_id=None, date_range=None, since_date=None):
     """Sync an inbox (used by test polling / User Inbox Test) using the new UID-cursor
     engine across ALL real result folders (INBOX, Spam/Junk/Bulk, Gmail tabs), plus a
     targeted X-Test-ID search that guarantees the exact test messages are fetched even
@@ -3962,13 +4003,14 @@ def _sync_test_inbox_folders(inbox, limit=200, since=None, identifiers=None, tar
                 return synced_total, errors, target_match_modes
             fallback_limit = max(
                 int(limit or 200),
-                min(2000, max(500, expected * 4)),
+                min(5000, max(1000, expected * 6)),
             )
-            recent_synced, _recent_results, recent_errors = _sync_mailbox_recent_no_cursor(
+            recent_synced, _recent_results, recent_errors = _sync_mailbox_date_range_no_cursor(
                 inbox,
                 folders=None,
+                date_range=date_range or 'current',
+                since_date=since_date,
                 limit=fallback_limit,
-                wait_for_lock=True,
             )
             synced_total += recent_synced
             errors.extend(recent_errors)
@@ -4004,6 +4046,14 @@ def _explorer_date_range_bounds(date_range, since_date=None):
     now = datetime.utcnow()
     today = datetime(now.year, now.month, now.day)
     week_start = today - timedelta(days=today.weekday())
+    if date_range == '24h':
+        return now - timedelta(hours=24), today + timedelta(days=1)
+    if date_range == '2d':
+        return now - timedelta(days=2), today + timedelta(days=1)
+    if date_range == '7d':
+        return now - timedelta(days=7), today + timedelta(days=1)
+    if date_range == '30d':
+        return now - timedelta(days=30), today + timedelta(days=1)
     if date_range in ('current', 'current_week'):
         return week_start, today + timedelta(days=1)
     if date_range == 'today':
@@ -4043,7 +4093,7 @@ def _sync_mailbox_date_range_no_cursor(account, folders=None, date_range=None, s
             pass
         all_folders = _imap_list_folders(conn)
         target_folders = _resolve_sync_folder_targets(conn, folders, all_folders)
-        per_folder_limit = max(25, min(2000, int(limit or 500)))
+        per_folder_limit = max(25, min(5000, int(limit or 500)))
         since_value = start_dt.strftime('%d-%b-%Y')
         before_value = end_dt.strftime('%d-%b-%Y')
         for folder in target_folders:
@@ -4113,6 +4163,12 @@ def _message_database_searchable(message):
         message.html_content or '',
     ])
 
+def _normalized_email_address(value):
+    return (parseaddr(value or '')[1] or str(value or '')).strip().lower()
+
+def _normalized_subject(value):
+    return re.sub(r'\s+', ' ', str(value or '').strip()).lower()
+
 def _detect_message_placements_from_synced(inbox_id, rows, test_id=None, allow_deep_scan=False):
     results = {}
     info = {'scanned_messages': 0, 'match_modes': {'exact': 0, 'x_test_id': 0, 'broad_sender': 0}, 'errors': []}
@@ -4167,6 +4223,59 @@ def _detect_message_placements_from_synced(inbox_id, rows, test_id=None, allow_d
                         matched_identifiers.add(row.test_identifier)
                         info['match_modes']['exact'] += 1
                         break
+
+    unmatched = identifiers - matched_identifiers
+    if unmatched:
+        sender_filters = []
+        sender_values = sorted({_normalized_email_address(row.workspace_sender) for row in rows if row.test_identifier in unmatched and row.workspace_sender})
+        for sender in sender_values[:200]:
+            sender_filters.append(InboxEmailMessage.sender.ilike(f'%{sender}%'))
+        if sender_filters:
+            dated_rows = [row for row in rows if row.test_identifier in unmatched and row.sent_at]
+            earliest_sent = min((row.sent_at for row in dated_rows), default=None)
+            latest_sent = max((row.sent_at for row in dated_rows), default=None)
+            q = InboxEmailMessage.query.filter(
+                InboxEmailMessage.imap_account_id == inbox_id,
+                or_(*sender_filters),
+            )
+            if earliest_sent:
+                q = q.filter(or_(
+                    InboxEmailMessage.received_at.is_(None),
+                    InboxEmailMessage.received_at >= earliest_sent - timedelta(minutes=10)
+                ))
+            if latest_sent:
+                q = q.filter(or_(
+                    InboxEmailMessage.received_at.is_(None),
+                    InboxEmailMessage.received_at <= latest_sent + timedelta(days=2)
+                ))
+            candidates = q.order_by(InboxEmailMessage.received_at.desc().nullslast(), InboxEmailMessage.id.desc()).limit(5000).all()
+            info['scanned_messages'] = max(info.get('scanned_messages') or 0, len(candidates))
+            used_message_ids = set()
+            for row in rows:
+                if row.test_identifier in matched_identifiers:
+                    continue
+                row_sender = _normalized_email_address(row.workspace_sender)
+                row_recipient = _normalized_email_address(row.recipient)
+                row_subject = _normalized_subject(row.subject)
+                for message in candidates:
+                    if message.id in used_message_ids:
+                        continue
+                    message_sender = _normalized_email_address(message.sender)
+                    message_recipient_blob = f'{message.recipient or ""}\n{message.headers_json or ""}'.lower()
+                    message_subject = _normalized_subject(message.subject)
+                    if row_sender and row_sender != message_sender:
+                        continue
+                    if row_recipient and row_recipient not in message_recipient_blob:
+                        continue
+                    if row_subject and message_subject and row_subject != message_subject:
+                        continue
+                    if row.sent_at and message.received_at and message.received_at < row.sent_at - timedelta(minutes=10):
+                        continue
+                    results[row.test_identifier] = (_placement_from_folder(message.folder), message.folder)
+                    matched_identifiers.add(row.test_identifier)
+                    used_message_ids.add(message.id)
+                    info['match_modes']['broad_sender'] += 1
+                    break
 
     return results, info
 
@@ -4269,6 +4378,8 @@ def _poll_inbox_test_payload(test_id, data=None, progress_callback=None):
                 targeted_only=targeted_only,
                 include_text_search=include_text_search,
                 batch_test_id=test.test_id,
+                date_range=data.get('date_range') or 'current',
+                since_date=(data.get('since_date') or '').strip() or None,
             )
             diagnostic['headers_fetched'] += matched_count
             diagnostic['accounts_synced'] += 1
