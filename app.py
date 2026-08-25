@@ -396,6 +396,14 @@ with app.app_context():
                     else:
                         conn.execute(text("ALTER TABLE inbox_deliverability_message ADD COLUMN sync_attempt_count INTEGER DEFAULT 0"))
                     conn.commit()
+            if 'workspace_account_email' not in columns:
+                logging.info("Adding missing 'workspace_account_email' column to inbox_deliverability_message table...")
+                with db.engine.connect() as conn:
+                    if 'postgresql' in str(db.engine.url):
+                        conn.execute(text('ALTER TABLE "inbox_deliverability_message" ADD COLUMN workspace_account_email VARCHAR(255)'))
+                    else:
+                        conn.execute(text("ALTER TABLE inbox_deliverability_message ADD COLUMN workspace_account_email VARCHAR(255)"))
+                    conn.commit()
         if 'inbox_deliverability_test' in table_names:
             columns = [col['name'] for col in inspector.get_columns('inbox_deliverability_test')]
             new_columns = {
@@ -3956,7 +3964,7 @@ def api_inbox_tests():
             stored_imap_id = recipient_imap_id
             if not stored_imap_id and 'sqlite' in str(db.engine.url):
                 stored_imap_id = 0
-            row = InboxDeliverabilityMessage(test_id=test_id, workspace_sender=sender, imap_account_id=stored_imap_id, recipient=recipient_info['email'], test_identifier=identifier, subject=subject, status='QUEUED', placement='PENDING')
+            row = InboxDeliverabilityMessage(test_id=test_id, workspace_sender=sender, workspace_account_email=sender_info.get('service_account_admin_email') or '', imap_account_id=stored_imap_id, recipient=recipient_info['email'], test_identifier=identifier, subject=subject, status='QUEUED', placement='PENDING')
             db.session.add(row)
             db.session.flush()
             if async_send:
@@ -4230,6 +4238,7 @@ def api_inbox_automated_tests():
                     test_id=test_id,
                     source_email_id=source_id,
                     workspace_sender=sender_info['email'],
+                    workspace_account_email=sender_info.get('service_account_admin_email') or '',
                     imap_account_id=inbox.id,
                     recipient=inbox.email.lower(),
                     test_identifier=identifier,
@@ -4299,6 +4308,7 @@ def api_inbox_automated_test_results(test_id):
         'verdict_counts': verdict_counts,
         'messages': [{
             'sender': m.workspace_sender,
+            'workspace_account_email': getattr(m, 'workspace_account_email', None) or '',
             'recipient': m.recipient,
             'source_email_id': m.source_email_id,
             'source_sender': source_lookup.get(m.source_email_id, {}).get('source_sender', ''),
@@ -5381,8 +5391,19 @@ def api_inbox_test_detail(test_id):
     sources = TestEmailSource.query.filter(TestEmailSource.id.in_(source_ids)).all() if source_ids else []
     sender_context = _sender_context_from_message_emails(sender_emails)
     resolved_accounts = _saved_analysis_account_lookup([test_id])
+    stored_account_by_sender = {
+        (row.workspace_sender or '').strip().lower(): (getattr(row, 'workspace_account_email', '') or '').strip().lower()
+        for row in messages
+        if (row.workspace_sender or '').strip() and (getattr(row, 'workspace_account_email', '') or '').strip()
+    }
     for sender in sender_context:
-        account = _saved_analysis_account_for_sender(sender.get('email') or '', resolved_accounts)
+        stored_account_email = stored_account_by_sender.get((sender.get('email') or '').strip().lower())
+        account = {
+            'id': None,
+            'name': stored_account_email,
+            'admin_email': stored_account_email,
+            'domain': stored_account_email.split('@')[-1],
+        } if stored_account_email and '@' in stored_account_email else _saved_analysis_account_for_sender(sender.get('email') or '', resolved_accounts)
         if account.get('admin_email'):
             sender['service_account_id'] = account.get('id')
             sender['service_account_name'] = account.get('name') or ''
@@ -5439,6 +5460,7 @@ def api_inbox_test_detail(test_id):
         },
         'messages': [{
             'sender': m.workspace_sender,
+            'workspace_account_email': getattr(m, 'workspace_account_email', None) or '',
             'recipient': m.recipient,
             'imap_account_id': m.imap_account_id,
             'source_email_id': m.source_email_id,
@@ -5641,7 +5663,11 @@ def _agent_classify_test_payload(test_id, sender_context=None):
             service_account_id = int(sender_context_item.get('service_account_id') or 0) or None
         except (TypeError, ValueError):
             service_account_id = None
-        account = account_by_id.get(service_account_id) if service_account_id else None
+        stored_account_email = (getattr(row, 'workspace_account_email', '') or '').strip().lower()
+        account = next((item for item in account_lookup if item.get('admin_email') == stored_account_email), None) if stored_account_email else None
+        if not account and stored_account_email and '@' in stored_account_email:
+            account = {'id': None, 'name': stored_account_email, 'admin_email': stored_account_email, 'domain': stored_account_email.split('@')[-1]}
+        account = account or (account_by_id.get(service_account_id) if service_account_id else None)
         account = account or _saved_analysis_account_for_sender(sender, account_lookup)
         item = stats.setdefault(sender, {
             'email': sender,
@@ -5963,6 +5989,12 @@ def _build_saved_analysis(test_ids):
     valid_test_ids = [test_id for test_id in test_ids if test_id in tests_by_id]
     rows = InboxDeliverabilityMessage.query.filter(InboxDeliverabilityMessage.test_id.in_(valid_test_ids)).order_by(InboxDeliverabilityMessage.id.asc()).all() if valid_test_ids else []
     accounts = _saved_analysis_account_lookup(valid_test_ids)
+    stored_account_by_sender = {}
+    for row in rows:
+        sender = (row.workspace_sender or '').strip().lower()
+        account_email = (getattr(row, 'workspace_account_email', '') or '').strip().lower()
+        if sender and account_email and '@' in account_email:
+            stored_account_by_sender[sender] = account_email
     user_stats = {}
     domain_stats = {}
     account_stats = {}
@@ -5978,6 +6010,14 @@ def _build_saved_analysis(test_ids):
             continue
         domain = sender.split('@')[-1] if '@' in sender else ''
         account = _saved_analysis_account_for_sender(sender, accounts)
+        stored_account_email = stored_account_by_sender.get(sender)
+        if stored_account_email:
+            account = next((item for item in accounts if item.get('admin_email') == stored_account_email), {
+                'id': None,
+                'name': stored_account_email,
+                'admin_email': stored_account_email,
+                'domain': stored_account_email.split('@')[-1],
+            })
         placement = (row.placement or '').strip().upper()
         if placement == 'INBOX':
             bucket = 'inbox'

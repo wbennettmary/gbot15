@@ -8238,6 +8238,20 @@ merge_recipe_id, content_blueprint_id</pre>
             <div class="ii-saved-action-row ii-saved-line-row"><span>${escapeHtml(line)}</span></div>`).join('')}</div>`;
     }
 
+    function savedAnalysisAccountUserLines(analytics, bucket, fallbackBucket) {
+        const items = analytics?.[fallbackBucket] || [];
+        const persistedLines = analytics?.[bucket] || [];
+        if (!items.length) {
+            return persistedLines.filter((line) => String(line || '').split(',', 1)[0].includes('@'));
+        }
+        return items.map((item, index) => {
+            const resolved = accountUserLineForSender(item.email);
+            if (resolved && String(resolved).split(',', 1)[0].includes('@')) return resolved;
+            const persisted = String(item.name_change_line || persistedLines[index] || '').trim();
+            return persisted && persisted.split(',', 1)[0].includes('@') ? persisted : '';
+        }).filter(Boolean);
+    }
+
     function renderSavedAnalysisDetail() {
         const detail = document.getElementById('savedAnalysisDetail');
         if (!detail) return;
@@ -8249,8 +8263,8 @@ merge_recipe_id, content_blueprint_id</pre>
         const a = row.analytics || {};
         const totals = a.totals || {};
         const domains = a.best_domains || [];
-        const inboxAccountUserLines = a.inbox_account_user_lines || (a.inbox_users || []).map((item) => item.name_change_line || `${item.account || ''},${item.email || ''}`).filter(Boolean);
-        const spamAccountUserLines = a.spam_account_user_lines || (a.spam_users || []).map((item) => item.name_change_line || `${item.account || ''},${item.email || ''}`).filter(Boolean);
+        const inboxAccountUserLines = savedAnalysisAccountUserLines(a, 'inbox_account_user_lines', 'inbox_users');
+        const spamAccountUserLines = savedAnalysisAccountUserLines(a, 'spam_account_user_lines', 'spam_users');
         const domainStatuses = a.domain_statuses || {};
         const savedInboxDomains = domains.filter((item) => domainStatuses[String(item.domain || '').toLowerCase()] === 'inbox');
         const savedSpamDomains = domains.filter((item) => domainStatuses[String(item.domain || '').toLowerCase()] === 'spam');
@@ -8461,10 +8475,7 @@ merge_recipe_id, content_blueprint_id</pre>
     async function copySavedAnalysisAccountUserLines(bucket, fallbackBucket, label) {
         const row = (iiState.savedAnalyses || []).find((item) => Number(item.id) === Number(iiState.activeSavedAnalysisId));
         const analytics = row?.analytics || {};
-        const savedLines = Array.isArray(analytics[bucket]) ? analytics[bucket] : [];
-        const values = savedLines.length
-            ? savedLines.map((line) => String(line || '').trim()).filter(Boolean)
-            : (analytics[fallbackBucket] || []).map((item) => String(item.name_change_line || `${item.account || ''},${item.email || ''}`).trim()).filter(Boolean);
+        const values = savedAnalysisAccountUserLines(analytics, bucket, fallbackBucket);
         const status = document.getElementById('savedAnalysisStatus');
         if (!values.length) {
             if (status) status.textContent = `There are no ${label} rows to copy.`;
