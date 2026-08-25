@@ -5453,7 +5453,10 @@ merge_recipe_id, content_blueprint_id</pre>
             });
             const totalSynced = data.synced || 0;
             const errCount = (data.errors || []).length;
-            status.textContent = `Sync complete: ${totalSynced} message(s) synced${errCount ? `, ${errCount} folder(s) had errors` : ''}.`;
+            const checked = (data.results || []).reduce((sum, result) => sum + (result.folders || []).reduce((inner, folder) => inner + Number(folder.checked || 0), 0), 0);
+            const matched = (data.results || []).reduce((sum, result) => sum + (result.folders || []).reduce((inner, folder) => inner + Number(folder.matched ?? folder.synced ?? 0), 0), 0);
+            const firstError = errCount ? ` First error: ${(data.errors || [])[0]}` : '';
+            status.textContent = `Sync complete: ${totalSynced} new message(s) synced; checked ${checked}, matched ${matched}.${errCount ? ` ${errCount} folder error(s).${firstError}` : ''}`;
             await refreshInboxExplorer();
         } catch (err) {
             status.textContent = `Sync failed: ${err.message}`;

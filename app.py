@@ -1637,7 +1637,7 @@ def _imap_select_folder(conn, folder):
         pass
     return meta
 
-def _parse_raw_message(uid_val, is_read, raw_body):
+def _parse_raw_message(uid_val, is_read, raw_body, internal_received_at=None):
     """Parse a full RFC822 body into a flat dict for _upsert_imap_message.
     Returns None on failure."""
     try:
@@ -1658,6 +1658,8 @@ def _parse_raw_message(uid_val, is_read, raw_body):
                 received_at = received_at.astimezone(timezone.utc).replace(tzinfo=None)
         except Exception:
             received_at = None
+    if not received_at:
+        received_at = internal_received_at
     plain_text, html_content, has_attachments = _message_text_parts(msg)
     preview_source = plain_text or re.sub(r'<[^>]+>', ' ', html_content or '')
     preview = re.sub(r'\s+', ' ', preview_source).strip()[:240]
@@ -1723,7 +1725,7 @@ def _imap_fetch_messages_batch(conn, uids, folder):
         batch = uids[i:i + batch_size]
         uid_range = b','.join(batch) if isinstance(batch[0], bytes) else ','.join(batch).encode()
         try:
-            fetch_status, fetch_data = conn.uid('fetch', uid_range, '(UID FLAGS BODY.PEEK[])')
+            fetch_status, fetch_data = conn.uid('fetch', uid_range, '(UID FLAGS INTERNALDATE BODY.PEEK[])')
         except Exception:
             continue
         if fetch_status != 'OK' or not fetch_data:
@@ -1740,9 +1742,22 @@ def _imap_fetch_messages_batch(conn, uids, folder):
             if not uid_val and position < len(batch):
                 uid_val = int(batch[position])
             position += 1
-            is_read = b'\\Seen' in (tag_line if isinstance(tag_line, bytes) else tag_line.encode('utf-8', 'replace'))
-            parsed = _parse_raw_message(uid_val, is_read, raw_body)
+            tag_bytes = tag_line if isinstance(tag_line, bytes) else tag_line.encode('utf-8', 'replace')
+            is_read = b'\\Seen' in tag_bytes
+            internal_received_at = None
+            internal_match = re.search(rb'INTERNALDATE\s+"([^"]+)"', tag_bytes, re.I)
+            if internal_match:
+                try:
+                    internal_dt = parsedate_to_datetime(internal_match.group(1).decode('ascii', errors='ignore'))
+                    if internal_dt and internal_dt.tzinfo:
+                        internal_received_at = internal_dt.astimezone(timezone.utc).replace(tzinfo=None)
+                    else:
+                        internal_received_at = internal_dt
+                except Exception:
+                    internal_received_at = None
+            parsed = _parse_raw_message(uid_val, is_read, raw_body, internal_received_at=internal_received_at)
             if parsed:
+                parsed['internal_received_at'] = internal_received_at
                 results.append(parsed)
     return results
 
@@ -4357,6 +4372,37 @@ def _explorer_date_range_bounds(date_range, since_date=None):
             return None, None
     return None, None
 
+def _message_in_date_window(parsed, start_dt, end_dt):
+    received_at = (parsed.get('internal_received_at') or parsed.get('received_at')) if parsed else None
+    return bool(received_at and start_dt <= received_at < end_dt)
+
+def _imap_search_date_uids(conn, since_value, before_value):
+    try:
+        return conn.uid('search', None, 'SINCE', since_value, 'BEFORE', before_value)
+    except Exception:
+        # Some providers are pickier when SEARCH args are split. Retry as one IMAP
+        # criteria string before falling back to newest-message local filtering.
+        return conn.uid('search', None, f'(SINCE {since_value} BEFORE {before_value})')
+
+def _sync_mailbox_date_window_by_recent_sample(conn, account, folder, meta, start_dt, end_dt, per_folder_limit):
+    s, data = conn.uid('search', None, 'ALL')
+    if s != 'OK' or not data or not data[0]:
+        return 0, 0, 0
+    all_uids = sorted(data[0].split(), key=lambda item: int(item))
+    sample_limit = max(per_folder_limit, min(15000, max(2000, per_folder_limit * 10)))
+    uids = all_uids[-sample_limit:]
+    messages = _imap_fetch_messages_batch(conn, uids, folder)
+    checked = len(messages)
+    in_window = [parsed for parsed in messages if _message_in_date_window(parsed, start_dt, end_dt)]
+    if len(in_window) > per_folder_limit:
+        in_window = sorted(in_window, key=lambda item: item.get('internal_received_at') or item.get('received_at') or datetime.min)[-per_folder_limit:]
+    new_messages = 0
+    for parsed in in_window:
+        _message, created = _upsert_imap_message_full(account, folder, parsed, uid_validity=str(meta.get('uidvalidity') or ''))
+        if created:
+            new_messages += 1
+    return new_messages, checked, len(in_window)
+
 def _sync_mailbox_date_range_no_cursor(account, folders=None, date_range=None, since_date=None, limit=500):
     """Sync messages matching a date window without changing incremental UID cursors."""
     if _inbox_sync_paused():
@@ -4394,22 +4440,55 @@ def _sync_mailbox_date_range_no_cursor(account, folders=None, date_range=None, s
                 if not meta:
                     errors.append(f'{folder}: could not open folder')
                     continue
-                s, data = conn.uid('search', None, 'SINCE', since_value, 'BEFORE', before_value)
+                date_search_error = None
+                try:
+                    s, data = _imap_search_date_uids(conn, since_value, before_value)
+                except Exception as search_error:
+                    s, data = 'ERROR', []
+                    date_search_error = str(search_error)
                 if s != 'OK' or not data or not data[0]:
-                    folder_results.append({'folder': folder, 'synced': 0, 'checked': 0, 'date_range_sync': True})
+                    fallback_synced = 0
+                    fallback_checked = 0
+                    fallback_matched = 0
+                    if int(meta.get('exists') or 0) > 0:
+                        fallback_synced, fallback_checked, fallback_matched = _sync_mailbox_date_window_by_recent_sample(
+                            conn,
+                            account,
+                            folder,
+                            meta,
+                            start_dt,
+                            end_dt,
+                            per_folder_limit,
+                        )
+                        total_synced += fallback_synced
+                        db.session.commit()
+                    if date_search_error and not fallback_checked:
+                        errors.append(f'{folder}: date search failed: {date_search_error}')
+                    folder_results.append({
+                        'folder': folder,
+                        'synced': fallback_synced,
+                        'checked': fallback_checked,
+                        'matched': fallback_matched,
+                        'date_range_sync': True,
+                        'fallback_sample': bool(fallback_checked),
+                    })
                     continue
                 uids = sorted(data[0].split(), key=lambda item: int(item))
                 if len(uids) > per_folder_limit:
                     uids = uids[-per_folder_limit:]
                 messages = _imap_fetch_messages_batch(conn, uids, folder)
                 new_messages = 0
+                matched_messages = 0
                 for parsed in messages:
+                    if not _message_in_date_window(parsed, start_dt, end_dt):
+                        continue
+                    matched_messages += 1
                     _message, created = _upsert_imap_message_full(account, folder, parsed, uid_validity=str(meta.get('uidvalidity') or ''))
                     if created:
                         new_messages += 1
                 total_synced += new_messages
                 db.session.commit()
-                folder_results.append({'folder': folder, 'synced': new_messages, 'checked': len(messages), 'date_range_sync': True})
+                folder_results.append({'folder': folder, 'synced': new_messages, 'checked': len(messages), 'matched': matched_messages, 'date_range_sync': True})
             except Exception as e:
                 db.session.rollback()
                 errors.append(f'{folder}: {e}')
