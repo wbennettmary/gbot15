@@ -6815,7 +6815,8 @@ merge_recipe_id, content_blueprint_id</pre>
                 targeted_only: options.targetedOnly !== undefined ? options.targetedOnly : true,
                 include_text_search: options.includeTextSearch === true,
                 skip_deep_scan: options.skipDeepScan !== undefined ? options.skipDeepScan : false,
-                date_range: automatedSyncDateRange()
+                date_range: automatedSyncDateRange(),
+                max_sync_seconds: options.maxSyncSeconds || 55
             };
             const pollData = options.background
                 ? await runAutomatedSyncJob(testId, pollPayload)
@@ -6890,7 +6891,7 @@ merge_recipe_id, content_blueprint_id</pre>
         const jobId = started.job_id;
         const syncLabel = document.getElementById('automatedLastSync');
         const runStatus = document.getElementById('automatedRunStatus');
-        const maxAttempts = Number(payload?.max_poll_attempts || 240);
+        const maxAttempts = Number(payload?.max_poll_attempts || 45);
         if (syncLabel) syncLabel.textContent = started.message || `Starting IMAP sync for ${testId}...`;
         if (runStatus) runStatus.textContent = 'Syncing';
         for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -7031,6 +7032,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 skip_deep_scan: options.skipDeepScan !== undefined ? options.skipDeepScan : false,
                 date_range: automatedSyncDateRange(),
                 max_poll_attempts: options.maxPollAttempts || 360,
+                max_sync_seconds: options.maxSyncSeconds || 55,
                 stale_minutes: options.staleMinutes || 15
             });
             test = await fetchAutomatedTestDetail(testId, true);
@@ -7900,7 +7902,8 @@ merge_recipe_id, content_blueprint_id</pre>
             targetedOnly: true,
             includeTextSearch: false,
             skipDeepScan: false,
-            maxPollAttempts: 360,
+            maxPollAttempts: 45,
+            maxSyncSeconds: 55,
             staleMinutes: 15,
             ...overrides,
         };
@@ -7917,7 +7920,8 @@ merge_recipe_id, content_blueprint_id</pre>
             recentLimit: 500,
             includeTextSearch: false,
             skipDeepScan: false,
-            maxPollAttempts: 240,
+            maxPollAttempts: 45,
+            maxSyncSeconds: 55,
             staleMinutes: 20,
             ...overrides,
         });
@@ -10131,7 +10135,7 @@ merge_recipe_id, content_blueprint_id</pre>
         try {
             setUserInboxSyncing(true, 'Syncing recent IMAP messages...');
             const dateRange = document.getElementById('userInboxDateFilter')?.value || '2d';
-            const pollPayload = {sync_mode: 'targeted', recent_limit: 500, targeted_only: true, include_text_search: false, skip_deep_scan: false, date_range: dateRange};
+            const pollPayload = {sync_mode: 'targeted', recent_limit: 500, targeted_only: true, include_text_search: false, skip_deep_scan: false, date_range: dateRange, max_sync_seconds: 55, max_poll_attempts: 45};
             const pollData = await runAutomatedSyncJob(testId, pollPayload);
             const data = await iiFetch(`/api/inbox-intelligence/tests/${testId}`);
             const rows = data.test.messages || [];
@@ -10193,7 +10197,7 @@ merge_recipe_id, content_blueprint_id</pre>
 
     async function pollDeliverabilityTest(testId) {
         const dateRange = automatedSyncDateRange();
-        await runAutomatedSyncJob(testId, {sync_mode: 'targeted', recent_limit: 500, targeted_only: true, include_text_search: false, skip_deep_scan: false, date_range: dateRange});
+        await runAutomatedSyncJob(testId, {sync_mode: 'targeted', recent_limit: 500, targeted_only: true, include_text_search: false, skip_deep_scan: false, date_range: dateRange, max_sync_seconds: 55, max_poll_attempts: 45});
         await loadTests();
         await loadTestDetail(testId);
     }

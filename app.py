@@ -1710,7 +1710,7 @@ def _sync_mailbox_account(account, folders=None, limit=200, force_full=False, wa
     folder_results = []
     lock = _get_account_sync_lock(account.id)
     if wait_for_lock:
-        if not lock.acquire(timeout=90):
+        if not lock.acquire(timeout=10):
             return 0, [], ['Sync already in progress for this account']
     elif not lock.acquire(blocking=False):
         return 0, [], ['Sync already in progress for this account']
@@ -1829,14 +1829,14 @@ def _sync_mailbox_recent_no_cursor(account, folders=None, limit=500, wait_for_lo
     folder_results = []
     lock = _get_account_sync_lock(account.id)
     if wait_for_lock:
-        if not lock.acquire(timeout=90):
+        if not lock.acquire(timeout=5):
             return 0, [], ['Sync already in progress for this account']
     elif not lock.acquire(blocking=False):
         return 0, [], ['Sync already in progress for this account']
     try:
         conn = _imap_connect(account)
         try:
-            conn.sock.settimeout(20)
+            conn.sock.settimeout(8)
         except Exception:
             pass
         all_folders = _imap_list_folders(conn)
@@ -3884,7 +3884,7 @@ def _resolve_sync_folder_targets(conn, folders, all_folders=None):
                 targets.append(match)
     return targets or all_folders or ['INBOX']
 
-def _imap_fetch_by_identifiers(account, identifiers, folders=None, include_text_search=False, batch_test_id=None):
+def _imap_fetch_by_identifiers(account, identifiers, folders=None, include_text_search=False, batch_test_id=None, deadline=None):
     """Targeted sync for test polling: connect once, search every relevant real folder
     for each test identifier (HEADER X-Test-ID plus RESULT-marking header fallback), then
     fetch and persist the full bodies. Works regardless of how far the incremental UID
@@ -3898,16 +3898,19 @@ def _imap_fetch_by_identifiers(account, identifiers, folders=None, include_text_
     placements = {}
     match_modes = {'batch_id': 0, 'x_test_id': 0, 'message_id': 0}
     lock = _get_account_sync_lock(account.id)
-    if not lock.acquire(timeout=90):
+    if not lock.acquire(timeout=5):
         return 0, ['Sync already in progress for this account'], {}
     try:
         conn = _imap_connect(account)
         try:
-            conn.sock.settimeout(30)
+            conn.sock.settimeout(8)
         except Exception:
             pass
         target_folders = folders if folders else _real_result_folders(conn)
         for folder in target_folders:
+            if deadline and time.monotonic() >= deadline:
+                errors.append('identifier search stopped at sync time limit')
+                break
             try:
                 meta = _imap_select_folder(conn, folder)
                 if not meta:
@@ -3915,6 +3918,9 @@ def _imap_fetch_by_identifiers(account, identifiers, folders=None, include_text_
                 uid_set = set()
                 if batch_test_id:
                     for search_term in (f'HEADER X-Test-Batch-ID "{batch_test_id}"', f'HEADER Message-ID "{batch_test_id}"'):
+                        if deadline and time.monotonic() >= deadline:
+                            errors.append(f'{folder}: identifier search stopped at sync time limit')
+                            break
                         try:
                             s, data = conn.uid('search', None, search_term)
                         except Exception:
@@ -3925,8 +3931,12 @@ def _imap_fetch_by_identifiers(account, identifiers, folders=None, include_text_
                             uid_set.add(u)
                         match_modes['batch_id'] += len(data[0].split())
                         break
-                if not uid_set or include_text_search:
+                run_identifier_scan = not batch_test_id or include_text_search or len(identifiers) <= 12
+                if (not uid_set or include_text_search) and run_identifier_scan:
                     for identifier in identifiers:
+                        if deadline and time.monotonic() >= deadline:
+                            errors.append(f'{folder}: per-message identifier search stopped at sync time limit')
+                            break
                         search_terms = [f'HEADER X-Test-ID "{identifier}"', f'HEADER Message-ID "{identifier}"']
                         if include_text_search:
                             search_terms.append(f'TEXT "{identifier}"')
@@ -3978,7 +3988,83 @@ def _imap_fetch_by_identifiers(account, identifiers, folders=None, include_text_
             pass
         lock.release()
 
-def _sync_test_inbox_folders(inbox, limit=200, since=None, identifiers=None, targeted_only=True, include_text_search=False, batch_test_id=None, date_range=None, since_date=None):
+def _imap_fetch_by_senders(account, sender_emails, folders=None, date_range=None, since_date=None, limit=1000, deadline=None):
+    """Fast bounded fallback for placement tests: search only result folders for
+    messages from the exact Workspace senders in the selected date window."""
+    sender_emails = sorted({_normalized_email_address(sender) for sender in (sender_emails or []) if sender})
+    sender_emails = [sender for sender in sender_emails if sender]
+    if not sender_emails:
+        return 0, [], {'from_sender': 0}
+    start_dt, end_dt = _explorer_date_range_bounds(date_range or '24h', since_date=since_date)
+    if not start_dt or not end_dt:
+        end_dt = datetime.utcnow() + timedelta(days=1)
+        start_dt = datetime.utcnow() - timedelta(days=2)
+    since_value = start_dt.strftime('%d-%b-%Y')
+    before_value = end_dt.strftime('%d-%b-%Y')
+    conn = None
+    found_count = 0
+    errors = []
+    match_modes = {'from_sender': 0}
+    lock = _get_account_sync_lock(account.id)
+    if not lock.acquire(timeout=5):
+        return 0, ['Sync already in progress for this account'], match_modes
+    try:
+        conn = _imap_connect(account)
+        try:
+            conn.sock.settimeout(8)
+        except Exception:
+            pass
+        target_folders = folders if folders else _real_result_folders(conn)
+        per_folder_limit = max(25, min(1500, int(limit or 1000)))
+        for folder in target_folders:
+            if deadline and time.monotonic() >= deadline:
+                errors.append('sender fallback stopped at sync time limit')
+                break
+            try:
+                meta = _imap_select_folder(conn, folder)
+                if not meta:
+                    continue
+                uid_set = set()
+                for sender in sender_emails[:250]:
+                    if deadline and time.monotonic() >= deadline:
+                        errors.append(f'{folder}: sender search stopped at sync time limit')
+                        break
+                    try:
+                        s, data = conn.uid('search', None, 'SINCE', since_value, 'BEFORE', before_value, 'FROM', f'"{sender}"')
+                    except Exception:
+                        continue
+                    if s != 'OK' or not data or not data[0]:
+                        continue
+                    for uid in data[0].split():
+                        uid_set.add(uid)
+                if not uid_set:
+                    continue
+                uids = sorted(uid_set, key=lambda item: int(item))
+                if len(uids) > per_folder_limit:
+                    uids = uids[-per_folder_limit:]
+                messages = _imap_fetch_messages_batch(conn, uids, folder)
+                for parsed in messages:
+                    _upsert_imap_message_full(account, folder, parsed, uid_validity=str(meta.get('uidvalidity') or ''))
+                    found_count += 1
+                match_modes['from_sender'] += len(messages)
+                db.session.commit()
+            except Exception as e:
+                db.session.rollback()
+                errors.append(f'{folder}: {e}')
+        return found_count, errors, match_modes
+    except Exception as e:
+        db.session.rollback()
+        return found_count, errors + [f'connection: {e}'], match_modes
+    finally:
+        try:
+            if conn:
+                conn.close()
+                conn.logout()
+        except Exception:
+            pass
+        lock.release()
+
+def _sync_test_inbox_folders(inbox, limit=200, since=None, identifiers=None, targeted_only=True, include_text_search=False, batch_test_id=None, date_range=None, since_date=None, sender_emails=None, deadline=None):
     """Sync an inbox (used by test polling / User Inbox Test) using the new UID-cursor
     engine across ALL real result folders (INBOX, Spam/Junk/Bulk, Gmail tabs), plus a
     targeted X-Test-ID search that guarantees the exact test messages are fetched even
@@ -3993,6 +4079,7 @@ def _sync_test_inbox_folders(inbox, limit=200, since=None, identifiers=None, tar
             identifiers,
             include_text_search=include_text_search,
             batch_test_id=batch_test_id,
+            deadline=deadline,
         )
         target_match_modes = placements.pop('_match_modes', {}) if isinstance(placements, dict) else {}
         synced_total += target_found
@@ -4003,17 +4090,21 @@ def _sync_test_inbox_folders(inbox, limit=200, since=None, identifiers=None, tar
                 return synced_total, errors, target_match_modes
             fallback_limit = max(
                 int(limit or 200),
-                min(5000, max(1000, expected * 6)),
+                min(1500, max(300, expected * 4)),
             )
-            recent_synced, _recent_results, recent_errors = _sync_mailbox_date_range_no_cursor(
+            sender_synced, sender_errors, sender_match_modes = _imap_fetch_by_senders(
                 inbox,
                 folders=None,
                 date_range=date_range or 'current',
                 since_date=since_date,
                 limit=fallback_limit,
+                sender_emails=sender_emails,
+                deadline=deadline,
             )
-            synced_total += recent_synced
-            errors.extend(recent_errors)
+            synced_total += sender_synced
+            errors.extend(sender_errors)
+            for mode, count in (sender_match_modes or {}).items():
+                target_match_modes[mode] = target_match_modes.get(mode, 0) + count
             return synced_total, errors, target_match_modes
     folder_synced, _folder_results, sync_errors = _sync_mailbox_account(
         inbox,
@@ -4080,7 +4171,7 @@ def _sync_mailbox_date_range_no_cursor(account, folders=None, date_range=None, s
     errors = []
     folder_results = []
     lock = _get_account_sync_lock(account.id)
-    if not lock.acquire(timeout=90):
+    if not lock.acquire(timeout=5):
         return 0, [], ['Sync already in progress for this account']
     try:
         account.connection_status = 'syncing'
@@ -4088,7 +4179,7 @@ def _sync_mailbox_date_range_no_cursor(account, folders=None, date_range=None, s
         db.session.commit()
         conn = _imap_connect(account)
         try:
-            conn.sock.settimeout(20)
+            conn.sock.settimeout(8)
         except Exception:
             pass
         all_folders = _imap_list_folders(conn)
@@ -4295,6 +4386,11 @@ def _poll_inbox_test_payload(test_id, data=None, progress_callback=None):
         sync_limit = min(2000, max(25, int(data.get('recent_limit') or data.get('limit') or 500)))
     except (TypeError, ValueError):
         sync_limit = 500
+    try:
+        max_sync_seconds = min(60, max(20, int(data.get('max_sync_seconds') or 55)))
+    except (TypeError, ValueError):
+        max_sync_seconds = 55
+    sync_deadline = time.monotonic() + max_sync_seconds
     targeted_only = data.get('targeted_only')
     if targeted_only is None:
         targeted_only = True
@@ -4327,7 +4423,7 @@ def _poll_inbox_test_payload(test_id, data=None, progress_callback=None):
     diagnostic = {
         'checked_rows': 0, 'matched_rows': 0,
         'headers_fetched': 0, 'deleted_old_messages': deleted_old,
-        'match_modes': {'batch_id': 0, 'x_test_id': 0, 'message_id': 0, 'exact': 0},
+        'match_modes': {'batch_id': 0, 'x_test_id': 0, 'message_id': 0, 'from_sender': 0, 'exact': 0, 'broad_sender': 0},
         'accounts_synced': 0,
         'skipped_completed': 0,
         'sync_mode': 'targeted' if targeted_only else 'targeted_plus_recent',
@@ -4353,6 +4449,11 @@ def _poll_inbox_test_payload(test_id, data=None, progress_callback=None):
         f'{diagnostic["skipped_completed"]} already classified row(s) skipped.'
     )
     for inbox_index, (inbox_id, rows) in enumerate(pending_by_inbox.items(), start=1):
+        if time.monotonic() >= sync_deadline:
+            message = f'Sync stopped at {max_sync_seconds}s limit before inbox {inbox_index}/{total_inboxes}.'
+            sync_errors.append(message)
+            emit_progress(96, 'time_limit', message, 'Run Sync fresh data again for any still-pending rows.')
+            break
         inbox = InboxImapAccount.query.get(inbox_id)
         start_percent = 10 + int(((inbox_index - 1) / total_inboxes) * 78)
         if not inbox:
@@ -4380,6 +4481,8 @@ def _poll_inbox_test_payload(test_id, data=None, progress_callback=None):
                 batch_test_id=test.test_id,
                 date_range=data.get('date_range') or 'current',
                 since_date=(data.get('since_date') or '').strip() or None,
+                sender_emails={row.workspace_sender for row in rows if row.workspace_sender},
+                deadline=sync_deadline,
             )
             diagnostic['headers_fetched'] += matched_count
             diagnostic['accounts_synced'] += 1
