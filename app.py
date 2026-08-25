@@ -5380,6 +5380,13 @@ def api_inbox_test_detail(test_id):
             sender_emails.append(sender_email)
     sources = TestEmailSource.query.filter(TestEmailSource.id.in_(source_ids)).all() if source_ids else []
     sender_context = _sender_context_from_message_emails(sender_emails)
+    resolved_accounts = _saved_analysis_account_lookup([test_id])
+    for sender in sender_context:
+        account = _saved_analysis_account_for_sender(sender.get('email') or '', resolved_accounts)
+        if account.get('admin_email'):
+            sender['service_account_id'] = account.get('id')
+            sender['service_account_name'] = account.get('name') or ''
+            sender['service_account_admin_email'] = account['admin_email']
     return jsonify({'success': True, 'test': {
         'test_id': test.test_id,
         'name': test.name,
@@ -5621,17 +5628,27 @@ def _agent_classify_test_payload(test_id, sender_context=None):
     if not test:
         return None
     context_lookup = _agent_sender_context_lookup(sender_context)
+    account_lookup = _saved_analysis_account_lookup([test_id])
+    account_by_id = {item['id']: item for item in account_lookup if item.get('id')}
     rows = InboxDeliverabilityMessage.query.filter_by(test_id=test_id).order_by(InboxDeliverabilityMessage.id.asc()).all()
     stats = {}
     for row in rows:
         sender = (row.workspace_sender or '').strip().lower()
         if not sender:
             continue
+        sender_context_item = context_lookup.get(sender, {})
+        try:
+            service_account_id = int(sender_context_item.get('service_account_id') or 0) or None
+        except (TypeError, ValueError):
+            service_account_id = None
+        account = account_by_id.get(service_account_id) if service_account_id else None
+        account = account or _saved_analysis_account_for_sender(sender, account_lookup)
         item = stats.setdefault(sender, {
             'email': sender,
             'domain': sender.split('@')[-1].lower() if '@' in sender else '',
-            'service_account_id': context_lookup.get(sender, {}).get('service_account_id'),
-            'name': context_lookup.get(sender, {}).get('name') or '',
+            'service_account_id': service_account_id or account.get('id'),
+            'account': account.get('admin_email') or account.get('name') or account.get('domain') or '',
+            'name': sender_context_item.get('name') or '',
             'inbox': 0,
             'spam': 0,
             'pending': 0,
@@ -5661,7 +5678,7 @@ def _agent_classify_test_payload(test_id, sender_context=None):
         payload['observed'] = total_observed
         payload['inbox_rate'] = round((item['inbox'] / total_observed) * 100) if total_observed else 0
         payload['copy_line'] = item['email']
-        payload['name_change_line'] = f"{item.get('service_account_id') or item['domain']},{item['email']}"
+        payload['name_change_line'] = f"{item.get('account') or item['domain']},{item['email']}"
         return payload
 
     inbox_users, spam_users, grey_users, waiting_users = [], [], [], []
@@ -5859,19 +5876,61 @@ def _prune_agent_saved_lists_for_tests(test_ids):
         changed += 1
     return changed
 
-def _saved_analysis_account_lookup():
+def _saved_analysis_account_lookup(test_ids=None):
+    """Resolve the real admin/account email used by each saved test sender domain."""
     accounts = []
-    for account in ServiceAccount.query.filter_by(is_active=True).all():
-        admin_email = (account.admin_email or '').strip().lower()
-        domain = admin_email.split('@')[-1] if '@' in admin_email else ''
-        if domain:
-            accounts.append({
-                'id': account.id,
-                'name': (account.name or '').strip(),
-                'admin_email': admin_email,
-                'domain': domain,
-            })
-    return sorted(accounts, key=lambda item: len(item['domain']), reverse=True)
+    seen = set()
+    service_accounts = ServiceAccount.query.all()
+    by_id = {account.id: account for account in service_accounts}
+    by_key = {}
+    for account in service_accounts:
+        for value in (account.name, account.admin_email, account.client_email):
+            key = (value or '').strip().lower()
+            if key:
+                by_key.setdefault(key, account)
+
+    def add_account(account=None, admin_email='', priority=0):
+        normalized_email = (admin_email or getattr(account, 'admin_email', '') or '').strip().lower()
+        domain = normalized_email.split('@')[-1] if '@' in normalized_email else ''
+        if not domain:
+            return
+        key = (getattr(account, 'id', None), normalized_email)
+        if key in seen:
+            for item in accounts:
+                if item['key'] == key:
+                    item['priority'] = max(item['priority'], priority)
+                    break
+            return
+        seen.add(key)
+        accounts.append({
+            'key': key,
+            'id': getattr(account, 'id', None),
+            'name': (getattr(account, 'name', '') or normalized_email).strip(),
+            'admin_email': normalized_email,
+            'domain': domain,
+            'priority': priority,
+        })
+
+    linked_list_ids = set()
+    if test_ids:
+        linked_list_ids = {
+            test.workspace_list_id
+            for test in InboxDeliverabilityTest.query.filter(InboxDeliverabilityTest.test_id.in_(test_ids)).all()
+            if getattr(test, 'workspace_list_id', None)
+        }
+    if linked_list_ids:
+        workspace_lists = WorkspaceList.query.filter(WorkspaceList.id.in_(linked_list_ids)).all()
+        for workspace_list in workspace_lists:
+            for key in _parse_workspace_list_keys(workspace_list.raw_accounts):
+                account = by_id.get(int(key)) if key.isdigit() else by_key.get(key)
+                if account:
+                    add_account(account, priority=3)
+                elif '@' in key:
+                    add_account(admin_email=key, priority=3)
+
+    for account in service_accounts:
+        add_account(account, priority=1)
+    return sorted(accounts, key=lambda item: (-item['priority'], -len(item['domain']), item['admin_email']))
 
 def _saved_analysis_account_for_sender(sender, accounts):
     sender_domain = sender.split('@')[-1] if '@' in sender else ''
@@ -5903,7 +5962,7 @@ def _build_saved_analysis(test_ids):
     missing_test_ids = [test_id for test_id in test_ids if test_id not in tests_by_id]
     valid_test_ids = [test_id for test_id in test_ids if test_id in tests_by_id]
     rows = InboxDeliverabilityMessage.query.filter(InboxDeliverabilityMessage.test_id.in_(valid_test_ids)).order_by(InboxDeliverabilityMessage.id.asc()).all() if valid_test_ids else []
-    accounts = _saved_analysis_account_lookup()
+    accounts = _saved_analysis_account_lookup(valid_test_ids)
     user_stats = {}
     domain_stats = {}
     account_stats = {}
@@ -6016,7 +6075,7 @@ def _build_saved_analysis(test_ids):
         'domain_statuses': {},
     }
 
-def _serialize_saved_analysis(row):
+def _saved_analysis_analytics(row):
     try:
         test_ids = json.loads(row.test_ids_json or '[]')
     except Exception:
@@ -6025,6 +6084,45 @@ def _serialize_saved_analysis(row):
         analytics = json.loads(row.analytics_json or '{}')
     except Exception:
         analytics = {}
+    return test_ids, analytics
+
+def _refresh_saved_analysis_account_mapping(row):
+    """Backfill account,user lines for snapshots created before account emails were retained."""
+    test_ids, current = _saved_analysis_analytics(row)
+    if not test_ids:
+        return current, False
+    for bucket, fallback_bucket in (
+        ('inbox_account_user_lines', 'inbox_users'),
+        ('spam_account_user_lines', 'spam_users'),
+    ):
+        lines = current.get(bucket)
+        if lines is None:
+            lines = [
+                item.get('name_change_line') or f"{item.get('account') or ''},{item.get('email') or ''}"
+                for item in (current.get(fallback_bucket) or [])
+            ]
+        for line in lines or []:
+            account = str(line or '').split(',', 1)[0].strip()
+            if account and '@' not in account:
+                break
+        else:
+            continue
+        break
+    else:
+        return current, False
+    rebuilt = _build_saved_analysis(test_ids)
+    if not rebuilt.get('test_ids'):
+        return current, False
+    rebuilt['domain_statuses'] = current.get('domain_statuses') or {}
+    if json.dumps(rebuilt, sort_keys=True) == json.dumps(current, sort_keys=True):
+        return current, False
+    row.analytics_json = json.dumps(rebuilt)
+    row.updated_at = datetime.utcnow()
+    return rebuilt, True
+
+def _serialize_saved_analysis(row, analytics=None):
+    test_ids, stored_analytics = _saved_analysis_analytics(row)
+    analytics = stored_analytics if analytics is None else analytics
     return {
         'id': row.id,
         'name': row.name,
@@ -6042,7 +6140,15 @@ def api_inbox_saved_analyses():
     owner = session.get('user') or ''
     if request.method == 'GET':
         rows = InboxSavedAnalysis.query.filter_by(created_by=owner).order_by(InboxSavedAnalysis.created_at.desc()).limit(100).all()
-        return jsonify({'success': True, 'analyses': [_serialize_saved_analysis(row) for row in rows]})
+        analyses = []
+        refreshed = False
+        for row in rows:
+            analytics, changed = _refresh_saved_analysis_account_mapping(row)
+            refreshed = refreshed or changed
+            analyses.append(_serialize_saved_analysis(row, analytics))
+        if refreshed:
+            db.session.commit()
+        return jsonify({'success': True, 'analyses': analyses})
 
     data = request.get_json(silent=True) or {}
     test_ids = []
@@ -6082,6 +6188,35 @@ def api_inbox_saved_analysis_delete(analysis_id):
     db.session.delete(row)
     db.session.commit()
     return jsonify({'success': True, 'message': 'Saved analysis deleted.'})
+
+@app.route('/api/inbox-intelligence/saved-analyses/bulk-delete', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_saved_analysis_bulk_delete():
+    data = request.get_json(silent=True) or {}
+    analysis_ids = []
+    for value in data.get('analysis_ids') or []:
+        try:
+            analysis_id = int(value)
+        except (TypeError, ValueError):
+            continue
+        if analysis_id > 0 and analysis_id not in analysis_ids:
+            analysis_ids.append(analysis_id)
+    if not analysis_ids:
+        return jsonify({'success': False, 'error': 'Select at least one saved analysis.'}), 400
+    if len(analysis_ids) > 100:
+        return jsonify({'success': False, 'error': 'You can delete up to 100 saved analyses at once.'}), 400
+
+    owner = session.get('user') or ''
+    rows = InboxSavedAnalysis.query.filter(
+        InboxSavedAnalysis.created_by == owner,
+        InboxSavedAnalysis.id.in_(analysis_ids),
+    ).all()
+    for row in rows:
+        db.session.delete(row)
+    db.session.commit()
+    noun = 'analysis' if len(rows) == 1 else 'analyses'
+    return jsonify({'success': True, 'deleted_count': len(rows), 'message': f'Deleted {len(rows)} saved {noun}.'})
 
 @app.route('/api/inbox-intelligence/saved-analyses/<int:analysis_id>/domain-status', methods=['POST'])
 @login_required

@@ -1284,12 +1284,21 @@
 
     .ii-saved-analysis-nav { border-right: 1px solid #e2e8f0; padding-right: 12px; min-width: 0; overflow: hidden; }
     .ii-saved-analysis-nav-list { display: grid; gap: 6px; max-height: 640px; overflow-y: auto; overflow-x: hidden; }
+    .ii-saved-analysis-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; padding: 7px 8px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc; }
+    .ii-saved-analysis-toolbar label { display: inline-flex; align-items: center; gap: 6px; margin: 0; color: #475569; font-size: 11px; }
+    .ii-saved-analysis-toolbar input[type="checkbox"],
+    .ii-saved-analysis-select { width: 16px; height: 16px; accent-color: #2563eb; }
+    .ii-saved-analysis-toolbar .ii-btn { padding: 6px 8px; font-size: 11px; }
+    .ii-saved-analysis-toolbar .ii-btn:disabled { opacity: .55; cursor: not-allowed; }
+    .ii-saved-analysis-nav-row { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 4px; align-items: start; min-width: 0; }
+    .ii-saved-analysis-select { margin-top: 13px; }
     .ii-saved-analysis-nav-item { width: 100%; min-width: 0; border: 1px solid transparent; border-radius: 6px; background: transparent; padding: 10px; text-align: left; color: #334155; cursor: pointer; white-space: normal; overflow: hidden; }
     .ii-saved-analysis-nav-item:hover,
     .ii-saved-analysis-nav-item.active { border-color: #bfdbfe; background: #eff6ff; color: #1d4ed8; }
     .ii-saved-analysis-nav-item strong,
     .ii-saved-analysis-nav-item span { display: block; overflow-wrap: anywhere; }
     .ii-saved-analysis-nav-item span { margin-top: 3px; color: #64748b; font-size: 11px; }
+    .ii-saved-analysis-delete-one { margin-top: 4px; padding: 7px; }
     .ii-saved-analytics-detail { min-width: 0; }
 
     .ii-saved-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; margin: 14px 0; }
@@ -3392,6 +3401,10 @@ The NightOwl Ranch Team</textarea>
                         <div class="ii-saved-analytics-shell">
                             <aside class="ii-saved-analysis-nav">
                                 <div class="ii-row justify-content-between mb-2"><strong>Saved analyses</strong><span class="ii-chip blue" id="savedAnalysisCount">0</span></div>
+                                <div class="ii-saved-analysis-toolbar">
+                                    <label><input type="checkbox" id="savedAnalysesSelectAll" aria-label="Select all saved analyses" onchange="toggleAllSavedAnalyses(this.checked)"><span>Select all</span></label>
+                                    <button class="ii-btn ii-btn-danger" type="button" id="deleteSelectedSavedAnalysesButton" onclick="requestDeleteSavedAnalyses()" disabled><i class="fas fa-trash"></i> Delete selected</button>
+                                </div>
                                 <div class="ii-saved-analysis-nav-list" id="savedAnalysisNav"></div>
                             </aside>
                             <div class="ii-saved-analytics-detail" id="savedAnalysisDetail">
@@ -3403,6 +3416,16 @@ The NightOwl Ranch Team</textarea>
                             <div class="ii-row justify-content-end mt-2"><button class="ii-btn" type="button" onclick="loadAgentSavedLists()" title="Refresh archives"><i class="fas fa-arrows-rotate"></i> Refresh</button></div>
                             <div id="agentSavedListsPanel" class="ii-grid"></div>
                         </details>
+                        <div class="ii-modal-backdrop" id="savedAnalysisDeleteModal" aria-hidden="true" onclick="closeSavedAnalysisDeleteModal(event)">
+                            <div class="ii-modal ii-save-name-modal" role="dialog" aria-modal="true" aria-labelledby="savedAnalysisDeleteTitle" aria-describedby="savedAnalysisDeleteDescription" onclick="event.stopPropagation()">
+                                <h3 id="savedAnalysisDeleteTitle">Delete saved analyses?</h3>
+                                <p id="savedAnalysisDeleteDescription" class="ii-muted">This removes the selected analytics snapshots. The original tests are not affected.</p>
+                                <div class="ii-row justify-content-end mt-3">
+                                    <button class="ii-btn" type="button" onclick="closeSavedAnalysisDeleteModal()">Cancel</button>
+                                    <button class="ii-btn ii-btn-danger" type="button" id="confirmSavedAnalysisDeleteButton" onclick="confirmDeleteSavedAnalyses()"><i class="fas fa-trash"></i> Delete</button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -4339,6 +4362,9 @@ merge_recipe_id, content_blueprint_id</pre>
         automatedActiveSenderContext: [],
         agentSavedLists: [],
         savedAnalyses: [],
+        selectedSavedAnalyses: new Set(),
+        pendingSavedAnalysisDeleteIds: [],
+        savedAnalysisDeleteReturnFocus: null,
         activeSavedAnalysisId: null,
         savedBestDomainsPage: 1,
         savedBestDomainsPageSize: 10,
@@ -8116,6 +8142,8 @@ merge_recipe_id, content_blueprint_id</pre>
         try {
             const data = await iiFetch('/api/inbox-intelligence/saved-analyses');
             iiState.savedAnalyses = data.analyses || [];
+            const availableIds = new Set(iiState.savedAnalyses.map((item) => Number(item.id)));
+            iiState.selectedSavedAnalyses = new Set(Array.from(iiState.selectedSavedAnalyses || []).filter((id) => availableIds.has(Number(id))));
             const requestedId = Number(preferredId || iiState.activeSavedAnalysisId || 0);
             iiState.activeSavedAnalysisId = iiState.savedAnalyses.some((item) => Number(item.id) === requestedId)
                 ? requestedId
@@ -8136,17 +8164,55 @@ merge_recipe_id, content_blueprint_id</pre>
         if (!nav) return;
         if (!rows.length) {
             nav.innerHTML = '<div class="ii-muted">No saved analyses yet.</div>';
+            updateSavedAnalysisDeleteControls();
             return;
         }
         nav.innerHTML = rows.map((row) => {
             const totals = row.analytics?.totals || {};
             const created = row.created_at ? new Date(row.created_at).toLocaleString() : '';
-            return `<button class="ii-saved-analysis-nav-item ${Number(row.id) === Number(iiState.activeSavedAnalysisId) ? 'active' : ''}" type="button" onclick="selectSavedAnalysis(${Number(row.id)})">
-                <strong>${escapeHtml(row.name)}</strong>
-                <span>${(row.test_ids || []).length} tests · ${Number(totals.inbox_rate || 0)}% inbox</span>
-                <span>${escapeHtml(created)}</span>
-            </button>`;
+            const id = Number(row.id);
+            const checked = iiState.selectedSavedAnalyses.has(id);
+            return `<div class="ii-saved-analysis-nav-row">
+                <input class="ii-saved-analysis-select" type="checkbox" data-analysis-id="${id}" aria-label="Select ${escapeHtml(row.name)}" ${checked ? 'checked' : ''} onchange="toggleSavedAnalysisSelection(this)">
+                <button class="ii-saved-analysis-nav-item ${id === Number(iiState.activeSavedAnalysisId) ? 'active' : ''}" type="button" onclick="selectSavedAnalysis(${id})">
+                    <strong>${escapeHtml(row.name)}</strong>
+                    <span>${(row.test_ids || []).length} tests · ${Number(totals.inbox_rate || 0)}% inbox</span>
+                    <span>${escapeHtml(created)}</span>
+                </button>
+                <button class="ii-btn ii-btn-danger ii-saved-analysis-delete-one" type="button" aria-label="Delete ${escapeHtml(row.name)}" title="Delete saved analysis" onclick="requestDeleteSavedAnalyses([${id}])"><i class="fas fa-trash"></i></button>
+            </div>`;
         }).join('');
+        updateSavedAnalysisDeleteControls();
+    }
+
+    function toggleSavedAnalysisSelection(input) {
+        const id = Number(input?.dataset?.analysisId || 0);
+        if (!id) return;
+        if (input.checked) iiState.selectedSavedAnalyses.add(id);
+        else iiState.selectedSavedAnalyses.delete(id);
+        updateSavedAnalysisDeleteControls();
+    }
+
+    function toggleAllSavedAnalyses(checked) {
+        const rows = iiState.savedAnalyses || [];
+        if (checked) rows.forEach((row) => iiState.selectedSavedAnalyses.add(Number(row.id)));
+        else iiState.selectedSavedAnalyses.clear();
+        renderSavedAnalysisNav();
+    }
+
+    function updateSavedAnalysisDeleteControls() {
+        const rows = iiState.savedAnalyses || [];
+        const selected = Array.from(iiState.selectedSavedAnalyses || []).filter((id) => rows.some((row) => Number(row.id) === Number(id)));
+        const button = document.getElementById('deleteSelectedSavedAnalysesButton');
+        const selectAll = document.getElementById('savedAnalysesSelectAll');
+        if (button) {
+            button.disabled = selected.length === 0;
+            button.innerHTML = `<i class="fas fa-trash"></i> Delete selected${selected.length ? ` (${selected.length})` : ''}`;
+        }
+        if (selectAll) {
+            selectAll.checked = rows.length > 0 && selected.length === rows.length;
+            selectAll.indeterminate = selected.length > 0 && selected.length < rows.length;
+        }
     }
 
     function selectSavedAnalysis(id) {
@@ -8199,7 +8265,7 @@ merge_recipe_id, content_blueprint_id</pre>
         detail.innerHTML = `
             <div class="ii-row justify-content-between">
                 <div><h3 style="font-size:18px; margin:0;">${escapeHtml(row.name)}</h3><div class="ii-muted mt-1">${(row.test_ids || []).map(escapeHtml).join(', ')}</div></div>
-                <button class="ii-btn ii-btn-danger" type="button" onclick="deleteSavedAnalysis(${Number(row.id)})" title="Delete saved analysis"><i class="fas fa-trash"></i></button>
+                <button class="ii-btn ii-btn-danger" type="button" onclick="requestDeleteSavedAnalyses([${Number(row.id)}])" title="Delete saved analysis"><i class="fas fa-trash"></i></button>
             </div>
             ${(a.missing_test_ids || []).length ? `<div class="ii-alert warning mt-2">Skipped missing tests: ${(a.missing_test_ids || []).map(escapeHtml).join(', ')}</div>` : ''}
             <div class="ii-saved-kpis">
@@ -8408,17 +8474,82 @@ merge_recipe_id, content_blueprint_id</pre>
         if (status) status.textContent = `Copied ${values.length} ${label} row(s).`;
     }
 
-    async function deleteSavedAnalysis(id) {
-        const row = (iiState.savedAnalyses || []).find((item) => Number(item.id) === Number(id));
-        if (!row || !confirm(`Delete saved analysis "${row.name}"?`)) return;
+    function requestDeleteSavedAnalyses(ids = null) {
+        const requestedIds = ids === null
+            ? Array.from(iiState.selectedSavedAnalyses || []).map((id) => Number(id)).filter(Boolean)
+            : ids.map((id) => Number(id)).filter(Boolean);
+        const rows = (iiState.savedAnalyses || []).filter((row) => requestedIds.includes(Number(row.id)));
+        if (!rows.length) return;
+        iiState.pendingSavedAnalysisDeleteIds = rows.map((row) => Number(row.id));
+        const description = document.getElementById('savedAnalysisDeleteDescription');
+        if (description) {
+            const names = rows.map((row) => row.name).join(', ');
+            description.textContent = rows.length === 1
+                ? `Delete "${names}"? The original test is not affected.`
+                : `Delete ${rows.length} saved analyses? The original tests are not affected.`;
+        }
+        iiState.savedAnalysisDeleteReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        const modal = document.getElementById('savedAnalysisDeleteModal');
+        if (modal) {
+            modal.classList.add('active');
+            modal.setAttribute('aria-hidden', 'false');
+            document.getElementById('confirmSavedAnalysisDeleteButton')?.focus();
+        }
+    }
+
+    function closeSavedAnalysisDeleteModal(event) {
+        if (event && event.target !== event.currentTarget) return;
+        const modal = document.getElementById('savedAnalysisDeleteModal');
+        if (modal) {
+            modal.classList.remove('active');
+            modal.setAttribute('aria-hidden', 'true');
+        }
+        iiState.pendingSavedAnalysisDeleteIds = [];
+        const returnFocus = iiState.savedAnalysisDeleteReturnFocus;
+        iiState.savedAnalysisDeleteReturnFocus = null;
+        if (returnFocus?.isConnected) returnFocus.focus();
+    }
+
+    document.addEventListener('keydown', (event) => {
+        const modal = document.getElementById('savedAnalysisDeleteModal');
+        if (event.key === 'Escape' && modal?.classList.contains('active')) {
+            event.preventDefault();
+            closeSavedAnalysisDeleteModal();
+        }
+    });
+
+    async function confirmDeleteSavedAnalyses() {
+        const ids = Array.from(iiState.pendingSavedAnalysisDeleteIds || []).map((id) => Number(id)).filter(Boolean);
+        if (!ids.length) {
+            closeSavedAnalysisDeleteModal();
+            return;
+        }
         const status = document.getElementById('savedAnalysisStatus');
+        const button = document.getElementById('confirmSavedAnalysisDeleteButton');
+        if (button) {
+            button.disabled = true;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';
+        }
         try {
-            const data = await iiFetch(`/api/inbox-intelligence/saved-analyses/${Number(id)}`, {method: 'DELETE'});
-            iiState.activeSavedAnalysisId = null;
-            if (status) status.textContent = data.message || 'Saved analysis deleted.';
+            const data = await iiFetch('/api/inbox-intelligence/saved-analyses/bulk-delete', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({analysis_ids: ids})
+            });
+            const activeWasDeleted = ids.includes(Number(iiState.activeSavedAnalysisId));
+            ids.forEach((id) => iiState.selectedSavedAnalyses.delete(id));
+            if (activeWasDeleted) iiState.activeSavedAnalysisId = null;
+            iiState.savedAnalysisDeleteReturnFocus = null;
+            closeSavedAnalysisDeleteModal();
+            if (status) status.textContent = data.message || 'Saved analyses deleted.';
             await loadSavedAnalyses();
         } catch (err) {
             if (status) status.textContent = `Delete failed: ${err.message}`;
+        } finally {
+            if (button) {
+                button.disabled = false;
+                button.innerHTML = '<i class="fas fa-trash"></i> Delete';
+            }
         }
     }
 
