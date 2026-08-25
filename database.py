@@ -492,6 +492,17 @@ class InboxAgentSavedList(db.Model):
 
     __table_args__ = (db.UniqueConstraint('result_date', 'list_type', 'created_by', name='uq_agent_saved_list_date_type_user'),)
 
+class InboxSavedAnalysis(db.Model):
+    """Persistent placement analytics snapshot built from a selected set of tests."""
+    __tablename__ = 'inbox_saved_analysis'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(255), nullable=False)
+    test_ids_json = db.Column(db.Text, nullable=False, default='[]')
+    analytics_json = db.Column(db.Text, nullable=False, default='{}')
+    created_by = db.Column(db.String(255), nullable=True, index=True)
+    created_at = db.Column(db.DateTime, default=db.func.current_timestamp(), index=True)
+    updated_at = db.Column(db.DateTime, default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
+
 class InboxOpenRouterConfig(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     encrypted_api_key = db.Column(db.Text, nullable=True)

@@ -1265,6 +1265,53 @@
         gap: 10px;
     }
 
+    .ii-saved-analytics-create {
+        display: grid;
+        grid-template-columns: minmax(220px, 1fr) auto auto;
+        gap: 10px;
+        align-items: end;
+        padding: 14px 0;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .ii-saved-analytics-shell {
+        display: grid;
+        grid-template-columns: minmax(210px, 260px) minmax(0, 1fr);
+        gap: 16px;
+        margin-top: 16px;
+        min-height: 420px;
+    }
+
+    .ii-saved-analysis-nav { border-right: 1px solid #e2e8f0; padding-right: 12px; min-width: 0; }
+    .ii-saved-analysis-nav-list { display: grid; gap: 6px; max-height: 640px; overflow-y: auto; overflow-x: hidden; }
+    .ii-saved-analysis-nav-item { width: 100%; min-width: 0; border: 1px solid transparent; border-radius: 6px; background: transparent; padding: 10px; text-align: left; color: #334155; cursor: pointer; }
+    .ii-saved-analysis-nav-item:hover,
+    .ii-saved-analysis-nav-item.active { border-color: #bfdbfe; background: #eff6ff; color: #1d4ed8; }
+    .ii-saved-analysis-nav-item strong,
+    .ii-saved-analysis-nav-item span { display: block; overflow-wrap: anywhere; }
+    .ii-saved-analysis-nav-item span { margin-top: 3px; color: #64748b; font-size: 11px; }
+    .ii-saved-analytics-detail { min-width: 0; }
+
+    .ii-saved-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; margin: 14px 0; }
+    .ii-saved-kpi { padding: 12px; border-right: 1px solid #e2e8f0; background: #fff; }
+    .ii-saved-kpi:last-child { border-right: 0; }
+    .ii-saved-kpi strong { display: block; margin-top: 3px; font-size: 21px; color: #0f172a; }
+
+    .ii-saved-action-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .ii-saved-action-section { border-top: 3px solid #94a3b8; padding-top: 10px; min-width: 0; }
+    .ii-saved-action-section.inbox { border-top-color: #16a34a; }
+    .ii-saved-action-section.grey { border-top-color: #d97706; }
+    .ii-saved-action-section.spam { border-top-color: #dc2626; }
+    .ii-saved-action-list { display: grid; gap: 5px; max-height: 230px; overflow-y: auto; margin: 10px 0; }
+    .ii-saved-action-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 7px 0; border-bottom: 1px solid #f1f5f9; font-size: 12px; }
+    .ii-saved-action-row > span:first-child { overflow-wrap: anywhere; }
+    .ii-saved-domain-section { margin-top: 18px; border-top: 1px solid #e2e8f0; padding-top: 14px; overflow-x: auto; }
+    .ii-saved-domain-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .ii-saved-domain-table th,
+    .ii-saved-domain-table td { padding: 9px 8px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+    .ii-saved-domain-table th { color: #475569; font-weight: 700; background: #f8fafc; }
+    .ii-legacy-saved-lists { margin-top: 22px; padding-top: 14px; border-top: 1px solid #e2e8f0; }
+
     .ii-save-name-modal {
         width: min(460px, 100%);
     }
@@ -2539,6 +2586,7 @@
         .ii-agent-result-hero,
         .ii-agent-setup-grid,
         .ii-saved-list-columns { grid-template-columns: 1fr; }
+        .ii-saved-action-grid { grid-template-columns: 1fr; }
         .ii-pro-card-head.ii-test-card-head,
         .ii-test-bulk-bar {
             grid-template-columns: 1fr;
@@ -2553,6 +2601,13 @@
     }
 
     @media (max-width: 900px) {
+        .ii-saved-analytics-create,
+        .ii-saved-analytics-shell { grid-template-columns: 1fr; }
+        .ii-saved-analysis-nav { border-right: 0; border-bottom: 1px solid #e2e8f0; padding: 0 0 12px; }
+        .ii-saved-analysis-nav-list { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 220px; }
+        .ii-saved-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .ii-saved-kpi { border-bottom: 1px solid #e2e8f0; }
+        .ii-saved-kpi:last-child { grid-column: 1 / -1; }
         .ii-template-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .ii-auto-top-actions { grid-template-columns: 1fr; }
         #userInboxTest .ii-form-grid { grid-template-columns: 1fr; }
@@ -3212,6 +3267,7 @@ The NightOwl Ranch Team</textarea>
                                     <option value="agent">Agent Results</option>
                                 </select>
                                 <button class="ii-btn ii-btn-primary" type="button" onclick="viewSelectedAutomatedTestsBulk()"><i class="fas fa-chart-simple"></i> View selected</button>
+                                <button class="ii-btn" type="button" onclick="openSavedAnalysisForSelection()"><i class="fas fa-floppy-disk"></i> Save analytics</button>
                                 <button class="ii-btn" type="button" onclick="deleteSelectedAutomatedTests()"><i class="fas fa-trash"></i> Delete selected</button>
                                 <button class="ii-btn" type="button" onclick="clearAutomatedTestSelection()"><i class="fas fa-xmark"></i></button>
                             </div>
@@ -3296,19 +3352,31 @@ The NightOwl Ranch Team</textarea>
                         </div>
                     </div>
                     <div class="ii-analytics-panel" id="analyticsPanelSavedLists">
-                        <div class="ii-row justify-content-between mb-3">
+                        <div class="ii-row justify-content-between">
                             <div>
-                                <h4><i class="fas fa-calendar-check text-primary"></i> Saved Lists</h4>
-                                <p class="ii-muted mb-0">Inbox, spam, and grey users grouped by the date they were tested together.</p>
+                                <h4><i class="fas fa-chart-line text-primary"></i> Saved Lists Analytics</h4>
+                                <p class="ii-muted mb-0">Combine selected tests into a persistent decision dashboard.</p>
                             </div>
-                            <button class="ii-btn" type="button" onclick="loadAgentSavedLists()"><i class="fas fa-arrows-rotate"></i> Refresh</button>
+                            <button class="ii-btn" type="button" onclick="loadSavedAnalyses()" title="Refresh saved analytics"><i class="fas fa-arrows-rotate"></i></button>
                         </div>
-                        <div id="agentSavedListsPanel" class="ii-grid">
-                            <div class="ii-ai-placeholder">
-                                <i class="fas fa-calendar-check"></i>
-                                <h4>No saved lists yet</h4>
-                                <p>Completed Agent Results will be collected here by test date.</p>
+                        <div class="ii-saved-analytics-create">
+                            <label class="ii-field mb-0"><span>Analysis name</span><input class="ii-input" id="savedAnalysisNameInput" maxlength="255" placeholder="Example: August campaign review"></label>
+                            <div><strong id="savedAnalysisSelectionCount">0 tests selected</strong><div class="ii-muted">From Active & Completed Tests</div></div>
+                            <button class="ii-btn ii-btn-primary" id="saveSelectedAnalysisButton" type="button" onclick="saveSelectedTestsAnalysis()"><i class="fas fa-chart-column"></i> Analyze & save</button>
+                        </div>
+                        <div class="ii-muted mt-2" id="savedAnalysisStatus" aria-live="polite"></div>
+                        <div class="ii-saved-analytics-shell">
+                            <aside class="ii-saved-analysis-nav">
+                                <div class="ii-row justify-content-between mb-2"><strong>Saved analyses</strong><span class="ii-chip blue" id="savedAnalysisCount">0</span></div>
+                                <div class="ii-saved-analysis-nav-list" id="savedAnalysisNav"></div>
+                            </aside>
+                            <div class="ii-saved-analytics-detail" id="savedAnalysisDetail">
+                                <div class="ii-ai-placeholder"><i class="fas fa-chart-column"></i><h4>No analysis selected</h4><p>Select tests above, then analyze and save their combined placement data.</p></div>
                             </div>
+                        </div>
+                        <div class="ii-legacy-saved-lists">
+                            <div class="ii-row justify-content-between mb-2"><div><strong>Agent result archives</strong><div class="ii-muted">Legacy date-grouped user lists.</div></div><button class="ii-btn" type="button" onclick="loadAgentSavedLists()" title="Refresh archives"><i class="fas fa-arrows-rotate"></i></button></div>
+                            <div id="agentSavedListsPanel" class="ii-grid"></div>
                         </div>
                     </div>
                 </div>
@@ -4196,7 +4264,7 @@ merge_recipe_id, content_blueprint_id</pre>
         userInboxListAccounts: [],
         userInboxListAccountOnly: false,
         selectedUserInboxListAccountIds: new Set(),
-        userInboxCopyBuckets: {inboxDomains: [], spamDomains: [], inboxUsers: [], spamUsers: [], inboxUserAccountLines: [], spamUserAccountLines: [], greyDomainNameChangeUsers: []},
+        userInboxCopyBuckets: {inboxDomains: [], spamDomains: [], inboxUsers: [], spamUsers: [], inboxAccounts: [], spamAccounts: [], inboxUserAccountLines: [], spamUserAccountLines: [], greyDomainNameChangeUsers: []},
         serviceAccounts: [],
         activeMessageId: null,
         explorerRefreshToken: 0,
@@ -4237,7 +4305,7 @@ merge_recipe_id, content_blueprint_id</pre>
         stoppedAutomatedTestIds: new Set(),
         inboxSyncPaused: false,
         inboxSyncPauseUpdating: false,
-        automatedCopyBuckets: {inboxUsers: [], inboxDomains: [], spamUsers: [], spamDomains: [], inboxUserAccountLines: [], spamUserAccountLines: [], greyDomainNameChangeUsers: []},
+        automatedCopyBuckets: {inboxUsers: [], inboxDomains: [], spamUsers: [], spamDomains: [], inboxAccounts: [], spamAccounts: [], inboxUserAccountLines: [], spamUserAccountLines: [], greyDomainNameChangeUsers: []},
         automatedAiResultCopyBuckets: {inbox_users: [], spam_users: [], inbox_domains: [], spam_domains: []},
         automatedAiResultAnalysis: null,
         automatedAiResultTestId: null,
@@ -4245,6 +4313,8 @@ merge_recipe_id, content_blueprint_id</pre>
         automatedAgentResults: [],
         automatedActiveSenderContext: [],
         agentSavedLists: [],
+        savedAnalyses: [],
+        activeSavedAnalysisId: null,
         userInboxTemplateNameResolver: null,
         aiAgentRunning: false,
         aiAgentStopRequested: false,
@@ -6443,6 +6513,8 @@ merge_recipe_id, content_blueprint_id</pre>
             document.getElementById('analyticsPanelAgentResults')?.classList.add('active');
         } else if (target === 'savedLists') {
             document.getElementById('analyticsPanelSavedLists')?.classList.add('active');
+            updateSavedAnalysisSelectionCount();
+            loadSavedAnalyses();
             loadAgentSavedLists();
         } else {
             document.getElementById('analyticsPanelInbox')?.classList.add('active');
@@ -7516,6 +7588,7 @@ merge_recipe_id, content_blueprint_id</pre>
     function renderAutomatedBulkSelectionStatus() {
         const countEl = document.getElementById('automatedSelectedBulkCount');
         if (countEl) countEl.textContent = `${iiState.selectedAutomatedTestIds.size} selected`;
+        updateSavedAnalysisSelectionCount();
     }
 
     function toggleAutomatedTestSelection(testId, checked) {
@@ -7801,7 +7874,7 @@ merge_recipe_id, content_blueprint_id</pre>
     function clearAutomatedAnalytics() {
         iiState.automatedSelectedTestId = null;
         iiState.automatedMessages = [];
-        iiState.automatedCopyBuckets = {inboxUsers: [], inboxDomains: [], spamUsers: [], spamDomains: [], inboxUserAccountLines: [], spamUserAccountLines: [], greyDomainNameChangeUsers: []};
+        iiState.automatedCopyBuckets = {inboxUsers: [], inboxDomains: [], spamUsers: [], spamDomains: [], inboxAccounts: [], spamAccounts: [], inboxUserAccountLines: [], spamUserAccountLines: [], greyDomainNameChangeUsers: []};
         iiState.automatedAiResultCopyBuckets = {inbox_users: [], spam_users: [], inbox_domains: [], spam_domains: []};
         iiState.automatedAiResultAnalysis = null;
         iiState.automatedAiResultTestId = null;
@@ -7959,6 +8032,182 @@ merge_recipe_id, content_blueprint_id</pre>
             await loadAgentSavedLists(false);
         } catch (err) {
             console.warn('Could not save Agent Results lists:', err);
+        }
+    }
+
+    function updateSavedAnalysisSelectionCount() {
+        const count = iiState.selectedAutomatedTestIds.size;
+        const el = document.getElementById('savedAnalysisSelectionCount');
+        const button = document.getElementById('saveSelectedAnalysisButton');
+        if (el) el.textContent = `${count} test${count === 1 ? '' : 's'} selected`;
+        if (button) button.disabled = !count;
+    }
+
+    function openSavedAnalysisForSelection() {
+        const status = document.getElementById('automatedAnalyticsStatus');
+        if (!iiState.selectedAutomatedTestIds.size) {
+            if (status) status.textContent = 'Select one or more Active or Completed tests first.';
+            return;
+        }
+        switchAnalyticsTab('savedLists');
+        document.getElementById('savedAnalysisNameInput')?.focus();
+    }
+
+    async function saveSelectedTestsAnalysis() {
+        const ids = Array.from(iiState.selectedAutomatedTestIds);
+        const status = document.getElementById('savedAnalysisStatus');
+        const button = document.getElementById('saveSelectedAnalysisButton');
+        if (!ids.length) {
+            if (status) status.textContent = 'Select one or more Active or Completed tests first.';
+            return;
+        }
+        const nameInput = document.getElementById('savedAnalysisNameInput');
+        if (button) button.disabled = true;
+        if (status) status.textContent = `Analyzing ${ids.length} selected test(s)...`;
+        try {
+            const data = await iiFetch('/api/inbox-intelligence/saved-analyses', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({test_ids: ids, name: nameInput?.value || ''})
+            });
+            if (nameInput) nameInput.value = '';
+            iiState.activeSavedAnalysisId = data.analysis?.id || null;
+            if (status) status.textContent = data.message || 'Analysis saved.';
+            await loadSavedAnalyses(iiState.activeSavedAnalysisId);
+        } catch (err) {
+            if (status) status.textContent = `Analysis failed: ${err.message}`;
+        } finally {
+            updateSavedAnalysisSelectionCount();
+        }
+    }
+
+    async function loadSavedAnalyses(preferredId = null) {
+        const nav = document.getElementById('savedAnalysisNav');
+        const detail = document.getElementById('savedAnalysisDetail');
+        if (nav) nav.innerHTML = '<div class="ii-muted">Loading saved analytics...</div>';
+        try {
+            const data = await iiFetch('/api/inbox-intelligence/saved-analyses');
+            iiState.savedAnalyses = data.analyses || [];
+            const requestedId = Number(preferredId || iiState.activeSavedAnalysisId || 0);
+            iiState.activeSavedAnalysisId = iiState.savedAnalyses.some((item) => Number(item.id) === requestedId)
+                ? requestedId
+                : (iiState.savedAnalyses[0]?.id || null);
+            renderSavedAnalysisNav();
+            renderSavedAnalysisDetail();
+        } catch (err) {
+            if (nav) nav.innerHTML = `<div class="text-danger">${escapeHtml(err.message)}</div>`;
+            if (detail) detail.innerHTML = '<div class="ii-ai-placeholder"><h4>Analytics unavailable</h4><p>Refresh to try again.</p></div>';
+        }
+    }
+
+    function renderSavedAnalysisNav() {
+        const nav = document.getElementById('savedAnalysisNav');
+        const count = document.getElementById('savedAnalysisCount');
+        const rows = iiState.savedAnalyses || [];
+        if (count) count.textContent = rows.length;
+        if (!nav) return;
+        if (!rows.length) {
+            nav.innerHTML = '<div class="ii-muted">No saved analyses yet.</div>';
+            return;
+        }
+        nav.innerHTML = rows.map((row) => {
+            const totals = row.analytics?.totals || {};
+            const created = row.created_at ? new Date(row.created_at).toLocaleString() : '';
+            return `<button class="ii-saved-analysis-nav-item ${Number(row.id) === Number(iiState.activeSavedAnalysisId) ? 'active' : ''}" type="button" onclick="selectSavedAnalysis(${Number(row.id)})">
+                <strong>${escapeHtml(row.name)}</strong>
+                <span>${(row.test_ids || []).length} tests · ${Number(totals.inbox_rate || 0)}% inbox</span>
+                <span>${escapeHtml(created)}</span>
+            </button>`;
+        }).join('');
+    }
+
+    function selectSavedAnalysis(id) {
+        iiState.activeSavedAnalysisId = Number(id);
+        renderSavedAnalysisNav();
+        renderSavedAnalysisDetail();
+    }
+
+    function savedAnalysisActionRows(items, labelKey, emptyText) {
+        if (!(items || []).length) return `<div class="ii-muted">${escapeHtml(emptyText)}</div>`;
+        return `<div class="ii-saved-action-list">${items.map((item) => `
+            <div class="ii-saved-action-row">
+                <span>${escapeHtml(item[labelKey] || '')}</span>
+                <span><span class="ii-chip green">${Number(item.inbox || 0)}</span> <span class="ii-chip red">${Number(item.spam || 0)}</span></span>
+            </div>`).join('')}</div>`;
+    }
+
+    function renderSavedAnalysisDetail() {
+        const detail = document.getElementById('savedAnalysisDetail');
+        if (!detail) return;
+        const row = (iiState.savedAnalyses || []).find((item) => Number(item.id) === Number(iiState.activeSavedAnalysisId));
+        if (!row) {
+            detail.innerHTML = '<div class="ii-ai-placeholder"><i class="fas fa-chart-column"></i><h4>No saved analysis yet</h4><p>Select tests and use Analyze & save.</p></div>';
+            return;
+        }
+        const a = row.analytics || {};
+        const totals = a.totals || {};
+        const domains = a.best_domains || [];
+        detail.innerHTML = `
+            <div class="ii-row justify-content-between">
+                <div><h3 style="font-size:18px; margin:0;">${escapeHtml(row.name)}</h3><div class="ii-muted mt-1">${(row.test_ids || []).map(escapeHtml).join(', ')}</div></div>
+                <button class="ii-btn ii-btn-danger" type="button" onclick="deleteSavedAnalysis(${Number(row.id)})" title="Delete saved analysis"><i class="fas fa-trash"></i></button>
+            </div>
+            ${(a.missing_test_ids || []).length ? `<div class="ii-alert warning mt-2">Skipped missing tests: ${(a.missing_test_ids || []).map(escapeHtml).join(', ')}</div>` : ''}
+            <div class="ii-saved-kpis">
+                <div class="ii-saved-kpi"><span class="ii-muted">Tests</span><strong>${(row.test_ids || []).length}</strong></div>
+                <div class="ii-saved-kpi"><span class="ii-muted">Messages</span><strong>${Number(totals.messages || 0)}</strong></div>
+                <div class="ii-saved-kpi"><span class="ii-muted">Inbox rate</span><strong>${Number(totals.inbox_rate || 0)}%</strong></div>
+                <div class="ii-saved-kpi"><span class="ii-muted">Spam rate</span><strong>${Number(totals.spam_rate || 0)}%</strong></div>
+                <div class="ii-saved-kpi"><span class="ii-muted">Waiting / failed</span><strong>${Number(totals.pending || 0) + Number(totals.failed || 0)}</strong></div>
+            </div>
+            <div class="ii-saved-action-grid">
+                <section class="ii-saved-action-section inbox">
+                    <div class="ii-row justify-content-between"><div><h4>Inbox accounts</h4><div class="ii-muted">Keep and scale</div></div><span class="ii-chip green">${(a.inbox_accounts || []).length}</span></div>
+                    ${savedAnalysisActionRows(a.inbox_accounts, 'account', 'No inbox-only accounts in this analysis.')}
+                    <button class="ii-btn" type="button" onclick="copySavedAnalysisBucket('inbox_accounts', 'account')"><i class="fas fa-copy"></i> Copy inbox accounts</button>
+                </section>
+                <section class="ii-saved-action-section grey">
+                    <div class="ii-row justify-content-between"><div><h4>Grey users</h4><div class="ii-muted">Change names in Workspace</div></div><span class="ii-chip yellow">${(a.grey_users || []).length}</span></div>
+                    ${savedAnalysisActionRows(a.grey_users, 'email', 'No mixed-placement users in this analysis.')}
+                    <button class="ii-btn" type="button" onclick="copySavedAnalysisBucket('grey_users', 'name_change_line')"><i class="fas fa-copy"></i> Copy Workspace rename list</button>
+                </section>
+                <section class="ii-saved-action-section spam">
+                    <div class="ii-row justify-content-between"><div><h4>Spam accounts</h4><div class="ii-muted">Change sending domains</div></div><span class="ii-chip red">${(a.spam_accounts || []).length}</span></div>
+                    ${savedAnalysisActionRows(a.spam_accounts, 'account', 'No spam-only accounts in this analysis.')}
+                    <button class="ii-btn ii-btn-danger" type="button" onclick="copySavedAnalysisBucket('spam_accounts', 'account')"><i class="fas fa-copy"></i> Spam account</button>
+                </section>
+            </div>
+            <section class="ii-saved-domain-section">
+                <div class="ii-row justify-content-between mb-2"><div><h4>Best domains</h4><div class="ii-muted">Ranked by inbox rate, then observation volume.</div></div><button class="ii-btn" type="button" onclick="copySavedAnalysisBucket('best_domains', 'domain')"><i class="fas fa-copy"></i> Copy domains</button></div>
+                <table class="ii-saved-domain-table"><thead><tr><th>Rank</th><th>Domain</th><th>Inbox rate</th><th>Inbox</th><th>Spam</th><th>Observed</th></tr></thead><tbody>
+                    ${domains.map((item, index) => `<tr><td>${index + 1}</td><td><strong>${escapeHtml(item.domain)}</strong></td><td><span class="ii-chip ${Number(item.inbox_rate || 0) >= 80 ? 'green' : Number(item.inbox_rate || 0) >= 50 ? 'yellow' : 'red'}">${Number(item.inbox_rate || 0)}%</span></td><td>${Number(item.inbox || 0)}</td><td>${Number(item.spam || 0)}</td><td>${Number(item.observed || 0)}</td></tr>`).join('') || '<tr><td colspan="6" class="ii-muted">No observed domain results yet.</td></tr>'}
+                </tbody></table>
+            </section>`;
+    }
+
+    async function copySavedAnalysisBucket(bucket, field) {
+        const row = (iiState.savedAnalyses || []).find((item) => Number(item.id) === Number(iiState.activeSavedAnalysisId));
+        const values = (row?.analytics?.[bucket] || []).map((item) => String(item?.[field] || '').trim()).filter(Boolean);
+        const status = document.getElementById('savedAnalysisStatus');
+        if (!values.length) {
+            if (status) status.textContent = 'There is nothing to copy in this section.';
+            return;
+        }
+        await copyTextToClipboard(`${values.join('\r\n')}\r\n`);
+        if (status) status.textContent = `Copied ${values.length} item(s).`;
+    }
+
+    async function deleteSavedAnalysis(id) {
+        const row = (iiState.savedAnalyses || []).find((item) => Number(item.id) === Number(id));
+        if (!row || !confirm(`Delete saved analysis "${row.name}"?`)) return;
+        const status = document.getElementById('savedAnalysisStatus');
+        try {
+            const data = await iiFetch(`/api/inbox-intelligence/saved-analyses/${Number(id)}`, {method: 'DELETE'});
+            iiState.activeSavedAnalysisId = null;
+            if (status) status.textContent = data.message || 'Saved analysis deleted.';
+            await loadSavedAnalyses();
+        } catch (err) {
+            if (status) status.textContent = `Delete failed: ${err.message}`;
         }
     }
 
@@ -8809,8 +9058,10 @@ merge_recipe_id, content_blueprint_id</pre>
         const spamUsers = users.filter((item) => item.spam > 0).map((item) => item.key);
         const inboxUserAccountLines = accountUserLinesForSenders(inboxUsers);
         const spamUserAccountLines = accountUserLinesForSenders(spamUsers);
+        const inboxAccounts = accountsForSenders(inboxUsers);
+        const spamAccounts = accountsForSenders(spamUsers);
         const greyDomainNameChangeUsers = greyDomainNameChangeRows(rows, 'sender');
-        iiState.automatedCopyBuckets = {inboxDomains, spamDomains, inboxUsers, spamUsers, inboxUserAccountLines, spamUserAccountLines, greyDomainNameChangeUsers};
+        iiState.automatedCopyBuckets = {inboxDomains, spamDomains, inboxUsers, spamUsers, inboxAccounts, spamAccounts, inboxUserAccountLines, spamUserAccountLines, greyDomainNameChangeUsers};
         const providers = {};
         rows.forEach((row) => {
             const key = recipientProvider(row.recipient);
@@ -8857,6 +9108,7 @@ merge_recipe_id, content_blueprint_id</pre>
                     <button class="ii-btn ii-copy-stat-button spam" type="button" onclick="copyAutomatedBucket('spamUsers')"><i class="fas fa-user-xmark"></i><strong>${spamUsers.length}</strong><span>Spam users</span></button>
                     <button class="ii-btn ii-copy-stat-button inbox" type="button" onclick="copyAutomatedBucket('inboxUserAccountLines')"><i class="fas fa-clipboard-list"></i><strong>${inboxUserAccountLines.length}</strong><span>Inbox account,user</span></button>
                     <button class="ii-btn ii-copy-stat-button spam" type="button" onclick="copyAutomatedBucket('spamUserAccountLines')"><i class="fas fa-clipboard-list"></i><strong>${spamUserAccountLines.length}</strong><span>Spam account,user</span></button>
+                    <button class="ii-btn ii-copy-stat-button spam" type="button" onclick="copyAutomatedBucket('spamAccounts')"><i class="fas fa-building-circle-xmark"></i><strong>${spamAccounts.length}</strong><span>Spam account</span></button>
                     <button class="ii-btn ii-copy-stat-button account" type="button" onclick="copyAutomatedBucket('greyDomainNameChangeUsers')"><i class="fas fa-id-card"></i><strong>${greyDomainNameChangeUsers.length}</strong><span>Grey-domain name changes</span></button>
                 </div>
                 <div class="ii-insight-grid mt-3">
@@ -10776,6 +11028,8 @@ merge_recipe_id, content_blueprint_id</pre>
         const spamUsers = users.filter((item) => item.spam > 0).map((item) => item.key);
         const inboxUserAccountLines = accountUserLinesForSenders(inboxUsers);
         const spamUserAccountLines = accountUserLinesForSenders(spamUsers);
+        const inboxAccounts = accountsForSenders(inboxUsers);
+        const spamAccounts = accountsForSenders(spamUsers);
         const greyDomainNameChangeUsers = greyDomainNameChangeRows(rows, senderField);
         copyBuckets.inboxDomains = inboxDomains;
         copyBuckets.spamDomains = spamDomains;
@@ -10783,6 +11037,8 @@ merge_recipe_id, content_blueprint_id</pre>
         copyBuckets.spamUsers = spamUsers;
         copyBuckets.inboxUserAccountLines = inboxUserAccountLines;
         copyBuckets.spamUserAccountLines = spamUserAccountLines;
+        copyBuckets.inboxAccounts = inboxAccounts;
+        copyBuckets.spamAccounts = spamAccounts;
         copyBuckets.greyDomainNameChangeUsers = greyDomainNameChangeUsers;
         const providerMap = {};
         rows.forEach((row) => {
@@ -10848,6 +11104,7 @@ merge_recipe_id, content_blueprint_id</pre>
                     <button class="ii-btn ii-copy-stat-button spam" type="button" onclick="${copyFn}('spamUsers')"><i class="fas fa-user-xmark"></i><strong>${spamUsers.length}</strong><span>Copy spam users</span></button>
                     <button class="ii-btn ii-copy-stat-button inbox" type="button" onclick="${copyFn}('inboxUserAccountLines')"><i class="fas fa-clipboard-list"></i><strong>${inboxUserAccountLines.length}</strong><span>Copy inbox account,user</span></button>
                     <button class="ii-btn ii-copy-stat-button spam" type="button" onclick="${copyFn}('spamUserAccountLines')"><i class="fas fa-clipboard-list"></i><strong>${spamUserAccountLines.length}</strong><span>Copy spam account,user</span></button>
+                    <button class="ii-btn ii-copy-stat-button spam" type="button" onclick="${copyFn}('spamAccounts')"><i class="fas fa-building-circle-xmark"></i><strong>${spamAccounts.length}</strong><span>Spam account</span></button>
                     <button class="ii-btn ii-copy-stat-button account" type="button" onclick="${copyFn}('greyDomainNameChangeUsers')"><i class="fas fa-id-card"></i><strong>${greyDomainNameChangeUsers.length}</strong><span>Copy grey-domain name changes</span></button>
                 </div>
                 <div class="ii-compact-stat-grid mt-2">
@@ -10960,6 +11217,21 @@ merge_recipe_id, content_blueprint_id</pre>
             .filter(Boolean)
             .filter((line) => {
                 const key = line.toLowerCase();
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            })
+            .sort((a, b) => a.localeCompare(b));
+    }
+
+    function accountsForSenders(emails) {
+        const seen = new Set();
+        return (emails || [])
+            .map(adminAccountLabelForSender)
+            .map((value) => String(value || '').trim())
+            .filter(Boolean)
+            .filter((value) => {
+                const key = value.toLowerCase();
                 if (seen.has(key)) return false;
                 seen.add(key);
                 return true;
