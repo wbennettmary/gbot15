@@ -329,8 +329,67 @@
         display: block;
     }
 
+    .afraid-ai-grid {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: minmax(0, 1.1fr) minmax(280px, .9fr);
+    }
+
+    .afraid-ai-panel {
+        border: 1px solid #dbeafe;
+        border-radius: 14px;
+        background: linear-gradient(135deg, #f8fbff 0%, #ffffff 56%, #f0fdfa 100%);
+        box-shadow: 0 14px 36px rgba(37, 99, 235, .08);
+        padding: 18px;
+    }
+
+    .afraid-ai-kpis {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .afraid-ai-kpi {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 12px;
+    }
+
+    .afraid-ai-kpi span {
+        color: #64748b;
+        display: block;
+        font-size: 12px;
+        font-weight: 700;
+        margin-bottom: 4px;
+    }
+
+    .afraid-ai-kpi strong {
+        color: #0f172a;
+        display: block;
+        font-size: 20px;
+        line-height: 1;
+    }
+
+    .afraid-ai-log {
+        background: #0f172a;
+        border-radius: 12px;
+        color: #dbeafe;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 12px;
+        min-height: 220px;
+        overflow: auto;
+        padding: 12px;
+        white-space: pre-wrap;
+    }
+
     @media (max-width: 768px) {
         .afraid-verify-toolbar {
+            grid-template-columns: 1fr;
+        }
+
+        .afraid-ai-grid,
+        .afraid-ai-kpis {
             grid-template-columns: 1fr;
         }
 
@@ -368,6 +427,7 @@
     <symbol id="afraid-icon-trash" viewBox="0 0 24 24"><path d="M4 7h16"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M6 7l1 14h10l1-14"></path><path d="M9 7V4h6v3"></path></symbol>
     <symbol id="afraid-icon-user-slash" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="m17 8 5 5"></path><path d="m22 8-5 5"></path></symbol>
     <symbol id="afraid-icon-wand" viewBox="0 0 24 24"><path d="m15 4 5 5"></path><path d="M3 21 17 7"></path><path d="m6 5 1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2Z"></path><path d="m19 14 .7 1.3 1.3.7-1.3.7L19 18l-.7-1.3L17 16l1.3-.7L19 14Z"></path></symbol>
+    <symbol id="afraid-icon-bot" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="12" rx="3"></rect><path d="M12 4v4"></path><path d="M8 13h.01"></path><path d="M16 13h.01"></path><path d="M9 17h6"></path></symbol>
 </svg>
 <div class="container mt-4">
     <h2 class="mb-1">Afraid (FreeDNS) Management</h2>
@@ -384,6 +444,11 @@
         <li class="nav-item" role="presentation">
             <button class="nav-link {% if session.get('role') != 'admin' %}active{% endif %}" id="process-tab" data-bs-toggle="tab" data-bs-target="#processPane" type="button" role="tab">
                 <svg class="afraid-svg-icon me-1"><use href="#afraid-icon-play"></use></svg> Process
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="ai-agent-tab" data-bs-toggle="tab" data-bs-target="#aiAgentPane" type="button" role="tab">
+                <svg class="afraid-svg-icon me-1"><use href="#afraid-icon-bot"></use></svg> AI Agent
             </button>
         </li>
         <li class="nav-item" role="presentation">
@@ -622,6 +687,65 @@
             <div id="batchResultList" class="small text-muted">No run yet.</div>
         </div>
     </div>
+        </div>
+
+        <div class="tab-pane fade" id="aiAgentPane" role="tabpanel" aria-labelledby="ai-agent-tab">
+            <div class="afraid-ai-grid">
+                <div class="afraid-ai-panel">
+                    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-3">
+                        <div>
+                            <h5 class="mb-1"><svg class="afraid-svg-icon me-2"><use href="#afraid-icon-bot"></use></svg>AI AFRAID Automation</h5>
+                            <div class="text-muted small">Generate a saved AFRAID list, randomly rotate Cloudflare destinations, then run Add & Verify against the selected Workspace accounts.</div>
+                        </div>
+                        <span class="badge rounded-pill text-bg-primary">Create + verify</span>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="afraidAiTldSelect" class="form-label fw-semibold">FreeDNS TLD group</label>
+                            <select class="form-select" id="afraidAiTldSelect">
+                                <option value="">All TLDs</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="afraidAiDomainCount" class="form-label fw-semibold">Domains to generate</label>
+                            <input type="number" class="form-control" id="afraidAiDomainCount" min="1" max="50" value="10">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="afraidAiWorkspaceListSelect" class="form-label fw-semibold">Related account list</label>
+                            <select class="form-select" id="afraidAiWorkspaceListSelect">
+                                <option value="">Loading account lists...</option>
+                            </select>
+                            <div class="form-text">The generated AFRAID rows will be merged with this List Management source for verification.</div>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="afraidAiCloudflareCount" class="form-label fw-semibold">Cloudflare rotation</label>
+                            <input type="number" class="form-control" id="afraidAiCloudflareCount" min="1" max="50" placeholder="Auto">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="afraidAiTtl" class="form-label fw-semibold">TTL</label>
+                            <input type="number" class="form-control" id="afraidAiTtl" min="60" value="300">
+                        </div>
+                        <div class="col-12">
+                            <label for="afraidAiSpecificAccounts" class="form-label fw-semibold">Specific accounts only</label>
+                            <textarea class="form-control font-monospace" id="afraidAiSpecificAccounts" rows="4" placeholder="Optional. One account per line from the selected list. Leave blank to use all accounts in the selected list."></textarea>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center gap-3 flex-wrap mt-3">
+                        <div class="small text-muted" id="afraidAiStatus">Ready. Choose a TLD, count, and related account list.</div>
+                        <button type="button" class="btn btn-primary" id="btnStartAfraidAiAutomation">
+                            <svg class="afraid-svg-icon me-1"><use href="#afraid-icon-play"></use></svg>Start AI automation
+                        </button>
+                    </div>
+                </div>
+                <div class="afraid-ai-panel">
+                    <div class="afraid-ai-kpis mb-3">
+                        <div class="afraid-ai-kpi"><span>Generated</span><strong id="afraidAiGeneratedCount">0</strong></div>
+                        <div class="afraid-ai-kpi"><span>Cloudflare zones</span><strong id="afraidAiCloudflareKpi">0</strong></div>
+                        <div class="afraid-ai-kpi"><span>Accounts</span><strong id="afraidAiAccountsKpi">0</strong></div>
+                    </div>
+                    <div class="afraid-ai-log" id="afraidAiLog">Ready.</div>
+                </div>
+            </div>
         </div>
 
         <div class="tab-pane fade" id="listsPane" role="tabpanel" aria-labelledby="lists-tab">
@@ -895,6 +1019,11 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('selectAllSubdomains').addEventListener('change', toggleAllSubdomains);
     document.getElementById('btnDeleteSelectedSubdomains').addEventListener('click', deleteSelectedSubdomains);
     document.getElementById('btnStartProcess').addEventListener('click', startProcess);
+    document.getElementById('btnStartAfraidAiAutomation').addEventListener('click', startAfraidAiAutomation);
+    ['afraidAiTldSelect', 'afraidAiDomainCount', 'afraidAiWorkspaceListSelect', 'afraidAiCloudflareCount', 'afraidAiSpecificAccounts'].forEach(id => {
+        document.getElementById(id)?.addEventListener('input', updateAfraidAiSummary);
+        document.getElementById(id)?.addEventListener('change', updateAfraidAiSummary);
+    });
     document.getElementById('manualSubdomainsInput').addEventListener('input', updateManualSubdomainsCount);
     document.getElementById('btnGenerateManualSubdomains').addEventListener('click', generateManualSubdomains);
     document.getElementById('manualBaseDomainsInput').addEventListener('input', updateManualBaseDomainsCount);
@@ -903,6 +1032,10 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('lists-tab').addEventListener('shown.bs.tab', loadAfraidLists);
     document.getElementById('btnRefreshUsedDomains').addEventListener('click', loadUsedDomains);
     document.getElementById('used-domains-tab').addEventListener('shown.bs.tab', loadUsedDomains);
+    document.getElementById('ai-agent-tab').addEventListener('shown.bs.tab', async () => {
+        await Promise.allSettled([loadAfraidWorkspaceLists(), loadTlds(), loadCloudflareDomains()]);
+        updateAfraidAiSummary();
+    });
     document.getElementById('afraidListForm').addEventListener('submit', saveManualAfraidList);
     document.getElementById('btnCancelAfraidListEdit').addEventListener('click', resetAfraidListForm);
     document.getElementById('afraidListRaw').addEventListener('input', updateAfraidListCount);
@@ -1126,16 +1259,21 @@ async function loadTlds() {
         const res = await fetch('/api/afraid/tlds');
         const data = await res.json();
         const select = document.getElementById('tldSelect');
+        const aiSelect = document.getElementById('afraidAiTldSelect');
         const current = select.value;
+        const aiCurrent = aiSelect?.value || '';
         select.innerHTML = '<option value="">All TLDs</option>';
+        if (aiSelect) aiSelect.innerHTML = '<option value="">All TLDs</option>';
         if (data.success) {
             data.tlds.forEach(item => {
                 const opt = document.createElement('option');
                 opt.value = item.tld;
                 opt.textContent = `.${item.tld} (${item.available}/${item.count})`;
                 select.appendChild(opt);
+                if (aiSelect) aiSelect.appendChild(opt.cloneNode(true));
             });
             select.value = current;
+            if (aiSelect) aiSelect.value = aiCurrent;
             loadDomainOptions();
             loadSelectedTldDomains();
         }
@@ -1576,6 +1714,142 @@ function renderBatchResults(data) {
         <table class="table table-sm"><thead><tr><th>Status</th><th>Subdomain</th><th>Destination</th><th>Message</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
+function logAfraidAi(message) {
+    const el = document.getElementById('afraidAiLog');
+    if (!el) return;
+    const timestamp = new Date().toLocaleTimeString();
+    const existing = el.textContent === 'Ready.' ? '' : `${el.textContent}\n`;
+    el.textContent = `${existing}[${timestamp}] ${message}`;
+    el.scrollTop = el.scrollHeight;
+}
+
+function setAfraidAiStatus(message, type = 'muted') {
+    const el = document.getElementById('afraidAiStatus');
+    if (!el) return;
+    const className = type === 'danger' ? 'text-danger' : type === 'success' ? 'text-success' : type === 'warning' ? 'text-warning' : 'text-muted';
+    el.className = `small ${className}`;
+    el.textContent = message;
+}
+
+function shuffleAfraidArray(values) {
+    const copy = [...values];
+    for (let index = copy.length - 1; index > 0; index -= 1) {
+        const swap = Math.floor(Math.random() * (index + 1));
+        [copy[index], copy[swap]] = [copy[swap], copy[index]];
+    }
+    return copy;
+}
+
+function selectedAfraidAiSpecificAccounts() {
+    const raw = document.getElementById('afraidAiSpecificAccounts')?.value || '';
+    const accounts = [];
+    const seen = new Set();
+    raw.split(/\r?\n/).forEach(line => {
+        const account = line.trim().split(/[,\s]+/)[0];
+        const key = account.toLowerCase();
+        if (account && !seen.has(key)) {
+            seen.add(key);
+            accounts.push(account);
+        }
+    });
+    return accounts;
+}
+
+function updateAfraidAiSummary() {
+    const list = getAfraidWorkspaceListById(document.getElementById('afraidAiWorkspaceListSelect')?.value || '');
+    const accounts = list ? parseAfraidWorkspaceAccounts(list.raw_accounts) : [];
+    const specific = selectedAfraidAiSpecificAccounts();
+    const count = Math.max(0, Number(document.getElementById('afraidAiDomainCount')?.value || 0) || 0);
+    const cfCount = window.afraidCloudflareDomains?.length || 0;
+    document.getElementById('afraidAiGeneratedCount').textContent = String(count || 0);
+    document.getElementById('afraidAiCloudflareKpi').textContent = String(cfCount);
+    document.getElementById('afraidAiAccountsKpi').textContent = String(specific.length || accounts.length || 0);
+}
+
+async function startAfraidAiAutomation() {
+    const btn = document.getElementById('btnStartAfraidAiAutomation');
+    const listId = document.getElementById('afraidAiWorkspaceListSelect')?.value || '';
+    const workspaceList = getAfraidWorkspaceListById(listId);
+    const count = Math.max(1, Math.min(50, Number(document.getElementById('afraidAiDomainCount')?.value || 0) || 0));
+    const tld = document.getElementById('afraidAiTldSelect')?.value || '';
+    const ttl = Math.max(60, Number(document.getElementById('afraidAiTtl')?.value || 300) || 300);
+    const specificAccounts = selectedAfraidAiSpecificAccounts();
+    if (!workspaceList) {
+        setAfraidAiStatus('Select the related List Management account source first.', 'danger');
+        return;
+    }
+    if (!count) {
+        setAfraidAiStatus('Set how many domains to generate.', 'danger');
+        return;
+    }
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Running automation';
+    }
+    document.getElementById('afraidAiLog').textContent = 'Ready.';
+    setAfraidAiStatus('Preparing automation...', 'muted');
+    try {
+        await Promise.allSettled([loadCloudflareDomains(), loadAfraidWorkspaceLists()]);
+        const cloudflarePool = shuffleAfraidArray((window.afraidCloudflareDomains || []).filter(Boolean));
+        if (!cloudflarePool.length) {
+            throw new Error('No available Cloudflare domains found for random rotation.');
+        }
+        const requestedCfCount = Number(document.getElementById('afraidAiCloudflareCount')?.value || 0) || Math.min(count, cloudflarePool.length);
+        const randomDestinations = cloudflarePool.slice(0, Math.max(1, Math.min(50, requestedCfCount)));
+        logAfraidAi(`Selected ${randomDestinations.length} random Cloudflare destination(s).`);
+        logAfraidAi(`Creating ${count} AFRAID CNAME row(s)${tld ? ` from .${tld}` : ''}.`);
+        const res = await fetch('/api/afraid/create-batch', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                tld,
+                total_count: count,
+                afraid_count: count,
+                cloudflare_count: randomDestinations.length,
+                destinations: randomDestinations,
+                ttl
+            })
+        });
+        const data = await parseJsonResponse(res);
+        if (!data.success) {
+            throw new Error(data.error || 'Could not generate AFRAID list.');
+        }
+        window.afraidUsedBaseDomains = data.used_base_domains || [];
+        renderBatchResults(data);
+        loadUsedDomains();
+        loadDomains();
+        loadTlds();
+        loadCloudflareDomains();
+        if (!data.list) {
+            throw new Error('AFRAID rows were created, but no saved list was returned for verification.');
+        }
+        window.afraidLists = [data.list, ...(window.afraidLists || []).filter(item => item.id !== data.list.id)];
+        document.getElementById('afraidAiGeneratedCount').textContent = String(data.created || 0);
+        logAfraidAi(`Saved generated list: ${data.list.name}.`);
+        if (data.failed) {
+            logAfraidAi(`${data.failed} AFRAID row(s) failed during creation; verification will use created rows only.`);
+        }
+        setAfraidAiStatus('Opening verification job...', 'muted');
+        await openAfraidExternalCfModal(data.list.id, {
+            autoStart: true,
+            workspaceListId: workspaceList.id,
+            specificAccounts: specificAccounts.length > 0,
+            specificAccountText: specificAccounts.join('\n')
+        });
+        logAfraidAi(`Sent ${specificAccounts.length || parseAfraidWorkspaceAccounts(workspaceList.raw_accounts).length} related account(s) to the verification modal.`);
+        setAfraidAiStatus('Generation finished. The Add & Verify modal is handling verification.', 'success');
+    } catch (err) {
+        setAfraidAiStatus(err.message || 'Automation failed.', 'danger');
+        logAfraidAi(`Failed: ${err.message || 'Unknown error'}`);
+    } finally {
+        updateAfraidAiSummary();
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<svg class="afraid-svg-icon me-1"><use href="#afraid-icon-play"></use></svg>Start AI automation';
+        }
+    }
+}
+
 let afraidExternalCfEntries = [];
 let afraidExternalCfJobId = null;
 let afraidExternalCfPollInterval = null;
@@ -1659,15 +1933,20 @@ async function loadAfraidLists() {
 }
 
 async function loadAfraidWorkspaceLists() {
-    if (afraidWorkspaceListsLoaded) return;
+    if (afraidWorkspaceListsLoaded) {
+        renderAfraidAiWorkspaceListOptions(document.getElementById('afraidAiWorkspaceListSelect')?.value || '');
+        return;
+    }
     try {
         const res = await fetch('/api/lists');
         const data = await parseJsonResponse(res);
         afraidWorkspaceLists = data.success ? (data.lists || []) : [];
         afraidWorkspaceListsLoaded = true;
+        renderAfraidAiWorkspaceListOptions(document.getElementById('afraidAiWorkspaceListSelect')?.value || '');
     } catch (err) {
         afraidWorkspaceLists = [];
         afraidWorkspaceListsLoaded = false;
+        renderAfraidAiWorkspaceListOptions();
         showAfraidExternalCfAlert(err.message || 'Could not load List Management account lists.', 'danger');
     }
 }
@@ -1683,9 +1962,19 @@ function renderAfraidWorkspaceListOptions(selectedValue = '') {
     }).join('');
 }
 
+function renderAfraidAiWorkspaceListOptions(selectedValue = '') {
+    const select = document.getElementById('afraidAiWorkspaceListSelect');
+    if (!select) return;
+    select.innerHTML = renderAfraidWorkspaceListOptions(selectedValue);
+}
+
 function getAfraidCardSelectedWorkspaceList(listId) {
     const selectedId = document.getElementById(`afraid-card-list-${listId}`)?.value || '';
     return (afraidWorkspaceLists || []).find(list => String(list.id) === String(selectedId)) || null;
+}
+
+function getAfraidWorkspaceListById(listId) {
+    return (afraidWorkspaceLists || []).find(list => String(list.id) === String(listId)) || null;
 }
 
 function openAfraidDeleteUsersModal(listId) {
@@ -1922,7 +2211,9 @@ async function openAfraidExternalCfModal(id, options = {}) {
     if (!list) return;
     await loadAfraidWorkspaceLists();
     await loadAfraidExternalCfAccounts();
-    const workspaceList = getAfraidCardSelectedWorkspaceList(id);
+    const workspaceList = options.workspaceListId
+        ? getAfraidWorkspaceListById(options.workspaceListId)
+        : getAfraidCardSelectedWorkspaceList(id);
     const workspaceAccounts = workspaceList ? parseAfraidWorkspaceAccounts(workspaceList.raw_accounts) : [];
     afraidExternalCfSourceList = list;
     afraidExternalCfSourceAccounts = workspaceAccounts;
@@ -1953,7 +2244,7 @@ async function openAfraidExternalCfModal(id, options = {}) {
     const specificPanel = document.getElementById('afraidSpecificAccountPanel');
     const specificInput = document.getElementById('afraidSpecificAccountsInput');
     if (specificPanel) specificPanel.classList.toggle('is-visible', afraidExternalCfSpecificMode);
-    if (specificInput) specificInput.value = '';
+    if (specificInput) specificInput.value = options.specificAccountText || '';
     updateAfraidSpecificAccountsStatus('Paste accounts, then apply before starting.');
     document.getElementById('afraidExternalCfLog').textContent = afraidExternalCfSpecificMode
         ? `Specific-account mode for ${list.name}. Paste accounts from ${workspaceList ? workspaceList.name : 'the selected list'} and apply them before starting.`

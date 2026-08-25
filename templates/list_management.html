@@ -331,6 +331,105 @@
         border: 1px solid rgba(239, 68, 68, 0.3);
     }
 
+    .usage-marker-strip {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 0 0 16px;
+    }
+
+    .usage-marker {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 30px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(148, 163, 184, 0.28);
+        background: rgba(15, 23, 42, 0.34);
+        color: var(--text-secondary);
+        font-size: 12px;
+        font-weight: 700;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
+    }
+
+    .usage-marker i {
+        font-size: 11px;
+    }
+
+    .usage-marker--new {
+        background: linear-gradient(135deg, rgba(59, 130, 246, .18), rgba(14, 165, 233, .12));
+        border-color: rgba(96, 165, 250, .34);
+        color: #93c5fd;
+    }
+
+    .usage-marker--cycle {
+        background: linear-gradient(135deg, rgba(16, 185, 129, .2), rgba(34, 197, 94, .1));
+        border-color: rgba(52, 211, 153, .36);
+        color: #6ee7b7;
+    }
+
+    .usage-marker--send {
+        background: linear-gradient(135deg, rgba(99, 102, 241, .2), rgba(168, 85, 247, .1));
+        border-color: rgba(129, 140, 248, .36);
+        color: #c4b5fd;
+    }
+
+    .usage-controls {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+        margin-top: 14px;
+    }
+
+    .usage-control-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        min-height: 34px;
+        padding: 7px 8px;
+        border-radius: 10px;
+        border: 1px solid var(--border-panel);
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--text-secondary);
+        cursor: pointer;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1;
+        transition: all .18s ease;
+        white-space: nowrap;
+    }
+
+    .usage-control-btn:hover {
+        transform: translateY(-1px);
+        color: var(--text-primary);
+    }
+
+    .usage-control-btn:disabled {
+        cursor: wait;
+        opacity: .62;
+        transform: none;
+    }
+
+    .usage-control-btn--cycle:hover {
+        background: rgba(16, 185, 129, .16);
+        border-color: rgba(52, 211, 153, .36);
+        color: #6ee7b7;
+    }
+
+    .usage-control-btn--send:hover {
+        background: rgba(99, 102, 241, .16);
+        border-color: rgba(129, 140, 248, .36);
+        color: #c4b5fd;
+    }
+
+    .usage-control-btn--reset:hover {
+        background: rgba(148, 163, 184, .14);
+        border-color: rgba(203, 213, 225, .28);
+        color: #cbd5e1;
+    }
+
     /* Timer Display */
     .timer-display {
         font-family: 'Geist Mono', 'SF Mono', 'Monaco', monospace;
@@ -500,6 +599,10 @@
         .lists-grid {
             grid-template-columns: 1fr !important;
         }
+
+        .usage-controls {
+            grid-template-columns: 1fr;
+        }
     }
 </style>
 
@@ -611,6 +714,7 @@
     function createListCard(list) {
         const statusClass = `list-card--${list.status.replace('_', '-')}`;
         const statusLabel = list.status === 'in_use' ? 'USED' : list.status.toUpperCase();
+        const usageMarkup = createUsageMarkers(list);
 
 
         return `
@@ -619,6 +723,8 @@
                     <h5 class="list-card-name">${escapeHtml(list.name)}</h5>
                     <span class="status-badge status-badge--${list.status.replace('_', '-')}">${statusLabel}</span>
                 </div>
+
+                ${usageMarkup}
                 
                 <div class="list-card-stats">
                     <div class="stat-item">
@@ -666,8 +772,83 @@
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>
+                <div class="usage-controls" onclick="event.stopPropagation();" aria-label="Manual usage markers">
+                    <button class="usage-control-btn usage-control-btn--cycle" onclick="updateListUsage(${list.id}, 'rebuild_increment', this)" title="Mark one delete and create cycle">
+                        <i class="fas fa-rotate"></i><span>Cycle +</span>
+                    </button>
+                    <button class="usage-control-btn usage-control-btn--send" onclick="updateListUsage(${list.id}, 'send_increment', this)" title="Mark one send usage">
+                        <i class="fas fa-paper-plane"></i><span>Send +</span>
+                    </button>
+                    <button class="usage-control-btn usage-control-btn--reset" onclick="updateListUsage(${list.id}, 'reset', this)" title="Reset usage markers">
+                        <i class="fas fa-eraser"></i><span>Reset</span>
+                    </button>
+                </div>
             </div>
         `;
+    }
+
+    function createUsageMarkers(list) {
+        const rebuildCount = Number(list.rebuild_usage_count || 0);
+        const sendCount = Number(list.send_usage_count || 0);
+        if (!rebuildCount && !sendCount) {
+            return `
+                <div class="usage-marker-strip" aria-label="List usage markers">
+                    <span class="usage-marker usage-marker--new" title="Never used yet">
+                        <i class="fas fa-star"></i>New
+                    </span>
+                </div>
+            `;
+        }
+        const markers = [];
+        if (rebuildCount) {
+            markers.push(`
+                <span class="usage-marker usage-marker--cycle" title="Deleted and created ${rebuildCount} time${rebuildCount === 1 ? '' : 's'}">
+                    <i class="fas fa-rotate"></i>${rebuildCount}
+                </span>
+            `);
+        }
+        if (sendCount) {
+            markers.push(`
+                <span class="usage-marker usage-marker--send" title="Used for send ${sendCount} time${sendCount === 1 ? '' : 's'}">
+                    <i class="fas fa-paper-plane"></i>S${sendCount}
+                </span>
+            `);
+        }
+        return `<div class="usage-marker-strip" aria-label="List usage markers">${markers.join('')}</div>`;
+    }
+
+    async function updateListUsage(listId, action, button) {
+        const list = lists.find(l => l.id === listId);
+        if (!list) return;
+
+        const originalHtml = button?.innerHTML;
+        if (button) {
+            button.disabled = true;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Saving</span>';
+        }
+
+        try {
+            const response = await fetch(`/api/lists/${listId}/usage`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action })
+            });
+            const data = await response.json();
+
+            if (!data.success) {
+                throw new Error(data.error || 'Could not update usage marker');
+            }
+
+            lists = lists.map(item => item.id === listId ? data.list : item);
+            renderLists();
+            showToast(data.message, 'success');
+        } catch (error) {
+            showToast(error.message || 'Failed to update usage marker', 'error');
+            if (button) {
+                button.disabled = false;
+                button.innerHTML = originalHtml;
+            }
+        }
     }
 
     // Start countdown timers for a list

@@ -232,6 +232,8 @@ class WorkspaceList(db.Model):
     lifetime_expires_at = db.Column(db.DateTime, nullable=False)  # 14-day expiration
     active_24h_expires_at = db.Column(db.DateTime, nullable=True)  # 24h timer (null = not started)
     status = db.Column(db.String(50), default='ready')  # ready, in_use, expired
+    rebuild_usage_count = db.Column(db.Integer, default=0)  # manual delete/create cycle marker
+    send_usage_count = db.Column(db.Integer, default=0)  # manual send usage marker
     updated_at = db.Column(db.DateTime, default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
     
     def get_account_count(self):
@@ -274,6 +276,8 @@ class WorkspaceList(db.Model):
             'lifetime_expires_at': format_utc(self.lifetime_expires_at),
             'active_24h_expires_at': format_utc(self.active_24h_expires_at),
             'status': self.compute_status(),
+            'rebuild_usage_count': self.rebuild_usage_count or 0,
+            'send_usage_count': self.send_usage_count or 0,
             'updated_at': format_utc(self.updated_at)
         }
 

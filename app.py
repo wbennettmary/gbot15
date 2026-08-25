@@ -318,6 +318,33 @@ with app.app_context():
         except:
             pass
 
+    # Auto-migration: Add manual usage counters to workspace lists.
+    try:
+        from sqlalchemy import inspect
+        inspector = inspect(db.engine)
+        table_names = inspector.get_table_names()
+        if 'workspace_list' in table_names:
+            columns = [col['name'] for col in inspector.get_columns('workspace_list')]
+            new_columns = {
+                'rebuild_usage_count': 'INTEGER DEFAULT 0',
+                'send_usage_count': 'INTEGER DEFAULT 0',
+            }
+            with db.engine.connect() as conn:
+                for column_name, column_type in new_columns.items():
+                    if column_name not in columns:
+                        logging.info(f"Adding missing '{column_name}' column to workspace_list table...")
+                        if 'postgresql' in str(db.engine.url):
+                            conn.execute(text(f'ALTER TABLE "workspace_list" ADD COLUMN {column_name} {column_type}'))
+                        else:
+                            conn.execute(text(f"ALTER TABLE workspace_list ADD COLUMN {column_name} {column_type}"))
+                conn.commit()
+    except Exception as e:
+        logging.warning(f"Could not auto-migrate workspace list usage counters: {e}")
+        try:
+            db.session.rollback()
+        except:
+            pass
+
     # Auto-migration: Allow deliverability rows for external recipients without a connected IMAP inbox.
     try:
         from sqlalchemy import inspect
@@ -5805,6 +5832,49 @@ def api_update_list(list_id):
     except Exception as e:
         db.session.rollback()
         app.logger.error(f"Error updating list: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/lists/<int:list_id>/usage', methods=['PATCH'])
+@login_required
+def api_update_list_usage(list_id):
+    """Manually update workspace list usage indicators."""
+    try:
+        lst = WorkspaceList.query.get(list_id)
+        if not lst:
+            return jsonify({'success': False, 'error': 'List not found'}), 404
+
+        data = request.get_json(silent=True) or {}
+        action = (data.get('action') or '').strip()
+
+        def clean_counter(value, current=0):
+            try:
+                parsed = int(value)
+            except (TypeError, ValueError):
+                parsed = int(current or 0)
+            return max(0, min(parsed, 999))
+
+        if action == 'rebuild_increment':
+            lst.rebuild_usage_count = clean_counter((lst.rebuild_usage_count or 0) + 1)
+        elif action == 'send_increment':
+            lst.send_usage_count = clean_counter((lst.send_usage_count or 0) + 1)
+        elif action == 'reset':
+            lst.rebuild_usage_count = 0
+            lst.send_usage_count = 0
+        else:
+            if 'rebuild_usage_count' in data:
+                lst.rebuild_usage_count = clean_counter(data.get('rebuild_usage_count'), lst.rebuild_usage_count)
+            if 'send_usage_count' in data:
+                lst.send_usage_count = clean_counter(data.get('send_usage_count'), lst.send_usage_count)
+
+        db.session.commit()
+        return jsonify({
+            'success': True,
+            'message': f'Usage marker updated for "{lst.name}"',
+            'list': lst.to_dict()
+        })
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Error updating list usage marker: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/lists/<int:list_id>', methods=['DELETE'])
