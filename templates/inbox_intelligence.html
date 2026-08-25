@@ -6781,7 +6781,7 @@ merge_recipe_id, content_blueprint_id</pre>
         iiState.automatedSelectedTestId = testId;
         if (manualInput) manualInput.value = testId;
         localStorage.setItem('ii_automated_last_test_id', testId);
-        await pollAutomatedEmailTest(testId, false, {syncMode: 'targeted', skipDeepScan: true, background: true});
+        await pollAutomatedEmailTest(testId, false, {syncMode: 'targeted', skipDeepScan: false, includeTextSearch: true, background: true});
     }
 
     function automatedSyncDateRange() {
@@ -6814,7 +6814,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 recent_limit: options.recentLimit ?? 500,
                 targeted_only: options.targetedOnly !== undefined ? options.targetedOnly : true,
                 include_text_search: options.includeTextSearch === true,
-                skip_deep_scan: options.skipDeepScan !== undefined ? options.skipDeepScan : true,
+                skip_deep_scan: options.skipDeepScan !== undefined ? options.skipDeepScan : false,
                 date_range: automatedSyncDateRange()
             };
             const pollData = options.background
@@ -7867,7 +7867,8 @@ merge_recipe_id, content_blueprint_id</pre>
             intervalMs: 5000,
             recentLimit: 500,
             targetedOnly: true,
-            skipDeepScan: true,
+            includeTextSearch: true,
+            skipDeepScan: false,
             maxPollAttempts: 360,
             staleMinutes: 15,
             ...overrides,
@@ -7883,6 +7884,8 @@ merge_recipe_id, content_blueprint_id</pre>
             sendWait: {timeoutMs: 45 * 1000, intervalMs: 2000},
             intervalMs: 3000,
             recentLimit: 500,
+            includeTextSearch: true,
+            skipDeepScan: false,
             maxPollAttempts: 240,
             staleMinutes: 20,
             ...overrides,
@@ -10097,7 +10100,7 @@ merge_recipe_id, content_blueprint_id</pre>
         try {
             setUserInboxSyncing(true, 'Syncing recent IMAP messages...');
             const dateRange = document.getElementById('userInboxDateFilter')?.value || '2d';
-            const pollPayload = {sync_mode: 'targeted', recent_limit: 60, targeted_only: true, skip_deep_scan: true, date_range: dateRange};
+            const pollPayload = {sync_mode: 'targeted', recent_limit: 500, targeted_only: true, include_text_search: true, skip_deep_scan: false, date_range: dateRange};
             const pollData = await runAutomatedSyncJob(testId, pollPayload);
             const data = await iiFetch(`/api/inbox-intelligence/tests/${testId}`);
             const rows = data.test.messages || [];
@@ -10159,7 +10162,7 @@ merge_recipe_id, content_blueprint_id</pre>
 
     async function pollDeliverabilityTest(testId) {
         const dateRange = automatedSyncDateRange();
-        await runAutomatedSyncJob(testId, {sync_mode: 'targeted', recent_limit: 60, targeted_only: true, skip_deep_scan: true, date_range: dateRange});
+        await runAutomatedSyncJob(testId, {sync_mode: 'targeted', recent_limit: 500, targeted_only: true, include_text_search: true, skip_deep_scan: false, date_range: dateRange});
         await loadTests();
         await loadTestDetail(testId);
     }

@@ -335,6 +335,120 @@
         grid-template-columns: minmax(0, 1.1fr) minmax(280px, .9fr);
     }
 
+    .afraid-floating-agent {
+        position: fixed;
+        right: 22px;
+        top: 86px;
+        z-index: 1040;
+        border: 0;
+        border-radius: 16px;
+        padding: 12px 14px;
+        display: grid;
+        grid-template-columns: 30px minmax(0, 1fr);
+        grid-template-areas: "icon label" "icon meta";
+        column-gap: 10px;
+        align-items: center;
+        min-width: 176px;
+        text-align: left;
+        color: #fff;
+        background: linear-gradient(135deg, #0f172a 0%, #2563eb 100%);
+        box-shadow: 0 18px 42px rgba(15, 23, 42, .26);
+        cursor: pointer;
+        transition: transform .18s ease, box-shadow .18s ease;
+    }
+
+    .afraid-floating-agent:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 22px 48px rgba(37, 99, 235, .28);
+    }
+
+    .afraid-floating-agent i,
+    .afraid-floating-agent svg {
+        grid-area: icon;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        padding: 6px;
+        background: rgba(255,255,255,.18);
+    }
+
+    .afraid-floating-agent span {
+        grid-area: label;
+        font-size: 13px;
+        font-weight: 800;
+    }
+
+    .afraid-floating-agent small {
+        grid-area: meta;
+        font-size: 11px;
+        opacity: .82;
+    }
+
+    .afraid-ai-drawer {
+        position: fixed;
+        inset: 0;
+        z-index: 1060;
+        display: none;
+        opacity: 1 !important;
+        pointer-events: none;
+    }
+
+    .afraid-ai-drawer.open {
+        display: block !important;
+    }
+
+    .afraid-ai-modal-panel {
+        pointer-events: auto;
+        position: absolute;
+        right: 22px;
+        top: 72px;
+        bottom: 28px;
+        width: min(820px, calc(100vw - 44px));
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+        background: #fff;
+        border: 1px solid #bfdbfe;
+        border-radius: 16px;
+        box-shadow: 0 26px 80px rgba(15, 23, 42, .22);
+        overflow: hidden;
+    }
+
+    .afraid-ai-modal-head,
+    .afraid-ai-modal-foot {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        padding: 16px 18px;
+        background: #f8fbff;
+        border-bottom: 1px solid #dbeafe;
+    }
+
+    .afraid-ai-modal-foot {
+        border-top: 1px solid #dbeafe;
+        border-bottom: 0;
+        justify-content: flex-end;
+    }
+
+    .afraid-ai-modal-head h3 {
+        color: #0f172a;
+        font-size: 22px;
+        font-weight: 800;
+        margin: 0;
+    }
+
+    .afraid-ai-modal-head p {
+        color: #64748b;
+        font-size: 13px;
+        margin: 4px 0 0;
+    }
+
+    .afraid-ai-modal-body {
+        overflow: auto;
+        padding: 16px;
+        background: #fff;
+    }
+
     .afraid-ai-panel {
         border: 1px solid #dbeafe;
         border-radius: 14px;
@@ -383,6 +497,86 @@
         white-space: pre-wrap;
     }
 
+    .afraid-ai-steps {
+        display: grid;
+        gap: 10px;
+        margin-bottom: 14px;
+    }
+
+    .afraid-ai-step {
+        display: grid;
+        grid-template-columns: 28px minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: center;
+        padding: 10px 12px;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        background: #fff;
+    }
+
+    .afraid-ai-step-dot {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        background: #e2e8f0;
+        color: #64748b;
+        font-size: 12px;
+    }
+
+    .afraid-ai-step strong {
+        display: block;
+        color: #0f172a;
+        font-size: 13px;
+    }
+
+    .afraid-ai-step span {
+        display: block;
+        color: #64748b;
+        font-size: 12px;
+    }
+
+    .afraid-ai-step-badge {
+        border-radius: 999px;
+        padding: 4px 9px;
+        background: #f1f5f9;
+        color: #64748b;
+        font-size: 11px;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .afraid-ai-step.running {
+        border-color: #93c5fd;
+        background: #eff6ff;
+    }
+
+    .afraid-ai-step.running .afraid-ai-step-dot {
+        background: #2563eb;
+        color: #fff;
+    }
+
+    .afraid-ai-step.done {
+        border-color: #86efac;
+        background: #f0fdf4;
+    }
+
+    .afraid-ai-step.done .afraid-ai-step-dot {
+        background: #16a34a;
+        color: #fff;
+    }
+
+    .afraid-ai-step.failed {
+        border-color: #fecaca;
+        background: #fef2f2;
+    }
+
+    .afraid-ai-step.failed .afraid-ai-step-dot {
+        background: #dc2626;
+        color: #fff;
+    }
+
     @media (max-width: 768px) {
         .afraid-verify-toolbar {
             grid-template-columns: 1fr;
@@ -391,6 +585,31 @@
         .afraid-ai-grid,
         .afraid-ai-kpis {
             grid-template-columns: 1fr;
+        }
+
+        .afraid-floating-agent {
+            top: auto;
+            right: 12px;
+            bottom: 22px;
+            min-width: 156px;
+        }
+
+        .afraid-ai-modal-panel {
+            right: 12px;
+            left: 12px;
+            top: 54px;
+            bottom: 12px;
+            width: auto;
+            border-radius: 14px;
+        }
+
+        .afraid-ai-step {
+            grid-template-columns: 28px minmax(0, 1fr);
+        }
+
+        .afraid-ai-step-badge {
+            grid-column: 2;
+            width: fit-content;
         }
 
         .afraid-verify-modal .modal-body {
@@ -444,11 +663,6 @@
         <li class="nav-item" role="presentation">
             <button class="nav-link {% if session.get('role') != 'admin' %}active{% endif %}" id="process-tab" data-bs-toggle="tab" data-bs-target="#processPane" type="button" role="tab">
                 <svg class="afraid-svg-icon me-1"><use href="#afraid-icon-play"></use></svg> Process
-            </button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" id="ai-agent-tab" data-bs-toggle="tab" data-bs-target="#aiAgentPane" type="button" role="tab">
-                <svg class="afraid-svg-icon me-1"><use href="#afraid-icon-bot"></use></svg> AI Agent
             </button>
         </li>
         <li class="nav-item" role="presentation">
@@ -689,65 +903,6 @@
     </div>
         </div>
 
-        <div class="tab-pane fade" id="aiAgentPane" role="tabpanel" aria-labelledby="ai-agent-tab">
-            <div class="afraid-ai-grid">
-                <div class="afraid-ai-panel">
-                    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-3">
-                        <div>
-                            <h5 class="mb-1"><svg class="afraid-svg-icon me-2"><use href="#afraid-icon-bot"></use></svg>AI AFRAID Automation</h5>
-                            <div class="text-muted small">Generate a saved AFRAID list, randomly rotate Cloudflare destinations, then run Add & Verify against the selected Workspace accounts.</div>
-                        </div>
-                        <span class="badge rounded-pill text-bg-primary">Create + verify</span>
-                    </div>
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <label for="afraidAiTldSelect" class="form-label fw-semibold">FreeDNS TLD group</label>
-                            <select class="form-select" id="afraidAiTldSelect">
-                                <option value="">All TLDs</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label for="afraidAiDomainCount" class="form-label fw-semibold">Domains to generate</label>
-                            <input type="number" class="form-control" id="afraidAiDomainCount" min="1" max="50" value="10">
-                        </div>
-                        <div class="col-md-6">
-                            <label for="afraidAiWorkspaceListSelect" class="form-label fw-semibold">Related account list</label>
-                            <select class="form-select" id="afraidAiWorkspaceListSelect">
-                                <option value="">Loading account lists...</option>
-                            </select>
-                            <div class="form-text">The generated AFRAID rows will be merged with this List Management source for verification.</div>
-                        </div>
-                        <div class="col-md-3">
-                            <label for="afraidAiCloudflareCount" class="form-label fw-semibold">Cloudflare rotation</label>
-                            <input type="number" class="form-control" id="afraidAiCloudflareCount" min="1" max="50" placeholder="Auto">
-                        </div>
-                        <div class="col-md-3">
-                            <label for="afraidAiTtl" class="form-label fw-semibold">TTL</label>
-                            <input type="number" class="form-control" id="afraidAiTtl" min="60" value="300">
-                        </div>
-                        <div class="col-12">
-                            <label for="afraidAiSpecificAccounts" class="form-label fw-semibold">Specific accounts only</label>
-                            <textarea class="form-control font-monospace" id="afraidAiSpecificAccounts" rows="4" placeholder="Optional. One account per line from the selected list. Leave blank to use all accounts in the selected list."></textarea>
-                        </div>
-                    </div>
-                    <div class="d-flex justify-content-between align-items-center gap-3 flex-wrap mt-3">
-                        <div class="small text-muted" id="afraidAiStatus">Ready. Choose a TLD, count, and related account list.</div>
-                        <button type="button" class="btn btn-primary" id="btnStartAfraidAiAutomation">
-                            <svg class="afraid-svg-icon me-1"><use href="#afraid-icon-play"></use></svg>Start AI automation
-                        </button>
-                    </div>
-                </div>
-                <div class="afraid-ai-panel">
-                    <div class="afraid-ai-kpis mb-3">
-                        <div class="afraid-ai-kpi"><span>Generated</span><strong id="afraidAiGeneratedCount">0</strong></div>
-                        <div class="afraid-ai-kpi"><span>Cloudflare zones</span><strong id="afraidAiCloudflareKpi">0</strong></div>
-                        <div class="afraid-ai-kpi"><span>Accounts</span><strong id="afraidAiAccountsKpi">0</strong></div>
-                    </div>
-                    <div class="afraid-ai-log" id="afraidAiLog">Ready.</div>
-                </div>
-            </div>
-        </div>
-
         <div class="tab-pane fade" id="listsPane" role="tabpanel" aria-labelledby="lists-tab">
             <div class="card mb-4">
                 <div class="card-header bg-light d-flex justify-content-between align-items-center">
@@ -813,6 +968,86 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+
+<button class="afraid-floating-agent" type="button" id="btnOpenAfraidAiAgent" aria-label="Open AFRAID AI Agent">
+    <svg class="afraid-svg-icon"><use href="#afraid-icon-bot"></use></svg>
+    <span>AI Agent</span>
+    <small>Create + verify</small>
+</button>
+
+<div class="afraid-ai-drawer" id="afraidAiDrawer" aria-hidden="true">
+    <div class="afraid-ai-modal-panel" role="dialog" aria-modal="false" aria-labelledby="afraidAiDrawerTitle">
+        <div class="afraid-ai-modal-head">
+            <div>
+                <h3 id="afraidAiDrawerTitle"><svg class="afraid-svg-icon me-2"><use href="#afraid-icon-bot"></use></svg>AFRAID AI Agent</h3>
+                <p>Generate a saved AFRAID list, rotate Cloudflare destinations, and start Add & Verify from one guided popup.</p>
+            </div>
+            <button class="btn btn-light" type="button" id="btnCloseAfraidAiAgent" aria-label="Close AFRAID AI Agent">
+                <i class="fas fa-xmark"></i>
+            </button>
+        </div>
+        <div class="afraid-ai-modal-body">
+            <div class="afraid-ai-grid">
+                <div class="afraid-ai-panel">
+                    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-3">
+                        <div>
+                            <h5 class="mb-1">Setup</h5>
+                            <div class="text-muted small">Choose the generation target and the Workspace account list that will own verification.</div>
+                        </div>
+                        <span class="badge rounded-pill text-bg-primary">Create + verify</span>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="afraidAiTldSelect" class="form-label fw-semibold">FreeDNS TLD group</label>
+                            <select class="form-select" id="afraidAiTldSelect">
+                                <option value="">All TLDs</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="afraidAiDomainCount" class="form-label fw-semibold">Domains to generate</label>
+                            <input type="number" class="form-control" id="afraidAiDomainCount" min="1" max="50" value="10">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="afraidAiWorkspaceListSelect" class="form-label fw-semibold">Related account list</label>
+                            <select class="form-select" id="afraidAiWorkspaceListSelect">
+                                <option value="">Loading account lists...</option>
+                            </select>
+                            <div class="form-text">The generated AFRAID rows will be merged with this List Management source.</div>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="afraidAiCloudflareCount" class="form-label fw-semibold">Cloudflare rotation</label>
+                            <input type="number" class="form-control" id="afraidAiCloudflareCount" min="1" max="50" placeholder="Auto">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="afraidAiTtl" class="form-label fw-semibold">TTL</label>
+                            <input type="number" class="form-control" id="afraidAiTtl" min="60" value="300">
+                        </div>
+                        <div class="col-12">
+                            <label for="afraidAiSpecificAccounts" class="form-label fw-semibold">Specific accounts only</label>
+                            <textarea class="form-control font-monospace" id="afraidAiSpecificAccounts" rows="4" placeholder="Optional. One account per line from the selected list. Leave blank to use all accounts in the selected list."></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="afraid-ai-panel">
+                    <div class="afraid-ai-kpis mb-3">
+                        <div class="afraid-ai-kpi"><span>Generated</span><strong id="afraidAiGeneratedCount">0</strong></div>
+                        <div class="afraid-ai-kpi"><span>Cloudflare zones</span><strong id="afraidAiCloudflareKpi">0</strong></div>
+                        <div class="afraid-ai-kpi"><span>Accounts</span><strong id="afraidAiAccountsKpi">0</strong></div>
+                    </div>
+                    <div class="afraid-ai-steps" id="afraidAiSteps" aria-label="AFRAID automation progress"></div>
+                    <div class="afraid-ai-log" id="afraidAiLog">Ready.</div>
+                </div>
+            </div>
+        </div>
+        <div class="afraid-ai-modal-foot">
+            <div class="small text-muted me-auto" id="afraidAiStatus">Ready. Choose a TLD, count, and related account list.</div>
+            <button type="button" class="btn btn-outline-secondary" id="btnCloseAfraidAiAgentFooter">Close</button>
+            <button type="button" class="btn btn-primary" id="btnStartAfraidAiAutomation">
+                <svg class="afraid-svg-icon me-1"><use href="#afraid-icon-play"></use></svg>Start AI automation
+            </button>
         </div>
     </div>
 </div>
@@ -1020,6 +1255,14 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('btnDeleteSelectedSubdomains').addEventListener('click', deleteSelectedSubdomains);
     document.getElementById('btnStartProcess').addEventListener('click', startProcess);
     document.getElementById('btnStartAfraidAiAutomation').addEventListener('click', startAfraidAiAutomation);
+    document.getElementById('btnOpenAfraidAiAgent').addEventListener('click', openAfraidAiAgent);
+    document.getElementById('btnCloseAfraidAiAgent').addEventListener('click', closeAfraidAiAgent);
+    document.getElementById('btnCloseAfraidAiAgentFooter').addEventListener('click', closeAfraidAiAgent);
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && document.getElementById('afraidAiDrawer')?.classList.contains('open')) {
+            closeAfraidAiAgent();
+        }
+    });
     ['afraidAiTldSelect', 'afraidAiDomainCount', 'afraidAiWorkspaceListSelect', 'afraidAiCloudflareCount', 'afraidAiSpecificAccounts'].forEach(id => {
         document.getElementById(id)?.addEventListener('input', updateAfraidAiSummary);
         document.getElementById(id)?.addEventListener('change', updateAfraidAiSummary);
@@ -1032,10 +1275,6 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('lists-tab').addEventListener('shown.bs.tab', loadAfraidLists);
     document.getElementById('btnRefreshUsedDomains').addEventListener('click', loadUsedDomains);
     document.getElementById('used-domains-tab').addEventListener('shown.bs.tab', loadUsedDomains);
-    document.getElementById('ai-agent-tab').addEventListener('shown.bs.tab', async () => {
-        await Promise.allSettled([loadAfraidWorkspaceLists(), loadTlds(), loadCloudflareDomains()]);
-        updateAfraidAiSummary();
-    });
     document.getElementById('afraidListForm').addEventListener('submit', saveManualAfraidList);
     document.getElementById('btnCancelAfraidListEdit').addEventListener('click', resetAfraidListForm);
     document.getElementById('afraidListRaw').addEventListener('input', updateAfraidListCount);
@@ -1059,6 +1298,7 @@ document.addEventListener('DOMContentLoaded', function() {
     updateCloudflareCountState();
     updateManualSubdomainsCount();
     updateManualBaseDomainsCount();
+    renderAfraidAiSteps();
 
     const cookieForm = document.getElementById('cookieForm');
     if (cookieForm) {
@@ -1714,6 +1954,72 @@ function renderBatchResults(data) {
         <table class="table table-sm"><thead><tr><th>Status</th><th>Subdomain</th><th>Destination</th><th>Message</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
+const AFRAID_AI_STEPS = [
+    {id: 'setup', label: 'Setup checked', detail: 'TLD, count, and account list are validated.'},
+    {id: 'cloudflare', label: 'Cloudflare picked', detail: 'Random Cloudflare destinations are selected.'},
+    {id: 'generate', label: 'AFRAID generated', detail: 'FreeDNS CNAME rows are created.'},
+    {id: 'save', label: 'List saved', detail: 'The generated domains are saved as a reusable AFRAID list.'},
+    {id: 'verify', label: 'Verification started', detail: 'Add & Verify receives account, AFRAID domain, Cloudflare domain rows.'},
+    {id: 'background', label: 'Background job', detail: 'The verifier modal continues showing DNS and Workspace status.'}
+];
+
+let afraidAiStepState = {};
+
+function renderAfraidAiSteps() {
+    const el = document.getElementById('afraidAiSteps');
+    if (!el) return;
+    el.innerHTML = AFRAID_AI_STEPS.map((step, index) => {
+        const state = afraidAiStepState[step.id] || 'pending';
+        const icon = state === 'done' ? 'check' : state === 'failed' ? 'xmark' : state === 'running' ? 'spinner fa-spin' : `${index + 1}`;
+        const badge = state === 'done' ? 'Done' : state === 'failed' ? 'Failed' : state === 'running' ? 'Running' : 'Waiting';
+        return `
+            <div class="afraid-ai-step ${state}" data-ai-step="${step.id}">
+                <div class="afraid-ai-step-dot">${state === 'pending' ? icon : `<i class="fas fa-${icon}"></i>`}</div>
+                <div>
+                    <strong>${escapeHtml(step.label)}</strong>
+                    <span>${escapeHtml(step.detail)}</span>
+                </div>
+                <div class="afraid-ai-step-badge">${badge}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+function resetAfraidAiSteps() {
+    afraidAiStepState = {};
+    renderAfraidAiSteps();
+}
+
+function setAfraidAiStep(stepId, state) {
+    afraidAiStepState[stepId] = state;
+    renderAfraidAiSteps();
+}
+
+function failCurrentAfraidAiStep() {
+    const running = AFRAID_AI_STEPS.find(step => afraidAiStepState[step.id] === 'running');
+    if (running) setAfraidAiStep(running.id, 'failed');
+}
+
+async function openAfraidAiAgent() {
+    const drawer = document.getElementById('afraidAiDrawer');
+    if (!drawer) return;
+    drawer.classList.add('open');
+    drawer.setAttribute('aria-hidden', 'false');
+    setAfraidAiStatus('Loading AI Agent setup...', 'muted');
+    await Promise.allSettled([loadAfraidWorkspaceLists(), loadTlds(), loadCloudflareDomains()]);
+    updateAfraidAiSummary();
+    if (!Object.keys(afraidAiStepState).length) renderAfraidAiSteps();
+    setAfraidAiStatus('Ready. Choose a TLD, count, and related account list.', 'muted');
+    window.setTimeout(() => document.getElementById('afraidAiTldSelect')?.focus(), 50);
+}
+
+function closeAfraidAiAgent() {
+    const drawer = document.getElementById('afraidAiDrawer');
+    if (!drawer) return;
+    drawer.classList.remove('open');
+    drawer.setAttribute('aria-hidden', 'true');
+}
+
 function logAfraidAi(message) {
     const el = document.getElementById('afraidAiLog');
     if (!el) return;
@@ -1782,21 +2088,30 @@ async function startAfraidAiAutomation() {
         setAfraidAiStatus('Set how many domains to generate.', 'danger');
         return;
     }
+    resetAfraidAiSteps();
+    setAfraidAiStep('setup', 'running');
+    document.getElementById('afraidAiLog').textContent = 'Ready.';
+    logAfraidAi('Starting AFRAID AI automation.');
+    setAfraidAiStatus('Checking setup and preparing the run...', 'muted');
     if (btn) {
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Running automation';
     }
-    document.getElementById('afraidAiLog').textContent = 'Ready.';
-    setAfraidAiStatus('Preparing automation...', 'muted');
     try {
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         await Promise.allSettled([loadCloudflareDomains(), loadAfraidWorkspaceLists()]);
+        setAfraidAiStep('setup', 'done');
+        setAfraidAiStep('cloudflare', 'running');
         const cloudflarePool = shuffleAfraidArray((window.afraidCloudflareDomains || []).filter(Boolean));
         if (!cloudflarePool.length) {
             throw new Error('No available Cloudflare domains found for random rotation.');
         }
         const requestedCfCount = Number(document.getElementById('afraidAiCloudflareCount')?.value || 0) || Math.min(count, cloudflarePool.length);
         const randomDestinations = cloudflarePool.slice(0, Math.max(1, Math.min(50, requestedCfCount)));
+        setAfraidAiStep('cloudflare', 'done');
         logAfraidAi(`Selected ${randomDestinations.length} random Cloudflare destination(s).`);
+        setAfraidAiStep('generate', 'running');
+        setAfraidAiStatus(`Creating ${count} AFRAID domain row(s)...`, 'muted');
         logAfraidAi(`Creating ${count} AFRAID CNAME row(s)${tld ? ` from .${tld}` : ''}.`);
         const res = await fetch('/api/afraid/create-batch', {
             method: 'POST',
@@ -1814,6 +2129,7 @@ async function startAfraidAiAutomation() {
         if (!data.success) {
             throw new Error(data.error || 'Could not generate AFRAID list.');
         }
+        setAfraidAiStep('generate', 'done');
         window.afraidUsedBaseDomains = data.used_base_domains || [];
         renderBatchResults(data);
         loadUsedDomains();
@@ -1823,12 +2139,15 @@ async function startAfraidAiAutomation() {
         if (!data.list) {
             throw new Error('AFRAID rows were created, but no saved list was returned for verification.');
         }
+        setAfraidAiStep('save', 'running');
         window.afraidLists = [data.list, ...(window.afraidLists || []).filter(item => item.id !== data.list.id)];
         document.getElementById('afraidAiGeneratedCount').textContent = String(data.created || 0);
         logAfraidAi(`Saved generated list: ${data.list.name}.`);
         if (data.failed) {
             logAfraidAi(`${data.failed} AFRAID row(s) failed during creation; verification will use created rows only.`);
         }
+        setAfraidAiStep('save', 'done');
+        setAfraidAiStep('verify', 'running');
         setAfraidAiStatus('Opening verification job...', 'muted');
         await openAfraidExternalCfModal(data.list.id, {
             autoStart: true,
@@ -1836,9 +2155,12 @@ async function startAfraidAiAutomation() {
             specificAccounts: specificAccounts.length > 0,
             specificAccountText: specificAccounts.join('\n')
         });
+        setAfraidAiStep('verify', 'done');
+        setAfraidAiStep('background', 'running');
         logAfraidAi(`Sent ${specificAccounts.length || parseAfraidWorkspaceAccounts(workspaceList.raw_accounts).length} related account(s) to the verification modal.`);
         setAfraidAiStatus('Generation finished. The Add & Verify modal is handling verification.', 'success');
     } catch (err) {
+        failCurrentAfraidAiStep();
         setAfraidAiStatus(err.message || 'Automation failed.', 'danger');
         logAfraidAi(`Failed: ${err.message || 'Unknown error'}`);
     } finally {
@@ -2505,6 +2827,14 @@ function finishAfraidExternalCfJob(status) {
     setAfraidExternalCfRunning(false);
     showAfraidExternalCfAlert(`Verification job ${status}.`, status === 'completed' ? 'success' : 'secondary');
     logAfraidExternalCf(`Job ${status}.`);
+    if (afraidAiStepState.background === 'running') {
+        setAfraidAiStep('background', status === 'completed' ? 'done' : 'failed');
+        setAfraidAiStatus(
+            status === 'completed' ? 'Verification completed.' : `Verification job ${status}. Review the Add & Verify log.`,
+            status === 'completed' ? 'success' : 'warning'
+        );
+        logAfraidAi(`Background verification job ${status}.`);
+    }
 }
 
 function setAfraidExternalCfRunning(isRunning) {

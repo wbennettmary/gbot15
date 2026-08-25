@@ -3819,6 +3819,7 @@ def _imap_fetch_by_identifiers(account, identifiers, folders=None, include_text_
     found_count = 0
     errors = []
     placements = {}
+    match_modes = {'x_test_id': 0, 'message_id': 0}
     lock = _get_account_sync_lock(account.id)
     if not lock.acquire(timeout=90):
         return 0, ['Sync already in progress for this account'], {}
@@ -3855,16 +3856,28 @@ def _imap_fetch_by_identifiers(account, identifiers, folders=None, include_text_
                 for parsed in messages:
                     _upsert_imap_message_full(account, folder, parsed, uid_validity=str(meta.get('uidvalidity') or ''))
                     found_count += 1
-                    xid = (parsed.get('headers') or {}).get('x_test_id')
+                    headers = parsed.get('headers') or {}
+                    xid = headers.get('x_test_id') or ''
+                    message_id = headers.get('message_id') or parsed.get('message_id') or ''
                     if xid and xid in identifiers:
                         placements[xid] = (_placement_from_folder(folder), folder)
+                        match_modes['x_test_id'] += 1
+                    else:
+                        message_id_lower = message_id.lower()
+                        for identifier in identifiers:
+                            if identifier.lower() in message_id_lower:
+                                placements[identifier] = (_placement_from_folder(folder), folder)
+                                match_modes['message_id'] += 1
+                                break
                 db.session.commit()
             except Exception as e:
                 db.session.rollback()
                 errors.append(f'{folder}: {e}')
+        placements['_match_modes'] = match_modes
         return found_count, errors, placements
     except Exception as e:
         db.session.rollback()
+        placements['_match_modes'] = match_modes
         return found_count, errors + [f'connection: {e}'], placements
     finally:
         try:
@@ -3886,12 +3899,13 @@ def _sync_test_inbox_folders(inbox, limit=200, since=None, identifiers=None, tar
     synced_total = 0
     if identifiers:
         target_found, target_errors, placements = _imap_fetch_by_identifiers(inbox, identifiers, include_text_search=include_text_search)
+        target_match_modes = placements.pop('_match_modes', {}) if isinstance(placements, dict) else {}
         synced_total += target_found
         errors.extend(target_errors)
         if targeted_only:
             expected = len(set(identifiers))
             if len(placements) >= expected:
-                return synced_total, errors
+                return synced_total, errors, target_match_modes
             fallback_limit = max(
                 int(limit or 200),
                 min(2000, max(500, expected * 4)),
@@ -3904,7 +3918,7 @@ def _sync_test_inbox_folders(inbox, limit=200, since=None, identifiers=None, tar
             )
             synced_total += recent_synced
             errors.extend(recent_errors)
-            return synced_total, errors
+            return synced_total, errors, target_match_modes
     folder_synced, _folder_results, sync_errors = _sync_mailbox_account(
         inbox,
         folders=None,
@@ -3913,7 +3927,7 @@ def _sync_test_inbox_folders(inbox, limit=200, since=None, identifiers=None, tar
     )
     synced_total += folder_synced
     errors.extend(sync_errors)
-    return synced_total, errors
+    return synced_total, errors, {}
 
 def _date_range_to_imap_since(date_range):
     if not date_range or date_range == 'all':
@@ -4074,10 +4088,14 @@ def _detect_message_placements_from_synced(inbox_id, rows, test_id=None, allow_d
         for token in unmatched:
             like_token = f'%{token}%'
             id_filters.extend([
+                InboxEmailMessage.message_id.ilike(like_token),
+                InboxEmailMessage.headers_json.ilike(like_token),
                 InboxEmailMessage.subject.ilike(like_token),
                 InboxEmailMessage.sender.ilike(like_token),
                 InboxEmailMessage.recipient.ilike(like_token),
                 InboxEmailMessage.preview.ilike(like_token),
+                InboxEmailMessage.plain_text.ilike(like_token),
+                InboxEmailMessage.html_content.ilike(like_token),
             ])
         if id_filters:
             messages = InboxEmailMessage.query.filter(
@@ -4121,7 +4139,7 @@ def _poll_inbox_test_payload(test_id, data=None):
         targeted_only = _truthy_setting(targeted_only, True)
     refresh_completed = _truthy_setting(data.get('refresh_completed'), False)
     include_text_search = _truthy_setting(data.get('include_text_search'), False)
-    allow_deep_scan = not _truthy_setting(data.get('skip_deep_scan'), True)
+    allow_deep_scan = not _truthy_setting(data.get('skip_deep_scan'), False)
     test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
     if not test:
         return {'success': False, 'error': 'Test not found'}, 404
@@ -4137,7 +4155,7 @@ def _poll_inbox_test_payload(test_id, data=None):
     diagnostic = {
         'checked_rows': 0, 'matched_rows': 0,
         'headers_fetched': 0, 'deleted_old_messages': deleted_old,
-        'match_modes': {'x_test_id': 0, 'exact': 0},
+        'match_modes': {'x_test_id': 0, 'message_id': 0, 'exact': 0},
         'accounts_synced': 0,
         'skipped_completed': 0,
         'sync_mode': 'targeted' if targeted_only else 'targeted_plus_recent',
@@ -4166,7 +4184,7 @@ def _poll_inbox_test_payload(test_id, data=None):
         try:
             row_identifiers = {row.test_identifier for row in rows if row.test_identifier}
             app.logger.info(f"[POLL] Syncing {inbox.email} for test {test_id} ({len(rows)} rows, {len(row_identifiers)} identifiers, mode={diagnostic['sync_mode']})")
-            matched_count, recent_errors = _sync_test_inbox_folders(
+            matched_count, recent_errors, fetch_match_modes = _sync_test_inbox_folders(
                 inbox,
                 limit=sync_limit,
                 identifiers=row_identifiers,
@@ -4176,6 +4194,8 @@ def _poll_inbox_test_payload(test_id, data=None):
             diagnostic['headers_fetched'] += matched_count
             diagnostic['accounts_synced'] += 1
             sync_errors.extend([f'{inbox.email}: {error}' for error in recent_errors])
+            for mode, count in (fetch_match_modes or {}).items():
+                diagnostic['match_modes'][mode] = diagnostic['match_modes'].get(mode, 0) + count
             placements, scan_info = _detect_message_placements_from_synced(inbox.id, rows, test_id=test.test_id, allow_deep_scan=allow_deep_scan)
             for mode, count in (scan_info.get('match_modes') or {}).items():
                 diagnostic['match_modes'][mode] = diagnostic['match_modes'].get(mode, 0) + count
