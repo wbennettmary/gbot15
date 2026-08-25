@@ -32,6 +32,7 @@ import paramiko
 import pyotp
 import re
 import unicodedata
+from collections import deque
 
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -211,22 +212,27 @@ if not app.debug:
     if not os.path.exists('logs'):
         os.makedirs('logs')
     
-    # Configure file handler for production
-    file_handler = logging.handlers.RotatingFileHandler(
-        'logs/gbot.log', maxBytes=10240000, backupCount=10
-    )
-    file_handler.setFormatter(logging.Formatter(
-        '%(asctime)s %(levelname)s [%(name)s]: %(message)s [in %(pathname)s:%(lineno)d]'
-    ))
-    file_handler.setLevel(logging.INFO)
-    
-    # Add to root logger to capture logs from all modules (including background threads)
-    logging.getLogger().addHandler(file_handler)
-    logging.getLogger().setLevel(logging.INFO)
-    
-    # Also keep app.logger handler if needed for Flask-specific logs
-    app.logger.addHandler(file_handler)
+    log_path = os.path.abspath('logs/gbot.log')
+    root_logger = logging.getLogger()
+    file_handler = next((
+        handler for handler in root_logger.handlers
+        if isinstance(handler, logging.handlers.RotatingFileHandler)
+        and os.path.abspath(getattr(handler, 'baseFilename', '')) == log_path
+    ), None)
+    if file_handler is None:
+        file_handler = logging.handlers.RotatingFileHandler(
+            log_path, maxBytes=10240000, backupCount=10
+        )
+        file_handler.setFormatter(logging.Formatter(
+            '%(asctime)s %(levelname)s [%(name)s]: %(message)s [in %(pathname)s:%(lineno)d]'
+        ))
+        file_handler.setLevel(logging.INFO)
+        # Flask's logger propagates to root, so one root handler captures app,
+        # module, and background-thread events without duplicate lines.
+        root_logger.addHandler(file_handler)
+    root_logger.setLevel(logging.INFO)
     app.logger.setLevel(logging.INFO)
+    app.logger.propagate = True
     
     app.logger.info('GBot startup - Root and App loggers configured')
 
@@ -1406,6 +1412,69 @@ def _json_no_store(payload, status=200):
     response.headers['Expires'] = '0'
     return response
 
+def _tail_text_file(path, max_lines):
+    """Read a bounded tail without loading a rotated log file into memory."""
+    lines = deque(maxlen=max_lines)
+    with open(path, 'r', encoding='utf-8', errors='replace') as handle:
+        for line in handle:
+            lines.append(line.rstrip('\n'))
+    return list(lines)
+
+@app.route('/api/application-logs', methods=['GET'])
+@login_required
+def api_application_logs():
+    if session.get('role') != 'admin':
+        return jsonify({'success': False, 'error': 'Administrator access is required.'}), 403
+    try:
+        limit = min(2000, max(50, int(request.args.get('limit', 500))))
+    except (TypeError, ValueError):
+        limit = 500
+    level = (request.args.get('level') or 'ALL').strip().upper()
+    query = (request.args.get('q') or '').strip().lower()
+    allowed_levels = {'ALL', 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'}
+    if level not in allowed_levels:
+        return jsonify({'success': False, 'error': 'Invalid log level.'}), 400
+    log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
+    candidates = []
+    if os.path.isdir(log_dir):
+        candidates = [
+            os.path.join(log_dir, name)
+            for name in os.listdir(log_dir)
+            if name == 'gbot.log' or re.fullmatch(r'gbot\.log\.\d+', name)
+        ]
+    candidates.sort(key=lambda path: os.path.getmtime(path))
+    raw_lines = []
+    per_file_limit = max(limit * 3, 1500)
+    for path in candidates:
+        try:
+            raw_lines.extend(_tail_text_file(path, per_file_limit))
+        except OSError as exc:
+            app.logger.warning('[LOG-VIEWER] Could not read %s: %s', os.path.basename(path), exc)
+    pattern = re.compile(r'^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d+)\s+(?P<level>[A-Z]+)\s+\[(?P<source>[^]]+)\]:\s*(?P<message>.*)$')
+    entries = []
+    for raw in raw_lines:
+        match = pattern.match(raw)
+        parsed_level = match.group('level') if match else 'INFO'
+        if level != 'ALL' and parsed_level != level:
+            continue
+        if query and query not in raw.lower():
+            continue
+        entries.append({
+            'timestamp': match.group('timestamp') if match else '',
+            'level': parsed_level,
+            'source': match.group('source') if match else 'application',
+            'message': match.group('message') if match else raw,
+            'raw': raw,
+        })
+    entries = entries[-limit:]
+    return _json_no_store({
+        'success': True,
+        'entries': entries,
+        'returned': len(entries),
+        'files': [os.path.basename(path) for path in candidates],
+        'updated_at': datetime.utcnow().isoformat() + 'Z',
+    })
+
 def _truthy_setting(value, default=True):
     if value is None:
         return default
@@ -1609,12 +1678,39 @@ def _imap_list_folders(conn):
     return folders or ['INBOX']
 
 def _imap_select_folder(conn, folder):
-    """Select folder read-only. Returns dict(uidvalidity, uidnext, exists) or None."""
-    try:
-        status, data = conn.select(folder, readonly=True)
-        if status != 'OK':
-            return None
-    except Exception:
+    """Select one exact folder and retain useful server diagnostics on failure."""
+    folder = str(folder or '').strip()
+    if not folder:
+        return None
+    quoted_folder = '"' + folder.replace('\\', '\\\\').replace('"', '\\"') + '"'
+    attempts = [(folder, True)]
+    if quoted_folder != folder:
+        attempts.append((quoted_folder, True))
+    # A few older IMAP servers reject EXAMINE but still support SELECT. Message
+    # searches and BODY.PEEK remain non-mutating after a normal SELECT.
+    attempts.append((quoted_folder, False))
+    status = None
+    data = None
+    select_errors = []
+    selected_with = None
+    for mailbox, readonly in attempts:
+        try:
+            status, data = conn.select(mailbox, readonly=readonly)
+            if status == 'OK':
+                selected_with = 'EXAMINE' if readonly else 'SELECT'
+                break
+            response = ' '.join(
+                item.decode('utf-8', errors='replace') if isinstance(item, bytes) else str(item)
+                for item in (data or []) if item is not None
+            )
+            select_errors.append(f'{"EXAMINE" if readonly else "SELECT"} {mailbox}: {status} {response}'.strip())
+        except Exception as exc:
+            select_errors.append(f'{"EXAMINE" if readonly else "SELECT"} {mailbox}: {exc}')
+    if status != 'OK':
+        try:
+            conn._gbot_last_select_error = '; '.join(select_errors)
+        except Exception:
+            pass
         return None
     meta = {'uidvalidity': None, 'uidnext': None, 'exists': 0}
     for item in data or []:
@@ -1635,7 +1731,12 @@ def _imap_select_folder(conn, folder):
             meta['exists'] = int(data[0].decode(errors='ignore').strip() or 0)
     except Exception:
         pass
+    meta['selected_folder'] = folder
+    meta['selected_with'] = selected_with
     return meta
+
+def _imap_last_select_error(conn):
+    return str(getattr(conn, '_gbot_last_select_error', '') or '').strip()
 
 def _parse_raw_message(uid_val, is_read, raw_body, internal_received_at=None):
     """Parse a full RFC822 body into a flat dict for _upsert_imap_message.
@@ -1818,6 +1919,10 @@ def _sync_mailbox_account(account, folders=None, limit=200, force_full=False, wa
         all_folders = _imap_list_folders(conn)
         account.folder_count = len(all_folders)
         target_folders = _resolve_sync_folder_targets(conn, folders, all_folders)
+        if folders is not None and not target_folders:
+            requested = ', '.join(str(folder) for folder in folders)
+            available = ', '.join(all_folders) or 'none'
+            return 0, [], [f'None of the selected folders exist. Selected: {requested}. Available: {available}.']
         for folder in target_folders:
             if _inbox_sync_paused():
                 errors.append(_INBOX_SYNC_PAUSED_MESSAGE)
@@ -1825,7 +1930,10 @@ def _sync_mailbox_account(account, folders=None, limit=200, force_full=False, wa
             try:
                 meta = _imap_select_folder(conn, folder)
                 if not meta:
-                    errors.append(f'{folder}: could not open folder')
+                    detail = _imap_last_select_error(conn) or 'server returned no detail'
+                    error = f'{folder}: could not open folder ({detail})'
+                    errors.append(error)
+                    app.logger.warning('[IMAP-SELECT] %s: %s', account.email, error)
                     continue
                 state = ImapFolderSyncState.query.filter_by(imap_account_id=account.id, folder_name=folder).first()
                 if not state:
@@ -1938,6 +2046,10 @@ def _sync_mailbox_recent_no_cursor(account, folders=None, limit=500, wait_for_lo
             pass
         all_folders = _imap_list_folders(conn)
         target_folders = _resolve_sync_folder_targets(conn, folders, all_folders) if folders else _real_result_folders(conn)
+        if folders is not None and not target_folders:
+            requested = ', '.join(str(folder) for folder in folders)
+            available = ', '.join(all_folders) or 'none'
+            return 0, [], [f'None of the selected folders exist. Selected: {requested}. Available: {available}.']
         per_folder_limit = max(25, min(2000, int(limit or 500)))
         for folder in target_folders:
             if _inbox_sync_paused():
@@ -1946,6 +2058,10 @@ def _sync_mailbox_recent_no_cursor(account, folders=None, limit=500, wait_for_lo
             try:
                 meta = _imap_select_folder(conn, folder)
                 if not meta:
+                    detail = _imap_last_select_error(conn) or 'server returned no detail'
+                    error = f'{folder}: could not open folder ({detail})'
+                    errors.append(error)
+                    app.logger.warning('[IMAP-SELECT] %s: %s', account.email, error)
                     continue
                 s, data = conn.uid('search', None, 'ALL')
                 if s != 'OK' or not data or not data[0]:
@@ -2125,27 +2241,68 @@ def api_explorer_bulk_sync():
     if _inbox_sync_paused():
         return _inbox_sync_paused_response()
     data = request.get_json(silent=True) or {}
+    selections = data.get('selections')
     account_ids = data.get('account_ids') or []
     limit = min(200, max(10, int(data.get('limit') or 80)))
-    folders = data.get('folders') or None
+    folders = data.get('folders')
     force_full = bool(data.get('force_full', True))
     date_range = (data.get('date_range') or 'current').strip()
     since_date = (data.get('since_date') or '').strip()
-    if not account_ids:
-        accounts = _enabled_imap_accounts_query().all()
-    else:
-        accounts = _enabled_imap_accounts_query().filter(InboxImapAccount.id.in_(account_ids)).all()
-    if date_range and date_range != 'all_recent':
-        results = []
-        all_errors = []
-        for account in accounts:
+    if selections is None:
+        selections = [{'account_id': account_id, 'folders': folders} for account_id in account_ids]
+    if not isinstance(selections, list) or not selections:
+        return jsonify({'success': False, 'error': 'Select at least one IMAP account.'}), 400
+    normalized = []
+    for selection in selections:
+        try:
+            account_id = int((selection or {}).get('account_id'))
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'error': 'Invalid IMAP account selection.'}), 400
+        selected_folders = (selection or {}).get('folders')
+        if not isinstance(selected_folders, list) or not selected_folders:
+            return jsonify({'success': False, 'error': f'Select at least one folder for account {account_id}.'}), 400
+        clean_folders = list(dict.fromkeys(str(folder).strip() for folder in selected_folders if str(folder).strip()))
+        if not clean_folders:
+            return jsonify({'success': False, 'error': f'Select at least one folder for account {account_id}.'}), 400
+        normalized.append({'account_id': account_id, 'folders': clean_folders})
+    selected_ids = [item['account_id'] for item in normalized]
+    accounts_by_id = {
+        account.id: account
+        for account in _enabled_imap_accounts_query().filter(InboxImapAccount.id.in_(selected_ids)).all()
+    }
+    missing_ids = [account_id for account_id in selected_ids if account_id not in accounts_by_id]
+    if missing_ids:
+        return jsonify({'success': False, 'error': f'Enabled IMAP account(s) not found: {", ".join(map(str, missing_ids))}'}), 404
+    results = []
+    all_errors = []
+    app.logger.info(
+        '[EXPLORER-SYNC] user=%s selections=%s range=%s',
+        session.get('user'),
+        '; '.join(
+            f"{accounts_by_id[item['account_id']].email}=[{', '.join(item['folders'])}]"
+            for item in normalized
+        ),
+        date_range,
+    )
+    for selection in normalized:
+        account = accounts_by_id[selection['account_id']]
+        selected_folders = selection['folders']
+        if date_range and date_range != 'all_recent':
             range_limit = limit if date_range == 'current' else max(limit, 500)
-            synced, folder_results, account_errors = _sync_mailbox_date_range_no_cursor(account, folders=folders, date_range=date_range, since_date=since_date, limit=range_limit)
-            results.append({'account_id': account.id, 'email': account.email, 'synced': synced, 'folders': folder_results, 'errors': account_errors})
-            all_errors.extend(account_errors)
-    else:
-        results, all_errors = _sync_mailbox_accounts(accounts, folders=folders, limit=limit, force_full=force_full)
+            synced, folder_results, account_errors = _sync_mailbox_date_range_no_cursor(account, folders=selected_folders, date_range=date_range, since_date=since_date, limit=range_limit)
+        else:
+            synced, folder_results, account_errors = _sync_mailbox_account(account, folders=selected_folders, limit=limit, force_full=force_full)
+        results.append({
+            'account_id': account.id,
+            'email': account.email,
+            'requested_folders': selected_folders,
+            'synced': synced,
+            'folders': folder_results,
+            'errors': account_errors,
+        })
+        all_errors.extend(f'{account.email}: {error}' for error in account_errors)
     total_synced = sum(r['synced'] for r in results)
+    app.logger.info('[EXPLORER-SYNC] completed synced=%s errors=%s', total_synced, len(all_errors))
     return _json_no_store({'success': True, 'synced': total_synced, 'results': results, 'errors': all_errors})
 
 @app.route('/api/inbox-intelligence/explorer/sync-cache', methods=['DELETE'])
@@ -2193,13 +2350,43 @@ def api_explorer_wipe_sync_cache():
 def api_explorer_folders():
     """Real folder tree per account: names, total/unread message counts, sync state."""
     account_id = request.args.get('account_id')
-    if account_id:
+    account_ids_raw = request.args.get('account_ids', '')
+    live = request.args.get('live', '').strip().lower() in {'1', 'true', 'yes'}
+    if account_ids_raw:
+        try:
+            account_ids = list(dict.fromkeys(int(value) for value in account_ids_raw.split(',') if value.strip()))
+        except ValueError:
+            return jsonify({'success': False, 'error': 'Invalid account_ids value.'}), 400
+        accounts_by_id = {
+            account.id: account
+            for account in _enabled_imap_accounts_query().filter(InboxImapAccount.id.in_(account_ids)).all()
+        }
+        accounts = [accounts_by_id[account_id] for account_id in account_ids if account_id in accounts_by_id]
+    elif account_id:
         account = _enabled_imap_accounts_query().filter(InboxImapAccount.id == account_id).first()
         accounts = [account] if account else []
     else:
         accounts = _enabled_imap_accounts_query().all()
     accounts_out = []
     for account in accounts:
+        live_folders = []
+        live_error = None
+        if live:
+            conn = None
+            try:
+                conn = _imap_connect(account)
+                live_folders = _imap_list_folders(conn)
+                if not live_folders:
+                    live_error = 'The IMAP server returned no selectable folders.'
+            except Exception as exc:
+                live_error = str(exc)
+                app.logger.warning('[IMAP-FOLDERS] %s: %s', account.email, live_error)
+            finally:
+                try:
+                    if conn:
+                        conn.logout()
+                except Exception:
+                    pass
         states = {state.folder_name: state for state in ImapFolderSyncState.query.filter_by(imap_account_id=account.id).all()}
         stored_folders = [
             row[0] for row in db.session.query(InboxEmailMessage.folder)
@@ -2208,7 +2395,7 @@ def api_explorer_folders():
             .all()
             if row[0]
         ]
-        folder_names = sorted(set(stored_folders) | set(states.keys()), key=lambda name: (name != 'INBOX', name))
+        folder_names = live_folders if live and live_folders else sorted(set(stored_folders) | set(states.keys()), key=lambda name: (name != 'INBOX', name))
         folders = []
         for folder_name in folder_names:
             state = states.get(folder_name)
@@ -2220,7 +2407,7 @@ def api_explorer_folders():
                 'last_seen_uid': state.last_seen_uid if state else None,
                 'last_sync_completed_at': _gmt_iso(state.last_sync_completed_at) if state else None,
             })
-        accounts_out.append({'account': _serialize_imap_account(account), 'folders': folders})
+        accounts_out.append({'account': _serialize_imap_account(account), 'folders': folders, 'live': bool(live_folders), 'error': live_error})
     return _json_no_store({'success': True, 'accounts': accounts_out})
 
 @app.route('/api/inbox-intelligence/imap-accounts/<int:account_id>/test', methods=['POST'])
@@ -4070,7 +4257,10 @@ def _resolve_sync_folder_targets(conn, folders, all_folders=None):
       * anything else                -> exact real folder name only
     Aliases that resolve to nothing are silently skipped (they're not sync errors)."""
     all_folders = all_folders or _imap_list_folders(conn)
+    explicit_selection = folders is not None
     if not folders:
+        if explicit_selection:
+            return []
         return all_folders or ['INBOX']
     real_lower = [f.lower() for f in all_folders]
     targets = []
@@ -4085,7 +4275,7 @@ def _resolve_sync_folder_targets(conn, folders, all_folders=None):
         for match in matches:
             if match not in targets:
                 targets.append(match)
-    return targets or all_folders or ['INBOX']
+    return targets
 
 def _imap_fetch_by_identifiers(account, identifiers, folders=None, include_text_search=False, batch_test_id=None, deadline=None):
     """Targeted sync for test polling: connect once, search every relevant real folder
@@ -4120,6 +4310,10 @@ def _imap_fetch_by_identifiers(account, identifiers, folders=None, include_text_
             try:
                 meta = _imap_select_folder(conn, folder)
                 if not meta:
+                    detail = _imap_last_select_error(conn) or 'server returned no detail'
+                    error = f'{folder}: could not open folder ({detail})'
+                    errors.append(error)
+                    app.logger.warning('[TEST-IMAP-SELECT] %s: %s', account.email, error)
                     continue
                 uid_set = set()
                 if batch_test_id:
@@ -4232,6 +4426,10 @@ def _imap_fetch_by_senders(account, sender_emails, folders=None, date_range=None
             try:
                 meta = _imap_select_folder(conn, folder)
                 if not meta:
+                    detail = _imap_last_select_error(conn) or 'server returned no detail'
+                    error = f'{folder}: could not open folder ({detail})'
+                    errors.append(error)
+                    app.logger.warning('[TEST-IMAP-SELECT] %s: %s', account.email, error)
                     continue
                 uid_set = set()
                 for sender in sender_emails[:250]:
@@ -4428,6 +4626,10 @@ def _sync_mailbox_date_range_no_cursor(account, folders=None, date_range=None, s
             pass
         all_folders = _imap_list_folders(conn)
         target_folders = _resolve_sync_folder_targets(conn, folders, all_folders)
+        if folders is not None and not target_folders:
+            requested = ', '.join(str(folder) for folder in folders)
+            available = ', '.join(all_folders) or 'none'
+            return 0, [], [f'None of the selected folders exist. Selected: {requested}. Available: {available}.']
         per_folder_limit = max(25, min(5000, int(limit or 500)))
         since_value = start_dt.strftime('%d-%b-%Y')
         before_value = end_dt.strftime('%d-%b-%Y')
@@ -4438,7 +4640,10 @@ def _sync_mailbox_date_range_no_cursor(account, folders=None, date_range=None, s
             try:
                 meta = _imap_select_folder(conn, folder)
                 if not meta:
-                    errors.append(f'{folder}: could not open folder')
+                    detail = _imap_last_select_error(conn) or 'server returned no detail'
+                    error = f'{folder}: could not open folder ({detail})'
+                    errors.append(error)
+                    app.logger.warning('[IMAP-SELECT] %s: %s', account.email, error)
                     continue
                 date_search_error = None
                 try:

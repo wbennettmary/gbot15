@@ -274,6 +274,36 @@
         margin: 10px 0;
     }
 
+    .ii-explorer-folder-picker {
+        max-height: 260px;
+        overflow: auto;
+        border: 1px solid #dbe4ef;
+        border-radius: 8px;
+        background: #f8fafc;
+        scrollbar-gutter: stable;
+    }
+
+    .ii-explorer-folder-account {
+        padding: 9px 10px;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .ii-explorer-folder-account:last-child { border-bottom: 0; }
+
+    .ii-explorer-folder-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 7px;
+        font-size: 11px;
+    }
+
+    .ii-explorer-folder-list {
+        display: grid;
+        gap: 6px;
+    }
+
     .ii-explorer-sync-check {
         display: flex;
         align-items: center;
@@ -2841,13 +2871,9 @@
                     <option value="custom_since">From date...</option>
                 </select>
                 <input class="ii-input mb-2 d-none" type="date" id="explorerSyncSinceDate" onchange="saveExplorerPreferences()">
-                <div class="ii-explorer-sync-options">
-                    <label class="ii-explorer-sync-check">
-                        <input type="checkbox" id="explorerSyncInbox" checked onchange="saveExplorerPreferences()"> INBOX
-                    </label>
-                    <label class="ii-explorer-sync-check">
-                        <input type="checkbox" id="explorerSyncSpam" checked onchange="saveExplorerPreferences()"> Spam / Junk
-                    </label>
+                <div class="ii-muted mt-2 mb-1" style="font-size:0.75em">Live IMAP folders</div>
+                <div class="ii-explorer-folder-picker" id="explorerSyncFolderPicker">
+                    <div class="ii-muted p-2" style="font-size:0.78em">Select an account to load its folders.</div>
                 </div>
                 <button class="ii-btn ii-btn-primary mt-2 w-100" type="button" onclick="syncExplorerAccounts()" id="explorerSyncBtn">
                     <i class="fas fa-rotate"></i> Sync Emails
@@ -4176,6 +4202,9 @@ merge_recipe_id, content_blueprint_id</pre>
         explorerRefreshToken: 0,
         selectedMessageIds: new Set(),
         explorerSelectedAccountIds: new Set(),
+        explorerFoldersByAccount: {},
+        explorerSelectedFoldersByAccount: {},
+        explorerFolderRequestToken: 0,
         explorerPreferencesLoaded: false,
         explorerHasSavedAccountSelection: false,
         inboxExplorerRefreshTimer: null,
@@ -5133,15 +5162,16 @@ merge_recipe_id, content_blueprint_id</pre>
             iiState.activeExplorerFolder = typeof prefs.activeFolder === 'string' ? prefs.activeFolder : '';
             const syncRange = document.getElementById('explorerSyncDateRange');
             const syncSince = document.getElementById('explorerSyncSinceDate');
-            const syncInbox = document.getElementById('explorerSyncInbox');
-            const syncSpam = document.getElementById('explorerSyncSpam');
             const search = document.getElementById('messageSearchInput');
             const accountFilter = document.getElementById('messageAccountFilter');
             const dateFilter = document.getElementById('messageDateFilter');
             if (syncRange && prefs.syncDateRange && Array.from(syncRange.options).some((option) => option.value === prefs.syncDateRange)) syncRange.value = prefs.syncDateRange;
             if (syncSince && typeof prefs.syncSinceDate === 'string') syncSince.value = prefs.syncSinceDate;
-            if (syncInbox && typeof prefs.syncInbox === 'boolean') syncInbox.checked = prefs.syncInbox;
-            if (syncSpam && typeof prefs.syncSpam === 'boolean') syncSpam.checked = prefs.syncSpam;
+            if (prefs.syncFoldersByAccount && typeof prefs.syncFoldersByAccount === 'object') {
+                iiState.explorerSelectedFoldersByAccount = Object.fromEntries(
+                    Object.entries(prefs.syncFoldersByAccount).map(([id, folders]) => [id, Array.isArray(folders) ? folders : []])
+                );
+            }
             if (search && typeof prefs.search === 'string') search.value = prefs.search;
             if (accountFilter && prefs.accountFilter && Array.from(accountFilter.options).some((option) => option.value === String(prefs.accountFilter))) accountFilter.value = String(prefs.accountFilter);
             if (dateFilter && prefs.dateFilter && Array.from(dateFilter.options).some((option) => option.value === prefs.dateFilter)) dateFilter.value = prefs.dateFilter;
@@ -5174,8 +5204,7 @@ merge_recipe_id, content_blueprint_id</pre>
             syncAccountIds: Array.from(iiState.explorerSelectedAccountIds),
             syncDateRange: document.getElementById('explorerSyncDateRange')?.value || 'current',
             syncSinceDate: document.getElementById('explorerSyncSinceDate')?.value || '',
-            syncInbox: document.getElementById('explorerSyncInbox')?.checked !== false,
-            syncSpam: document.getElementById('explorerSyncSpam')?.checked !== false,
+            syncFoldersByAccount: iiState.explorerSelectedFoldersByAccount,
             accountFilter: document.getElementById('messageAccountFilter')?.value || '',
             dateFilter: document.getElementById('messageDateFilter')?.value || '',
             search: document.getElementById('messageSearchInput')?.value || '',
@@ -5196,6 +5225,7 @@ merge_recipe_id, content_blueprint_id</pre>
         else iiState.explorerSelectedAccountIds.delete(numericId);
         iiState.explorerHasSavedAccountSelection = true;
         saveExplorerPreferences();
+        loadExplorerSyncFolders();
     }
 
     function renderMessageAccountFilter() {
@@ -5229,11 +5259,100 @@ merge_recipe_id, content_blueprint_id</pre>
                 ${escapeHtml(account.email)}
             </label>`).join('');
         if (!iiState.explorerHasSavedAccountSelection) saveExplorerPreferences();
+        loadExplorerSyncFolders();
+    }
+
+    function setExplorerAccountFolders(accountId, selectAll) {
+        const key = String(accountId);
+        const available = iiState.explorerFoldersByAccount[key] || [];
+        iiState.explorerSelectedFoldersByAccount[key] = selectAll ? [...available] : [];
+        saveExplorerPreferences();
+        renderExplorerSyncFolders();
+    }
+
+    function handleExplorerFolderSelection(input) {
+        const key = String(input.dataset.accountId || '');
+        const folder = input.dataset.folder || '';
+        if (!key || !folder) return;
+        const selected = new Set(iiState.explorerSelectedFoldersByAccount[key] || []);
+        if (input.checked) selected.add(folder);
+        else selected.delete(folder);
+        iiState.explorerSelectedFoldersByAccount[key] = [...selected];
+        saveExplorerPreferences();
+    }
+
+    function renderExplorerSyncFolders(accounts = null) {
+        const picker = document.getElementById('explorerSyncFolderPicker');
+        if (!picker) return;
+        const selectedAccounts = (accounts || iiState.imapAccounts)
+            .filter((account) => iiState.explorerSelectedAccountIds.has(account.id));
+        if (!selectedAccounts.length) {
+            picker.innerHTML = '<div class="ii-muted p-2" style="font-size:0.78em">Select an account to load its folders.</div>';
+            return;
+        }
+        picker.innerHTML = selectedAccounts.map((account) => {
+            const key = String(account.id);
+            const folders = iiState.explorerFoldersByAccount[key] || [];
+            const selected = new Set(iiState.explorerSelectedFoldersByAccount[key] || []);
+            const folderHtml = folders.length ? folders.map((folder) => `
+                <label class="ii-explorer-sync-check" title="${escapeHtml(folder)}">
+                    <input type="checkbox" data-account-id="${account.id}" data-folder="${escapeHtml(folder)}" ${selected.has(folder) ? 'checked' : ''} onchange="handleExplorerFolderSelection(this)">
+                    <span class="text-truncate">${escapeHtml(folder)}</span>
+                </label>`).join('') : '<div class="ii-muted" style="font-size:0.75em">No selectable folders returned.</div>';
+            return `<div class="ii-explorer-folder-account">
+                <div class="ii-explorer-folder-head">
+                    <strong class="text-truncate" title="${escapeHtml(account.email)}">${escapeHtml(account.email)}</strong>
+                    <span><button class="ii-btn ii-btn-sm" type="button" onclick="setExplorerAccountFolders(${account.id}, true)">All</button> <button class="ii-btn ii-btn-sm" type="button" onclick="setExplorerAccountFolders(${account.id}, false)">None</button></span>
+                </div>
+                <div class="ii-explorer-folder-list">${folderHtml}</div>
+            </div>`;
+        }).join('');
+    }
+
+    async function loadExplorerSyncFolders() {
+        const selectedIds = [...iiState.explorerSelectedAccountIds];
+        const picker = document.getElementById('explorerSyncFolderPicker');
+        if (!selectedIds.length) {
+            renderExplorerSyncFolders([]);
+            return;
+        }
+        const requestToken = ++iiState.explorerFolderRequestToken;
+        if (picker) picker.innerHTML = '<div class="ii-muted p-2" style="font-size:0.78em"><span class="ii-spinner" aria-hidden="true"></span> Loading live IMAP folders...</div>';
+        try {
+            const params = new URLSearchParams({live: '1', account_ids: selectedIds.join(','), _: String(Date.now())});
+            const data = await iiFetch('/api/inbox-intelligence/explorer/folders?' + params.toString());
+            if (requestToken !== iiState.explorerFolderRequestToken) return;
+            const returnedAccounts = [];
+            (data.accounts || []).forEach((entry) => {
+                const account = entry.account;
+                const key = String(account.id);
+                const folders = (entry.folders || []).map((folder) => folder.folder).filter(Boolean);
+                iiState.explorerFoldersByAccount[key] = folders;
+                const hasSavedSelection = Object.prototype.hasOwnProperty.call(iiState.explorerSelectedFoldersByAccount, key);
+                if (hasSavedSelection) {
+                    const available = new Set(folders);
+                    iiState.explorerSelectedFoldersByAccount[key] = (iiState.explorerSelectedFoldersByAccount[key] || []).filter((folder) => available.has(folder));
+                } else {
+                    const defaults = folders.filter((folder) => folder.toLowerCase() === 'inbox' || /spam|junk|bulk/i.test(folder));
+                    iiState.explorerSelectedFoldersByAccount[key] = defaults.length ? defaults : folders.slice(0, 1);
+                }
+                returnedAccounts.push(account);
+            });
+            saveExplorerPreferences();
+            renderExplorerSyncFolders(returnedAccounts);
+            const errors = (data.accounts || []).filter((entry) => entry.error);
+            if (errors.length) {
+                document.getElementById('explorerSyncStatus').textContent = `Folder loading issue: ${errors[0].account.email}: ${errors[0].error}`;
+            }
+        } catch (err) {
+            if (requestToken !== iiState.explorerFolderRequestToken) return;
+            if (picker) picker.innerHTML = `<div class="text-danger p-2" style="font-size:0.75em">Could not load IMAP folders: ${escapeHtml(err.message)}</div>`;
+        }
     }
 
     async function loadExplorerFolders(accountId, refreshToken = iiState.explorerRefreshToken) {
         try {
-            const params = new URLSearchParams();
+            const params = new URLSearchParams({live: '1'});
             params.set('_', refreshToken || Date.now().toString());
             if (accountId) params.set('account_id', accountId);
             const data = await iiFetch('/api/inbox-intelligence/explorer/folders?' + params.toString());
@@ -5422,11 +5541,14 @@ merge_recipe_id, content_blueprint_id</pre>
             status.textContent = 'Select at least one account above.';
             return;
         }
-        const folders = [];
-        if (document.getElementById('explorerSyncInbox')?.checked) folders.push('INBOX');
-        if (document.getElementById('explorerSyncSpam')?.checked) folders.push('[Gmail]/Spam', 'Spam', 'Junk');
-        if (!folders.length) {
-            status.textContent = 'Select at least one folder type (INBOX or Spam/Junk).';
+        const selections = accountIds.map((accountId) => ({
+            account_id: accountId,
+            folders: [...(iiState.explorerSelectedFoldersByAccount[String(accountId)] || [])]
+        }));
+        const missingFolderSelection = selections.find((selection) => !selection.folders.length);
+        if (missingFolderSelection) {
+            const account = iiState.imapAccounts.find((item) => item.id === missingFolderSelection.account_id);
+            status.textContent = `Select at least one folder for ${account?.email || `account ${missingFolderSelection.account_id}`}.`;
             return;
         }
         const syncDateRange = document.getElementById('explorerSyncDateRange')?.value || 'current';
@@ -5444,19 +5566,21 @@ merge_recipe_id, content_blueprint_id</pre>
             custom_since: syncSinceDate ? `from ${syncSinceDate}` : 'custom date'
         }[syncDateRange] || 'selected date';
         if (btn) { btn.disabled = true; btn.innerHTML = '<span class="ii-spinner" aria-hidden="true"></span> Syncing...'; }
-        status.textContent = `Syncing ${accountIds.length} account(s), ${folders.length} folder(s), ${rangeLabel}...`;
+        const selectedFolderCount = selections.reduce((sum, selection) => sum + selection.folders.length, 0);
+        status.textContent = `Syncing ${accountIds.length} selected account(s), ${selectedFolderCount} exact folder(s), ${rangeLabel}...`;
         try {
             const data = await iiFetch('/api/inbox-intelligence/explorer/sync', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({account_ids: accountIds, folders, limit: syncLimit, force_full: false, date_range: syncDateRange, since_date: syncSinceDate})
+                body: JSON.stringify({selections, limit: syncLimit, force_full: false, date_range: syncDateRange, since_date: syncSinceDate})
             });
             const totalSynced = data.synced || 0;
             const errCount = (data.errors || []).length;
             const checked = (data.results || []).reduce((sum, result) => sum + (result.folders || []).reduce((inner, folder) => inner + Number(folder.checked || 0), 0), 0);
             const matched = (data.results || []).reduce((sum, result) => sum + (result.folders || []).reduce((inner, folder) => inner + Number(folder.matched ?? folder.synced ?? 0), 0), 0);
             const firstError = errCount ? ` First error: ${(data.errors || [])[0]}` : '';
-            status.textContent = `Sync complete: ${totalSynced} new message(s) synced; checked ${checked}, matched ${matched}.${errCount ? ` ${errCount} folder error(s).${firstError}` : ''}`;
+            const completedAccounts = (data.results || []).map((result) => result.email).join(', ');
+            status.textContent = `Sync complete for ${completedAccounts || 'selected accounts'}: ${totalSynced} new message(s); checked ${checked}, matched ${matched}.${errCount ? ` ${errCount} folder error(s).${firstError}` : ''}`;
             await refreshInboxExplorer();
         } catch (err) {
             status.textContent = `Sync failed: ${err.message}`;

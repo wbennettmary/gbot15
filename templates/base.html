@@ -1013,6 +1013,107 @@
         .sidebar-transition {
             transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
+
+        .app-log-backdrop {
+            position: fixed;
+            inset: 0;
+            z-index: 1090;
+            display: none;
+            place-items: center;
+            padding: 24px;
+            background: rgba(15, 23, 42, 0.62);
+        }
+
+        .app-log-backdrop.is-open { display: grid; }
+
+        .app-log-dialog {
+            width: min(1180px, 96vw);
+            height: min(760px, 90vh);
+            display: grid;
+            grid-template-rows: auto auto minmax(0, 1fr) auto;
+            overflow: hidden;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            background: #ffffff;
+            box-shadow: 0 24px 80px rgba(15, 23, 42, 0.32);
+        }
+
+        .app-log-header,
+        .app-log-toolbar,
+        .app-log-footer {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 16px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .app-log-header { justify-content: space-between; }
+        .app-log-header h2 { margin: 0; font-size: 16px; letter-spacing: 0; }
+        .app-log-toolbar { flex-wrap: wrap; background: #f8fafc; }
+        .app-log-toolbar input { min-width: 220px; flex: 1; }
+        .app-log-toolbar input,
+        .app-log-toolbar select {
+            height: 36px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 0 10px;
+            background: #fff;
+            color: #0f172a;
+            font-size: 12px;
+        }
+
+        .app-log-button {
+            height: 36px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 0 11px;
+            background: #fff;
+            color: #334155;
+            font-size: 12px;
+            font-weight: 650;
+            cursor: pointer;
+        }
+
+        .app-log-button:hover { background: #f1f5f9; color: #0f172a; }
+        .app-log-button:focus-visible { outline: 3px solid rgba(37, 99, 235, 0.3); outline-offset: 2px; }
+        .app-log-button.is-active { border-color: #0f766e; color: #0f766e; background: #ecfdf5; }
+
+        .app-log-stream {
+            overflow: auto;
+            background: #111827;
+            color: #dbeafe;
+            font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            scrollbar-gutter: stable;
+        }
+
+        .app-log-row {
+            display: grid;
+            grid-template-columns: 184px 76px 130px minmax(0, 1fr);
+            gap: 10px;
+            padding: 7px 14px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+        }
+
+        .app-log-row:hover { background: rgba(59, 130, 246, 0.08); }
+        .app-log-time, .app-log-source { color: #94a3b8; }
+        .app-log-message { white-space: pre-wrap; overflow-wrap: anywhere; }
+        .app-log-level { font-weight: 750; }
+        .app-log-level.WARNING { color: #fbbf24; }
+        .app-log-level.ERROR, .app-log-level.CRITICAL { color: #fb7185; }
+        .app-log-level.INFO { color: #5eead4; }
+        .app-log-footer { justify-content: space-between; border-top: 1px solid #e2e8f0; border-bottom: 0; color: #64748b; font-size: 11px; }
+
+        @media (max-width: 760px) {
+            .app-log-backdrop { padding: 8px; }
+            .app-log-dialog { width: 100%; height: 94vh; }
+            .app-log-row { grid-template-columns: 1fr; gap: 2px; }
+            .app-log-time, .app-log-source { font-size: 10px; }
+        }
     </style>
 
     <!-- Modern Minimalist Theme (Moved to end for priority) -->
@@ -1192,16 +1293,20 @@
         <div class="p-4 border-t border-slate-100 bg-slate-50/50">
             <div id="sidebar-footer-expanded" class="flex flex-col gap-3">
 
-                <!-- System Status (Combined with User Info) -->
-                <div class="flex items-center gap-3 p-2 rounded-lg bg-white border border-slate-100 shadow-sm">
-                    <div class="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
-                        <i class="fas fa-user-circle text-lg"></i>
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <p class="text-xs font-semibold text-slate-900 truncate">{{ user if user else 'Guest' }}</p>
-                        <p class="text-[10px] text-slate-500 truncate">{{ role if role else 'User' }}</p>
-                    </div>
-                </div>
+                {% if role == 'admin' %}
+                <button type="button" onclick="openApplicationLogs()"
+                    class="flex items-center gap-3 p-2 rounded-lg bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50 transition-colors text-left w-full"
+                    title="Open application logs">
+                    <span class="h-8 w-8 rounded-md bg-slate-900 flex items-center justify-center text-emerald-300">
+                        <i class="fas fa-terminal text-sm"></i>
+                    </span>
+                    <span class="flex-1 min-w-0">
+                        <span class="block text-xs font-semibold text-slate-900 truncate">Application logs</span>
+                        <span class="block text-[10px] text-slate-500 truncate">Live errors, syncs, and jobs</span>
+                    </span>
+                    <i class="fas fa-chevron-right text-[10px] text-slate-400"></i>
+                </button>
+                {% endif %}
 
                 <!-- Logout Button -->
                 <a href="{{ url_for('logout') }}"
@@ -1212,10 +1317,16 @@
             </div>
 
             <div id="sidebar-footer-collapsed" class="hidden flex flex-col items-center gap-4">
+                {% if role == 'admin' %}
+                <button type="button" onclick="openApplicationLogs()" class="h-8 w-8 rounded-md bg-slate-900 text-emerald-300 hover:bg-slate-700" title="Application logs">
+                    <i class="fas fa-terminal text-xs"></i>
+                </button>
+                {% else %}
                 <div class="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600"
                     title="{{ user }}">
                     <i class="fas fa-user text-xs"></i>
                 </div>
+                {% endif %}
                 <a href="{{ url_for('logout') }}" class="text-red-500 hover:text-red-700" title="Logout">
                     <i class="fas fa-sign-out-alt"></i>
                 </a>
@@ -1787,6 +1898,186 @@
             setInterval(loadNotifications, 30000);
         });
     </script>
+
+    {% if role == 'admin' %}
+    <div class="app-log-backdrop" id="applicationLogBackdrop" role="presentation" onclick="handleApplicationLogBackdrop(event)">
+        <section class="app-log-dialog" role="dialog" aria-modal="true" aria-labelledby="applicationLogTitle">
+            <header class="app-log-header">
+                <div>
+                    <h2 id="applicationLogTitle"><i class="fas fa-terminal me-2"></i>Application logs</h2>
+                    <div class="text-[11px] text-slate-500 mt-1">Runtime activity from the current and rotated GBot logs</div>
+                </div>
+                <button type="button" class="app-log-button" onclick="closeApplicationLogs()" aria-label="Close application logs" title="Close">
+                    <i class="fas fa-xmark"></i>
+                </button>
+            </header>
+            <div class="app-log-toolbar">
+                <input type="search" id="applicationLogSearch" placeholder="Search messages or sources" aria-label="Search logs">
+                <button type="button" class="app-log-button" id="applicationLogClear" onclick="clearApplicationLogSearch()" title="Clear search" aria-label="Clear log search" disabled>
+                    <i class="fas fa-xmark"></i>
+                </button>
+                <select id="applicationLogLevel" aria-label="Log level">
+                    <option value="ALL">All levels</option>
+                    <option value="INFO">Info</option>
+                    <option value="WARNING">Warning</option>
+                    <option value="ERROR">Error</option>
+                    <option value="CRITICAL">Critical</option>
+                    <option value="DEBUG">Debug</option>
+                </select>
+                <select id="applicationLogLimit" aria-label="Number of log entries">
+                    <option value="250">Latest 250</option>
+                    <option value="500" selected>Latest 500</option>
+                    <option value="1000">Latest 1,000</option>
+                    <option value="2000">Latest 2,000</option>
+                </select>
+                <button type="button" class="app-log-button is-active" id="applicationLogLive" onclick="toggleApplicationLogLive()" aria-pressed="true">
+                    <i class="fas fa-circle-play"></i> Live
+                </button>
+                <button type="button" class="app-log-button" onclick="loadApplicationLogs(true)" title="Refresh logs">
+                    <i class="fas fa-rotate"></i> Refresh
+                </button>
+            </div>
+            <div class="app-log-stream" id="applicationLogStream" tabindex="0">
+                <div class="app-log-row"><span class="app-log-message">Loading application logs...</span></div>
+            </div>
+            <footer class="app-log-footer">
+                <span id="applicationLogStatus" aria-live="polite">Waiting for log data</span>
+                <span id="applicationLogUpdated"></span>
+            </footer>
+        </section>
+    </div>
+    <script>
+        let applicationLogTimer = null;
+        let applicationLogLive = true;
+        let applicationLogSearchTimer = null;
+        let applicationLogOpener = null;
+
+        function openApplicationLogs() {
+            const backdrop = document.getElementById('applicationLogBackdrop');
+            applicationLogOpener = document.activeElement;
+            backdrop.classList.add('is-open');
+            document.body.style.overflow = 'hidden';
+            document.getElementById('applicationLogSearch').focus();
+            loadApplicationLogs(true);
+            scheduleApplicationLogRefresh();
+        }
+
+        function closeApplicationLogs() {
+            document.getElementById('applicationLogBackdrop').classList.remove('is-open');
+            document.body.style.overflow = '';
+            clearTimeout(applicationLogTimer);
+            applicationLogTimer = null;
+            applicationLogOpener?.focus();
+        }
+
+        function handleApplicationLogBackdrop(event) {
+            if (event.target === event.currentTarget) closeApplicationLogs();
+        }
+
+        function scheduleApplicationLogRefresh() {
+            clearTimeout(applicationLogTimer);
+            if (!applicationLogLive || !document.getElementById('applicationLogBackdrop').classList.contains('is-open')) return;
+            applicationLogTimer = setTimeout(async () => {
+                await loadApplicationLogs(false);
+                scheduleApplicationLogRefresh();
+            }, 5000);
+        }
+
+        function toggleApplicationLogLive() {
+            applicationLogLive = !applicationLogLive;
+            const button = document.getElementById('applicationLogLive');
+            button.classList.toggle('is-active', applicationLogLive);
+            button.setAttribute('aria-pressed', String(applicationLogLive));
+            button.innerHTML = applicationLogLive ? '<i class="fas fa-circle-play"></i> Live' : '<i class="fas fa-circle-pause"></i> Paused';
+            scheduleApplicationLogRefresh();
+        }
+
+        function clearApplicationLogSearch() {
+            const input = document.getElementById('applicationLogSearch');
+            input.value = '';
+            document.getElementById('applicationLogClear').disabled = true;
+            input.focus();
+            loadApplicationLogs(true);
+        }
+
+        async function loadApplicationLogs(scrollToEnd) {
+            const stream = document.getElementById('applicationLogStream');
+            const status = document.getElementById('applicationLogStatus');
+            const params = new URLSearchParams({
+                level: document.getElementById('applicationLogLevel').value,
+                limit: document.getElementById('applicationLogLimit').value,
+                q: document.getElementById('applicationLogSearch').value.trim(),
+                _: String(Date.now())
+            });
+            try {
+                const response = await fetch('/api/application-logs?' + params.toString(), {headers: {'Cache-Control': 'no-cache'}});
+                const data = await response.json();
+                if (!response.ok || data.success === false) throw new Error(data.error || 'Could not load logs');
+                stream.replaceChildren();
+                if (!data.entries.length) {
+                    const empty = document.createElement('div');
+                    empty.className = 'app-log-row';
+                    empty.textContent = 'No log entries match the current filters.';
+                    stream.appendChild(empty);
+                }
+                data.entries.forEach((entry) => {
+                    const row = document.createElement('div');
+                    row.className = 'app-log-row';
+                    const time = document.createElement('span');
+                    time.className = 'app-log-time';
+                    time.textContent = entry.timestamp || '-';
+                    const level = document.createElement('span');
+                    level.className = `app-log-level ${entry.level}`;
+                    level.textContent = entry.level;
+                    const source = document.createElement('span');
+                    source.className = 'app-log-source';
+                    source.textContent = entry.source;
+                    const message = document.createElement('span');
+                    message.className = 'app-log-message';
+                    message.textContent = entry.message;
+                    row.append(time, level, source, message);
+                    stream.appendChild(row);
+                });
+                status.textContent = `${data.returned} entries from ${data.files.length} log file(s)`;
+                status.style.color = '';
+                document.getElementById('applicationLogUpdated').textContent = `Updated ${new Date(data.updated_at).toLocaleTimeString()}`;
+                if (scrollToEnd) stream.scrollTop = stream.scrollHeight;
+            } catch (error) {
+                status.textContent = error.message;
+                status.style.color = '#be123c';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const search = document.getElementById('applicationLogSearch');
+            const clear = document.getElementById('applicationLogClear');
+            search?.addEventListener('input', () => {
+                clear.disabled = !search.value;
+                clearTimeout(applicationLogSearchTimer);
+                applicationLogSearchTimer = setTimeout(() => loadApplicationLogs(true), 300);
+            });
+            document.getElementById('applicationLogLevel')?.addEventListener('change', () => loadApplicationLogs(true));
+            document.getElementById('applicationLogLimit')?.addEventListener('change', () => loadApplicationLogs(true));
+            document.addEventListener('keydown', (event) => {
+                const backdrop = document.getElementById('applicationLogBackdrop');
+                if (!backdrop?.classList.contains('is-open')) return;
+                if (event.key === 'Escape') closeApplicationLogs();
+                if (event.key === 'Tab') {
+                    const focusable = [...backdrop.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex="0"]')];
+                    const first = focusable[0];
+                    const last = focusable[focusable.length - 1];
+                    if (event.shiftKey && document.activeElement === first) {
+                        event.preventDefault();
+                        last.focus();
+                    } else if (!event.shiftKey && document.activeElement === last) {
+                        event.preventDefault();
+                        first.focus();
+                    }
+                }
+            });
+        });
+    </script>
+    {% endif %}
 
     {% block scripts %}{% endblock %}
 
