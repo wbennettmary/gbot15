@@ -1282,9 +1282,9 @@
         min-height: 420px;
     }
 
-    .ii-saved-analysis-nav { border-right: 1px solid #e2e8f0; padding-right: 12px; min-width: 0; }
+    .ii-saved-analysis-nav { border-right: 1px solid #e2e8f0; padding-right: 12px; min-width: 0; overflow: hidden; }
     .ii-saved-analysis-nav-list { display: grid; gap: 6px; max-height: 640px; overflow-y: auto; overflow-x: hidden; }
-    .ii-saved-analysis-nav-item { width: 100%; min-width: 0; border: 1px solid transparent; border-radius: 6px; background: transparent; padding: 10px; text-align: left; color: #334155; cursor: pointer; }
+    .ii-saved-analysis-nav-item { width: 100%; min-width: 0; border: 1px solid transparent; border-radius: 6px; background: transparent; padding: 10px; text-align: left; color: #334155; cursor: pointer; white-space: normal; overflow: hidden; }
     .ii-saved-analysis-nav-item:hover,
     .ii-saved-analysis-nav-item.active { border-color: #bfdbfe; background: #eff6ff; color: #1d4ed8; }
     .ii-saved-analysis-nav-item strong,
@@ -1302,15 +1302,38 @@
     .ii-saved-action-section.inbox { border-top-color: #16a34a; }
     .ii-saved-action-section.grey { border-top-color: #d97706; }
     .ii-saved-action-section.spam { border-top-color: #dc2626; }
+    .ii-saved-decision-heading { display: flex; justify-content: space-between; gap: 12px; align-items: end; margin: 18px 0 10px; }
+    .ii-saved-decision-heading h4 { margin: 0; }
+    .ii-saved-domain-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 10px 0 12px; }
+    .ii-saved-domain-summary-item { border-left: 3px solid #94a3b8; padding: 9px 10px; background: #f8fafc; }
+    .ii-saved-domain-summary-item.inbox { border-left-color: #16a34a; }
+    .ii-saved-domain-summary-item.spam { border-left-color: #dc2626; }
+    .ii-saved-domain-summary-item strong { display: block; color: #0f172a; font-size: 18px; }
+    .ii-saved-domain-summary-item .ii-btn { margin-top: 6px; padding: 5px 8px; font-size: 11px; }
+    .ii-saved-domain-bulkbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 9px 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; }
+    .ii-saved-domain-bulkbar .ii-btn { padding: 7px 10px; }
+    .ii-saved-domain-bulkbar .ii-btn:disabled { opacity: .55; cursor: not-allowed; }
     .ii-saved-action-list { display: grid; gap: 5px; max-height: 230px; overflow-y: auto; margin: 10px 0; }
     .ii-saved-action-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 7px 0; border-bottom: 1px solid #f1f5f9; font-size: 12px; }
     .ii-saved-action-row > span:first-child { overflow-wrap: anywhere; }
     .ii-saved-domain-section { margin-top: 18px; border-top: 1px solid #e2e8f0; padding-top: 14px; overflow-x: auto; }
+    .ii-saved-domain-controls { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; margin: 8px 0 10px; }
+    .ii-saved-domain-controls .ii-select { width: auto; min-width: 92px; }
+    .ii-saved-domain-range { margin-right: auto; }
     .ii-saved-domain-table { width: 100%; border-collapse: collapse; font-size: 12px; }
     .ii-saved-domain-table th,
-    .ii-saved-domain-table td { padding: 9px 8px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+    .ii-saved-domain-table td { padding: 9px 8px; border-bottom: 1px solid #e2e8f0; text-align: left; vertical-align: middle; }
     .ii-saved-domain-table th { color: #475569; font-weight: 700; background: #f8fafc; }
+    .ii-saved-domain-table input[type="checkbox"] { width: 16px; height: 16px; accent-color: #2563eb; }
+    .ii-saved-domain-table .ii-select { min-width: 112px; width: auto; padding: 6px 8px; }
+    .ii-saved-domain-table .domain-status-inbox { border-color: #86efac; color: #166534; background: #f0fdf4; }
+    .ii-saved-domain-table .domain-status-spam { border-color: #fca5a5; color: #991b1b; background: #fef2f2; }
     .ii-legacy-saved-lists { margin-top: 22px; padding-top: 14px; border-top: 1px solid #e2e8f0; }
+    .ii-legacy-saved-lists summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; list-style: none; padding: 4px 0; color: #475569; }
+    .ii-legacy-saved-lists summary::-webkit-details-marker { display: none; }
+    .ii-legacy-saved-lists summary::after { content: '+'; color: #2563eb; font-size: 20px; line-height: 1; }
+    .ii-legacy-saved-lists[open] summary::after { content: '−'; }
+    .ii-legacy-saved-lists summary:focus-visible { outline: 2px solid #2563eb; outline-offset: 3px; }
 
     .ii-save-name-modal {
         width: min(460px, 100%);
@@ -2608,6 +2631,7 @@
         .ii-saved-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .ii-saved-kpi { border-bottom: 1px solid #e2e8f0; }
         .ii-saved-kpi:last-child { grid-column: 1 / -1; }
+        .ii-saved-domain-summary { grid-template-columns: 1fr; }
         .ii-template-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .ii-auto-top-actions { grid-template-columns: 1fr; }
         #userInboxTest .ii-form-grid { grid-template-columns: 1fr; }
@@ -3374,10 +3398,11 @@ The NightOwl Ranch Team</textarea>
                                 <div class="ii-ai-placeholder"><i class="fas fa-chart-column"></i><h4>No analysis selected</h4><p>Select tests above, then analyze and save their combined placement data.</p></div>
                             </div>
                         </div>
-                        <div class="ii-legacy-saved-lists">
-                            <div class="ii-row justify-content-between mb-2"><div><strong>Agent result archives</strong><div class="ii-muted">Legacy date-grouped user lists.</div></div><button class="ii-btn" type="button" onclick="loadAgentSavedLists()" title="Refresh archives"><i class="fas fa-arrows-rotate"></i></button></div>
+                        <details class="ii-legacy-saved-lists" id="legacyAgentArchives" ontoggle="if (this.open) loadAgentSavedLists()">
+                            <summary><span><strong>Agent result archives</strong><span class="ii-muted" style="display:block; margin-top:3px;">Open only when you need the legacy date-grouped lists.</span></span></summary>
+                            <div class="ii-row justify-content-end mt-2"><button class="ii-btn" type="button" onclick="loadAgentSavedLists()" title="Refresh archives"><i class="fas fa-arrows-rotate"></i> Refresh</button></div>
                             <div id="agentSavedListsPanel" class="ii-grid"></div>
-                        </div>
+                        </details>
                     </div>
                 </div>
             </div>
@@ -4315,6 +4340,10 @@ merge_recipe_id, content_blueprint_id</pre>
         agentSavedLists: [],
         savedAnalyses: [],
         activeSavedAnalysisId: null,
+        savedBestDomainsPage: 1,
+        savedBestDomainsPageSize: 10,
+        selectedSavedDomains: new Set(),
+        savedDomainStatusQueue: Promise.resolve(),
         userInboxTemplateNameResolver: null,
         aiAgentRunning: false,
         aiAgentStopRequested: false,
@@ -6515,7 +6544,6 @@ merge_recipe_id, content_blueprint_id</pre>
             document.getElementById('analyticsPanelSavedLists')?.classList.add('active');
             updateSavedAnalysisSelectionCount();
             loadSavedAnalyses();
-            loadAgentSavedLists();
         } else {
             document.getElementById('analyticsPanelInbox')?.classList.add('active');
         }
@@ -8123,6 +8151,8 @@ merge_recipe_id, content_blueprint_id</pre>
 
     function selectSavedAnalysis(id) {
         iiState.activeSavedAnalysisId = Number(id);
+        iiState.savedBestDomainsPage = 1;
+        iiState.selectedSavedDomains.clear();
         renderSavedAnalysisNav();
         renderSavedAnalysisDetail();
     }
@@ -8147,6 +8177,17 @@ merge_recipe_id, content_blueprint_id</pre>
         const a = row.analytics || {};
         const totals = a.totals || {};
         const domains = a.best_domains || [];
+        const domainStatuses = a.domain_statuses || {};
+        const savedInboxDomains = domains.filter((item) => domainStatuses[String(item.domain || '').toLowerCase()] === 'inbox');
+        const savedSpamDomains = domains.filter((item) => domainStatuses[String(item.domain || '').toLowerCase()] === 'spam');
+        const unassignedDomains = Math.max(0, domains.length - savedInboxDomains.length - savedSpamDomains.length);
+        const pageSize = Math.max(1, Number(iiState.savedBestDomainsPageSize) || 10);
+        const totalPages = Math.max(1, Math.ceil(domains.length / pageSize));
+        iiState.savedBestDomainsPage = Math.min(Math.max(1, Number(iiState.savedBestDomainsPage) || 1), totalPages);
+        const pageStart = (iiState.savedBestDomainsPage - 1) * pageSize;
+        const pageDomains = domains.slice(pageStart, pageStart + pageSize);
+        const rangeStart = domains.length ? pageStart + 1 : 0;
+        const rangeEnd = Math.min(pageStart + pageSize, domains.length);
         detail.innerHTML = `
             <div class="ii-row justify-content-between">
                 <div><h3 style="font-size:18px; margin:0;">${escapeHtml(row.name)}</h3><div class="ii-muted mt-1">${(row.test_ids || []).map(escapeHtml).join(', ')}</div></div>
@@ -8160,6 +8201,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 <div class="ii-saved-kpi"><span class="ii-muted">Spam rate</span><strong>${Number(totals.spam_rate || 0)}%</strong></div>
                 <div class="ii-saved-kpi"><span class="ii-muted">Waiting / failed</span><strong>${Number(totals.pending || 0) + Number(totals.failed || 0)}</strong></div>
             </div>
+            <div class="ii-saved-decision-heading"><div><h4>Decision queues</h4><div class="ii-muted">Accounts and users ready for the next operational step.</div></div></div>
             <div class="ii-saved-action-grid">
                 <section class="ii-saved-action-section inbox">
                     <div class="ii-row justify-content-between"><div><h4>Inbox accounts</h4><div class="ii-muted">Keep and scale</div></div><span class="ii-chip green">${(a.inbox_accounts || []).length}</span></div>
@@ -8178,11 +8220,146 @@ merge_recipe_id, content_blueprint_id</pre>
                 </section>
             </div>
             <section class="ii-saved-domain-section">
-                <div class="ii-row justify-content-between mb-2"><div><h4>Best domains</h4><div class="ii-muted">Ranked by inbox rate, then observation volume.</div></div><button class="ii-btn" type="button" onclick="copySavedAnalysisBucket('best_domains', 'domain')"><i class="fas fa-copy"></i> Copy domains</button></div>
-                <table class="ii-saved-domain-table"><thead><tr><th>Rank</th><th>Domain</th><th>Inbox rate</th><th>Inbox</th><th>Spam</th><th>Observed</th></tr></thead><tbody>
-                    ${domains.map((item, index) => `<tr><td>${index + 1}</td><td><strong>${escapeHtml(item.domain)}</strong></td><td><span class="ii-chip ${Number(item.inbox_rate || 0) >= 80 ? 'green' : Number(item.inbox_rate || 0) >= 50 ? 'yellow' : 'red'}">${Number(item.inbox_rate || 0)}%</span></td><td>${Number(item.inbox || 0)}</td><td>${Number(item.spam || 0)}</td><td>${Number(item.observed || 0)}</td></tr>`).join('') || '<tr><td colspan="6" class="ii-muted">No observed domain results yet.</td></tr>'}
+                <div class="ii-row justify-content-between mb-2"><div><h4>Best domains</h4><div class="ii-muted">Ranked by inbox rate, then observation volume. Assign a saved status for follow-up lists.</div></div><button class="ii-btn" type="button" onclick="copySavedAnalysisBucket('best_domains', 'domain')"><i class="fas fa-copy"></i> Copy all domains</button></div>
+                <div class="ii-saved-domain-summary">
+                    <div class="ii-saved-domain-summary-item inbox"><span class="ii-muted">Saved inbox domains</span><strong>${savedInboxDomains.length}</strong><button class="ii-btn" type="button" onclick="copySavedDomainDecisions('inbox')"><i class="fas fa-copy"></i> Copy inbox</button></div>
+                    <div class="ii-saved-domain-summary-item spam"><span class="ii-muted">Saved spam domains</span><strong>${savedSpamDomains.length}</strong><button class="ii-btn" type="button" onclick="copySavedDomainDecisions('spam')"><i class="fas fa-copy"></i> Copy spam</button></div>
+                    <div class="ii-saved-domain-summary-item"><span class="ii-muted">Unassigned</span><strong>${unassignedDomains}</strong></div>
+                </div>
+                <div class="ii-saved-domain-bulkbar" aria-live="polite">
+                    <label class="ii-row" style="gap:6px; margin:0;"><input type="checkbox" id="savedDomainsPageSelectAll" aria-label="Select all visible domains" onchange="toggleAllSavedDomains(this.checked)"><span class="ii-muted">Select visible</span></label>
+                    <strong id="savedDomainsSelectedCount">0 selected</strong>
+                    <button class="ii-btn" type="button" id="saveSelectedDomainsInboxButton" onclick="saveSelectedSavedDomainsStatus('inbox')" disabled><i class="fas fa-inbox"></i> Save as Inbox</button>
+                    <button class="ii-btn ii-btn-danger" type="button" id="saveSelectedDomainsSpamButton" onclick="saveSelectedSavedDomainsStatus('spam')" disabled><i class="fas fa-triangle-exclamation"></i> Save as Spam</button>
+                    <button class="ii-btn" type="button" id="clearSelectedDomainsStatusButton" onclick="saveSelectedSavedDomainsStatus('none')" disabled><i class="fas fa-rotate-left"></i> Clear status</button>
+                </div>
+                <div class="ii-saved-domain-controls">
+                    <span class="ii-muted ii-saved-domain-range">Showing ${rangeStart}-${rangeEnd} of ${domains.length} domain${domains.length === 1 ? '' : 's'}</span>
+                    <label class="ii-muted" for="savedBestDomainsPageSize">Per page</label>
+                    <select class="ii-select" id="savedBestDomainsPageSize" aria-label="Best domains per page" onchange="changeSavedBestDomainsPageSize(this.value)">
+                        ${[5, 10, 25, 50].map((size) => `<option value="${size}" ${size === pageSize ? 'selected' : ''}>${size}</option>`).join('')}
+                    </select>
+                    <button class="ii-btn" type="button" aria-label="Previous best domains page" title="Previous page" ${iiState.savedBestDomainsPage <= 1 ? 'disabled' : ''} onclick="changeSavedBestDomainsPage(${iiState.savedBestDomainsPage - 1})"><i class="fas fa-chevron-left"></i></button>
+                    <span class="ii-muted">Page ${iiState.savedBestDomainsPage} of ${totalPages}</span>
+                    <button class="ii-btn" type="button" aria-label="Next best domains page" title="Next page" ${iiState.savedBestDomainsPage >= totalPages ? 'disabled' : ''} onclick="changeSavedBestDomainsPage(${iiState.savedBestDomainsPage + 1})"><i class="fas fa-chevron-right"></i></button>
+                </div>
+                <table class="ii-saved-domain-table"><caption class="sr-only">Best domains and saved domain decisions</caption><thead><tr><th scope="col">Select</th><th scope="col">Rank</th><th scope="col">Domain</th><th scope="col">Inbox rate</th><th scope="col">Inbox</th><th scope="col">Spam</th><th scope="col">Observed</th><th scope="col">Saved status</th></tr></thead><tbody>
+                    ${pageDomains.map((item, index) => {
+                        const domain = String(item.domain || '').toLowerCase();
+                        const status = domainStatuses[domain] || '';
+                        return `<tr><td><input type="checkbox" class="saved-domain-check" data-domain="${escapeHtml(domain)}" aria-label="Select ${escapeHtml(domain)}" ${iiState.selectedSavedDomains.has(domain) ? 'checked' : ''} onchange="toggleSavedDomainSelection(this)"></td><td>${pageStart + index + 1}</td><td><strong>${escapeHtml(item.domain)}</strong></td><td><span class="ii-chip ${Number(item.inbox_rate || 0) >= 80 ? 'green' : Number(item.inbox_rate || 0) >= 50 ? 'yellow' : 'red'}">${Number(item.inbox_rate || 0)}%</span></td><td>${Number(item.inbox || 0)}</td><td>${Number(item.spam || 0)}</td><td>${Number(item.observed || 0)}</td><td><select class="ii-select ${status ? `domain-status-${status}` : ''}" data-domain="${escapeHtml(domain)}" aria-label="Saved status for ${escapeHtml(domain)}" onchange="saveSavedDomainStatus(this.dataset.domain, this.value)"><option value="">Unassigned</option><option value="inbox" ${status === 'inbox' ? 'selected' : ''}>Inbox</option><option value="spam" ${status === 'spam' ? 'selected' : ''}>Spam</option></select></td></tr>`;
+                    }).join('') || '<tr><td colspan="8" class="ii-muted">No observed domain results yet.</td></tr>'}
                 </tbody></table>
             </section>`;
+        updateSavedDomainSelectionControls();
+    }
+
+    function currentSavedAnalysisDomainPage() {
+        const row = (iiState.savedAnalyses || []).find((item) => Number(item.id) === Number(iiState.activeSavedAnalysisId));
+        const domains = row?.analytics?.best_domains || [];
+        const pageSize = Math.max(1, Number(iiState.savedBestDomainsPageSize) || 10);
+        const page = Math.max(1, Number(iiState.savedBestDomainsPage) || 1);
+        return domains.slice((page - 1) * pageSize, page * pageSize).map((item) => String(item.domain || '').toLowerCase()).filter(Boolean);
+    }
+
+    function updateSavedDomainSelectionControls() {
+        const visible = currentSavedAnalysisDomainPage();
+        const selected = Array.from(iiState.selectedSavedDomains || new Set());
+        const count = document.getElementById('savedDomainsSelectedCount');
+        const selectAll = document.getElementById('savedDomainsPageSelectAll');
+        const buttons = [
+            document.getElementById('saveSelectedDomainsInboxButton'),
+            document.getElementById('saveSelectedDomainsSpamButton'),
+            document.getElementById('clearSelectedDomainsStatusButton'),
+        ];
+        if (count) count.textContent = `${selected.length} selected`;
+        if (selectAll) {
+            selectAll.checked = visible.length > 0 && visible.every((domain) => iiState.selectedSavedDomains.has(domain));
+            selectAll.indeterminate = visible.some((domain) => iiState.selectedSavedDomains.has(domain)) && !selectAll.checked;
+        }
+        buttons.forEach((button) => { if (button) button.disabled = !selected.length; });
+    }
+
+    function toggleSavedDomainSelection(input) {
+        const domain = String(input?.dataset?.domain || '').toLowerCase();
+        if (!domain) return;
+        if (input.checked) iiState.selectedSavedDomains.add(domain);
+        else iiState.selectedSavedDomains.delete(domain);
+        updateSavedDomainSelectionControls();
+    }
+
+    function toggleAllSavedDomains(checked) {
+        currentSavedAnalysisDomainPage().forEach((domain) => {
+            if (checked) iiState.selectedSavedDomains.add(domain);
+            else iiState.selectedSavedDomains.delete(domain);
+        });
+        document.querySelectorAll('.saved-domain-check').forEach((input) => { input.checked = checked; });
+        updateSavedDomainSelectionControls();
+    }
+
+    function queueSavedDomainStatusUpdate(updates, clearSelection = false) {
+        const run = async () => {
+            const status = document.getElementById('savedAnalysisStatus');
+            if (status) status.textContent = 'Saving domain decisions...';
+            const data = await iiFetch(`/api/inbox-intelligence/saved-analyses/${Number(iiState.activeSavedAnalysisId)}/domain-status`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({updates})
+            });
+            const index = (iiState.savedAnalyses || []).findIndex((item) => Number(item.id) === Number(iiState.activeSavedAnalysisId));
+            if (index >= 0 && data.analysis) iiState.savedAnalyses[index] = data.analysis;
+            if (clearSelection) iiState.selectedSavedDomains.clear();
+            if (status) status.textContent = data.message || 'Domain decisions saved.';
+            renderSavedAnalysisNav();
+            renderSavedAnalysisDetail();
+            return data;
+        };
+        const queued = (iiState.savedDomainStatusQueue || Promise.resolve()).catch(() => {}).then(run);
+        iiState.savedDomainStatusQueue = queued.catch(() => {});
+        queued.catch((err) => {
+            const status = document.getElementById('savedAnalysisStatus');
+            if (status) status.textContent = `Domain status save failed: ${err.message}`;
+            renderSavedAnalysisDetail();
+        });
+        return queued;
+    }
+
+    function saveSavedDomainStatus(domain, status) {
+        const normalizedDomain = String(domain || '').trim().toLowerCase();
+        if (!normalizedDomain) return;
+        return queueSavedDomainStatusUpdate({[normalizedDomain]: status || 'none'});
+    }
+
+    function saveSelectedSavedDomainsStatus(status) {
+        const domains = Array.from(iiState.selectedSavedDomains || new Set());
+        if (!domains.length) return;
+        const updates = {};
+        domains.forEach((domain) => { updates[domain] = status; });
+        queueSavedDomainStatusUpdate(updates, true);
+    }
+
+    async function copySavedDomainDecisions(status) {
+        const row = (iiState.savedAnalyses || []).find((item) => Number(item.id) === Number(iiState.activeSavedAnalysisId));
+        const statuses = row?.analytics?.domain_statuses || {};
+        const values = Object.entries(statuses).filter(([, value]) => value === status).map(([domain]) => domain).sort((a, b) => a.localeCompare(b));
+        const message = document.getElementById('savedAnalysisStatus');
+        if (!values.length) {
+            if (message) message.textContent = `No domains are saved as ${status} yet.`;
+            return;
+        }
+        await copyTextToClipboard(`${values.join('\r\n')}\r\n`);
+        if (message) message.textContent = `Copied ${values.length} saved ${status} domain(s).`;
+    }
+
+    function changeSavedBestDomainsPageSize(value) {
+        iiState.savedBestDomainsPageSize = Math.max(1, Number(value) || 10);
+        iiState.savedBestDomainsPage = 1;
+        renderSavedAnalysisDetail();
+    }
+
+    function changeSavedBestDomainsPage(page) {
+        iiState.savedBestDomainsPage = Math.max(1, Number(page) || 1);
+        renderSavedAnalysisDetail();
     }
 
     async function copySavedAnalysisBucket(bucket, field) {

@@ -5990,6 +5990,7 @@ def _build_saved_analysis(test_ids):
         'grey_users': grey_users,
         'waiting_users': waiting_users,
         'best_domains': best_domains,
+        'domain_statuses': {},
     }
 
 def _serialize_saved_analysis(row):
@@ -6058,6 +6059,57 @@ def api_inbox_saved_analysis_delete(analysis_id):
     db.session.delete(row)
     db.session.commit()
     return jsonify({'success': True, 'message': 'Saved analysis deleted.'})
+
+@app.route('/api/inbox-intelligence/saved-analyses/<int:analysis_id>/domain-status', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_saved_analysis_domain_status(analysis_id):
+    owner = session.get('user') or ''
+    row = InboxSavedAnalysis.query.filter_by(id=analysis_id, created_by=owner).first()
+    if not row:
+        return jsonify({'success': False, 'error': 'Saved analysis not found.'}), 404
+    data = request.get_json(silent=True) or {}
+    updates = data.get('updates') if isinstance(data.get('updates'), dict) else {}
+    if not updates:
+        domain = str(data.get('domain') or '').strip().lower()
+        updates = {domain: data.get('status')} if domain else {}
+    if not updates:
+        return jsonify({'success': False, 'error': 'At least one domain status is required.'}), 400
+    try:
+        analytics = json.loads(row.analytics_json or '{}')
+    except Exception:
+        analytics = {}
+    valid_domains = {
+        str(item.get('domain') or '').strip().lower()
+        for item in (analytics.get('best_domains') or [])
+        if isinstance(item, dict) and item.get('domain')
+    }
+    statuses = {
+        str(domain).strip().lower(): str(status).strip().lower()
+        for domain, status in (analytics.get('domain_statuses') or {}).items()
+        if str(domain).strip().lower() in valid_domains and str(status).strip().lower() in {'inbox', 'spam'}
+    }
+    invalid_domains = []
+    for domain, status in updates.items():
+        normalized_domain = str(domain or '').strip().lower()
+        normalized_status = str(status or '').strip().lower()
+        if normalized_domain not in valid_domains:
+            invalid_domains.append(normalized_domain or '(blank)')
+            continue
+        if normalized_status in {'inbox', 'spam'}:
+            statuses[normalized_domain] = normalized_status
+        elif normalized_status in {'', 'none', 'unassigned'}:
+            statuses.pop(normalized_domain, None)
+        else:
+            return jsonify({'success': False, 'error': f'Invalid status for {normalized_domain}. Use inbox or spam.'}), 400
+    if invalid_domains:
+        return jsonify({'success': False, 'error': f"Unknown domain(s): {', '.join(invalid_domains)}"}), 400
+    analytics['domain_statuses'] = statuses
+    row.analytics_json = json.dumps(analytics)
+    row.updated_at = datetime.utcnow()
+    db.session.commit()
+    app.logger.info('Updated %s manual domain status decision(s) in analysis %s', len(updates), analysis_id)
+    return jsonify({'success': True, 'analysis': _serialize_saved_analysis(row), 'message': f'Saved {len(updates)} domain decision(s).'})
 
 @app.route('/api/inbox-intelligence/agent-saved-lists', methods=['GET', 'POST'])
 @login_required
