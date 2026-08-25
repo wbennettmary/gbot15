@@ -5259,7 +5259,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 ${escapeHtml(account.email)}
             </label>`).join('');
         if (!iiState.explorerHasSavedAccountSelection) saveExplorerPreferences();
-        loadExplorerSyncFolders();
+        renderExplorerSyncFolders();
     }
 
     function setExplorerAccountFolders(accountId, selectAll) {
@@ -5326,13 +5326,18 @@ merge_recipe_id, content_blueprint_id</pre>
             (data.accounts || []).forEach((entry) => {
                 const account = entry.account;
                 const key = String(account.id);
-                const folders = (entry.folders || []).map((folder) => folder.folder).filter(Boolean);
-                iiState.explorerFoldersByAccount[key] = folders;
+                const serverFolders = (entry.folders || []).map((folder) => folder.folder).filter(Boolean);
+                const previousFolders = iiState.explorerFoldersByAccount[key] || [];
+                const liveSucceeded = entry.live === true && !entry.error;
+                const folders = liveSucceeded ? serverFolders : (previousFolders.length ? previousFolders : serverFolders);
+                if (liveSucceeded || (!previousFolders.length && serverFolders.length)) {
+                    iiState.explorerFoldersByAccount[key] = serverFolders;
+                }
                 const hasSavedSelection = Object.prototype.hasOwnProperty.call(iiState.explorerSelectedFoldersByAccount, key);
-                if (hasSavedSelection) {
+                if (hasSavedSelection && liveSucceeded) {
                     const available = new Set(folders);
                     iiState.explorerSelectedFoldersByAccount[key] = (iiState.explorerSelectedFoldersByAccount[key] || []).filter((folder) => available.has(folder));
-                } else {
+                } else if (!hasSavedSelection) {
                     const defaults = folders.filter((folder) => folder.toLowerCase() === 'inbox' || /spam|junk|bulk/i.test(folder));
                     iiState.explorerSelectedFoldersByAccount[key] = defaults.length ? defaults : folders.slice(0, 1);
                 }
@@ -5360,6 +5365,12 @@ merge_recipe_id, content_blueprint_id</pre>
             const folderList = document.getElementById('folderList');
             if (!folderList) return;
             const accounts = data.accounts || [];
+            const hasFolderDiscoveryFailure = accounts.some((entry) => entry.error);
+            if (hasFolderDiscoveryFailure && document.querySelectorAll('#folderList .ii-folder').length > 1) {
+                const failed = accounts.find((entry) => entry.error);
+                document.getElementById('explorerSyncStatus').textContent = `Keeping the last folder list. Live refresh failed for ${failed.account.email}: ${failed.error}`;
+                return;
+            }
             const allFolders = [];
             accounts.forEach((acc) => {
                 (acc.folders || []).forEach((f) => {
@@ -5421,6 +5432,7 @@ merge_recipe_id, content_blueprint_id</pre>
         syncRecipientInputFromSelectedInboxes();
         updateAutomatedSummary();
         if (options.refreshExplorer !== false) {
+            await loadExplorerSyncFolders();
             await Promise.allSettled([loadExplorerFolders(), loadExplorerMessages()]);
         }
     }

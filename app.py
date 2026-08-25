@@ -4256,7 +4256,8 @@ def _resolve_sync_folder_targets(conn, folders, all_folders=None):
       * spam-ish names               -> every real folder containing spam/junk/bulk
       * anything else                -> exact real folder name only
     Aliases that resolve to nothing are silently skipped (they're not sync errors)."""
-    all_folders = all_folders or _imap_list_folders(conn)
+    if all_folders is None:
+        all_folders = _imap_list_folders(conn)
     explicit_selection = folders is not None
     if not folders:
         if explicit_selection:
@@ -4272,6 +4273,11 @@ def _resolve_sync_folder_targets(conn, folders, all_folders=None):
             matches = [f for i, f in enumerate(all_folders) if any(k in real_lower[i] for k in ('spam', 'junk', 'bulk'))]
         else:
             matches = [f for i, f in enumerate(all_folders) if real_lower[i] == low]
+        # LIST can fail transiently even though SELECT still works. For an
+        # explicit UI selection, let the IMAP server decide by selecting that
+        # exact mailbox instead of treating an empty/partial LIST as deletion.
+        if not matches and explicit_selection:
+            matches = [folder]
         for match in matches:
             if match not in targets:
                 targets.append(match)
