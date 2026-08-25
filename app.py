@@ -382,6 +382,14 @@ with app.app_context():
                     else:
                         conn.execute(text("ALTER TABLE inbox_deliverability_message ADD COLUMN source_email_id INTEGER"))
                     conn.commit()
+            if 'sync_attempt_count' not in columns:
+                logging.info("Adding missing 'sync_attempt_count' column to inbox_deliverability_message table...")
+                with db.engine.connect() as conn:
+                    if 'postgresql' in str(db.engine.url):
+                        conn.execute(text('ALTER TABLE "inbox_deliverability_message" ADD COLUMN sync_attempt_count INTEGER DEFAULT 0'))
+                    else:
+                        conn.execute(text("ALTER TABLE inbox_deliverability_message ADD COLUMN sync_attempt_count INTEGER DEFAULT 0"))
+                    conn.commit()
         if 'inbox_deliverability_test' in table_names:
             columns = [col['name'] for col in inspector.get_columns('inbox_deliverability_test')]
             new_columns = {
@@ -1407,6 +1415,8 @@ def _truthy_setting(value, default=True):
 
 _INBOX_SYNC_PAUSE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.inbox_sync_paused.json')
 _INBOX_SYNC_PAUSED_MESSAGE = 'Inbox sync is paused from Synced status. Resume sync to start new IMAP sync jobs.'
+_INBOX_TEST_STOPPED_STATUS = 'STOPPED'
+_INBOX_MISSING_RETRY_LIMIT = 3
 
 def _inbox_sync_pause_state():
     try:
@@ -1453,6 +1463,21 @@ def _inbox_sync_paused_response():
         'error': state['message'],
         'sync_paused': True,
         'control': state,
+    }, 409)
+
+def _inbox_test_sync_stopped(test_id):
+    test_id = str(test_id or '').strip()
+    if not test_id:
+        return False
+    test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
+    return bool(test and str(test.status or '').upper() == _INBOX_TEST_STOPPED_STATUS)
+
+def _inbox_test_stopped_response(test_id):
+    return _json_no_store({
+        'success': False,
+        'error': f'{test_id} sync is stopped. Press Resume for this test before starting another sync.',
+        'test_sync_stopped': True,
+        'test_id': test_id,
     }, 409)
 
 def _serialize_imap_account(account):
@@ -2121,6 +2146,10 @@ def api_explorer_wipe_sync_cache():
         return jsonify({'success': False, 'error': 'No enabled IMAP accounts found.'}), 404
     ids = [account.id for account in accounts]
     try:
+        message_ids = db.session.query(InboxEmailMessage.id).filter(InboxEmailMessage.imap_account_id.in_(ids))
+        detached_sources = TestEmailSource.query.filter(
+            TestEmailSource.source_message_id.in_(message_ids)
+        ).update({'source_message_id': None}, synchronize_session=False)
         deleted_messages = InboxEmailMessage.query.filter(InboxEmailMessage.imap_account_id.in_(ids)).delete(synchronize_session=False)
         deleted_states = ImapFolderSyncState.query.filter(ImapFolderSyncState.imap_account_id.in_(ids)).delete(synchronize_session=False)
         for account in accounts:
@@ -2132,7 +2161,13 @@ def api_explorer_wipe_sync_cache():
             account.last_error = None
             account.connection_status = 'connected'
         db.session.commit()
-        return _json_no_store({'success': True, 'deleted_messages': deleted_messages, 'deleted_sync_states': deleted_states, 'account_ids': ids})
+        return _json_no_store({
+            'success': True,
+            'deleted_messages': deleted_messages,
+            'deleted_sync_states': deleted_states,
+            'detached_sources': detached_sources,
+            'account_ids': ids,
+        })
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -3330,7 +3365,8 @@ def _send_test_email_gmail_api(service_account_id, sender, recipient, subject, h
     result = gmail.users().messages().send(userId='me', body={'raw': raw}).execute()
     return result.get('id') or fallback_message_id
 
-def _refresh_deliverability_counts(test):
+def _refresh_deliverability_counts(test, preserve_stopped=True):
+    was_stopped = preserve_stopped and str(test.status or '').upper() == _INBOX_TEST_STOPPED_STATUS
     test.sent_count = InboxDeliverabilityMessage.query.filter(
         InboxDeliverabilityMessage.test_id == test.test_id,
         InboxDeliverabilityMessage.status.in_(['WAITING_FOR_DELIVERY', 'COMPLETED', 'SENT_EXTERNAL'])
@@ -3342,6 +3378,8 @@ def _refresh_deliverability_counts(test):
     completed = InboxDeliverabilityMessage.query.filter_by(test_id=test.test_id, status='COMPLETED').count()
     external = InboxDeliverabilityMessage.query.filter_by(test_id=test.test_id, status='SENT_EXTERNAL').count()
     queued = InboxDeliverabilityMessage.query.filter_by(test_id=test.test_id, status='QUEUED').count()
+    if was_stopped:
+        return queued
     if queued:
         test.status = 'SENDING'
     elif completed + external + test.failed_count >= test.total_messages:
@@ -3374,6 +3412,29 @@ def _mark_stale_missing_observations(test, max_observation_minutes=30):
         row.error_message = f'No inbox/spam placement observed after {max_observation_minutes} minutes; marked missing to stop automatic sync.'
         row.detected_at = datetime.utcnow()
     return len(stale_rows)
+
+def _mark_retry_exhausted_missing_observations(test, max_retries=_INBOX_MISSING_RETRY_LIMIT):
+    """Skip unresolved rows after enough successful sync attempts have looked for them."""
+    try:
+        max_retries = int(max_retries or _INBOX_MISSING_RETRY_LIMIT)
+    except (TypeError, ValueError):
+        max_retries = _INBOX_MISSING_RETRY_LIMIT
+    max_retries = max(1, max_retries)
+    if not test:
+        return 0
+    rows = InboxDeliverabilityMessage.query.filter(
+        InboxDeliverabilityMessage.test_id == test.test_id,
+        InboxDeliverabilityMessage.placement == 'PENDING',
+        InboxDeliverabilityMessage.status.in_(['WAITING_FOR_DELIVERY', 'CHECKING_INBOX']),
+        InboxDeliverabilityMessage.sent_at.isnot(None),
+        InboxDeliverabilityMessage.sync_attempt_count >= max_retries,
+    ).all()
+    for row in rows:
+        row.status = 'FAILED'
+        row.placement = 'FAILED'
+        row.error_message = f'No inbox/spam placement observed after {max_retries} sync retries; skipped as missing.'
+        row.detected_at = datetime.utcnow()
+    return len(rows)
 
 def _send_deliverability_test_messages_async(test_id, senders, subject, html_body, text_body, custom_headers):
     with app.app_context():
@@ -3961,6 +4022,7 @@ def api_inbox_automated_test_results(test_id):
             'placement': m.placement,
             'folder': m.folder,
             'status': m.status,
+            'sync_attempt_count': m.sync_attempt_count or 0,
             'error_message': m.error_message,
             'sent_at': m.sent_at.isoformat() + 'Z' if m.sent_at else None,
             'detected_at': m.detected_at.isoformat() + 'Z' if m.detected_at else None,
@@ -4513,6 +4575,8 @@ def _detect_message_placements_from_synced(inbox_id, rows, test_id=None, allow_d
 @login_required
 @permission_required('inbox_intelligence')
 def api_inbox_poll_test(test_id):
+    if _inbox_test_sync_stopped(test_id):
+        return _inbox_test_stopped_response(test_id)
     result, status_code = _poll_inbox_test_payload(test_id, request.get_json(silent=True) or {})
     return jsonify(result), status_code
 
@@ -4543,6 +4607,8 @@ def _poll_inbox_test_payload(test_id, data=None, progress_callback=None):
         return {'success': False, 'error': 'Test not found'}, 404
     if _inbox_sync_paused():
         return {'success': False, 'error': _INBOX_SYNC_PAUSED_MESSAGE, 'sync_paused': True, 'control': _inbox_sync_pause_state()}, 409
+    if str(test.status or '').upper() == _INBOX_TEST_STOPPED_STATUS:
+        return {'success': False, 'error': f'{test_id} sync is stopped. Press Resume for this test before starting another sync.', 'test_sync_stopped': True, 'test_id': test_id}, 409
     raw_mark_missing_minutes = data.get('mark_missing_after_minutes')
     if raw_mark_missing_minutes is None:
         mark_missing_after_minutes = 30 if (getattr(test, 'test_type', None) == 'automated' or str(test.test_id or '').startswith('AT-')) else 0
@@ -4575,9 +4641,15 @@ def _poll_inbox_test_payload(test_id, data=None, progress_callback=None):
         'match_modes': {'batch_id': 0, 'x_test_id': 0, 'message_id': 0, 'from_sender': 0, 'exact': 0, 'broad_sender': 0},
         'accounts_synced': 0,
         'skipped_completed': 0,
+        'skipped_finalized': 0,
         'stale_missing_marked': 0,
+        'retry_missing_marked': 0,
         'sync_mode': 'targeted' if targeted_only else 'targeted_plus_recent',
     }
+    diagnostic['retry_missing_marked'] = _mark_retry_exhausted_missing_observations(test, _INBOX_MISSING_RETRY_LIMIT)
+    if diagnostic['retry_missing_marked']:
+        db.session.flush()
+        all_messages = InboxDeliverabilityMessage.query.filter_by(test_id=test_id).all()
     for row in all_messages:
         if not row.imap_account_id:
             row.status = 'SENT_EXTERNAL'
@@ -4585,6 +4657,9 @@ def _poll_inbox_test_payload(test_id, data=None, progress_callback=None):
             row.error_message = 'Recipient is external; connect it as an IMAP inbox to observe inbox/spam placement.'
             continue
         diagnostic['checked_rows'] += 1
+        if row.placement in ('FAILED', 'UNOBSERVED') or row.status in ('FAILED', 'SENT_EXTERNAL'):
+            diagnostic['skipped_finalized'] += 1
+            continue
         if targeted_only and not refresh_completed and row.placement in ('INBOX', 'SPAM') and row.folder:
             diagnostic['skipped_completed'] += 1
             diagnostic['matched_rows'] += 1
@@ -4602,6 +4677,10 @@ def _poll_inbox_test_payload(test_id, data=None, progress_callback=None):
         if _inbox_sync_paused():
             sync_errors.append(_INBOX_SYNC_PAUSED_MESSAGE)
             emit_progress(96, 'paused', 'Sync stopped from Synced status.', 'Resume sync to allow new jobs.')
+            break
+        if _inbox_test_sync_stopped(test_id):
+            sync_errors.append(f'{test_id} sync stopped from the test schedule.')
+            emit_progress(96, 'paused', 'Sync stopped for this test.', 'Press Resume on the test row to allow new jobs.')
             break
         if time.monotonic() >= sync_deadline:
             message = f'Sync stopped at {max_sync_seconds}s limit before inbox {inbox_index}/{total_inboxes}.'
@@ -4664,6 +4743,15 @@ def _poll_inbox_test_payload(test_id, data=None, progress_callback=None):
                     row.status = 'COMPLETED'
                     diagnostic['matched_rows'] += 1
                     inbox_matched += 1
+                elif row.status in ('WAITING_FOR_DELIVERY', 'CHECKING_INBOX') and row.sent_at:
+                    row.sync_attempt_count = (row.sync_attempt_count or 0) + 1
+                    row.status = 'CHECKING_INBOX'
+                    if row.sync_attempt_count >= _INBOX_MISSING_RETRY_LIMIT:
+                        row.status = 'FAILED'
+                        row.placement = 'FAILED'
+                        row.error_message = f'No inbox/spam placement observed after {_INBOX_MISSING_RETRY_LIMIT} sync retries; skipped as missing.'
+                        row.detected_at = datetime.utcnow()
+                        diagnostic['retry_missing_marked'] += 1
             _refresh_deliverability_counts(test)
             db.session.commit()
             emit_progress(
@@ -4686,6 +4774,7 @@ def _poll_inbox_test_payload(test_id, data=None, progress_callback=None):
     emit_progress(97, 'finalizing', f'Finalizing analytics for {test_id}...', f'{diagnostic["matched_rows"]}/{diagnostic["checked_rows"]} observations matched.')
     if mark_missing_after_minutes:
         diagnostic['stale_missing_marked'] = _mark_stale_missing_observations(test, mark_missing_after_minutes)
+    diagnostic['retry_missing_marked'] += _mark_retry_exhausted_missing_observations(test, _INBOX_MISSING_RETRY_LIMIT)
     _refresh_deliverability_counts(test)
     _update_automated_source_statuses(test.test_id)
     db.session.commit()
@@ -4702,6 +4791,8 @@ def _poll_inbox_test_payload(test_id, data=None, progress_callback=None):
 def api_inbox_poll_test_async(test_id):
     if _inbox_sync_paused():
         return _inbox_sync_paused_response()
+    if _inbox_test_sync_stopped(test_id):
+        return _inbox_test_stopped_response(test_id)
     payload = request.get_json(silent=True) or {}
     try:
         stale_minutes = min(30, max(5, int(payload.get('stale_minutes') or 15)))
@@ -4770,10 +4861,16 @@ def api_inbox_poll_test_async(test_id):
                     j = InboxPollJob(job_id=job_id, test_id=test_id, status='running')
                     db.session.add(j)
                 stopped_by_pause = _inbox_sync_paused()
-                j.status = 'error' if stopped_by_pause else ('completed' if status_code < 400 and result.get('success') else 'error')
-                j.message = 'Sync stopped from Synced status.' if stopped_by_pause else ('Sync completed.' if result.get('success') else result.get('error', 'Sync failed.'))
+                stopped_by_test = _inbox_test_sync_stopped(test_id)
+                j.status = 'error' if (stopped_by_pause or stopped_by_test) else ('completed' if status_code < 400 and result.get('success') else 'error')
+                if stopped_by_pause:
+                    j.message = 'Sync stopped from Synced status.'
+                elif stopped_by_test:
+                    j.message = 'Sync stopped for this test from the schedule.'
+                else:
+                    j.message = 'Sync completed.' if result.get('success') else result.get('error', 'Sync failed.')
                 j.progress_percent = 100 if j.status == 'completed' else (j.progress_percent or 0)
-                j.progress_stage = 'completed' if j.status == 'completed' else ('paused' if stopped_by_pause else 'error')
+                j.progress_stage = 'completed' if j.status == 'completed' else ('paused' if (stopped_by_pause or stopped_by_test) else 'error')
                 if j.status == 'completed':
                     diagnostic = result.get('diagnostic') or {}
                     j.progress_detail = f"Matched {diagnostic.get('matched_rows', 0)}/{diagnostic.get('checked_rows', 0)} observation(s); fetched {diagnostic.get('headers_fetched', 0)} IMAP message(s)."
@@ -4807,6 +4904,36 @@ def api_inbox_poll_test_async(test_id):
 
     threading.Thread(target=run_job, daemon=True).start()
     return jsonify({'success': True, 'job_id': job_id, 'message': job.message})
+
+@app.route('/api/inbox-intelligence/tests/<test_id>/sync-control', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_test_sync_control(test_id):
+    test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
+    if not test:
+        return _json_no_store({'success': False, 'error': 'Test not found'}, 404)
+    data = request.get_json(silent=True) or {}
+    if 'stopped' in data:
+        stopped = _truthy_setting(data.get('stopped'), False)
+    else:
+        stopped = str(data.get('action') or '').strip().lower() in {'stop', 'pause'}
+    try:
+        if stopped:
+            test.status = _INBOX_TEST_STOPPED_STATUS
+            running_jobs = InboxPollJob.query.filter_by(test_id=test_id, status='running').all()
+            for job in running_jobs:
+                job.status = 'error'
+                job.message = 'Sync stopped for this test from the schedule.'
+                job.progress_stage = 'paused'
+                job.finished_at = datetime.utcnow()
+        else:
+            if str(test.status or '').upper() == _INBOX_TEST_STOPPED_STATUS:
+                _refresh_deliverability_counts(test, preserve_stopped=False)
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        return _json_no_store({'success': False, 'error': f'Could not update test sync control: {exc}'}, 500)
+    return _json_no_store({'success': True, 'test': _serialize_automated_test(test)})
 
 @app.route('/api/inbox-intelligence/poll-jobs/<job_id>', methods=['GET'])
 @login_required
@@ -4914,6 +5041,7 @@ def api_inbox_test_detail(test_id):
             'placement': m.placement,
             'folder': m.folder,
             'status': m.status,
+            'sync_attempt_count': m.sync_attempt_count or 0,
             'error_message': m.error_message,
             'sent_at': m.sent_at.isoformat() + 'Z' if m.sent_at else None,
             'detected_at': m.detected_at.isoformat() + 'Z' if m.detected_at else None,

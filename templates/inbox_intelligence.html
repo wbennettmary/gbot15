@@ -4204,6 +4204,8 @@ merge_recipe_id, content_blueprint_id</pre>
         automatedTests: [],
         automatedSelectedTestId: null,
         automatedPollTimers: {},
+        automatedTestStopUpdating: {},
+        stoppedAutomatedTestIds: new Set(),
         inboxSyncPaused: false,
         inboxSyncPauseUpdating: false,
         automatedCopyBuckets: {inboxUsers: [], inboxDomains: [], spamUsers: [], spamDomains: [], inboxUserAccountLines: [], spamUserAccountLines: [], greyDomainNameChangeUsers: []},
@@ -5481,7 +5483,8 @@ merge_recipe_id, content_blueprint_id</pre>
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({account_ids: accountIds})
             });
-            status.textContent = `Wipe complete: ${data.deleted_messages || 0} synced message(s) removed. Sync again for fresh data.`;
+            const detached = data.detached_sources ? ` Detached ${data.detached_sources} queued source link(s).` : '';
+            status.textContent = `Wipe complete: ${data.deleted_messages || 0} synced message(s) removed.${detached} Sync again for fresh data.`;
             iiState.selectedMessageIds.clear();
             iiState.activeMessageId = null;
             await refreshInboxExplorer();
@@ -6767,6 +6770,10 @@ merge_recipe_id, content_blueprint_id</pre>
         return ['QUEUED', 'SENDING', 'WAITING_FOR_DELIVERY', 'CHECKING_INBOX'].includes(String(status || '').toUpperCase());
     }
 
+    function automatedTestSyncIsStopped(testId) {
+        return iiState.stoppedAutomatedTestIds.has(String(testId || '').trim().toUpperCase());
+    }
+
     function normalizeAutomatedTestId(value) {
         const text = String(value || '').trim().toUpperCase();
         const match = text.match(/^((?:AT|DLV)-[A-Z0-9]+)(?:-[0-9]+)?(?:-[A-Z0-9]+)?/);
@@ -6776,6 +6783,13 @@ merge_recipe_id, content_blueprint_id</pre>
     function clearAutomatedPollTimers() {
         Object.values(iiState.automatedPollTimers || {}).forEach((timerId) => window.clearTimeout(timerId));
         iiState.automatedPollTimers = {};
+    }
+
+    function clearAutomatedPollTimer(testId) {
+        const key = String(testId || '').trim();
+        const timerId = iiState.automatedPollTimers[key];
+        if (timerId) window.clearTimeout(timerId);
+        delete iiState.automatedPollTimers[key];
     }
 
     function renderInboxSyncPauseState(control = {}) {
@@ -6887,10 +6901,12 @@ merge_recipe_id, content_blueprint_id</pre>
 
     function scheduleAutomatedPoll(testId) {
         if (iiState.inboxSyncPaused) return;
+        if (automatedTestSyncIsStopped(testId)) return;
         if (!testId || iiState.automatedPollTimers[testId]) return;
         iiState.automatedPollTimers[testId] = window.setTimeout(() => {
             delete iiState.automatedPollTimers[testId];
             if (iiState.inboxSyncPaused) return;
+            if (automatedTestSyncIsStopped(testId)) return;
             pollAutomatedEmailTest(testId, true, {background: true});
         }, 20000);
     }
@@ -6901,6 +6917,12 @@ merge_recipe_id, content_blueprint_id</pre>
         if (iiState.inboxSyncPaused) {
             if (status) status.textContent = 'Inbox sync is paused. Press Resume sync to allow new automated test sync jobs.';
             if (runStatus) runStatus.textContent = 'Sync paused';
+            return;
+        }
+        if (automatedTestSyncIsStopped(testId)) {
+            if (status) status.textContent = `${testId} sync is stopped. Press Resume on the test row before syncing again.`;
+            if (runStatus) runStatus.textContent = 'Test sync stopped';
+            clearAutomatedPollTimer(testId);
             return;
         }
         if (status) status.textContent = `Syncing automated test ${testId} with IMAP/database messages...`;
@@ -6931,6 +6953,8 @@ merge_recipe_id, content_blueprint_id</pre>
             if (manualInput) manualInput.value = iiState.automatedSelectedTestId;
             localStorage.setItem('ii_automated_last_test_id', iiState.automatedSelectedTestId);
             iiState.automatedMessages = test.messages || [];
+            if (String(test.status || '').toUpperCase() === 'STOPPED') iiState.stoppedAutomatedTestIds.add(String(iiState.automatedSelectedTestId || '').trim().toUpperCase());
+            else iiState.stoppedAutomatedTestIds.delete(String(iiState.automatedSelectedTestId || '').trim().toUpperCase());
             const existing = iiState.automatedTests.findIndex((item) => item.test_id === iiState.automatedSelectedTestId);
             if (existing >= 0) iiState.automatedTests[existing] = {...iiState.automatedTests[existing], ...test};
             else iiState.automatedTests.unshift(test);
@@ -6984,6 +7008,9 @@ merge_recipe_id, content_blueprint_id</pre>
         if (iiState.inboxSyncPaused) {
             throw new Error('Inbox sync is paused. Press Resume sync before starting a new sync job.');
         }
+        if (automatedTestSyncIsStopped(testId)) {
+            throw new Error(`${testId} sync is stopped. Press Resume on the test row before starting a new sync job.`);
+        }
         const started = await iiFetch(`/api/inbox-intelligence/tests/${testId}/poll-async`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -6996,6 +7023,7 @@ merge_recipe_id, content_blueprint_id</pre>
         if (syncLabel) syncLabel.textContent = started.message || `Starting IMAP sync for ${testId}...`;
         if (runStatus) runStatus.textContent = 'Syncing';
         for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+            if (automatedTestSyncIsStopped(testId)) throw new Error(`${testId} sync was stopped from the schedule.`);
             await new Promise((resolve) => setTimeout(resolve, attempt < 5 ? 1000 : 1500));
             const data = await iiFetch(`/api/inbox-intelligence/poll-jobs/${jobId}`);
             const job = data.job || {};
@@ -7065,6 +7093,8 @@ merge_recipe_id, content_blueprint_id</pre>
         if (manualInput) manualInput.value = iiState.automatedSelectedTestId;
         localStorage.setItem('ii_automated_last_test_id', iiState.automatedSelectedTestId);
         iiState.automatedMessages = test.messages || [];
+        if (String(test.status || '').toUpperCase() === 'STOPPED') iiState.stoppedAutomatedTestIds.add(String(iiState.automatedSelectedTestId || '').trim().toUpperCase());
+        else iiState.stoppedAutomatedTestIds.delete(String(iiState.automatedSelectedTestId || '').trim().toUpperCase());
         const existing = iiState.automatedTests.findIndex((item) => item.test_id === iiState.automatedSelectedTestId);
         if (existing >= 0) iiState.automatedTests[existing] = {...iiState.automatedTests[existing], ...test};
         else iiState.automatedTests.unshift(test);
@@ -7230,6 +7260,10 @@ merge_recipe_id, content_blueprint_id</pre>
         }
         const data = await iiFetch('/api/inbox-intelligence/automated-tests?' + params.toString());
         iiState.automatedTests = data.tests || [];
+        iiState.stoppedAutomatedTestIds = new Set(iiState.automatedTests
+            .filter((test) => String(test.status || '').toUpperCase() === 'STOPPED')
+            .map((test) => String(test.test_id || '').trim().toUpperCase())
+            .filter(Boolean));
         iiState.automatedTestsTotal = data.total || 0;
         iiState.automatedTestsPage = data.page || page;
         iiState.automatedTestsPerPage = document.getElementById('automatedPageSizeSelect')?.value === 'all' ? 'all' : (data.per_page || iiState.automatedTestsPerPage || 5);
@@ -7266,8 +7300,11 @@ merge_recipe_id, content_blueprint_id</pre>
             const failed = test.failed_count || 0;
             const statusText = String(test.status || '').toUpperCase();
             const isSending = ['QUEUED', 'SENDING'].includes(statusText);
+            const isStopped = statusText === 'STOPPED';
             const syncJob = test.sync_job || null;
             const hasSyncJob = syncJob && String(syncJob.status || '').toLowerCase() === 'running';
+            const testKey = String(test.test_id || '').trim().toUpperCase();
+            const stopUpdating = Boolean(iiState.automatedTestStopUpdating[testKey]);
             const syncPercent = Math.max(0, Math.min(99, Number(syncJob?.progress_percent || 0)));
             const observed = inbox + spam + failed;
             const progressW = hasSyncJob ? syncPercent : (total ? Math.round(((isSending ? sent : observed) / total) * 100) : 0);
@@ -7285,6 +7322,9 @@ merge_recipe_id, content_blueprint_id</pre>
                 : isSending
                 ? `<div class="seg sent" style="width:${progressW}%;"></div>`
                 : `<div class="seg inbox" style="width:${inboxW}%;"></div><div class="seg spam" style="width:${spamW}%;"></div><div class="seg pending" style="width:${failedW}%;"></div>`;
+            const stopButton = (isStopped || hasSyncJob || automatedTestIsActive(test.status))
+                ? `<button class="ii-btn ${isStopped ? 'ii-btn-primary' : 'ii-btn-danger'}" type="button" ${stopUpdating ? 'disabled' : ''} onclick="event.stopPropagation(); toggleAutomatedTestSyncStop('${escapeHtml(test.test_id)}', ${!isStopped})">${stopUpdating ? '<span class="ii-spinner" aria-hidden="true"></span>' : `<i class="fas ${isStopped ? 'fa-play' : 'fa-stop'}"></i>`} ${isStopped ? 'Resume' : 'Stop'}</button>`
+                : '';
             return `
             <tr onclick="viewAutomatedEmailTest('${escapeHtml(test.test_id)}')" style="cursor:pointer; ${iiState.automatedSelectedTestId === test.test_id ? 'background:#eff6ff;' : ''}">
                 <td onclick="event.stopPropagation()"><input type="checkbox" aria-label="Select ${escapeHtml(test.test_id)}" ${iiState.selectedAutomatedTestIds.has(test.test_id) ? 'checked' : ''} onchange="toggleAutomatedTestSelection('${escapeHtml(test.test_id)}', this.checked)"></td>
@@ -7301,7 +7341,8 @@ merge_recipe_id, content_blueprint_id</pre>
                 <td>
                     <button class="ii-btn" type="button" title="Load saved header/body" onclick="event.stopPropagation(); loadAutomatedTestSetup('${escapeHtml(test.test_id)}')"><i class="fas fa-download"></i></button>
                     <button class="ii-btn" type="button" onclick="event.stopPropagation(); viewAutomatedEmailTest('${escapeHtml(test.test_id)}')"><i class="fas fa-eye"></i> View</button>
-                    <button class="ii-btn" type="button" onclick="event.stopPropagation(); pollAutomatedEmailTest('${escapeHtml(test.test_id)}', true, {background: true})"><i class="fas fa-arrows-rotate"></i> Sync</button>
+                    <button class="ii-btn" type="button" ${isStopped || iiState.inboxSyncPaused ? 'disabled' : ''} onclick="event.stopPropagation(); pollAutomatedEmailTest('${escapeHtml(test.test_id)}', true, {background: true})"><i class="fas fa-arrows-rotate"></i> Sync</button>
+                    ${stopButton}
                 </td>
             </tr>`;
         }).join('')}
@@ -7338,6 +7379,44 @@ merge_recipe_id, content_blueprint_id</pre>
     function clearAutomatedTestSelection() {
         iiState.selectedAutomatedTestIds = new Set();
         renderAutomatedTests();
+    }
+
+    async function toggleAutomatedTestSyncStop(testId, stopped) {
+        const status = document.getElementById('automatedAnalyticsStatus') || document.getElementById('automatedStatusText');
+        const key = String(testId || '').trim().toUpperCase();
+        if (!key) return;
+        iiState.automatedTestStopUpdating[key] = true;
+        if (stopped) {
+            iiState.stoppedAutomatedTestIds.add(key);
+            clearAutomatedPollTimer(key);
+        }
+        renderAutomatedTests();
+        try {
+            const data = await iiFetch(`/api/inbox-intelligence/tests/${encodeURIComponent(key)}/sync-control`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({stopped})
+            });
+            const test = data.test || {};
+            if (String(test.status || '').toUpperCase() === 'STOPPED') {
+                iiState.stoppedAutomatedTestIds.add(key);
+                clearAutomatedPollTimer(key);
+            } else {
+                iiState.stoppedAutomatedTestIds.delete(key);
+            }
+            const existing = iiState.automatedTests.findIndex((item) => String(item.test_id || '').toUpperCase() === key);
+            if (existing >= 0) iiState.automatedTests[existing] = {...iiState.automatedTests[existing], ...test};
+            if (status) status.textContent = String(test.status || '').toUpperCase() === 'STOPPED'
+                ? `${key} sync stopped. The schedule will skip it until you resume.`
+                : `${key} sync resumed. It can sync again.`;
+            renderAutomatedTests();
+        } catch (err) {
+            if (stopped) iiState.stoppedAutomatedTestIds.delete(key);
+            if (status) status.textContent = `Could not update ${key}: ${err.message}`;
+        } finally {
+            delete iiState.automatedTestStopUpdating[key];
+            await loadAutomatedTests(false);
+        }
     }
 
     async function deleteSelectedAutomatedTests() {
@@ -10326,6 +10405,7 @@ merge_recipe_id, content_blueprint_id</pre>
         if (status === 'COMPLETED') return 'green';
         if (status === 'FAILED') return 'red';
         if (status === 'PARTIAL') return 'yellow';
+        if (status === 'STOPPED') return 'gray';
         if (status === 'CHECKING_INBOX' || status === 'RUNNING' || status === 'SENDING' || status === 'QUEUED') return 'blue';
         return 'gray';
     }

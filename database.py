@@ -567,6 +567,7 @@ class InboxDeliverabilityMessage(db.Model):
     placement = db.Column(db.String(50), default='PENDING')
     folder = db.Column(db.String(255), nullable=True)
     status = db.Column(db.String(50), default='QUEUED')
+    sync_attempt_count = db.Column(db.Integer, default=0)
     error_message = db.Column(db.Text, nullable=True)
     updated_at = db.Column(db.DateTime, default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
 
