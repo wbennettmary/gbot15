@@ -3261,6 +3261,29 @@ def _refresh_deliverability_counts(test):
         test.status = 'CHECKING_INBOX'
     return queued
 
+def _mark_stale_missing_observations(test, max_observation_minutes=30):
+    """Stop auto-polling old tests by converting long-pending rows to missing."""
+    try:
+        max_observation_minutes = int(max_observation_minutes or 0)
+    except (TypeError, ValueError):
+        max_observation_minutes = 0
+    if not test or max_observation_minutes <= 0:
+        return 0
+    cutoff = datetime.utcnow() - timedelta(minutes=max_observation_minutes)
+    stale_rows = InboxDeliverabilityMessage.query.filter(
+        InboxDeliverabilityMessage.test_id == test.test_id,
+        InboxDeliverabilityMessage.placement == 'PENDING',
+        InboxDeliverabilityMessage.status.in_(['WAITING_FOR_DELIVERY', 'CHECKING_INBOX']),
+        InboxDeliverabilityMessage.sent_at.isnot(None),
+        InboxDeliverabilityMessage.sent_at < cutoff,
+    ).all()
+    for row in stale_rows:
+        row.status = 'FAILED'
+        row.placement = 'FAILED'
+        row.error_message = f'No inbox/spam placement observed after {max_observation_minutes} minutes; marked missing to stop automatic sync.'
+        row.detected_at = datetime.utcnow()
+    return len(stale_rows)
+
 def _send_deliverability_test_messages_async(test_id, senders, subject, html_body, text_body, custom_headers):
     with app.app_context():
         sender_lookup = {sender['email']: sender for sender in senders}
@@ -3573,6 +3596,18 @@ def api_inbox_automated_tests():
             return jsonify({'success': False, 'error': 'Select at least one test to delete'}), 400
         active_statuses = {'QUEUED', 'SENDING', 'RUNNING'}
         tests = InboxDeliverabilityTest.query.filter(InboxDeliverabilityTest.test_id.in_(ids)).all()
+        stale_poll_cutoff = datetime.utcnow() - timedelta(minutes=30)
+        stale_poll_jobs = InboxPollJob.query.filter(
+            InboxPollJob.test_id.in_(ids),
+            InboxPollJob.status == 'running',
+            InboxPollJob.created_at < stale_poll_cutoff,
+        ).all()
+        for job in stale_poll_jobs:
+            job.status = 'error'
+            job.message = 'Stale sync job expired so the test can be deleted.'
+            job.finished_at = datetime.utcnow()
+        if stale_poll_jobs:
+            db.session.commit()
         running_poll_test_ids = {
             job.test_id for job in InboxPollJob.query.filter(
                 InboxPollJob.test_id.in_(ids),
@@ -3602,7 +3637,7 @@ def api_inbox_automated_tests():
                 InboxAiAuditEvent.query.filter(or_(*audit_filters)).delete(synchronize_session=False)
                 InboxAiJob.query.filter(InboxAiJob.test_id.in_(deletable_ids)).delete(synchronize_session=False)
                 InboxPollJob.query.filter(InboxPollJob.test_id.in_(deletable_ids)).delete(synchronize_session=False)
-                InboxAgentSavedList.query.filter(InboxAgentSavedList.last_test_id.in_(deletable_ids)).delete(synchronize_session=False)
+                _prune_agent_saved_lists_for_tests(deletable_ids)
                 TestEmailSource.query.filter(TestEmailSource.last_test_id.in_(deletable_ids)).update(
                     {'status': 'AVAILABLE', 'last_test_id': None},
                     synchronize_session=False,
@@ -4402,6 +4437,14 @@ def _poll_inbox_test_payload(test_id, data=None, progress_callback=None):
     test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
     if not test:
         return {'success': False, 'error': 'Test not found'}, 404
+    raw_mark_missing_minutes = data.get('mark_missing_after_minutes')
+    if raw_mark_missing_minutes is None:
+        mark_missing_after_minutes = 30 if (getattr(test, 'test_type', None) == 'automated' or str(test.test_id or '').startswith('AT-')) else 0
+    else:
+        try:
+            mark_missing_after_minutes = max(0, int(raw_mark_missing_minutes))
+        except (TypeError, ValueError):
+            mark_missing_after_minutes = 0
     def emit_progress(percent, stage, message, detail=None):
         if not progress_callback:
             return
@@ -4426,6 +4469,7 @@ def _poll_inbox_test_payload(test_id, data=None, progress_callback=None):
         'match_modes': {'batch_id': 0, 'x_test_id': 0, 'message_id': 0, 'from_sender': 0, 'exact': 0, 'broad_sender': 0},
         'accounts_synced': 0,
         'skipped_completed': 0,
+        'stale_missing_marked': 0,
         'sync_mode': 'targeted' if targeted_only else 'targeted_plus_recent',
     }
     for row in all_messages:
@@ -4530,6 +4574,8 @@ def _poll_inbox_test_payload(test_id, data=None, progress_callback=None):
                 str(e)[:500]
             )
     emit_progress(97, 'finalizing', f'Finalizing analytics for {test_id}...', f'{diagnostic["matched_rows"]}/{diagnostic["checked_rows"]} observations matched.')
+    if mark_missing_after_minutes:
+        diagnostic['stale_missing_marked'] = _mark_stale_missing_observations(test, mark_missing_after_minutes)
     _refresh_deliverability_counts(test)
     _update_automated_source_statuses(test.test_id)
     db.session.commit()
@@ -5143,6 +5189,36 @@ def _serialize_agent_saved_list(row):
         'created_at': row.created_at.isoformat() + 'Z' if row.created_at else None,
         'updated_at': row.updated_at.isoformat() + 'Z' if row.updated_at else None,
     }
+
+def _prune_agent_saved_lists_for_tests(test_ids):
+    test_ids = {str(test_id or '').strip().upper() for test_id in (test_ids or []) if test_id}
+    if not test_ids:
+        return 0
+    changed = 0
+    rows = InboxAgentSavedList.query.all()
+    for row in rows:
+        try:
+            existing_test_ids = json.loads(row.test_ids_json or '[]')
+        except Exception:
+            existing_test_ids = []
+        kept_test_ids = []
+        removed = False
+        for value in existing_test_ids:
+            normalized = str(value or '').strip().upper()
+            if normalized in test_ids:
+                removed = True
+                continue
+            if normalized and normalized not in kept_test_ids:
+                kept_test_ids.append(normalized)
+        if not removed:
+            continue
+        if kept_test_ids:
+            row.test_ids_json = json.dumps(kept_test_ids)
+            row.updated_at = datetime.utcnow()
+        else:
+            db.session.delete(row)
+        changed += 1
+    return changed
 
 @app.route('/api/inbox-intelligence/agent-saved-lists', methods=['GET', 'POST'])
 @login_required
