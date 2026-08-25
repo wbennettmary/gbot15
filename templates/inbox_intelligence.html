@@ -2864,7 +2864,7 @@
                 <h4>Sync</h4>
                 <div id="explorerAccountCheckboxes" class="mb-2"></div>
                 <select class="ii-select mb-2" id="explorerSyncDateRange" onchange="toggleExplorerSyncSinceDate(); saveExplorerPreferences()">
-                    <option value="current">Current week (latest 50)</option>
+                    <option value="current">Latest 50 in selected folders</option>
                     <option value="today">Today</option>
                     <option value="yesterday">Yesterday</option>
                     <option value="last_week">Last week</option>
@@ -5226,6 +5226,8 @@ merge_recipe_id, content_blueprint_id</pre>
         iiState.explorerHasSavedAccountSelection = true;
         saveExplorerPreferences();
         loadExplorerSyncFolders();
+        loadExplorerFolders(document.getElementById('messageAccountFilter')?.value || undefined);
+        loadExplorerMessages();
     }
 
     function renderMessageAccountFilter() {
@@ -5360,6 +5362,10 @@ merge_recipe_id, content_blueprint_id</pre>
             const params = new URLSearchParams({live: '1'});
             params.set('_', refreshToken || Date.now().toString());
             if (accountId) params.set('account_id', accountId);
+            else {
+                const selectedIds = [...iiState.explorerSelectedAccountIds];
+                if (selectedIds.length) params.set('account_ids', selectedIds.join(','));
+            }
             const data = await iiFetch('/api/inbox-intelligence/explorer/folders?' + params.toString());
             if (refreshToken !== iiState.explorerRefreshToken) return;
             const folderList = document.getElementById('folderList');
@@ -5571,7 +5577,7 @@ merge_recipe_id, content_blueprint_id</pre>
         }
         const syncLimit = syncDateRange === 'current' ? 50 : 500;
         const rangeLabel = {
-            current: 'current week latest emails',
+            current: 'latest 50 in selected folders',
             today: 'today',
             yesterday: 'yesterday',
             last_week: 'last week',
@@ -5661,9 +5667,20 @@ merge_recipe_id, content_blueprint_id</pre>
         const dateRange = document.getElementById('messageDateFilter')?.value;
         const folder = iiState.activeExplorerFolder || '';
         if (accountId) params.set('account_id', accountId);
+        else {
+            const selectedIds = [...iiState.explorerSelectedAccountIds];
+            if (selectedIds.length) params.set('account_ids', selectedIds.join(','));
+        }
         if (search) params.set('search', search);
         if (dateRange) params.set('date_range', dateRange);
         if (folder) params.set('folder', folder);
+        else {
+            const folderScopes = {};
+            [...iiState.explorerSelectedAccountIds].forEach((id) => {
+                folderScopes[String(id)] = iiState.explorerSelectedFoldersByAccount[String(id)] || [];
+            });
+            params.set('folder_scopes', JSON.stringify(folderScopes));
+        }
         const data = await iiFetch('/api/inbox-intelligence/messages?' + params.toString());
         if (refreshToken !== iiState.explorerRefreshToken) return;
         iiState.messages = data.messages || [];

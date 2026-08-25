@@ -23,7 +23,7 @@ import quopri
 from email import message_from_bytes
 from email.header import decode_header, make_header
 from email.utils import parsedate_to_datetime, parseaddr, formatdate, make_msgid, formataddr
-from sqlalchemy import text, or_, func
+from sqlalchemy import text, or_, and_, func
 from werkzeug.security import generate_password_hash, check_password_hash
 import logging.handlers
 import threading
@@ -1738,6 +1738,28 @@ def _imap_select_folder(conn, folder):
 def _imap_last_select_error(conn):
     return str(getattr(conn, '_gbot_last_select_error', '') or '').strip()
 
+def _imap_folder_status(conn, folder):
+    """Return live IMAP message/unread counts for one exact mailbox."""
+    mailbox = '"' + str(folder or '').replace('\\', '\\\\').replace('"', '\\"') + '"'
+    try:
+        status, data = conn.status(mailbox, '(MESSAGES UNSEEN)')
+    except Exception:
+        return None
+    if status != 'OK' or not data:
+        return None
+    raw = ' '.join(
+        item.decode('utf-8', errors='replace') if isinstance(item, bytes) else str(item)
+        for item in data if item is not None
+    )
+    messages_match = re.search(r'\bMESSAGES\s+(\d+)', raw, re.I)
+    unseen_match = re.search(r'\bUNSEEN\s+(\d+)', raw, re.I)
+    if not messages_match:
+        return None
+    return {
+        'total': int(messages_match.group(1)),
+        'unread': int(unseen_match.group(1)) if unseen_match else 0,
+    }
+
 def _parse_raw_message(uid_val, is_read, raw_body, internal_received_at=None):
     """Parse a full RFC822 body into a flat dict for _upsert_imap_message.
     Returns None on failure."""
@@ -2370,14 +2392,24 @@ def api_explorer_folders():
     accounts_out = []
     for account in accounts:
         live_folders = []
+        live_counts = {}
         live_error = None
         if live:
             conn = None
             try:
                 conn = _imap_connect(account)
+                try:
+                    conn.sock.settimeout(8)
+                except Exception:
+                    pass
                 live_folders = _imap_list_folders(conn)
                 if not live_folders:
                     live_error = 'The IMAP server returned no selectable folders.'
+                else:
+                    for folder_name in live_folders:
+                        status_counts = _imap_folder_status(conn, folder_name)
+                        if status_counts is not None:
+                            live_counts[folder_name] = status_counts
             except Exception as exc:
                 live_error = str(exc)
                 app.logger.warning('[IMAP-FOLDERS] %s: %s', account.email, live_error)
@@ -2399,10 +2431,12 @@ def api_explorer_folders():
         folders = []
         for folder_name in folder_names:
             state = states.get(folder_name)
+            status_counts = live_counts.get(folder_name)
             folders.append({
                 'folder': folder_name,
-                'total': _folder_message_count(account.id, folder_name),
-                'unread': _folder_unread_count(account.id, folder_name),
+                'total': status_counts['total'] if status_counts is not None else _folder_message_count(account.id, folder_name),
+                'unread': status_counts['unread'] if status_counts is not None else _folder_unread_count(account.id, folder_name),
+                'count_source': 'imap' if status_counts is not None else 'cache',
                 'uid_validity': state.uid_validity if state else None,
                 'last_seen_uid': state.last_seen_uid if state else None,
                 'last_sync_completed_at': _gmt_iso(state.last_sync_completed_at) if state else None,
@@ -2506,11 +2540,11 @@ def api_inbox_sync_all():
         results = []
         all_errors = []
         for account in accounts:
-            synced, folder_results, account_errors = _sync_mailbox_date_range_no_cursor(account, folders=None, date_range=date_range, since_date=since_date, limit=limit)
+            synced, folder_results, account_errors = _sync_mailbox_date_range_no_cursor(account, folders=['INBOX', 'Spam'], date_range=date_range, since_date=since_date, limit=limit)
             results.append({'account_id': account.id, 'email': account.email, 'synced': synced, 'folders': folder_results, 'errors': account_errors})
             all_errors.extend(account_errors)
     else:
-        results, all_errors = _sync_mailbox_accounts(accounts, folders=None, limit=limit, force_full=bool(data.get('force_full')))
+        results, all_errors = _sync_mailbox_accounts(accounts, folders=['INBOX', 'Spam'], limit=limit, force_full=bool(data.get('force_full')))
     total_synced = sum(r['synced'] for r in results)
     return _json_no_store({'success': True, 'synced': total_synced, 'results': results, 'errors': all_errors})
 
@@ -2547,7 +2581,9 @@ def api_inbox_delete_account(account_id):
 def api_inbox_messages():
     q = InboxEmailMessage.query.filter(InboxEmailMessage.imap_account_id.in_(_enabled_imap_account_ids_query()))
     account_id = request.args.get('account_id')
+    account_ids_raw = request.args.get('account_ids', '')
     folder = request.args.get('folder')
+    folder_scopes_raw = request.args.get('folder_scopes', '')
     search = (request.args.get('search') or '').strip()
     date_range = (request.args.get('date_range') or '').strip()
     unread_only = (request.args.get('unread_only') or '').lower() == 'true'
@@ -2556,8 +2592,52 @@ def api_inbox_messages():
         if not account:
             return jsonify({'success': False, 'error': 'IMAP account not found'}), 404
         q = q.filter_by(imap_account_id=account.id)
+    elif account_ids_raw:
+        try:
+            requested_ids = list(dict.fromkeys(int(value) for value in account_ids_raw.split(',') if value.strip()))
+        except ValueError:
+            return jsonify({'success': False, 'error': 'Invalid account_ids value.'}), 400
+        allowed_ids = {
+            row[0] for row in _enabled_imap_accounts_query()
+            .filter(InboxImapAccount.id.in_(requested_ids))
+            .with_entities(InboxImapAccount.id)
+            .all()
+        }
+        if len(allowed_ids) != len(set(requested_ids)):
+            return jsonify({'success': False, 'error': 'One or more selected IMAP accounts were not found.'}), 404
+        q = q.filter(InboxEmailMessage.imap_account_id.in_(allowed_ids))
     if folder:
-        q = q.filter(InboxEmailMessage.folder.ilike(folder))
+        q = q.filter(InboxEmailMessage.folder == folder)
+    elif folder_scopes_raw:
+        try:
+            raw_scopes = json.loads(folder_scopes_raw)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return jsonify({'success': False, 'error': 'Invalid folder scope.'}), 400
+        if not isinstance(raw_scopes, dict):
+            return jsonify({'success': False, 'error': 'Invalid folder scope.'}), 400
+        scope_clauses = []
+        for raw_account_id, raw_folders in raw_scopes.items():
+            try:
+                scope_account_id = int(raw_account_id)
+            except (TypeError, ValueError):
+                continue
+            folders_for_account = list(dict.fromkeys(
+                str(value).strip() for value in (raw_folders or []) if str(value).strip()
+            )) if isinstance(raw_folders, list) else []
+            if account_id:
+                permitted = scope_account_id == account.id
+            elif account_ids_raw:
+                permitted = scope_account_id in allowed_ids
+            else:
+                permitted = _enabled_imap_accounts_query().filter(InboxImapAccount.id == scope_account_id).first() is not None
+            if permitted and folders_for_account:
+                scope_clauses.append(and_(
+                    InboxEmailMessage.imap_account_id == scope_account_id,
+                    InboxEmailMessage.folder.in_(folders_for_account),
+                ))
+        if not scope_clauses:
+            return _json_no_store({'success': True, 'messages': [], 'total': 0})
+        q = q.filter(or_(*scope_clauses))
     if unread_only:
         q = q.filter(InboxEmailMessage.is_read.is_(False))
     if search:
@@ -4523,7 +4603,7 @@ def _sync_test_inbox_folders(inbox, limit=200, since=None, identifiers=None, tar
             return synced_total, errors, target_match_modes
     folder_synced, _folder_results, sync_errors = _sync_mailbox_account(
         inbox,
-        folders=None,
+        folders=['INBOX', 'Spam'],
         limit=limit or 200,
         wait_for_lock=True,
     )
@@ -4588,10 +4668,10 @@ def _imap_search_date_uids(conn, since_value, before_value):
         # criteria string before falling back to newest-message local filtering.
         return conn.uid('search', None, f'(SINCE {since_value} BEFORE {before_value})')
 
-def _sync_mailbox_date_window_by_recent_sample(conn, account, folder, meta, start_dt, end_dt, per_folder_limit):
+def _sync_mailbox_date_window_by_recent_sample(conn, folder, start_dt, end_dt, per_folder_limit):
     s, data = conn.uid('search', None, 'ALL')
     if s != 'OK' or not data or not data[0]:
-        return 0, 0, 0
+        return 0, []
     all_uids = sorted(data[0].split(), key=lambda item: int(item))
     sample_limit = max(per_folder_limit, min(15000, max(2000, per_folder_limit * 10)))
     uids = all_uids[-sample_limit:]
@@ -4600,12 +4680,7 @@ def _sync_mailbox_date_window_by_recent_sample(conn, account, folder, meta, star
     in_window = [parsed for parsed in messages if _message_in_date_window(parsed, start_dt, end_dt)]
     if len(in_window) > per_folder_limit:
         in_window = sorted(in_window, key=lambda item: item.get('internal_received_at') or item.get('received_at') or datetime.min)[-per_folder_limit:]
-    new_messages = 0
-    for parsed in in_window:
-        _message, created = _upsert_imap_message_full(account, folder, parsed, uid_validity=str(meta.get('uidvalidity') or ''))
-        if created:
-            new_messages += 1
-    return new_messages, checked, len(in_window)
+    return checked, in_window
 
 def _sync_mailbox_date_range_no_cursor(account, folders=None, date_range=None, since_date=None, limit=500):
     """Sync messages matching a date window without changing incremental UID cursors."""
@@ -4637,8 +4712,11 @@ def _sync_mailbox_date_range_no_cursor(account, folders=None, date_range=None, s
             available = ', '.join(all_folders) or 'none'
             return 0, [], [f'None of the selected folders exist. Selected: {requested}. Available: {available}.']
         per_folder_limit = max(25, min(5000, int(limit or 500)))
+        total_limit = max(1, min(5000, int(limit or 500)))
         since_value = start_dt.strftime('%d-%b-%Y')
         before_value = end_dt.strftime('%d-%b-%Y')
+        candidates = []
+        folder_result_lookup = {}
         for folder in target_folders:
             if _inbox_sync_paused():
                 errors.append(_INBOX_SYNC_PAUSED_MESSAGE)
@@ -4658,56 +4736,82 @@ def _sync_mailbox_date_range_no_cursor(account, folders=None, date_range=None, s
                     s, data = 'ERROR', []
                     date_search_error = str(search_error)
                 if s != 'OK' or not data or not data[0]:
-                    fallback_synced = 0
                     fallback_checked = 0
-                    fallback_matched = 0
+                    fallback_messages = []
                     if int(meta.get('exists') or 0) > 0:
-                        fallback_synced, fallback_checked, fallback_matched = _sync_mailbox_date_window_by_recent_sample(
+                        fallback_checked, fallback_messages = _sync_mailbox_date_window_by_recent_sample(
                             conn,
-                            account,
                             folder,
-                            meta,
                             start_dt,
                             end_dt,
                             per_folder_limit,
                         )
-                        total_synced += fallback_synced
-                        db.session.commit()
                     if date_search_error and not fallback_checked:
                         errors.append(f'{folder}: date search failed: {date_search_error}')
-                    folder_results.append({
+                    result = {
                         'folder': folder,
-                        'synced': fallback_synced,
+                        'synced': 0,
                         'checked': fallback_checked,
-                        'matched': fallback_matched,
+                        'matched': 0,
+                        'eligible': len(fallback_messages),
                         'date_range_sync': True,
                         'fallback_sample': bool(fallback_checked),
-                    })
+                    }
+                    folder_results.append(result)
+                    folder_result_lookup[folder] = result
+                    candidates.extend((folder, meta, parsed) for parsed in fallback_messages)
                     continue
                 uids = sorted(data[0].split(), key=lambda item: int(item))
                 if len(uids) > per_folder_limit:
                     uids = uids[-per_folder_limit:]
                 messages = _imap_fetch_messages_batch(conn, uids, folder)
-                new_messages = 0
-                matched_messages = 0
-                for parsed in messages:
-                    if not _message_in_date_window(parsed, start_dt, end_dt):
-                        continue
-                    matched_messages += 1
-                    _message, created = _upsert_imap_message_full(account, folder, parsed, uid_validity=str(meta.get('uidvalidity') or ''))
-                    if created:
-                        new_messages += 1
-                total_synced += new_messages
-                db.session.commit()
-                folder_results.append({'folder': folder, 'synced': new_messages, 'checked': len(messages), 'matched': matched_messages, 'date_range_sync': True})
+                in_window = [parsed for parsed in messages if _message_in_date_window(parsed, start_dt, end_dt)]
+                result = {
+                    'folder': folder,
+                    'synced': 0,
+                    'checked': len(messages),
+                    'matched': 0,
+                    'eligible': len(in_window),
+                    'date_range_sync': True,
+                }
+                folder_results.append(result)
+                folder_result_lookup[folder] = result
+                candidates.extend((folder, meta, parsed) for parsed in in_window)
             except Exception as e:
                 db.session.rollback()
                 errors.append(f'{folder}: {e}')
+        candidates.sort(key=lambda item: (
+            item[2].get('internal_received_at') or item[2].get('received_at') or datetime.min,
+            int(item[2].get('uid') or 0),
+        ), reverse=True)
+        selected_candidates = candidates[:total_limit]
+        for folder, meta, parsed in selected_candidates:
+            _message, created = _upsert_imap_message_full(
+                account,
+                folder,
+                parsed,
+                uid_validity=str(meta.get('uidvalidity') or ''),
+            )
+            result = folder_result_lookup.get(folder)
+            if result is not None:
+                result['matched'] += 1
+                if created:
+                    result['synced'] += 1
+            if created:
+                total_synced += 1
         account.last_synced_at = datetime.utcnow()
         account.connection_status = 'connected'
         _refresh_account_counts(account)
         db.session.commit()
-        app.logger.info(f"[SYNC-DATE] {account.email}: +{total_synced} message(s) for {date_range}")
+        app.logger.info(
+            '[SYNC-DATE] %s: +%s message(s), selected=%s/%s candidate(s), folders=%s, range=%s',
+            account.email,
+            total_synced,
+            len(selected_candidates),
+            len(candidates),
+            ', '.join(target_folders),
+            date_range,
+        )
         return total_synced, folder_results, errors
     except Exception as e:
         db.session.rollback()
@@ -20399,7 +20503,12 @@ def _inbox_auto_sync_loop():
                     try:
                         if account.last_synced_at and (now - account.last_synced_at).total_seconds() < 600:
                             continue
-                        synced, _folder_results, errors = _sync_mailbox_account(account, folders=None, limit=50)
+                        synced, _folder_results, errors = _sync_mailbox_date_range_no_cursor(
+                            account,
+                            folders=['INBOX', 'Spam'],
+                            date_range='current',
+                            limit=50,
+                        )
                         if errors:
                             app.logger.warning(f"[AUTO-SYNC] {account.email}: {errors}")
                         else:
