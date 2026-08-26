@@ -70,6 +70,9 @@ class GWorkspaceWorker(QObject):
         self.prepared_emails = []  # Store prepared emails for lightning mode
         self.campaign_threads = []  # Store active sending threads
         self.csv_lock = threading.Lock()
+        # Gmail client objects are expensive to build and are not shared
+        # across threads, so cache one per sender per sending thread.
+        self._gmail_services_local = threading.local()
 
 
     def _parse_gsuite_error(self, e):
@@ -478,22 +481,32 @@ class GWorkspaceWorker(QObject):
         
         return message
 
+    def _get_thread_gmail_service(self, user_email):
+        """Return a cached Gmail service for this sender on this thread."""
+        services = getattr(self._gmail_services_local, 'services', None)
+        if services is None:
+            services = {}
+            self._gmail_services_local.services = services
+        service = services.get(user_email)
+        if service is None:
+            if not self.credentials:
+                raise Exception("No credentials available for Gmail service")
+            user_creds = self.credentials.with_subject(user_email)
+            service = build('gmail', 'v1', credentials=user_creds, cache_discovery=False)
+            services[user_email] = service
+        return service
+
+    def _drop_thread_gmail_service(self, user_email):
+        services = getattr(self._gmail_services_local, 'services', None)
+        if services:
+            services.pop(user_email, None)
+
     def _send_message_with_retry(self, user_email, message, max_retries=3):
-        """Send a message with exponential backoff retry logic"""
+        """Send through the cached service with bounded transient retries."""
+        raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
         for attempt in range(max_retries):
             try:
-                # Create Gmail service with the specific user
-                if not self.credentials:
-                    raise Exception("No credentials available for Gmail service")
-                
-                # Create new credentials for the specific user
-                user_creds = self.credentials.with_subject(user_email)
-                gmail_service = build('gmail', 'v1', credentials=user_creds)
-                
-                # Encode the message
-                raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
-                
-                # Send the message
+                gmail_service = self._get_thread_gmail_service(user_email)
                 result = gmail_service.users().messages().send(
                     userId='me',
                     body={'raw': raw_message}
@@ -514,6 +527,7 @@ class GWorkspaceWorker(QObject):
                     raise e
             except Exception as e:
                 if attempt < max_retries - 1:
+                    self._drop_thread_gmail_service(user_email)
                     wait_time = (2 ** attempt) + random.uniform(0, 1)
                     self.log_message.emit(f"Error sending to {user_email}, retrying in {wait_time:.1f}s...", QColor("yellow"))
                     time.sleep(wait_time)
@@ -559,87 +573,13 @@ class GWorkspaceWorker(QObject):
     @pyqtSlot(list, list, str, str, str, str, dict, list, bool, int, int, int)
     def send_bulk_emails(self, sender_emails, recipients, subject, body, cc="", bcc="", custom_headers=None, 
                         attachments=None, is_html=False, concurrency=1, rate_limit=60, delay_between_batches=1):
-        """Send bulk emails with rotation, rate limiting, and concurrency control"""
+        """Compatibility slot that uses the reliable concurrent sender."""
         try:
-            total_recipients = len(recipients)
-            self.log_message.emit(f"Starting bulk email campaign to {total_recipients} recipients...", QColor("cyan"))
-            
-            # Parse recipients and CC/BCC
-            cc_list = [email.strip() for email in cc.split(',') if email.strip()] if cc else []
-            bcc_list = [email.strip() for email in bcc.split(',') if email.strip()] if bcc else []
-            
-            # Statistics tracking
-            sent_count = 0
-            failed_count = 0
-            sender_index = 0
-            
-            # Process recipients in batches
-            for i, recipient in enumerate(recipients):
-                try:
-                    # Select sender (round-robin if multiple senders)
-                    sender_email = sender_emails[sender_index % len(sender_emails)]
-                    sender_index += 1
-                    
-                    # Create personalized message (support for variables like {{name}})
-                    personalized_subject = subject
-                    personalized_body = body
-                    
-                    # Simple variable substitution (can be enhanced)
-                    if isinstance(recipient, dict):
-                        recipient_email = recipient.get('email', '')
-                        recipient_name = recipient.get('name', '')
-                        personalized_subject = personalized_subject.replace('{{name}}', recipient_name)
-                        personalized_body = personalized_body.replace('{{name}}', recipient_name)
-                    else:
-                        recipient_email = str(recipient)
-                    
-                    # Create message
-                    message = self._create_mime_message(
-                        sender_email, [recipient_email], cc_list, bcc_list,
-                        personalized_subject, personalized_body, is_html, attachments, custom_headers
-                    )
-                    
-                    # Send with retry
-                    result = self._send_message_with_retry(sender_email, message)
-                    
-                    if result:
-                        sent_count += 1
-                        self.email_sent.emit(recipient_email, "Sent successfully")
-                        self.log_message.emit(f"Sent to {recipient_email} via {sender_email}", QColor("lightgreen"))
-                    else:
-                        failed_count += 1
-                        self.email_failed.emit(recipient_email, "Failed to send")
-                        self.log_message.emit(f"Failed to send to {recipient_email}", QColor("red"))
-                    
-                    # Update progress
-                    self.campaign_progress.emit(i + 1, total_recipients)
-                    
-                    # Rate limiting
-                    if rate_limit > 0:
-                        time.sleep(60.0 / rate_limit)  # Convert emails/minute to seconds between emails
-                    
-                    # Batch delay
-                    if (i + 1) % concurrency == 0:
-                        time.sleep(delay_between_batches)
-                        
-                except Exception as e:
-                    failed_count += 1
-                    error_msg = f"Error sending to {recipient}: {self._parse_gsuite_error(e)}"
-                    self.email_failed.emit(str(recipient), error_msg)
-                    self.log_message.emit(error_msg, QColor("red"))
-                    self.campaign_progress.emit(i + 1, total_recipients)
-            
-            # Campaign finished
-            summary = {
-                'total': total_recipients,
-                'sent': sent_count,
-                'failed': failed_count,
-                'success_rate': (sent_count / total_recipients * 100) if total_recipients > 0 else 0
-            }
-            
-            self.log_message.emit(f"Campaign completed! Sent: {sent_count}, Failed: {failed_count}", QColor("cyan"))
-            self.campaign_finished.emit(summary)
-            
+            self._send_bulk_emails_regular(
+                sender_emails, recipients, subject, body, cc, bcc,
+                custom_headers, attachments, is_html, concurrency,
+                rate_limit, delay_between_batches
+            )
         except Exception as e:
             error_msg = f"Bulk email campaign failed: {self._parse_gsuite_error(e)}"
             self.log_message.emit(error_msg, QColor("red"))
@@ -720,75 +660,78 @@ class GWorkspaceWorker(QObject):
 
     def _send_bulk_emails_regular(self, sender_emails, recipients, subject, body, cc="", bcc="", custom_headers=None, 
                                 attachments=None, is_html=False, concurrency=1, rate_limit=60, delay_between_batches=1):
-        """Regular bulk email sending with rate limiting"""
+        """Reliable bounded-concurrency sender with a global launch rate."""
         total_recipients = len(recipients)
         self.log_message.emit(f"Starting regular bulk email campaign to {total_recipients} recipients...", QColor("cyan"))
-        
-        # Parse recipients and CC/BCC
         cc_list = [email.strip() for email in cc.split(',') if email.strip()] if cc else []
         bcc_list = [email.strip() for email in bcc.split(',') if email.strip()] if bcc else []
-        
-        # Statistics tracking
+
+        if not sender_emails:
+            raise ValueError('At least one sender is required')
+
+        worker_count = max(1, min(int(concurrency or 1), 20, total_recipients or 1))
+        send_items = []
+        for i, recipient in enumerate(recipients):
+            sender_email = sender_emails[i % len(sender_emails)]
+            personalized_subject = subject
+            personalized_body = body
+            if isinstance(recipient, dict):
+                recipient_email = str(recipient.get('email', '')).strip()
+                recipient_name = str(recipient.get('name', ''))
+                personalized_subject = personalized_subject.replace('{{name}}', recipient_name)
+                personalized_body = personalized_body.replace('{{name}}', recipient_name)
+            else:
+                recipient_email = str(recipient).strip()
+            message = self._create_mime_message(
+                sender_email, [recipient_email], cc_list, bcc_list,
+                personalized_subject, personalized_body, is_html, attachments, custom_headers
+            )
+            send_items.append((i, sender_email, recipient_email, message))
+
+        def send_one(item):
+            index, sender_email, recipient_email, message = item
+            try:
+                result = self._send_message_with_retry(sender_email, message)
+                return index, sender_email, recipient_email, bool(result), None
+            except Exception as e:
+                return index, sender_email, recipient_email, False, e
+
         sent_count = 0
         failed_count = 0
-        sender_index = 0
-        
-        # Process recipients in batches
-        for i, recipient in enumerate(recipients):
-            try:
-                # Select sender (round-robin if multiple senders)
-                sender_email = sender_emails[sender_index % len(sender_emails)]
-                sender_index += 1
-                
-                # Create personalized message
-                personalized_subject = subject
-                personalized_body = body
-                
-                if isinstance(recipient, dict):
-                    recipient_email = recipient.get('email', '')
-                    recipient_name = recipient.get('name', '')
-                    personalized_subject = personalized_subject.replace('{{name}}', recipient_name)
-                    personalized_body = personalized_body.replace('{{name}}', recipient_name)
-                else:
-                    recipient_email = str(recipient)
-                
-                # Create message
-                message = self._create_mime_message(
-                    sender_email, [recipient_email], cc_list, bcc_list,
-                    personalized_subject, personalized_body, is_html, attachments, custom_headers
+        next_launch = time.monotonic()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as executor:
+            launch_interval = 60.0 / float(rate_limit) if rate_limit and rate_limit > 0 else 0.0
+            pending = {}
+            next_item = 0
+            while next_item < len(send_items) or pending:
+                while next_item < len(send_items) and len(pending) < worker_count:
+                    item = send_items[next_item]
+                    wait_for_slot = next_launch - time.monotonic()
+                    if wait_for_slot > 0:
+                        time.sleep(wait_for_slot)
+                    pending[executor.submit(send_one, item)] = item
+                    next_item += 1
+                    next_launch = max(next_launch, time.monotonic()) + launch_interval
+                    if delay_between_batches and item[0] and item[0] % worker_count == worker_count - 1:
+                        next_launch += max(0.0, float(delay_between_batches))
+
+                done, _ = concurrent.futures.wait(
+                    tuple(pending), return_when=concurrent.futures.FIRST_COMPLETED
                 )
-                
-                # Send with retry
-                result = self._send_message_with_retry(sender_email, message)
-                
-                if result:
-                    sent_count += 1
-                    self.email_sent.emit(recipient_email, "Sent successfully")
-                    self.log_message.emit(f"Sent to {recipient_email} via {sender_email}", QColor("lightgreen"))
-                else:
-                    failed_count += 1
-                    self.email_failed.emit(recipient_email, "Failed to send")
-                    self.log_message.emit(f"Failed to send to {recipient_email}", QColor("red"))
-                
-                # Update progress
-                self.campaign_progress.emit(i + 1, total_recipients)
-                
-                # Rate limiting
-                if rate_limit > 0:
-                    time.sleep(60.0 / rate_limit)
-                
-                # Batch delay
-                if (i + 1) % concurrency == 0:
-                    time.sleep(delay_between_batches)
-                    
-            except Exception as e:
-                failed_count += 1
-                error_msg = f"Error sending to {recipient}: {self._parse_gsuite_error(e)}"
-                self.email_failed.emit(str(recipient), error_msg)
-                self.log_message.emit(error_msg, QColor("red"))
-                self.campaign_progress.emit(i + 1, total_recipients)
-        
-        # Campaign finished
+                for future in done:
+                    pending.pop(future, None)
+                    index, sender_email, recipient_email, success, error = future.result()
+                    if success:
+                        sent_count += 1
+                        self.email_sent.emit(recipient_email, "Sent successfully")
+                        self.log_message.emit(f"Sent to {recipient_email} via {sender_email}", QColor("lightgreen"))
+                    else:
+                        failed_count += 1
+                        error_msg = self._parse_gsuite_error(error) if error else "Failed to send"
+                        self.email_failed.emit(recipient_email, error_msg)
+                        self.log_message.emit(f"Failed to send to {recipient_email}: {error_msg}", QColor("red"))
+                    self.campaign_progress.emit(index + 1, total_recipients)
+
         summary = {
             'total': total_recipients,
             'sent': sent_count,
@@ -1307,13 +1250,13 @@ class GUserAdminApp(QMainWindow):
         # Concurrency and rate limiting
         self.concurrency_spin = QSpinBox()
         self.concurrency_spin.setRange(1, 20)
-        self.concurrency_spin.setValue(1)
-        self.concurrency_spin.setToolTip("Number of concurrent email sending threads")
+        self.concurrency_spin.setValue(4)
+        self.concurrency_spin.setToolTip("Number of bounded concurrent email sending threads")
         
         self.rate_limit_spin = QSpinBox()
         self.rate_limit_spin.setRange(1, 1000)
-        self.rate_limit_spin.setValue(60)
-        self.rate_limit_spin.setToolTip("Emails per minute")
+        self.rate_limit_spin.setValue(240)
+        self.rate_limit_spin.setToolTip("Maximum email launch rate per minute; retries handle transient Google throttling")
         
         # Lightning mode toggle
         self.lightning_mode_checkbox = QCheckBox("⚡ Lightning Mode (1.9k+ emails in <10s)")
@@ -1960,7 +1903,7 @@ class GUserAdminApp(QMainWindow):
         else:
             self.trigger_send_bulk_emails.emit(
                 sender_emails, recipients, subject, body, cc, bcc, custom_headers, 
-                attachments, is_html, concurrency, rate_limit, 1
+                attachments, is_html, concurrency, rate_limit, 0
             )
 
     def _pause_campaign(self):

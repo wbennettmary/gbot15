@@ -1766,6 +1766,27 @@ def _imap_list_folders(conn):
         pass
     return folders or ['INBOX']
 
+def _imap_list_folders_with_retry(account, conn):
+    """List folders, reconnecting once when LIST poisoned the IMAP socket."""
+    folders = _imap_list_folders(conn)
+    list_error = str(getattr(conn, '_gbot_last_list_error', '') or '').strip()
+    if folders or not _imap_is_stale_connection_error(list_error):
+        return conn, folders, list_error or None
+
+    stale_detail = list_error
+    _imap_close_connection(conn)
+    try:
+        conn = _imap_connect(account)
+        _imap_set_operation_timeout(conn)
+        folders = _imap_list_folders(conn)
+        retry_error = str(getattr(conn, '_gbot_last_list_error', '') or '').strip()
+        if folders:
+            app.logger.info('[IMAP-LIST-RETRY] %s: loaded %s folder(s) on a fresh connection', account.email, len(folders))
+            return conn, folders, None
+        return conn, folders, f'{stale_detail}; retry: {retry_error or "LIST returned no folders"}'
+    except Exception as exc:
+        return conn, [], f'{stale_detail}; reconnect failed: {exc}'
+
 def _imap_select_folder(conn, folder):
     """Select one exact folder and retain useful server diagnostics on failure."""
     folder = str(folder or '').strip()
@@ -2028,7 +2049,9 @@ def _sync_mailbox_account(account, folders=None, limit=200, force_full=False, wa
         db.session.commit()
         conn = _imap_connect(account)
         _imap_set_operation_timeout(conn)
-        all_folders = _imap_list_folders(conn)
+        conn, all_folders, list_error = _imap_list_folders_with_retry(account, conn)
+        if list_error:
+            app.logger.warning('[IMAP-LIST] %s: %s', account.email, list_error)
         account.folder_count = len(all_folders)
         target_folders = _resolve_sync_folder_targets(conn, folders, all_folders)
         if folders is not None and not target_folders:
@@ -2153,8 +2176,10 @@ def _sync_mailbox_recent_no_cursor(account, folders=None, limit=500, wait_for_lo
     try:
         conn = _imap_connect(account)
         _imap_set_operation_timeout(conn)
-        all_folders = _imap_list_folders(conn)
-        target_folders = _resolve_sync_folder_targets(conn, folders, all_folders) if folders else _real_result_folders(conn)
+        conn, all_folders, list_error = _imap_list_folders_with_retry(account, conn)
+        if list_error:
+            app.logger.warning('[IMAP-LIST] %s: %s', account.email, list_error)
+        target_folders = _resolve_sync_folder_targets(conn, folders, all_folders) if folders else _real_result_folders_from_list(all_folders)
         if folders is not None and not target_folders:
             requested = ', '.join(str(folder) for folder in folders)
             available = ', '.join(all_folders) or 'none'
@@ -2486,9 +2511,9 @@ def api_explorer_folders():
             try:
                 conn = _imap_connect(account)
                 _imap_set_operation_timeout(conn)
-                live_folders = _imap_list_folders(conn)
+                conn, live_folders, list_error = _imap_list_folders_with_retry(account, conn)
                 if not live_folders:
-                    live_error = 'The IMAP server returned no selectable folders.'
+                    live_error = list_error or 'The IMAP server returned no selectable folders.'
                 else:
                     for folder_name in live_folders:
                         status_counts = _imap_folder_status(conn, folder_name)
@@ -3005,47 +3030,59 @@ def _send_automated_test_messages_async(test_id, senders, custom_headers='', cus
         sender_lookup = {sender['email']: sender for sender in senders}
         rows = InboxDeliverabilityMessage.query.filter_by(test_id=test_id, status='QUEUED').order_by(InboxDeliverabilityMessage.id.asc()).all()
         sources = {source.id: source for source in TestEmailSource.query.filter(TestEmailSource.id.in_([row.source_email_id for row in rows if row.source_email_id])).all()}
+        service_account_ids = {sender.get('service_account_id') for sender in senders if sender.get('service_account_id')}
+        service_accounts = ServiceAccount.query.filter(ServiceAccount.id.in_(service_account_ids)).all() if service_account_ids else []
+        service_account_json = {account.id: account.json_content for account in service_accounts if account.json_content}
+        payloads = []
+        results = {}
         for row in rows:
             sender_info = sender_lookup.get(row.workspace_sender)
             source = sources.get(row.source_email_id)
             if not sender_info:
+                results[row.id] = {'provider_id': None, 'error': 'Sender payload was not available.'}
+            elif not service_account_json.get(sender_info.get('service_account_id')):
+                results[row.id] = {'provider_id': None, 'error': 'Selected Workspace service account is missing or has no JSON key.'}
+            else:
+                headers = '\n'.join([
+                    custom_headers or '',
+                    f'X-Test-Batch-ID: {test_id}',
+                    f'X-Test-Source-ID: {source.id if source else "manual"}',
+                ]).strip()
+                subject = custom_subject or (source.original_subject if source else '') or row.subject or 'Automated Email Test'
+                custom_html = str(custom_html_body or '')
+                custom_text = str(custom_text_body or '')
+                html_body = custom_html if custom_html.strip() else ((source.html_snapshot if source else '') or '')
+                text_body = custom_text if custom_text.strip() else ((source.text_snapshot or source.preview_snapshot) if source else '')
+                payloads.append({
+                    'row_id': row.id,
+                    'service_account_id': sender_info['service_account_id'],
+                    'service_account_json': service_account_json[sender_info['service_account_id']],
+                    'sender': row.workspace_sender,
+                    'sender_name': sender_info.get('name'),
+                    'recipient': row.recipient,
+                    'subject': subject,
+                    'html_body': html_body,
+                    'text_body': text_body,
+                    'test_identifier': row.test_identifier,
+                    'custom_headers': headers,
+                })
+        results.update(_send_test_payloads_concurrently(payloads))
+        for row_index, row in enumerate(rows, 1):
+            result = results.get(row.id) or {'provider_id': None, 'error': 'No send result returned.'}
+            if result.get('error'):
                 row.status = 'FAILED'
                 row.placement = 'FAILED'
-                row.error_message = 'Sender payload was not available.'
+                row.error_message = result['error']
             else:
-                try:
-                    headers = '\n'.join([
-                        custom_headers or '',
-                        f'X-Test-Batch-ID: {test_id}',
-                        f'X-Test-Source-ID: {source.id if source else "manual"}',
-                    ]).strip()
-                    subject = custom_subject or (source.original_subject if source else '') or row.subject or 'Automated Email Test'
-                    custom_html = str(custom_html_body or '')
-                    custom_text = str(custom_text_body or '')
-                    html_body = custom_html if custom_html.strip() else ((source.html_snapshot if source else '') or '')
-                    text_body = custom_text if custom_text.strip() else ((source.text_snapshot or source.preview_snapshot) if source else '')
-                    row.provider_message_id = _send_test_email_gmail_api(
-                        sender_info['service_account_id'],
-                        row.workspace_sender,
-                        row.recipient,
-                        subject,
-                        html_body,
-                        text_body,
-                        row.test_identifier,
-                        headers,
-                        sender_info.get('name')
-                    )
-                    row.sent_at = datetime.utcnow()
-                    row.status = 'WAITING_FOR_DELIVERY'
-                    row.placement = 'PENDING'
-                except Exception as e:
-                    row.status = 'FAILED'
-                    row.placement = 'FAILED'
-                    row.error_message = str(e)
-            test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
-            if test:
-                _refresh_deliverability_counts(test)
-            db.session.commit()
+                row.provider_message_id = result['provider_id']
+                row.sent_at = datetime.utcnow()
+                row.status = 'WAITING_FOR_DELIVERY'
+                row.placement = 'PENDING'
+            if row_index % 10 == 0 or row_index == len(rows):
+                test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
+                if test:
+                    _refresh_deliverability_counts(test)
+                db.session.commit()
         test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
         if test:
             _refresh_deliverability_counts(test)
@@ -3708,18 +3745,30 @@ def _build_test_mime_message(sender, recipient, subject, html_body, text_body, t
     _apply_custom_headers(msg, custom_headers, sender, recipient, subject, test_identifier, sender_name)
     return msg
 
-def _send_test_email_gmail_api(service_account_id, sender, recipient, subject, html_body, text_body, test_identifier, custom_headers=None, sender_name=None):
+def _send_test_email_gmail_api(service_account_id, sender, recipient, subject, html_body, text_body, test_identifier, custom_headers=None, sender_name=None, service_account_json=None, service_cache=None):
     from google.oauth2 import service_account as google_service_account
     from googleapiclient.discovery import build
-    sa = ServiceAccount.query.get(service_account_id)
-    if not sa or not sa.json_content:
-        raise ValueError('Selected Workspace service account is missing or has no JSON key.')
-    credentials_info = json.loads(sa.json_content)
-    creds = google_service_account.Credentials.from_service_account_info(
-        credentials_info,
-        scopes=['https://www.googleapis.com/auth/gmail.send']
-    ).with_subject(sender)
-    gmail = build('gmail', 'v1', credentials=creds, cache_discovery=False)
+    cache_key = (int(service_account_id), str(sender).lower())
+    cache = getattr(service_cache, 'services', None) if service_cache is not None else None
+    if service_cache is not None and cache is None:
+        cache = {}
+        service_cache.services = cache
+    gmail = cache.get(cache_key) if cache is not None else None
+    if gmail is None:
+        if service_account_json:
+            credentials_info = json.loads(service_account_json) if isinstance(service_account_json, str) else service_account_json
+        else:
+            sa = ServiceAccount.query.get(service_account_id)
+            if not sa or not sa.json_content:
+                raise ValueError('Selected Workspace service account is missing or has no JSON key.')
+            credentials_info = json.loads(sa.json_content)
+        creds = google_service_account.Credentials.from_service_account_info(
+            credentials_info,
+            scopes=['https://www.googleapis.com/auth/gmail.send']
+        ).with_subject(sender)
+        gmail = build('gmail', 'v1', credentials=creds, cache_discovery=False)
+        if cache is not None:
+            cache[cache_key] = gmail
     if _should_send_raw_custom_mime(custom_headers, html_body, text_body):
         raw_bytes = _build_raw_custom_mime_bytes(sender, recipient, subject, html_body, text_body, test_identifier, custom_headers, sender_name)
         fallback_message_id = _custom_header_value(custom_headers, 'Message-ID') or make_msgid(idstring=test_identifier)
@@ -3730,6 +3779,33 @@ def _send_test_email_gmail_api(service_account_id, sender, recipient, subject, h
     raw = base64.urlsafe_b64encode(raw_bytes).decode('utf-8')
     result = gmail.users().messages().send(userId='me', body={'raw': raw}).execute()
     return result.get('id') or fallback_message_id
+
+def _send_test_payloads_concurrently(payloads, max_workers=4):
+    """Send prepared test payloads with bounded, thread-local Gmail clients."""
+    if not payloads:
+        return {}
+    service_cache = threading.local()
+
+    def send_one(payload):
+        try:
+            provider_id = _send_test_email_gmail_api(
+                payload['service_account_id'], payload['sender'], payload['recipient'],
+                payload['subject'], payload['html_body'], payload['text_body'],
+                payload['test_identifier'], payload.get('custom_headers'),
+                payload.get('sender_name'), payload.get('service_account_json'), service_cache
+            )
+            return payload['row_id'], provider_id, None
+        except Exception as exc:
+            return payload['row_id'], None, str(exc)
+
+    workers = max(1, min(int(max_workers or 4), 8, len(payloads)))
+    results = {}
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = [executor.submit(send_one, payload) for payload in payloads]
+        for future in as_completed(futures):
+            row_id, provider_id, error = future.result()
+            results[row_id] = {'provider_id': provider_id, 'error': error}
+    return results
 
 def _refresh_deliverability_counts(test, preserve_stopped=True):
     was_stopped = preserve_stopped and str(test.status or '').upper() == _INBOX_TEST_STOPPED_STATUS
@@ -3806,40 +3882,52 @@ def _send_deliverability_test_messages_async(test_id, senders, subject, html_bod
     with app.app_context():
         sender_lookup = {sender['email']: sender for sender in senders}
         rows = InboxDeliverabilityMessage.query.filter_by(test_id=test_id, status='QUEUED').order_by(InboxDeliverabilityMessage.id.asc()).all()
+        service_account_ids = {sender.get('service_account_id') for sender in senders if sender.get('service_account_id')}
+        service_accounts = ServiceAccount.query.filter(ServiceAccount.id.in_(service_account_ids)).all() if service_account_ids else []
+        service_account_json = {account.id: account.json_content for account in service_accounts if account.json_content}
+        payloads = []
+        results = {}
         for row in rows:
             sender_info = sender_lookup.get(row.workspace_sender)
             if not sender_info:
+                results[row.id] = {'provider_id': None, 'error': 'Sender payload was not available for this queued message.'}
+            elif not service_account_json.get(sender_info.get('service_account_id')):
+                results[row.id] = {'provider_id': None, 'error': 'Selected Workspace service account is missing or has no JSON key.'}
+            else:
+                payloads.append({
+                    'row_id': row.id,
+                    'service_account_id': sender_info['service_account_id'],
+                    'service_account_json': service_account_json[sender_info['service_account_id']],
+                    'sender': row.workspace_sender,
+                    'sender_name': sender_info.get('name'),
+                    'recipient': row.recipient,
+                    'subject': subject,
+                    'html_body': html_body,
+                    'text_body': text_body,
+                    'test_identifier': row.test_identifier,
+                    'custom_headers': custom_headers,
+                })
+        results.update(_send_test_payloads_concurrently(payloads))
+        for row_index, row in enumerate(rows, 1):
+            result = results.get(row.id) or {'provider_id': None, 'error': 'No send result returned.'}
+            if result.get('error'):
                 row.status = 'FAILED'
                 row.placement = 'FAILED'
-                row.error_message = 'Sender payload was not available for this queued message.'
+                row.error_message = result['error']
             else:
-                try:
-                    row.provider_message_id = _send_test_email_gmail_api(
-                        sender_info['service_account_id'],
-                        row.workspace_sender,
-                        row.recipient,
-                        subject,
-                        html_body,
-                        text_body,
-                        row.test_identifier,
-                        custom_headers,
-                        sender_info.get('name')
-                    )
-                    row.sent_at = datetime.utcnow()
-                    if row.imap_account_id:
-                        row.status = 'WAITING_FOR_DELIVERY'
-                        row.placement = 'PENDING'
-                    else:
-                        row.status = 'SENT_EXTERNAL'
-                        row.placement = 'UNOBSERVED'
-                except Exception as e:
-                    row.status = 'FAILED'
-                    row.placement = 'FAILED'
-                    row.error_message = str(e)
-            test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
-            if test:
-                _refresh_deliverability_counts(test)
-            db.session.commit()
+                row.provider_message_id = result['provider_id']
+                row.sent_at = datetime.utcnow()
+                if row.imap_account_id:
+                    row.status = 'WAITING_FOR_DELIVERY'
+                    row.placement = 'PENDING'
+                else:
+                    row.status = 'SENT_EXTERNAL'
+                    row.placement = 'UNOBSERVED'
+            if row_index % 10 == 0 or row_index == len(rows):
+                test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
+                if test:
+                    _refresh_deliverability_counts(test)
+                db.session.commit()
         test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
         if test:
             _refresh_deliverability_counts(test)
@@ -4404,7 +4492,10 @@ def _real_result_folders(conn):
     """Intersect the account's real folder tree with the folders known to carry
     deliverability test results (INBOX, Spam/Junk/Bulk, Gmail Promotions/Updates/Social...).
     Falls back to all folders so non-standard providers still get scanned."""
-    real = _imap_list_folders(conn)
+    return _real_result_folders_from_list(_imap_list_folders(conn))
+
+def _real_result_folders_from_list(real):
+    """Filter an already-loaded IMAP folder list for deliverability results."""
     if not real:
         return ['INBOX']
     matches = []
@@ -4468,7 +4559,13 @@ def _imap_fetch_by_identifiers(account, identifiers, folders=None, include_text_
     try:
         conn = _imap_connect(account)
         _imap_set_operation_timeout(conn)
-        target_folders = folders if folders else _real_result_folders(conn)
+        if folders:
+            target_folders = folders
+        else:
+            conn, all_folders, list_error = _imap_list_folders_with_retry(account, conn)
+            if list_error:
+                app.logger.warning('[IMAP-LIST] %s: %s', account.email, list_error)
+            target_folders = _real_result_folders_from_list(all_folders)
         for folder in target_folders:
             if _inbox_sync_paused():
                 errors.append(_INBOX_SYNC_PAUSED_MESSAGE)
@@ -4580,7 +4677,13 @@ def _imap_fetch_by_senders(account, sender_emails, folders=None, date_range=None
     try:
         conn = _imap_connect(account)
         _imap_set_operation_timeout(conn)
-        target_folders = folders if folders else _real_result_folders(conn)
+        if folders:
+            target_folders = folders
+        else:
+            conn, all_folders, list_error = _imap_list_folders_with_retry(account, conn)
+            if list_error:
+                app.logger.warning('[IMAP-LIST] %s: %s', account.email, list_error)
+            target_folders = _real_result_folders_from_list(all_folders)
         per_folder_limit = max(25, min(1500, int(limit or 1000)))
         for folder in target_folders:
             if _inbox_sync_paused():
@@ -4782,7 +4885,9 @@ def _sync_mailbox_date_range_no_cursor(account, folders=None, date_range=None, s
         db.session.commit()
         conn = _imap_connect(account)
         _imap_set_operation_timeout(conn)
-        all_folders = _imap_list_folders(conn)
+        conn, all_folders, list_error = _imap_list_folders_with_retry(account, conn)
+        if list_error:
+            app.logger.warning('[IMAP-LIST] %s: %s', account.email, list_error)
         target_folders = _resolve_sync_folder_targets(conn, folders, all_folders)
         if folders is not None and not target_folders:
             requested = ', '.join(str(folder) for folder in folders)
