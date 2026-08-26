@@ -785,9 +785,14 @@
                                 <label class="form-label fw-semibold">Domains In Selected TLD</label>
                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                     <div class="small text-muted">Available domains are used for creation. Used domains can be reactivated here.</div>
-                                    <button type="button" class="btn btn-sm btn-primary" id="btnReactivateSelectedDomains">
-                                        Reactivate Selected Used
-                                    </button>
+                                    <div class="btn-group btn-group-sm" role="group" aria-label="Used domain selection actions">
+                                        <button type="button" class="btn btn-outline-secondary" id="btnSelectAllUsedDomains">
+                                            Select All Used
+                                        </button>
+                                        <button type="button" class="btn btn-primary" id="btnReactivateSelectedDomains">
+                                            Reactivate Selected Used
+                                        </button>
+                                    </div>
                                 </div>
                                 <div id="tldDomainList" class="border rounded p-2" style="height: 220px; overflow-y: auto;">
                                     <div class="text-muted small">Select a TLD group to view public domains.</div>
@@ -1270,6 +1275,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('manualSubdomainsInput').addEventListener('input', updateManualSubdomainsCount);
     document.getElementById('btnGenerateManualSubdomains').addEventListener('click', generateManualSubdomains);
     document.getElementById('manualBaseDomainsInput').addEventListener('input', updateManualBaseDomainsCount);
+    document.getElementById('btnSelectAllUsedDomains').addEventListener('click', toggleAllUsedDomains);
     document.getElementById('btnReactivateSelectedDomains').addEventListener('click', reactivateSelectedDomains);
     document.getElementById('btnRefreshAfraidLists').addEventListener('click', loadAfraidLists);
     document.getElementById('lists-tab').addEventListener('shown.bs.tab', loadAfraidLists);
@@ -1587,12 +1593,39 @@ function renderSelectedTldDomains(domains) {
         const checkClass = usedThisMonth ? 'reactivate-domain-check' : 'tld-domain-check';
         row.innerHTML = `<span><input type="checkbox" class="me-2 ${checkClass}" value="${escapeHtml(item.domain_name)}"> ${escapeHtml(item.domain_name)}</span>
             <span class="text-muted">hosts: ${item.hosts_in_use ?? 'n/a'} | ${item.registry_created_on || 'n/a'} | ${usedThisMonth ? 'used' : 'available'}</span>`;
-        if (!usedThisMonth) {
-            row.querySelector('input').addEventListener('change', syncSelectedTldDomains);
-        }
+        const checkbox = row.querySelector('input');
+        checkbox.addEventListener('change', () => {
+            if (usedThisMonth) {
+                updateUsedDomainSelectAllState();
+            } else {
+                syncSelectedTldDomains();
+            }
+        });
         list.appendChild(row);
     });
+    updateUsedDomainSelectAllState();
     syncSelectedTldDomains();
+}
+
+function toggleAllUsedDomains() {
+    const checkboxes = [...document.querySelectorAll('#tldDomainList .reactivate-domain-check')];
+    if (!checkboxes.length) {
+        alert('No used domains are available to select in this TLD.');
+        return;
+    }
+    const selectAll = checkboxes.some(checkbox => !checkbox.checked);
+    checkboxes.forEach(checkbox => { checkbox.checked = selectAll; });
+    updateUsedDomainSelectAllState();
+}
+
+function updateUsedDomainSelectAllState() {
+    const button = document.getElementById('btnSelectAllUsedDomains');
+    if (!button) return;
+    const checkboxes = [...document.querySelectorAll('#tldDomainList .reactivate-domain-check')];
+    const allSelected = checkboxes.length > 0 && checkboxes.every(checkbox => checkbox.checked);
+    button.textContent = allSelected ? 'Clear Used Selection' : 'Select All Used';
+    button.classList.toggle('btn-secondary', allSelected);
+    button.classList.toggle('btn-outline-secondary', !allSelected);
 }
 
 async function reactivateSelectedDomains() {
