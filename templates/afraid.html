@@ -1788,10 +1788,15 @@ function joinGeneratedSubdomainWords(words, options = {}) {
 }
 
 function buildGeneratedSubdomainCandidate(index, options = {}) {
-    const words = afraidSubdomainWordPool;
-    const first = words[Math.floor(Math.random() * words.length)];
-    const second = words[Math.floor(Math.random() * words.length)];
-    const third = words[Math.floor(Math.random() * words.length)];
+    // Use a deterministic, collision-free three-word combination for each
+    // position in this batch. Random sampling alone can repeat combinations.
+    const words = [...new Set(afraidSubdomainWordPool)];
+    const wordCount = words.length;
+    const combinationCount = wordCount * wordCount * wordCount;
+    const serial = (Number(options.generationOffset || 0) + Number(index || 0)) % combinationCount;
+    const first = words[Math.floor(serial / (wordCount * wordCount))];
+    const second = words[Math.floor(serial / wordCount) % wordCount];
+    const third = words[serial % wordCount];
     const compact = joinGeneratedSubdomainWords([first, second, third], options);
     return cleanGeneratedSubdomainLabel(compact, options);
 }
@@ -1824,7 +1829,11 @@ function generateManualSubdomains() {
     };
     const requested = Math.min(5000, Math.max(1, Number(countInput?.value || 0) || 0));
     if (!input || !requested) return;
+    const uniqueWordCount = [...new Set(afraidSubdomainWordPool)].length;
+    const combinationCount = uniqueWordCount * uniqueWordCount * uniqueWordCount;
     const used = new Set();
+    const generationOffset = Math.floor(Math.random() * Math.max(1, combinationCount));
+    options.generationOffset = generationOffset;
     const generated = [];
     for (let index = 0; index < requested; index += 1) {
         generated.push(generateUniqueManualSubdomain(used, index, options));
