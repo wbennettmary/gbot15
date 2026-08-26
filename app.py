@@ -239,6 +239,35 @@ if not app.debug:
 with app.app_context():
     db.create_all()
 
+    # Auto-migration: Track whether a saved Afraid result list has been used
+    # by the Add & Verify All/Pick actions.
+    try:
+        from sqlalchemy import inspect
+        inspector = inspect(db.engine)
+        table_names = inspector.get_table_names()
+        if 'afraid_result_list' in table_names:
+            columns = [col['name'] for col in inspector.get_columns('afraid_result_list')]
+            new_columns = {
+                'is_used': 'BOOLEAN DEFAULT FALSE',
+                'used_at': 'TIMESTAMP',
+                'used_mode': 'VARCHAR(20)',
+            }
+            with db.engine.connect() as conn:
+                for column_name, column_type in new_columns.items():
+                    if column_name not in columns:
+                        logging.info(f"Adding missing '{column_name}' column to afraid_result_list table...")
+                        if 'postgresql' in str(db.engine.url):
+                            conn.execute(text(f'ALTER TABLE "afraid_result_list" ADD COLUMN {column_name} {column_type}'))
+                        else:
+                            conn.execute(text(f"ALTER TABLE afraid_result_list ADD COLUMN {column_name} {column_type}"))
+                conn.commit()
+    except Exception as e:
+        logging.warning(f"Could not auto-migrate Afraid result-list usage fields: {e}")
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+
     # Auto-migration: Add cookies_str column to afraid_config if it doesn't exist.
     # db.create_all() creates new tables, but it does not alter existing ones.
     try:
@@ -4449,6 +4478,11 @@ def api_inbox_automated_test_results(test_id):
         verdict_counts[item['verdict']] = verdict_counts.get(item['verdict'], 0) + 1
     source_lookup = {item['id']: item for item in source_results}
     messages = InboxDeliverabilityMessage.query.filter_by(test_id=test_id).order_by(InboxDeliverabilityMessage.id.asc()).all()
+    inbox_account_ids = {message.imap_account_id for message in messages if message.imap_account_id}
+    inbox_accounts = {
+        account.id: account
+        for account in InboxImapAccount.query.filter(InboxImapAccount.id.in_(inbox_account_ids)).all()
+    } if inbox_account_ids else {}
     return jsonify({'success': True, 'test': {
         'test_id': test.test_id,
         'name': test.name,
@@ -4470,6 +4504,8 @@ def api_inbox_automated_test_results(test_id):
             'sender': m.workspace_sender,
             'workspace_account_email': getattr(m, 'workspace_account_email', None) or '',
             'recipient': m.recipient,
+            'imap_account_id': m.imap_account_id,
+            'inbox_account_email': inbox_accounts.get(m.imap_account_id).email if inbox_accounts.get(m.imap_account_id) else '',
             'source_email_id': m.source_email_id,
             'source_sender': source_lookup.get(m.source_email_id, {}).get('source_sender', ''),
             'source_sender_domain': source_lookup.get(m.source_email_id, {}).get('source_sender_domain', ''),
@@ -5557,6 +5593,10 @@ def api_inbox_test_detail(test_id):
         if sender_email and sender_email not in sender_emails:
             sender_emails.append(sender_email)
     sources = TestEmailSource.query.filter(TestEmailSource.id.in_(source_ids)).all() if source_ids else []
+    inbox_accounts = {
+        account.id: account
+        for account in InboxImapAccount.query.filter(InboxImapAccount.id.in_(inbox_account_ids)).all()
+    } if inbox_account_ids else {}
     sender_context = _sender_context_from_message_emails(sender_emails)
     resolved_accounts = _saved_analysis_account_lookup([test_id])
     stored_account_by_sender = {
@@ -5631,6 +5671,7 @@ def api_inbox_test_detail(test_id):
             'workspace_account_email': getattr(m, 'workspace_account_email', None) or '',
             'recipient': m.recipient,
             'imap_account_id': m.imap_account_id,
+            'inbox_account_email': inbox_accounts.get(m.imap_account_id).email if inbox_accounts.get(m.imap_account_id) else '',
             'source_email_id': m.source_email_id,
             'test_identifier': m.test_identifier,
             'placement': m.placement,

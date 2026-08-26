@@ -4138,7 +4138,12 @@ merge_recipe_id, content_blueprint_id</pre>
                 </div>
                 <div id="iiTargetedAliasResults" class="ii-targeted-alias-results">
                     <div class="ii-row justify-content-between mb-2">
-                        <strong>Targeted identity results</strong>
+                        <div class="ii-row">
+                            <strong>Targeted identity results</strong>
+                            <button type="button" class="ii-btn" id="iiTargetedAliasCopyButton" onclick="copyIiTargetedAliasChangedUsers()" disabled title="Copy successful identity changes as account,user pairs for testing">
+                                <i class="fas fa-copy"></i> Copy changed users for testing
+                            </button>
+                        </div>
                         <span id="iiTargetedAliasResultSummary" class="ii-muted">No completed targeted run yet.</span>
                     </div>
                     <textarea class="ii-textarea" id="iiTargetedAliasResultText" rows="8" readonly
@@ -4331,6 +4336,7 @@ merge_recipe_id, content_blueprint_id</pre>
         selectedServiceAccountIds: new Set(),
         selectedSenderEmails: new Set(),
         automatedNameTestUserRows: [],
+        targetedAliasChangedPairs: [],
         selectedInboxIds: new Set(),
         activeExplorerFolder: '',
         automatedQueue: [],
@@ -4921,6 +4927,12 @@ merge_recipe_id, content_blueprint_id</pre>
         if (confirmBox) confirmBox.checked = false;
         if (results) results.classList.remove('is-visible');
         if (resultText) resultText.value = '';
+        iiState.targetedAliasChangedPairs = [];
+        const copyButton = document.getElementById('iiTargetedAliasCopyButton');
+        if (copyButton) {
+            copyButton.disabled = true;
+            copyButton.innerHTML = '<i class="fas fa-copy"></i> Copy changed users for testing';
+        }
         setIiTargetedAliasProgress(0);
         updateIiTargetedAliasPreview();
     }
@@ -4929,9 +4941,32 @@ merge_recipe_id, content_blueprint_id</pre>
         const results = document.getElementById('iiTargetedAliasResults');
         const summary = document.getElementById('iiTargetedAliasResultSummary');
         const text = document.getElementById('iiTargetedAliasResultText');
+        const copyButton = document.getElementById('iiTargetedAliasCopyButton');
+        const changedPairs = [];
+        const seenPairs = new Set();
+
+        (data.results || []).forEach((result) => {
+            const account = String(result.account || '').trim();
+            if (!account) return;
+            (result.details || []).forEach((detail) => {
+                if (!detail.success) return;
+                const newUser = String(detail.new_primary || '').trim();
+                if (!newUser) return;
+                const line = `${account},${newUser}`;
+                const key = line.toLowerCase();
+                if (seenPairs.has(key)) return;
+                seenPairs.add(key);
+                changedPairs.push(line);
+            });
+        });
+        iiState.targetedAliasChangedPairs = changedPairs;
         if (results) results.classList.add('is-visible');
         if (summary) {
             summary.textContent = `${data.total_aliases_added || 0} updated, ${data.total_aliases_failed || 0} failed, ${data.total_skipped || 0} skipped`;
+        }
+        if (copyButton) {
+            copyButton.disabled = !changedPairs.length;
+            copyButton.innerHTML = `<i class="fas fa-copy"></i> ${changedPairs.length ? `Copy ${changedPairs.length} changed user(s) for testing` : 'No changed users to copy'}`;
         }
         if (!text) return;
         const lines = [];
@@ -4948,6 +4983,23 @@ merge_recipe_id, content_blueprint_id</pre>
             });
         });
         text.value = lines.join('\n');
+    }
+
+    async function copyIiTargetedAliasChangedUsers() {
+        const values = (iiState.targetedAliasChangedPairs || [])
+            .map((value) => String(value || '').trim())
+            .filter(Boolean);
+        if (!values.length) {
+            setIiTargetedAliasStatus('No successful identity changes are available to copy yet.', 'error');
+            return;
+        }
+        try {
+            await copyTextToClipboard(`${values.join('\r\n')}\r\n`);
+            setIiTargetedAliasStatus(`Copied ${values.length} changed user pair(s) as account,user lines for testing.`, 'ready');
+        } catch (err) {
+            console.error('[TARGETED ALIAS] Clipboard copy failed:', err);
+            setIiTargetedAliasStatus('Clipboard access failed. Select and copy the successful results manually.', 'error');
+        }
     }
 
     async function executeIiTargetedAliasRandomization(event) {
@@ -4967,6 +5019,12 @@ merge_recipe_id, content_blueprint_id</pre>
 
         let btn = event?.target?.closest('button') || document.querySelector('button[onclick*="executeIiTargetedAliasRandomization"]');
         const originalButtonHtml = btn ? btn.innerHTML : '';
+        iiState.targetedAliasChangedPairs = [];
+        const copyButton = document.getElementById('iiTargetedAliasCopyButton');
+        if (copyButton) {
+            copyButton.disabled = true;
+            copyButton.innerHTML = '<i class="fas fa-copy"></i> Waiting for completed changes...';
+        }
         const resetButton = () => {
             if (!btn) return;
             btn.disabled = false;
@@ -9490,6 +9548,11 @@ merge_recipe_id, content_blueprint_id</pre>
                 </div>
                 <div class="ii-insight-grid mt-3">
                     <div class="ii-insight-card">
+                        <h4>Receiving Inbox Accounts</h4>
+                        <div class="ii-muted mb-2">The IMAP account attached to each placement result.</div>
+                        ${renderAnalyticsInboxAccountRows(rows)}
+                    </div>
+                    <div class="ii-insight-card">
                         <h4>Provider Mix</h4>
                         ${providerRows.map(([name, stats]) => `<div class="ii-insight-row">
                             <strong>${escapeHtml(name)}</strong>
@@ -11342,6 +11405,51 @@ merge_recipe_id, content_blueprint_id</pre>
         return domain || 'External';
     }
 
+    function analyticsInboxAccountStats(rows) {
+        const stats = new Map();
+        (rows || []).forEach((row) => {
+            const recipient = String(row.recipient || '').trim().toLowerCase();
+            const rowAccountId = Number(row.imap_account_id || 0);
+            const account = rowAccountId
+                ? iiState.imapAccounts.find((item) => Number(item.id) === rowAccountId)
+                : iiState.imapAccounts.find((item) => String(item.email || '').trim().toLowerCase() === recipient);
+            const accountId = rowAccountId || Number(account?.id || 0);
+            const key = accountId ? `id:${accountId}` : `recipient:${recipient || 'unknown'}`;
+            const item = stats.get(key) || {
+                email: String(row.inbox_account_email || account?.email || recipient || (accountId ? `IMAP account #${accountId}` : 'Unknown recipient')),
+                accountId,
+                connected: Boolean(accountId || row.inbox_account_email),
+                total: 0,
+                inbox: 0,
+                spam: 0,
+                pending: 0,
+                failed: 0,
+            };
+            item.total += 1;
+            if (row.placement === 'INBOX') item.inbox += 1;
+            else if (row.placement === 'SPAM') item.spam += 1;
+            else if (row.placement === 'PENDING') item.pending += 1;
+            else item.failed += 1;
+            stats.set(key, item);
+        });
+        return [...stats.values()].sort((a, b) => b.total - a.total || a.email.localeCompare(b.email));
+    }
+
+    function renderAnalyticsInboxAccountRows(rows) {
+        const accounts = analyticsInboxAccountStats(rows);
+        if (!accounts.length) return '<div class="ii-muted">No receiving inbox account was attached to these results.</div>';
+        return accounts.map((account) => `
+            <div class="ii-insight-row">
+                <div style="min-width:0;">
+                    <strong class="ii-email-text">${escapeHtml(account.email)}</strong>
+                    <div class="ii-muted">${account.connected ? 'Connected receiving IMAP account' : 'Recipient is not linked to an IMAP account'}</div>
+                </div>
+                <span class="ii-chip green">${account.inbox} inbox</span>
+                <span class="ii-chip red">${account.spam} spam</span>
+                <span class="ii-chip yellow">${account.pending} waiting</span>
+            </div>`).join('');
+    }
+
     function renderUserInboxProviderSummary(rows, opts = {}) {
         const el = document.getElementById(opts.el || 'userInboxProviderSummary');
         if (!el) return;
@@ -11491,6 +11599,11 @@ merge_recipe_id, content_blueprint_id</pre>
                     <div class="ii-compact-stat"><span class="ii-muted">Spam users</span><strong>${spamUsers.length}</strong><span class="ii-muted">${summary.spam} spam hit(s)</span></div>
                 </div>
                 <div class="ii-insight-grid mt-2">
+                    <div class="ii-insight-card">
+                        <h4>Receiving Inbox Accounts</h4>
+                        <div class="ii-muted mb-2">The IMAP account attached to each placement result.</div>
+                        ${renderAnalyticsInboxAccountRows(rows)}
+                    </div>
                     <div class="ii-insight-card">
                         <h4>Provider Mix</h4>
                         ${providers.map(([provider, stats]) => {

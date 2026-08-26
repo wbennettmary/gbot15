@@ -373,6 +373,9 @@ class AfraidResultList(db.Model):
     results_json = db.Column(db.Text, nullable=True)
     created_count = db.Column(db.Integer, default=0)
     failed_count = db.Column(db.Integer, default=0)
+    is_used = db.Column(db.Boolean, default=False, nullable=False)
+    used_at = db.Column(db.DateTime, nullable=True)
+    used_mode = db.Column(db.String(20), nullable=True)
     created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
 
     def to_dict(self):
@@ -384,6 +387,9 @@ class AfraidResultList(db.Model):
             'results_json': self.results_json,
             'created_count': self.created_count or 0,
             'failed_count': self.failed_count or 0,
+            'is_used': bool(self.is_used),
+            'used_at': self.used_at.isoformat() + 'Z' if self.used_at else None,
+            'used_mode': self.used_mode or '',
             'created_at': self.created_at.isoformat() + 'Z' if self.created_at else None
         }
 

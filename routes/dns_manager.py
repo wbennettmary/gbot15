@@ -1513,6 +1513,30 @@ def stop_external_cloudflare():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@dns_manager.route('/api/domains/external-cloudflare/clear-txt', methods=['POST'])
+@login_required
+def clear_external_cloudflare_txt():
+    """Remove all TXT records from one Cloudflare zone for failed retries."""
+    try:
+        data = request.get_json(silent=True) or {}
+        domain = str(data.get('domain') or '').strip().lower().rstrip('.')
+        if not domain or '.' not in domain or any(char.isspace() for char in domain):
+            return jsonify({'success': False, 'error': 'A valid Cloudflare domain is required'}), 400
+        result = CloudflareDNSService().delete_all_txt_records(domain)
+        if not result.get('success'):
+            return jsonify(result), 400
+        return jsonify({
+            'success': True,
+            'domain': domain,
+            'deleted': result.get('deleted', 0),
+            'total': result.get('total', result.get('deleted', 0)),
+            'message': result.get('message') or f"Cleared {result.get('deleted', 0)} TXT record(s) from {domain}."
+        })
+    except Exception as e:
+        logger.error(f"Error clearing TXT records for external Cloudflare retry: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @dns_manager.route('/api/domains/external-cloudflare/status/<job_id>', methods=['GET'])
 @login_required
 def get_external_cloudflare_status(job_id):

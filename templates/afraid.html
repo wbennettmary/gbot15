@@ -103,6 +103,18 @@
         white-space: nowrap;
     }
 
+    .afraid-external-cf-row-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-top: 5px;
+    }
+
+    .afraid-external-cf-row-actions .btn {
+        font-size: .72rem;
+        padding: 2px 6px;
+    }
+
     .afraid-svg-icon {
         display: inline-block;
         flex: 0 0 auto;
@@ -114,6 +126,29 @@
         stroke-width: 2;
         vertical-align: -0.14em;
         width: 1em;
+    }
+
+    .afraid-list-card {
+        border: 1px solid #dee2e6;
+        transition: border-color .2s ease, box-shadow .2s ease, background-color .2s ease;
+    }
+
+    .afraid-list-card.is-used {
+        background: #fffbeb;
+        border-color: #f59e0b;
+        box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.12);
+    }
+
+    .afraid-list-card.is-used .card-header {
+        background: #fef3c7 !important;
+        border-bottom-color: #fcd34d;
+    }
+
+    .afraid-list-used-badge {
+        background: #d97706;
+        color: #fff;
+        font-size: .68rem;
+        letter-spacing: .03em;
     }
 
     .afraid-list-card-actions {
@@ -2226,6 +2261,7 @@ let afraidExternalCfMergedSource = null;
 let afraidExternalCfSourceList = null;
 let afraidExternalCfSourceAccounts = [];
 let afraidExternalCfSpecificMode = false;
+let afraidExternalCfSelectionMode = 'all';
 let afraidExternalCfLogSeen = {};
 let afraidExternalCfStatusSeen = {};
 let afraidDeleteUsersAccounts = [];
@@ -2247,14 +2283,21 @@ async function loadAfraidLists() {
         grid.innerHTML = '';
         data.lists.forEach(lst => {
             const createdAt = lst.created_at ? new Date(lst.created_at).toLocaleString() : 'n/a';
+            const usedAt = lst.used_at ? new Date(lst.used_at).toLocaleString() : '';
+            const usageLabel = lst.is_used
+                ? `Used${lst.used_mode ? ` · ${lst.used_mode === 'pick' ? 'Pick' : 'All'}` : ''}`
+                : 'Available';
             const col = document.createElement('div');
             col.className = 'col-lg-6';
             col.innerHTML = `
-                <div class="card h-100">
+                <div class="card h-100 afraid-list-card${lst.is_used ? ' is-used' : ''}" data-afraid-list-id="${lst.id}">
                     <div class="card-header bg-light d-flex justify-content-between align-items-start gap-3 flex-wrap">
                         <div>
-                            <h6 class="mb-1">${escapeHtml(lst.name)}</h6>
-                            <div class="text-muted small">${escapeHtml(createdAt)} | owner: ${escapeHtml(lst.created_by || 'user')}</div>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <h6 class="mb-1">${escapeHtml(lst.name)}</h6>
+                                <span class="badge ${lst.is_used ? 'afraid-list-used-badge' : 'bg-secondary'}" data-afraid-list-usage>${escapeHtml(usageLabel)}</span>
+                            </div>
+                            <div class="text-muted small">${escapeHtml(createdAt)} | owner: ${escapeHtml(lst.created_by || 'user')}${usedAt ? ` | used: ${escapeHtml(usedAt)}` : ''}</div>
                         </div>
                         <div class="afraid-list-card-actions">
                             <select class="form-select form-select-sm afraid-card-account-select" id="afraid-card-list-${lst.id}" title="List Management account source">
@@ -2571,6 +2614,56 @@ function parseAfraidExternalCfRows(list, accounts = []) {
         });
 }
 
+function applyAfraidListUsedState(list) {
+    if (!list) return;
+    const card = document.querySelector(`[data-afraid-list-id="${list.id}"]`);
+    if (!card) return;
+    card.classList.toggle('is-used', Boolean(list.is_used));
+    const badge = card.querySelector('[data-afraid-list-usage]');
+    if (badge) {
+        badge.className = `badge ${list.is_used ? 'afraid-list-used-badge' : 'bg-secondary'}`;
+        badge.textContent = list.is_used
+            ? `Used${list.used_mode ? ` · ${list.used_mode === 'pick' ? 'Pick' : 'All'}` : ''}`
+            : 'Available';
+    }
+}
+
+async function markAfraidListUsed(listId, mode) {
+    if (!listId) return null;
+    const res = await fetch(`/api/afraid/lists/${listId}/used`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({mode})
+    });
+    const data = await parseJsonResponse(res);
+    if (!data.success) throw new Error(data.error || 'Could not mark the saved list as used.');
+    window.afraidLists = (window.afraidLists || []).map(item => item.id === data.list.id ? data.list : item);
+    if (afraidExternalCfSourceList?.id === data.list.id) afraidExternalCfSourceList = data.list;
+    applyAfraidListUsedState(data.list);
+    return data.list;
+}
+
+function isAfraidExternalCfQuotaError(entry) {
+    const message = String(entry?.message || '').toLowerCase();
+    return /\bquota\b|\brate limit\b|\btoo many\b|\bmaximum\b|\blimit\b/.test(message);
+}
+
+function renderAfraidExternalCfMessageCell(entry) {
+    const message = escapeHtml(entry?.message || '');
+    const showRecoveryActions = isAfraidExternalCfQuotaError(entry) || Boolean(entry?.recoveryActions);
+    if (!showRecoveryActions) return message;
+    const index = Number(entry?.index || 0);
+    return `<div>${message}</div>
+        <div class="afraid-external-cf-row-actions">
+            <button type="button" class="btn btn-sm btn-outline-warning" onclick="clearAfraidExternalCfTxt(${index})" title="Delete all TXT records from this Cloudflare zone">
+                <i class="fas fa-eraser"></i> Clear TXT
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-primary" onclick="retryAfraidExternalCfEntry(${index})" title="Retry this failed row">
+                <i class="fas fa-rotate-right"></i> Retry
+            </button>
+        </div>`;
+}
+
 async function openAfraidExternalCfModal(id, options = {}) {
     const list = (window.afraidLists || []).find(item => item.id === id);
     if (!list) return;
@@ -2583,6 +2676,7 @@ async function openAfraidExternalCfModal(id, options = {}) {
     afraidExternalCfSourceList = list;
     afraidExternalCfSourceAccounts = workspaceAccounts;
     afraidExternalCfSpecificMode = Boolean(options.specificAccounts);
+    afraidExternalCfSelectionMode = afraidExternalCfSpecificMode ? 'pick' : 'all';
     afraidExternalCfMergedSource = workspaceList
         ? {id: workspaceList.id, name: workspaceList.name, accountCount: workspaceAccounts.length}
         : null;
@@ -2656,7 +2750,7 @@ function renderAfraidExternalCfTable(entries) {
             <td class="text-center">${getAfraidExternalCfStatusBadge(entry.tokenStatus)}</td>
             <td class="text-center">${getAfraidExternalCfStatusBadge(entry.dnsStatus)}</td>
             <td class="text-center">${getAfraidExternalCfStatusBadge(entry.verifyStatus)}</td>
-            <td class="small text-muted">${escapeHtml(entry.message || '')}</td>
+            <td class="small text-muted">${renderAfraidExternalCfMessageCell(entry)}</td>
         </tr>
     `).join('');
 }
@@ -2705,6 +2799,9 @@ document.getElementById('btnApplyAfraidSpecificAccounts')?.addEventListener('cli
 function updateAfraidExternalCfTable(entries) {
     let done = 0;
     entries.forEach(entry => {
+        const currentEntry = afraidExternalCfEntries.find(item => Number(item.index) === Number(entry.index));
+        if (currentEntry) Object.assign(currentEntry, entry);
+        else afraidExternalCfEntries.push(entry);
         const row = document.getElementById(`afraid-ext-cf-row-${entry.index}`);
         if (!row) return;
         const cells = row.querySelectorAll('td');
@@ -2715,12 +2812,93 @@ function updateAfraidExternalCfTable(entries) {
         cells[6].innerHTML = getAfraidExternalCfStatusBadge(entry.tokenStatus);
         cells[7].innerHTML = getAfraidExternalCfStatusBadge(entry.dnsStatus);
         cells[8].innerHTML = getAfraidExternalCfStatusBadge(entry.verifyStatus);
-        cells[9].textContent = entry.message || '';
+        cells[9].innerHTML = renderAfraidExternalCfMessageCell(currentEntry || entry);
         if (entry.verifyStatus === 'success' || entry.authStatus === 'failed' || entry.workspaceStatus === 'failed' || entry.tokenStatus === 'failed' || entry.dnsStatus === 'failed' || entry.verifyStatus === 'failed') {
             done += 1;
         }
     });
     document.getElementById('afraidExternalCfDoneCount').textContent = done;
+}
+
+async function clearAfraidExternalCfTxt(index) {
+    const entry = afraidExternalCfEntries.find(item => Number(item.index) === Number(index));
+    if (!entry || !entry.cloudflareDomain) {
+        showAfraidExternalCfAlert('The failed row has no Cloudflare zone to clear.', 'warning');
+        return;
+    }
+    if (!confirm(`Clear ALL TXT records from the Cloudflare zone ${entry.cloudflareDomain}? This may remove TXT records unrelated to this verification.`)) return;
+    const row = document.getElementById(`afraid-ext-cf-row-${index}`);
+    row?.querySelectorAll('.afraid-external-cf-row-actions button').forEach(button => { button.disabled = true; });
+    entry.recoveryActions = true;
+    entry.message = `Clearing TXT records from ${entry.cloudflareDomain}...`;
+    updateAfraidExternalCfTable([entry]);
+    try {
+        const res = await fetch('/api/domains/external-cloudflare/clear-txt', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({domain: entry.cloudflareDomain})
+        });
+        const data = await parseJsonResponse(res);
+        if (!data.success) throw new Error(data.error || 'Could not clear TXT records.');
+        entry.dnsStatus = 'pending';
+        entry.verifyStatus = 'pending';
+        entry.message = data.message || `Cleared ${data.deleted || 0} TXT record(s) from ${entry.cloudflareDomain}. Ready to retry.`;
+        logAfraidExternalCf(`${entry.cloudflareDomain}: ${entry.message}`);
+        showAfraidExternalCfAlert(`${entry.cloudflareDomain}: TXT records cleared. Press Retry on this row.`, 'success');
+    } catch (err) {
+        entry.message = `TXT cleanup failed: ${err.message || 'Unknown error'}`;
+        showAfraidExternalCfAlert(entry.message, 'danger');
+        logAfraidExternalCf(entry.message);
+    } finally {
+        updateAfraidExternalCfTable([entry]);
+        document.getElementById(`afraid-ext-cf-row-${index}`)?.querySelectorAll('.afraid-external-cf-row-actions button').forEach(button => { button.disabled = false; });
+    }
+}
+
+async function retryAfraidExternalCfEntry(index) {
+    const entry = afraidExternalCfEntries.find(item => Number(item.index) === Number(index));
+    if (!entry || !entry.account || !entry.externalDomain || !entry.cloudflareDomain) {
+        showAfraidExternalCfAlert('This row is missing account, AFRAID domain, or Cloudflare zone data.', 'warning');
+        return;
+    }
+    const retryEntry = {
+        ...entry,
+        authStatus: 'pending',
+        workspaceStatus: 'pending',
+        tokenStatus: 'pending',
+        dnsStatus: 'pending',
+        verifyStatus: 'pending',
+        recoveryActions: false,
+        message: 'Retry queued...'
+    };
+    Object.assign(entry, retryEntry);
+    updateAfraidExternalCfTable([entry]);
+    setAfraidExternalCfRunning(true);
+    try {
+        const res = await fetch('/api/domains/external-cloudflare/start', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({entries: [{
+                index: retryEntry.index,
+                account: retryEntry.account,
+                externalDomain: retryEntry.externalDomain,
+                cloudflareDomain: retryEntry.cloudflareDomain
+            }]})
+        });
+        const data = await parseJsonResponse(res);
+        if (!data.success) throw new Error(data.error || 'Could not retry this row.');
+        afraidExternalCfJobId = data.job_id;
+        logAfraidExternalCf(`Retry started for ${retryEntry.externalDomain}: ${data.job_id}`);
+        showAfraidExternalCfAlert(`Retry started for ${retryEntry.externalDomain}.`, 'info');
+        pollAfraidExternalCfJob();
+    } catch (err) {
+        entry.recoveryActions = true;
+        entry.message = `Retry failed to start: ${err.message || 'Unknown error'}`;
+        updateAfraidExternalCfTable([entry]);
+        setAfraidExternalCfRunning(false);
+        showAfraidExternalCfAlert(entry.message, 'danger');
+        logAfraidExternalCf(entry.message);
+    }
 }
 
 function getAfraidExternalCfStatusBadge(status) {
@@ -2781,6 +2959,11 @@ async function startAfraidExternalCfVerification() {
             throw new Error(data.error || 'Could not start verification.');
         }
         afraidExternalCfJobId = data.job_id;
+        try {
+            await markAfraidListUsed(afraidExternalCfSourceList?.id, afraidExternalCfSelectionMode);
+        } catch (usageError) {
+            logAfraidExternalCf(`Warning: verification started, but the saved list could not be marked used: ${usageError.message || 'unknown error'}`);
+        }
         logAfraidExternalCf(`Job started: ${data.job_id}`);
         pollAfraidExternalCfJob();
     } catch (err) {

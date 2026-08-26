@@ -523,6 +523,23 @@ def get_afraid_lists():
     lists = AfraidResultList.query.order_by(AfraidResultList.created_at.desc()).all()
     return jsonify({'success': True, 'lists': [lst.to_dict() for lst in lists]})
 
+@afraid_manager.route('/api/afraid/lists/<int:list_id>/used', methods=['POST'])
+@login_required
+def mark_afraid_list_used(list_id):
+    """Persist that a saved generated list was sent through All or Pick."""
+    lst = AfraidResultList.query.get(list_id)
+    if not lst:
+        return jsonify({'success': False, 'error': 'Afraid list not found'}), 404
+    data = request.get_json(silent=True) or {}
+    mode = (data.get('mode') or '').strip().lower()
+    if mode not in {'all', 'pick'}:
+        return jsonify({'success': False, 'error': 'Usage mode must be all or pick'}), 400
+    lst.is_used = True
+    lst.used_at = datetime.utcnow()
+    lst.used_mode = mode
+    db.session.commit()
+    return jsonify({'success': True, 'list': lst.to_dict()})
+
 @afraid_manager.route('/api/afraid/lists', methods=['POST'])
 @login_required
 def create_manual_afraid_list():
@@ -566,6 +583,9 @@ def update_afraid_list(list_id):
     lst.created_count = len(lines)
     lst.failed_count = 0
     lst.results_json = None
+    lst.is_used = False
+    lst.used_at = None
+    lst.used_mode = None
     db.session.commit()
     return jsonify({'success': True, 'message': 'Afraid list updated', 'list': lst.to_dict()})
 
