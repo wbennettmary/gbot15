@@ -1311,6 +1311,12 @@ _inbox_sync_locks_lock = threading.Lock()  # protects _inbox_sync_locks dict its
 # Folders to scan for test results
 TEST_RESULT_FOLDERS = ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk', 'Bulk Mail', 'Promotions', 'Updates', 'Social']
 
+# IMAP providers can take a few seconds to answer LIST/EXAMINE while a mailbox
+# is being indexed.  A socket that has timed out cannot be reused by
+# imaplib, so select retries must create a fresh authenticated connection.
+_IMAP_CONNECT_TIMEOUT_SECONDS = 30
+_IMAP_OPERATION_TIMEOUT_SECONDS = 30
+
 def _get_account_sync_lock(account_id):
     with _inbox_sync_locks_lock:
         if account_id not in _inbox_sync_locks:
@@ -1403,11 +1409,70 @@ def _imap_connect(account):
     username = _normalize_imap_credential(account.username)
     password = _normalize_imap_credential(_unprotect_secret(account.encrypted_password))
     if account.tls_enabled:
-        conn = imaplib.IMAP4_SSL(host, int(account.imap_port or 993), ssl_context=ssl.create_default_context(), timeout=30)
+        conn = imaplib.IMAP4_SSL(host, int(account.imap_port or 993), ssl_context=ssl.create_default_context(), timeout=_IMAP_CONNECT_TIMEOUT_SECONDS)
     else:
-        conn = imaplib.IMAP4(host, int(account.imap_port or 143), timeout=30)
+        conn = imaplib.IMAP4(host, int(account.imap_port or 143), timeout=_IMAP_CONNECT_TIMEOUT_SECONDS)
     conn.login(username, password)
     return conn
+
+def _imap_set_operation_timeout(conn):
+    """Apply the normal command timeout without failing test doubles."""
+    try:
+        conn.sock.settimeout(_IMAP_OPERATION_TIMEOUT_SECONDS)
+    except Exception:
+        pass
+
+def _imap_close_connection(conn):
+    if not conn:
+        return
+    try:
+        conn.close()
+    except Exception:
+        pass
+    try:
+        conn.logout()
+    except Exception:
+        pass
+
+def _imap_is_stale_connection_error(value):
+    """Whether an IMAP error means the current imaplib object is unusable."""
+    text = str(value or '').lower()
+    return any(marker in text for marker in (
+        'timed out object',
+        'socket.timeout',
+        'timed out',
+        'timeout',
+        'cannot read from',
+    ))
+
+def _imap_select_folder_with_retry(account, conn, folder):
+    """Select a folder, reconnecting once when a socket timeout poisoned conn.
+
+    imaplib leaves its socket in a permanently unusable state after a read
+    timeout.  Retrying ``select`` on that same instance produces the misleading
+    sequence ``EXAMINE ...; SELECT ...: cannot read from timed out object``.
+    """
+    meta = _imap_select_folder(conn, folder)
+    if meta:
+        return conn, meta, None
+    detail = _imap_last_select_error(conn) or 'server returned no detail'
+    if not _imap_is_stale_connection_error(detail):
+        return conn, None, detail
+
+    stale_detail = detail
+    _imap_close_connection(conn)
+    try:
+        conn = _imap_connect(account)
+        _imap_set_operation_timeout(conn)
+        meta = _imap_select_folder(conn, folder)
+        if meta:
+            app.logger.info('[IMAP-SELECT-RETRY] %s: reopened %s on a fresh connection', account.email, folder)
+            return conn, meta, None
+        retry_detail = _imap_last_select_error(conn) or 'server returned no detail'
+        detail = f'{stale_detail}; retry: {retry_detail}'
+    except Exception as exc:
+        detail = f'{stale_detail}; reconnect failed: {exc}'
+    return conn, None, detail
 
 def _gmt_iso(value):
     if not value:
@@ -1660,9 +1725,17 @@ def _imap_list_folders(conn):
     folders = []
     try:
         status, data = conn.list()
-    except Exception:
+    except Exception as exc:
+        try:
+            conn._gbot_last_list_error = str(exc)
+        except Exception:
+            pass
         return folders
     if status != 'OK' or not data:
+        try:
+            conn._gbot_last_list_error = f'LIST returned {status}'
+        except Exception:
+            pass
         return folders
     for item in data:
         if not isinstance(item, bytes):
@@ -1687,6 +1760,10 @@ def _imap_list_folders(conn):
         name = name.replace('\\"', '"').replace('\\\\', '\\')
         if name and name not in folders:
             folders.append(name)
+    try:
+        conn._gbot_last_list_error = None
+    except Exception:
+        pass
     return folders or ['INBOX']
 
 def _imap_select_folder(conn, folder):
@@ -1718,6 +1795,10 @@ def _imap_select_folder(conn, folder):
             select_errors.append(f'{"EXAMINE" if readonly else "SELECT"} {mailbox}: {status} {response}'.strip())
         except Exception as exc:
             select_errors.append(f'{"EXAMINE" if readonly else "SELECT"} {mailbox}: {exc}')
+            # A socket timeout poisons the imaplib connection.  Do not send
+            # more commands to it; the caller will reconnect once.
+            if _imap_is_stale_connection_error(exc):
+                break
     if status != 'OK':
         try:
             conn._gbot_last_select_error = '; '.join(select_errors)
@@ -1946,10 +2027,7 @@ def _sync_mailbox_account(account, folders=None, limit=200, force_full=False, wa
         account.last_error = None
         db.session.commit()
         conn = _imap_connect(account)
-        try:
-            conn.sock.settimeout(12)
-        except Exception:
-            pass
+        _imap_set_operation_timeout(conn)
         all_folders = _imap_list_folders(conn)
         account.folder_count = len(all_folders)
         target_folders = _resolve_sync_folder_targets(conn, folders, all_folders)
@@ -1962,9 +2040,9 @@ def _sync_mailbox_account(account, folders=None, limit=200, force_full=False, wa
                 errors.append(_INBOX_SYNC_PAUSED_MESSAGE)
                 break
             try:
-                meta = _imap_select_folder(conn, folder)
+                conn, meta, select_error = _imap_select_folder_with_retry(account, conn, folder)
                 if not meta:
-                    detail = _imap_last_select_error(conn) or 'server returned no detail'
+                    detail = select_error or _imap_last_select_error(conn) or 'server returned no detail'
                     error = f'{folder}: could not open folder ({detail})'
                     errors.append(error)
                     app.logger.warning('[IMAP-SELECT] %s: %s', account.email, error)
@@ -2074,10 +2152,7 @@ def _sync_mailbox_recent_no_cursor(account, folders=None, limit=500, wait_for_lo
         return 0, [], ['Sync already in progress for this account']
     try:
         conn = _imap_connect(account)
-        try:
-            conn.sock.settimeout(8)
-        except Exception:
-            pass
+        _imap_set_operation_timeout(conn)
         all_folders = _imap_list_folders(conn)
         target_folders = _resolve_sync_folder_targets(conn, folders, all_folders) if folders else _real_result_folders(conn)
         if folders is not None and not target_folders:
@@ -2090,9 +2165,9 @@ def _sync_mailbox_recent_no_cursor(account, folders=None, limit=500, wait_for_lo
                 errors.append(_INBOX_SYNC_PAUSED_MESSAGE)
                 break
             try:
-                meta = _imap_select_folder(conn, folder)
+                conn, meta, select_error = _imap_select_folder_with_retry(account, conn, folder)
                 if not meta:
-                    detail = _imap_last_select_error(conn) or 'server returned no detail'
+                    detail = select_error or _imap_last_select_error(conn) or 'server returned no detail'
                     error = f'{folder}: could not open folder ({detail})'
                     errors.append(error)
                     app.logger.warning('[IMAP-SELECT] %s: %s', account.email, error)
@@ -2410,10 +2485,7 @@ def api_explorer_folders():
             conn = None
             try:
                 conn = _imap_connect(account)
-                try:
-                    conn.sock.settimeout(8)
-                except Exception:
-                    pass
+                _imap_set_operation_timeout(conn)
                 live_folders = _imap_list_folders(conn)
                 if not live_folders:
                     live_error = 'The IMAP server returned no selectable folders.'
@@ -4395,10 +4467,7 @@ def _imap_fetch_by_identifiers(account, identifiers, folders=None, include_text_
         return 0, ['Sync already in progress for this account'], {}
     try:
         conn = _imap_connect(account)
-        try:
-            conn.sock.settimeout(8)
-        except Exception:
-            pass
+        _imap_set_operation_timeout(conn)
         target_folders = folders if folders else _real_result_folders(conn)
         for folder in target_folders:
             if _inbox_sync_paused():
@@ -4408,9 +4477,9 @@ def _imap_fetch_by_identifiers(account, identifiers, folders=None, include_text_
                 errors.append('identifier search stopped at sync time limit')
                 break
             try:
-                meta = _imap_select_folder(conn, folder)
+                conn, meta, select_error = _imap_select_folder_with_retry(account, conn, folder)
                 if not meta:
-                    detail = _imap_last_select_error(conn) or 'server returned no detail'
+                    detail = select_error or _imap_last_select_error(conn) or 'server returned no detail'
                     error = f'{folder}: could not open folder ({detail})'
                     errors.append(error)
                     app.logger.warning('[TEST-IMAP-SELECT] %s: %s', account.email, error)
@@ -4510,10 +4579,7 @@ def _imap_fetch_by_senders(account, sender_emails, folders=None, date_range=None
         return 0, ['Sync already in progress for this account'], match_modes
     try:
         conn = _imap_connect(account)
-        try:
-            conn.sock.settimeout(8)
-        except Exception:
-            pass
+        _imap_set_operation_timeout(conn)
         target_folders = folders if folders else _real_result_folders(conn)
         per_folder_limit = max(25, min(1500, int(limit or 1000)))
         for folder in target_folders:
@@ -4524,9 +4590,9 @@ def _imap_fetch_by_senders(account, sender_emails, folders=None, date_range=None
                 errors.append('sender fallback stopped at sync time limit')
                 break
             try:
-                meta = _imap_select_folder(conn, folder)
+                conn, meta, select_error = _imap_select_folder_with_retry(account, conn, folder)
                 if not meta:
-                    detail = _imap_last_select_error(conn) or 'server returned no detail'
+                    detail = select_error or _imap_last_select_error(conn) or 'server returned no detail'
                     error = f'{folder}: could not open folder ({detail})'
                     errors.append(error)
                     app.logger.warning('[TEST-IMAP-SELECT] %s: %s', account.email, error)
@@ -4715,10 +4781,7 @@ def _sync_mailbox_date_range_no_cursor(account, folders=None, date_range=None, s
         account.last_error = None
         db.session.commit()
         conn = _imap_connect(account)
-        try:
-            conn.sock.settimeout(8)
-        except Exception:
-            pass
+        _imap_set_operation_timeout(conn)
         all_folders = _imap_list_folders(conn)
         target_folders = _resolve_sync_folder_targets(conn, folders, all_folders)
         if folders is not None and not target_folders:
@@ -4736,9 +4799,9 @@ def _sync_mailbox_date_range_no_cursor(account, folders=None, date_range=None, s
                 errors.append(_INBOX_SYNC_PAUSED_MESSAGE)
                 break
             try:
-                meta = _imap_select_folder(conn, folder)
+                conn, meta, select_error = _imap_select_folder_with_retry(account, conn, folder)
                 if not meta:
-                    detail = _imap_last_select_error(conn) or 'server returned no detail'
+                    detail = select_error or _imap_last_select_error(conn) or 'server returned no detail'
                     error = f'{folder}: could not open folder ({detail})'
                     errors.append(error)
                     app.logger.warning('[IMAP-SELECT] %s: %s', account.email, error)
