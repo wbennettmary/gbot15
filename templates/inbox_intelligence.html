@@ -4109,7 +4109,12 @@ merge_recipe_id, content_blueprint_id</pre>
                         <h4><i class="fas fa-user-edit text-primary"></i> Targeted User Identity Randomization</h4>
                         <p class="ii-muted mb-0">Paste exact admin account and user pairs to randomize the email local-part and display name for only those non-admin Workspace users.</p>
                     </div>
-                    <span id="iiTargetedAliasCount" class="ii-chip blue">0 selected</span>
+                    <div class="ii-row">
+                        <button type="button" class="ii-btn" id="iiTargetedAliasCopyButton" onclick="copyIiTargetedAliasChangedUsers()" disabled title="Copy successful identity changes as account,user pairs for testing">
+                            <i class="fas fa-copy"></i> Copy changed users for testing
+                        </button>
+                        <span id="iiTargetedAliasCount" class="ii-chip blue">0 selected</span>
+                    </div>
                 </div>
                 <div class="ii-targeted-alias-grid">
                     <div class="ii-field mb-0">
@@ -4138,12 +4143,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 </div>
                 <div id="iiTargetedAliasResults" class="ii-targeted-alias-results">
                     <div class="ii-row justify-content-between mb-2">
-                        <div class="ii-row">
-                            <strong>Targeted identity results</strong>
-                            <button type="button" class="ii-btn" id="iiTargetedAliasCopyButton" onclick="copyIiTargetedAliasChangedUsers()" disabled title="Copy successful identity changes as account,user pairs for testing">
-                                <i class="fas fa-copy"></i> Copy changed users for testing
-                            </button>
-                        </div>
+                        <strong>Targeted identity results</strong>
                         <span id="iiTargetedAliasResultSummary" class="ii-muted">No completed targeted run yet.</span>
                     </div>
                     <textarea class="ii-textarea" id="iiTargetedAliasResultText" rows="8" readonly
