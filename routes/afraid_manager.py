@@ -7,6 +7,7 @@ from flask import Blueprint, request, jsonify, session, render_template, redirec
 from functools import wraps
 from faker import Faker
 from sqlalchemy import func, or_
+from sqlalchemy.exc import IntegrityError
 from database import (
     db,
     AfraidConfig,
@@ -34,6 +35,22 @@ def login_required(f):
         if 'user' not in session:
             return redirect(url_for('login'))
         return f(*args, **kwargs)
+    return wrapper
+
+def json_api_errors(f):
+    """Keep API failures JSON-shaped so the frontend can report them without an HTML 500 page."""
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        try:
+            return f(*args, **kwargs)
+        except ValueError as exc:
+            db.session.rollback()
+            logger.warning('AFRAID API validation error: %s', exc)
+            return jsonify({'success': False, 'error': str(exc)}), 400
+        except Exception as exc:
+            db.session.rollback()
+            logger.error('AFRAID API error: %s', exc, exc_info=True)
+            return jsonify({'success': False, 'error': f'AFRAID operation failed: {exc}'}), 500
     return wrapper
 
 def get_service():
@@ -559,6 +576,7 @@ def reactivate_domains():
 
 @afraid_manager.route('/api/afraid/fetch-domains', methods=['POST'])
 @login_required
+@json_api_errors
 def fetch_domains_from_afraid():
     data = request.get_json(silent=True) or {}
     result = sync_afraid_registry_domains(
@@ -696,7 +714,15 @@ def create_afraid_result_list(results):
         failed_count=sum(1 for item in results if not item.get('success'))
     )
     db.session.add(lst)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        # Two create requests for the same user can calculate the same counter
+        # concurrently. Preserve the completed CNAME batch with a unique suffix.
+        db.session.rollback()
+        lst.name = f"{prefix}-{existing + 1}-{datetime.utcnow().strftime('%H%M%S%f')}"
+        db.session.add(lst)
+        db.session.commit()
     return lst
 
 def _afraid_domains_in_result_list(lst):
@@ -914,19 +940,25 @@ def delete_existing_subdomains():
 
 @afraid_manager.route('/api/afraid/create-batch', methods=['POST'])
 @login_required
+@json_api_errors
 def create_batch_subdomains():
     data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({'success': False, 'error': 'Invalid CNAME creation payload.'}), 400
     freshness = sync_afraid_registry_domains(force=False)
     if not freshness.get('success'):
         return jsonify({
             'success': False,
             'error': f"Cannot create CNAME subdomains until the FreeDNS registry is refreshed: {freshness.get('error', 'refresh failed')}"
         }), 503
-    tld = data.get('tld', '').strip().lower()
+    tld = str(data.get('tld') or '').strip().lower()
     try:
         base_domain = normalize_domain_name(data.get('base_domain', ''))
         base_domains = []
-        for raw_domain in data.get('base_domains', []):
+        raw_base_domains = data.get('base_domains') or []
+        if not isinstance(raw_base_domains, list):
+            raise ValueError('Base domains must be provided as a list.')
+        for raw_domain in raw_base_domains:
             domain_name = normalize_domain_name(raw_domain)
             if domain_name and domain_name not in base_domains:
                 base_domains.append(domain_name)
@@ -934,7 +966,10 @@ def create_batch_subdomains():
         return jsonify({'success': False, 'error': str(e)}), 400
     try:
         selected_registry_domains = set()
-        for raw_domain in data.get('selected_registry_domains', []):
+        raw_selected_registry_domains = data.get('selected_registry_domains') or []
+        if not isinstance(raw_selected_registry_domains, list):
+            raise ValueError('Selected registry domains must be provided as a list.')
+        for raw_domain in raw_selected_registry_domains:
             domain_name = normalize_domain_name(raw_domain)
             if domain_name:
                 selected_registry_domains.add(domain_name)
@@ -959,17 +994,28 @@ def create_batch_subdomains():
                 'error': 'The following selected FreeDNS domain(s) are no longer available after the latest registry sync: '
                          + ', '.join(missing_registry_domains)
             }), 409
-    raw_afraid_count = data.get('afraid_count')
-    afraid_count = None if raw_afraid_count in (None, '') else max(1, min(5000, int(raw_afraid_count)))
-    raw_cloudflare_count = data.get('cloudflare_count')
-    cloudflare_count = max(1, min(50, int(raw_cloudflare_count or 1)))
-    ttl = data.get('ttl', 300)
-    manual_destinations = [d.strip().lower() for d in data.get('destinations', []) if d.strip()]
     try:
-        manual_subdomains = parse_manual_subdomain_labels(data.get('subdomains', []))
+        raw_afraid_count = data.get('afraid_count')
+        afraid_count = None if raw_afraid_count in (None, '') else max(1, min(5000, int(raw_afraid_count)))
+        raw_cloudflare_count = data.get('cloudflare_count')
+        cloudflare_count = max(1, min(50, int(raw_cloudflare_count or 1)))
+        raw_total_count = data.get('total_count')
+        total_count_value = max(1, min(50, int(raw_total_count or afraid_count or 1)))
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'Domain and subdomain counts must be valid numbers.'}), 400
+    ttl = data.get('ttl', 300)
+    raw_destinations = data.get('destinations') or []
+    if not isinstance(raw_destinations, list):
+        return jsonify({'success': False, 'error': 'Cloudflare destinations must be provided as a list.'}), 400
+    manual_destinations = [str(d).strip().lower() for d in raw_destinations if str(d).strip()]
+    try:
+        raw_subdomains = data.get('subdomains') or []
+        if not isinstance(raw_subdomains, list):
+            raise ValueError('Manual subdomains must be provided as a list.')
+        manual_subdomains = parse_manual_subdomain_labels(raw_subdomains)
     except ValueError as e:
         return jsonify({'success': False, 'error': str(e)}), 400
-    total_count = len(manual_subdomains) if manual_subdomains else max(1, min(50, int(data.get('total_count') or afraid_count or 1)))
+    total_count = len(manual_subdomains) if manual_subdomains else total_count_value
 
     svc, error = get_service()
     if error:
@@ -1057,7 +1103,12 @@ def create_batch_subdomains():
                 planned_fqdns.add(fqdn)
         except ValueError as e:
             return jsonify({'success': False, 'error': str(e)}), 400
-        success, message = svc.add_cname(label, domain_record.domain_id, destination, ttl)
+        try:
+            success, message = svc.add_cname(label, domain_record.domain_id, destination, ttl)
+        except Exception as exc:
+            success = False
+            message = f'FreeDNS CNAME request failed: {exc}'
+            logger.error('AFRAID CNAME request failed for %s: %s', fqdn, exc, exc_info=True)
         result = {
             'success': success,
             'subdomain': fqdn,
