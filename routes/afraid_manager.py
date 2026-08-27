@@ -7,7 +7,16 @@ from flask import Blueprint, request, jsonify, session, render_template, redirec
 from functools import wraps
 from faker import Faker
 from sqlalchemy import func, or_
-from database import db, AfraidConfig, AfraidDomain, AfraidResultList, AfraidCloudflareDomainUsage, ServiceAccount
+from database import (
+    db,
+    AfraidConfig,
+    AfraidDomain,
+    AfraidResultList,
+    AfraidCloudflareDomainUsage,
+    ServiceAccount,
+    InboxDeliverabilityTest,
+    InboxDeliverabilityMessage,
+)
 from services.afraid_dns_service import AfraidDNSService
 from services.cloudflare_dns_service import CloudflareDNSService
 
@@ -39,6 +48,67 @@ def get_service():
 
 def used_cutoff():
     return datetime.utcnow() - timedelta(days=30)
+
+def _completed_inbox_domain_stats():
+    """Return observed sender-domain placement counts from completed inbox tests."""
+    rows = db.session.query(
+        InboxDeliverabilityMessage.workspace_sender,
+        InboxDeliverabilityMessage.placement,
+    ).join(
+        InboxDeliverabilityTest,
+        InboxDeliverabilityTest.test_id == InboxDeliverabilityMessage.test_id,
+    ).filter(
+        func.upper(InboxDeliverabilityTest.status).in_({'COMPLETED', 'PARTIAL'}),
+        func.upper(InboxDeliverabilityMessage.placement).in_({'INBOX', 'SPAM'}),
+    ).all()
+    stats = {}
+    for sender, placement in rows:
+        sender = (sender or '').strip().lower().rstrip('.')
+        if '@' not in sender:
+            continue
+        domain = sender.rsplit('@', 1)[1].strip().rstrip('.')
+        if not domain:
+            continue
+        item = stats.setdefault(domain, {'inbox': 0, 'spam': 0})
+        placement = (placement or '').strip().lower()
+        if placement in item:
+            item[placement] += 1
+    return stats
+
+def _afraid_analytics_tags(domain_names):
+    """Map AFRAID domains to the spam-inbox tag when completed tests observed them."""
+    domain_names = {str(name or '').strip().lower().rstrip('.') for name in (domain_names or []) if str(name or '').strip()}
+    if not domain_names:
+        return {}
+    observed = _completed_inbox_domain_stats()
+    tags = {}
+    for domain_name in domain_names:
+        inbox_hits = 0
+        spam_hits = 0
+        for observed_domain, counts in observed.items():
+            if (
+                observed_domain == domain_name
+                or observed_domain.endswith('.' + domain_name)
+                or domain_name.endswith('.' + observed_domain)
+            ):
+                inbox_hits += counts['inbox']
+                spam_hits += counts['spam']
+        if inbox_hits or spam_hits:
+            tags[domain_name] = {
+                'tag': 'spam-inbox',
+                'inbox_hits': inbox_hits,
+                'spam_hits': spam_hits,
+            }
+    return tags
+
+def _afraid_domain_analytics_fields(domain, tags=None):
+    domain_name = (domain.domain_name or '').strip().lower().rstrip('.')
+    analytics = (tags or {}).get(domain_name, {})
+    return {
+        'analytics_tag': analytics.get('tag', ''),
+        'analytics_inbox_hits': analytics.get('inbox_hits', 0),
+        'analytics_spam_hits': analytics.get('spam_hits', 0),
+    }
 
 def available_domain_query():
     return AfraidDomain.query.filter(
@@ -279,6 +349,7 @@ def get_domains():
         query = query.filter_by(tld=tld)
     total = query.count()
     domains = query.order_by(AfraidDomain.domain_name.asc()).offset((page - 1) * per_page).limit(per_page).all()
+    analytics_tags = _afraid_analytics_tags([domain.domain_name for domain in domains])
     return jsonify({
         'success': True,
         'total': total,
@@ -298,7 +369,8 @@ def get_domains():
             'hosts_in_use': d.hosts_in_use,
             'registry_age_text': d.registry_age_text,
             'registry_created_on': d.registry_created_on,
-            'delivery_status': d.delivery_status or 'inbox'
+            'delivery_status': d.delivery_status or 'inbox',
+            **_afraid_domain_analytics_fields(d, analytics_tags)
         } for d in domains]
     })
 
@@ -311,6 +383,7 @@ def get_used_domains():
         AfraidDomain.last_used_at.isnot(None),
         AfraidDomain.last_used_at >= used_cutoff()
     ).order_by(AfraidDomain.last_used_at.desc(), AfraidDomain.domain_name.asc()).all()
+    analytics_tags = _afraid_analytics_tags([domain.domain_name for domain in domains])
     return jsonify({
         'success': True,
         'domains': [{
@@ -320,7 +393,8 @@ def get_used_domains():
             'hosts_in_use': d.hosts_in_use,
             'registry_created_on': d.registry_created_on,
             'last_used_at': d.last_used_at.isoformat() + 'Z' if d.last_used_at else None,
-            'delivery_status': d.delivery_status or 'inbox'
+            'delivery_status': d.delivery_status or 'inbox',
+            **_afraid_domain_analytics_fields(d, analytics_tags)
         } for d in domains]
     })
 
@@ -354,6 +428,11 @@ def get_domain_options():
     query = AfraidDomain.query.filter(AfraidDomain.domain_id.isnot(None), AfraidDomain.registry_status == 'public') if include_used else available_domain_query()
     if tld:
         query = query.filter_by(tld=tld)
+    analytics_tag = request.args.get('analytics_tag', '').strip().lower()
+    if analytics_tag == 'spam-inbox':
+        candidate_names = [row[0] for row in query.with_entities(AfraidDomain.domain_name).all()]
+        tagged_names = _afraid_analytics_tags(candidate_names)
+        query = query.filter(AfraidDomain.domain_name.in_(list(tagged_names)))
     if include_used:
         domains = query.order_by(
             AfraidDomain.last_used_at.is_(None).asc(),
@@ -366,6 +445,7 @@ def get_domain_options():
             AfraidDomain.last_used_at.asc(),
             AfraidDomain.domain_name.asc()
         ).limit(limit).all()
+    analytics_tags = _afraid_analytics_tags([domain.domain_name for domain in domains])
     return jsonify({
         'success': True,
         'domains': [{
@@ -374,7 +454,8 @@ def get_domain_options():
             'tld': d.tld,
             'used_this_month': bool(d.last_used_at and d.last_used_at >= used_cutoff()),
             'hosts_in_use': d.hosts_in_use,
-            'registry_created_on': d.registry_created_on
+            'registry_created_on': d.registry_created_on,
+            **_afraid_domain_analytics_fields(d, analytics_tags)
         } for d in domains]
     })
 

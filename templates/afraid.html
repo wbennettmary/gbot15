@@ -367,6 +367,54 @@
         width: auto;
     }
 
+    .afraid-domain-count-row {
+        align-items: stretch;
+        display: grid;
+        gap: 8px;
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .afraid-domain-filter-controls {
+        align-items: center;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 5px 8px;
+    }
+
+    .afraid-domain-filter-controls .form-check {
+        align-items: center;
+        display: inline-flex;
+        gap: 5px;
+        margin: 0;
+        white-space: nowrap;
+    }
+
+    .afraid-domain-filter-controls .form-check-input {
+        cursor: pointer;
+        margin: 0;
+    }
+
+    .afraid-domain-filter-controls .form-check-label {
+        color: #475569;
+        cursor: pointer;
+        font-size: .75rem;
+        font-weight: 700;
+    }
+
+    .afraid-analytics-domain-tag {
+        background: #fef3c7;
+        border: 1px solid #fcd34d;
+        color: #92400e;
+        font-size: .67rem;
+        font-weight: 700;
+        letter-spacing: .01em;
+        vertical-align: middle;
+    }
+
     .afraid-used-domain-actions {
         display: grid;
         gap: 8px;
@@ -686,6 +734,10 @@
             padding: 14px;
         }
 
+        .afraid-domain-count-row {
+            grid-template-columns: 1fr;
+        }
+
         .afraid-list-card-actions {
             grid-template-columns: 1fr;
             width: 100%;
@@ -855,12 +907,24 @@
                                 <label class="form-label fw-semibold">Domains In Selected TLD</label>
                                 <div class="afraid-domain-selection-actions mb-2">
                                     <div class="small text-muted">Available domains are used for creation. Used domains can be reactivated here.</div>
-                                    <div class="afraid-domain-count-control input-group input-group-sm" aria-label="Descending domain selection">
-                                        <span class="input-group-text">Count</span>
-                                        <input type="number" class="form-control" id="selectDomainCountInput" min="1" max="5000" value="10" aria-label="Number of domains to select">
-                                        <button type="button" class="btn btn-outline-primary" id="btnSelectDescendingDomains" title="Select available domains by descending name">
-                                            Select descending
-                                        </button>
+                                    <div class="afraid-domain-count-row">
+                                        <div class="afraid-domain-count-control input-group input-group-sm" aria-label="Descending domain selection">
+                                            <span class="input-group-text">Count</span>
+                                            <input type="number" class="form-control" id="selectDomainCountInput" min="1" max="5000" value="10" aria-label="Number of domains to select">
+                                            <button type="button" class="btn btn-outline-primary" id="btnSelectDescendingDomains" title="Select available domains by descending name">
+                                                Select descending
+                                            </button>
+                                        </div>
+                                        <div class="afraid-domain-filter-controls" role="group" aria-label="AFRAID domain analytics filter">
+                                            <div class="form-check">
+                                                <input class="form-check-input afraid-domain-filter" type="checkbox" id="afraidDomainFilterDomain" value="domain" checked>
+                                                <label class="form-check-label" for="afraidDomainFilterDomain">Domain</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input afraid-domain-filter" type="checkbox" id="afraidDomainFilterSpamInbox" value="spam-inbox">
+                                                <label class="form-check-label" for="afraidDomainFilterSpamInbox">spam-inbox</label>
+                                            </div>
+                                        </div>
                                     </div>
                                     <div class="afraid-used-domain-actions" role="group" aria-label="Used domain selection actions">
                                         <button type="button" class="btn btn-outline-secondary" id="btnSelectAllUsedDomains">
@@ -1347,6 +1411,9 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('btnDeleteSelectedSubdomains').addEventListener('click', deleteSelectedSubdomains);
     document.getElementById('btnCreateCnameSubdomain').addEventListener('click', startProcess);
     document.getElementById('btnSelectDescendingDomains').addEventListener('click', selectDomainsDescending);
+    document.querySelectorAll('.afraid-domain-filter').forEach(input => {
+        input.addEventListener('change', handleAfraidDomainFilterChange);
+    });
     document.getElementById('btnStartAfraidAiAutomation').addEventListener('click', startAfraidAiAutomation);
     document.getElementById('btnOpenAfraidAiAgent').addEventListener('click', openAfraidAiAgent);
     document.getElementById('btnCloseAfraidAiAgent').addEventListener('click', closeAfraidAiAgent);
@@ -1575,7 +1642,10 @@ async function loadDomains() {
         if (data.success && data.domains.length > 0) {
             data.domains.forEach(d => {
                 const tr = document.createElement('tr');
-                tr.innerHTML = `<td><strong>${d.domain_name}</strong>
+                const analyticsTag = d.analytics_tag === 'spam-inbox'
+                    ? '<span class="badge rounded-pill afraid-analytics-domain-tag ms-1">spam-inbox</span>'
+                    : '';
+                tr.innerHTML = `<td><strong>${d.domain_name}</strong> ${analyticsTag}
                         <div class="text-muted small">.${d.tld || ''} | public | hosts: ${d.hosts_in_use ?? 'n/a'} | created: ${d.registry_created_on || 'n/a'} | ${d.used_this_month ? 'used this month' : 'available'}</div>
                     </td>
                     <td>
@@ -1649,6 +1719,8 @@ async function loadSelectedTldDomains() {
         const tld = document.getElementById('tldSelect')?.value || '';
         const params = new URLSearchParams({limit: 5000, include_used: 'true'});
         if (tld) params.set('tld', tld);
+        const analyticsTag = getAfraidDomainAnalyticsFilter();
+        if (analyticsTag) params.set('analytics_tag', analyticsTag);
         const res = await fetch('/api/afraid/domain-options?' + params.toString());
         const data = await parseJsonResponse(res);
         if (requestToken !== window.afraidTldDomainsRequestToken) return;
@@ -1656,6 +1728,25 @@ async function loadSelectedTldDomains() {
     } catch (err) {
         console.error('Error loading selected TLD domains', err);
     }
+}
+
+function getAfraidDomainAnalyticsFilter() {
+    const spamInbox = document.getElementById('afraidDomainFilterSpamInbox');
+    const domain = document.getElementById('afraidDomainFilterDomain');
+    return spamInbox?.checked && !domain?.checked ? 'spam-inbox' : '';
+}
+
+function handleAfraidDomainFilterChange(event) {
+    const domain = document.getElementById('afraidDomainFilterDomain');
+    const spamInbox = document.getElementById('afraidDomainFilterSpamInbox');
+    if (event.target.checked) {
+        if (event.target === domain && spamInbox) spamInbox.checked = false;
+        if (event.target === spamInbox && domain) domain.checked = false;
+    } else if (domain && spamInbox && !domain.checked && !spamInbox.checked) {
+        event.target.checked = true;
+    }
+    window.afraidDomainPage = 1;
+    loadSelectedTldDomains();
 }
 
 async function searchDomainGroup() {
@@ -1705,7 +1796,10 @@ function renderSelectedTldDomains(domains) {
         row.className = `d-flex justify-content-between align-items-center py-1 px-2 border-bottom small ${usedThisMonth ? 'text-muted bg-light' : 'bg-success bg-opacity-10'} ${highlighted ? 'border border-primary bg-primary bg-opacity-10' : ''}`;
         row.style.cursor = 'pointer';
         const checkClass = usedThisMonth ? 'reactivate-domain-check' : 'tld-domain-check';
-        row.innerHTML = `<span><input type="checkbox" class="me-2 ${checkClass}" value="${escapeHtml(item.domain_name)}"> ${escapeHtml(item.domain_name)}</span>
+        const analyticsTag = item.analytics_tag === 'spam-inbox'
+            ? '<span class="badge rounded-pill afraid-analytics-domain-tag ms-1" title="Observed in completed inbox analytics">spam-inbox</span>'
+            : '';
+        row.innerHTML = `<span><input type="checkbox" class="me-2 ${checkClass}" value="${escapeHtml(item.domain_name)}"> ${escapeHtml(item.domain_name)} ${analyticsTag}</span>
             <span class="text-muted">hosts: ${item.hosts_in_use ?? 'n/a'} | ${item.registry_created_on || 'n/a'} | ${usedThisMonth ? 'used' : 'available'}</span>`;
         const checkbox = row.querySelector('input');
         checkbox.addEventListener('change', () => {
