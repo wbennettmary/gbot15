@@ -351,6 +351,39 @@
         min-width: 0;
     }
 
+    .afraid-merged-section {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        min-width: 0;
+        padding: 16px;
+    }
+
+    .afraid-merged-section-header {
+        align-items: flex-start;
+        display: flex;
+        gap: 12px;
+        justify-content: space-between;
+        margin-bottom: 14px;
+    }
+
+    .afraid-merged-section-header h6 {
+        color: #1e293b;
+        font-weight: 800;
+    }
+
+    .afraid-quota-section {
+        background: #fffbeb;
+        border-color: #fde68a;
+    }
+
+    .afraid-quota-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        justify-content: flex-end;
+    }
+
     .afraid-domain-count-control {
         display: grid;
         grid-template-columns: auto minmax(70px, 1fr) auto;
@@ -747,6 +780,15 @@
             justify-content: flex-start;
             width: max-content;
         }
+
+        .afraid-merged-section-header {
+            flex-direction: column;
+        }
+
+        .afraid-quota-actions {
+            justify-content: flex-start;
+            width: 100%;
+        }
     }
 </style>
 <svg aria-hidden="true" focusable="false" style="position:absolute;width:0;height:0;overflow:hidden">
@@ -987,10 +1029,10 @@
         </div>
     </div>
 
-    <!-- Domains Management -->
-    <div class="card mb-4">
-        <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
-            <h5 class="card-title mb-0"><i class="fas fa-list me-2"></i>Managed FreeDNS Domains</h5>
+    <!-- Domains Management + Quota Cleanup -->
+    <div class="card mb-4 afraid-domain-management-card">
+        <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center gap-3 flex-wrap">
+            <h5 class="card-title mb-0"><i class="fas fa-list me-2"></i>Managed FreeDNS Domains &amp; Quota Cleanup</h5>
             <div class="d-flex align-items-center gap-2">
                 <span class="small text-white-50" id="afraidDomainSyncStatus">Checking registry freshness...</span>
                 <button class="btn btn-sm btn-light" id="btnFetchDomains" type="button">
@@ -999,48 +1041,67 @@
             </div>
         </div>
         <div class="card-body">
-            <form id="addDomainForm" class="mb-4">
-                <div class="input-group">
-                    <input type="text" class="form-control" id="newDomainInput" placeholder="Manually add domain (e.g. chickenkiller.com)">
-                    <button class="btn btn-primary" type="submit">Add Manually</button>
-                </div>
-            </form>
+            <div class="row g-4">
+                <section class="col-lg-7">
+                    <div class="afraid-merged-section h-100">
+                        <div class="afraid-merged-section-header">
+                            <div>
+                                <h6 class="mb-1"><i class="fas fa-list me-2 text-secondary"></i>Managed FreeDNS Domains</h6>
+                                <div class="small text-muted">Add, review, and manage the cached public registry domains.</div>
+                            </div>
+                        </div>
+                        <form id="addDomainForm" class="mb-4">
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="newDomainInput" placeholder="Manually add domain (e.g. chickenkiller.com)">
+                                <button class="btn btn-primary" type="submit">Add Manually</button>
+                            </div>
+                        </form>
 
-            <table class="table table-striped table-hover">
-                <thead>
-                    <tr>
-                        <th>Domain Name</th>
-                        <th style="width:100px">Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="domainsTableBody">
-                    <tr><td colspan="2" class="text-center text-muted">Loading...</td></tr>
-                </tbody>
-            </table>
-            <div class="d-flex justify-content-between align-items-center">
-                <button class="btn btn-sm btn-outline-secondary" id="btnPrevDomainPage">Previous</button>
-                <span class="text-muted small" id="domainPageStatus">Page 1</span>
-                <button class="btn btn-sm btn-outline-secondary" id="btnNextDomainPage">Next</button>
-            </div>
-        </div>
-    </div>
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Domain Name</th>
+                                        <th style="width:100px">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="domainsTableBody">
+                                    <tr><td colspan="2" class="text-center text-muted">Loading...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mt-3">
+                            <button class="btn btn-sm btn-outline-secondary" id="btnPrevDomainPage">Previous</button>
+                            <span class="text-muted small" id="domainPageStatus">Page 1</span>
+                            <button class="btn btn-sm btn-outline-secondary" id="btnNextDomainPage">Next</button>
+                        </div>
+                    </div>
+                </section>
 
-    <div class="card mb-4">
-        <div class="card-header bg-warning d-flex justify-content-between align-items-center">
-            <h5 class="card-title mb-0"><i class="fas fa-trash me-2"></i>FreeDNS Quota Cleanup</h5>
-            <div>
-                <button class="btn btn-sm btn-light" id="btnLoadSubdomains">Load Existing</button>
-                <button class="btn btn-sm btn-outline-dark" id="btnMarkAllSubdomains">Mark All</button>
-                <button class="btn btn-sm btn-danger" id="btnDeleteSelectedSubdomains">Delete Selected</button>
+                <section class="col-lg-5">
+                    <div class="afraid-merged-section afraid-quota-section h-100">
+                        <div class="afraid-merged-section-header">
+                            <div>
+                                <h6 class="mb-1"><i class="fas fa-trash me-2 text-warning"></i>FreeDNS Quota Cleanup</h6>
+                                <div class="small text-muted">Load existing records and remove unused subdomains when capacity is reached.</div>
+                            </div>
+                            <div class="afraid-quota-actions">
+                                <button class="btn btn-sm btn-light" id="btnLoadSubdomains">Load Existing</button>
+                                <button class="btn btn-sm btn-outline-dark" id="btnMarkAllSubdomains">Mark All</button>
+                                <button class="btn btn-sm btn-danger" id="btnDeleteSelectedSubdomains">Delete Selected</button>
+                            </div>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-striped mb-0">
+                                <thead><tr><th style="width:40px"><input type="checkbox" id="selectAllSubdomains"></th><th>Subdomain</th><th>Type</th><th>Destination</th></tr></thead>
+                                <tbody id="subdomainsTableBody">
+                                    <tr><td colspan="4" class="text-center text-muted">Load existing records before cleanup.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
             </div>
-        </div>
-        <div class="card-body">
-            <table class="table table-sm table-striped">
-                <thead><tr><th style="width:40px"><input type="checkbox" id="selectAllSubdomains"></th><th>Subdomain</th><th>Type</th><th>Destination</th></tr></thead>
-                <tbody id="subdomainsTableBody">
-                    <tr><td colspan="4" class="text-center text-muted">Load existing records before cleanup.</td></tr>
-                </tbody>
-            </table>
         </div>
     </div>
 
