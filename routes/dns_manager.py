@@ -1016,6 +1016,7 @@ def process_external_cf_entry(entry_data):
     """
     Add an external domain to the Workspace account, generate its TXT token,
     and insert that TXT record into a SEPARATE Cloudflare domain's zone.
+    Workspace ownership verification is intentionally handled by the other app.
     """
     entry, job = entry_data
     from app import app
@@ -1107,20 +1108,16 @@ def process_external_cf_entry(entry_data):
                 logger.warning(f"[EXT_CF] DNS insert failed: {dns_result.get('message')}")
                 return
 
-            # ========== STEP 4: Trigger Workspace verification ==========
-            entry['verifyStatus'] = 'running'
-            entry['message'] = f'Verifying {external_domain} in Workspace...'
-            logger.info(f"[EXT_CF] Verifying {external_domain} in Workspace...")
-            verified, verify_msg = svc.verify_domain(external_domain)
-
-            if verified:
-                entry['verifyStatus'] = 'success'
-                entry['message'] = verify_msg or 'Domain verified successfully'
-                logger.info(f"[EXT_CF] Verified {external_domain}: {entry['message']}")
-            else:
-                entry['verifyStatus'] = 'failed'
-                entry['message'] = verify_msg or 'Workspace verification failed'
-                logger.warning(f"[EXT_CF] Verify failed for {external_domain}: {entry['message']}")
+            # ========== STEP 4: Leave Workspace verification to the other app ==========
+            entry['verifyStatus'] = 'external'
+            entry['message'] = (
+                f"TXT record inserted at @ in {cf_domain} zone. "
+                "Workspace verification is handled by the other app."
+            )
+            logger.info(
+                f"[EXT_CF] Prepared {external_domain} for external Workspace verification "
+                f"after TXT insertion in {cf_domain}"
+            )
 
         except Exception as e:
             logger.error(f"[EXT_CF] Error for {entry.get('externalDomain')}: {e}", exc_info=True)
@@ -1412,7 +1409,7 @@ def get_bulk_multi_account_status(job_id):
 def start_external_cloudflare():
     """
     Start adding external domains to accounts and inserting their TXT tokens
-    into a SEPARATE Cloudflare zone.
+    into a SEPARATE Cloudflare zone. Workspace verification is handled elsewhere.
     Each entry has: account, externalDomain, cloudflareDomain
     """
     try:

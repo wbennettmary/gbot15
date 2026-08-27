@@ -1062,7 +1062,7 @@
 <button class="afraid-floating-agent" type="button" id="btnOpenAfraidAiAgent" aria-label="Open AFRAID AI Agent">
     <svg class="afraid-svg-icon"><use href="#afraid-icon-bot"></use></svg>
     <span>AI Agent</span>
-    <small>Create + verify</small>
+    <small>Create + prepare</small>
 </button>
 
 <div class="afraid-ai-drawer" id="afraidAiDrawer" aria-hidden="true">
@@ -1070,7 +1070,7 @@
         <div class="afraid-ai-modal-head">
             <div>
                 <h3 id="afraidAiDrawerTitle"><svg class="afraid-svg-icon me-2"><use href="#afraid-icon-bot"></use></svg>AFRAID AI Agent</h3>
-                <p>Generate a saved AFRAID list, rotate Cloudflare destinations, and start Add & Verify from one guided popup.</p>
+                <p>Generate a saved AFRAID list, rotate Cloudflare destinations, and start Add &amp; Prepare from one guided popup.</p>
             </div>
             <button class="btn btn-light" type="button" id="btnCloseAfraidAiAgent" aria-label="Close AFRAID AI Agent">
                 <i class="fas fa-xmark"></i>
@@ -1084,7 +1084,7 @@
                             <h5 class="mb-1">Setup</h5>
                             <div class="text-muted small">Choose the generation target and the Workspace account list that will own verification.</div>
                         </div>
-                        <span class="badge rounded-pill text-bg-primary">Create + verify</span>
+                        <span class="badge rounded-pill text-bg-primary">Create + prepare</span>
                     </div>
                     <div class="row g-3">
                         <div class="col-md-6">
@@ -1219,9 +1219,9 @@
             <div class="modal-header">
                 <div>
                     <h5 class="modal-title" id="afraidExternalCfModalTitle">
-                        <svg class="afraid-svg-icon me-2"><use href="#afraid-icon-cloud-upload"></use></svg>Add & Verify Saved AFRAID Domains
+                        <svg class="afraid-svg-icon me-2"><use href="#afraid-icon-cloud-upload"></use></svg>Add & Prepare Saved AFRAID Domains
                     </h5>
-                    <div class="afraid-verify-subtitle" id="afraidExternalCfModalSubtitle">Parse the saved list, add each domain to Workspace, then insert TXT records into Cloudflare.</div>
+                    <div class="afraid-verify-subtitle" id="afraidExternalCfModalSubtitle">Add domains to Workspace and insert TXT records into Cloudflare. Workspace verification is handled by the other app.</div>
                 </div>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
@@ -1278,12 +1278,12 @@
                                 <th class="text-center" title="Workspace add"><svg class="afraid-svg-icon"><use href="#afraid-icon-briefcase"></use></svg></th>
                                 <th class="text-center" title="TXT token"><svg class="afraid-svg-icon"><use href="#afraid-icon-fingerprint"></use></svg></th>
                                 <th class="text-center" title="Cloudflare DNS"><svg class="afraid-svg-icon"><use href="#afraid-icon-globe"></use></svg></th>
-                                <th class="text-center" title="Workspace verification"><svg class="afraid-svg-icon"><use href="#afraid-icon-shield"></use></svg></th>
+                                <th class="text-center" title="Workspace verification handled by the other app"><svg class="afraid-svg-icon"><use href="#afraid-icon-shield"></use></svg></th>
                                 <th>Message</th>
                             </tr>
                         </thead>
                         <tbody id="afraidExternalCfTableBody">
-                            <tr><td colspan="10" class="text-center text-muted py-4">Open a saved list to prepare verification.</td></tr>
+                            <tr><td colspan="10" class="text-center text-muted py-4">Open a saved list to prepare Workspace and Cloudflare records.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -1302,7 +1302,7 @@
                     <svg class="afraid-svg-icon me-1"><use href="#afraid-icon-stop"></use></svg>Stop
                 </button>
                 <button type="button" class="btn btn-primary" id="btnStartAfraidExternalCf">
-                    <svg class="afraid-svg-icon me-1"><use href="#afraid-icon-play"></use></svg>Start verification
+                    <svg class="afraid-svg-icon me-1"><use href="#afraid-icon-play"></use></svg>Start add &amp; prepare
                 </button>
             </div>
         </div>
@@ -2160,8 +2160,8 @@ const AFRAID_AI_STEPS = [
     {id: 'cloudflare', label: 'Cloudflare picked', detail: 'Random Cloudflare destinations are selected.'},
     {id: 'generate', label: 'AFRAID generated', detail: 'FreeDNS CNAME rows are created.'},
     {id: 'save', label: 'List saved', detail: 'The generated domains are saved as a reusable AFRAID list.'},
-    {id: 'verify', label: 'Verification started', detail: 'Add & Verify receives account, AFRAID domain, Cloudflare domain rows.'},
-    {id: 'background', label: 'Background job', detail: 'The verifier modal continues showing DNS and Workspace status.'}
+    {id: 'verify', label: 'Preparation started', detail: 'Add & Prepare receives account, AFRAID domain, Cloudflare domain rows.'},
+    {id: 'background', label: 'Background job', detail: 'The preparation modal continues showing account, token, and DNS status.'}
 ];
 
 let afraidAiStepState = {};
@@ -2345,11 +2345,11 @@ async function startAfraidAiAutomation() {
         document.getElementById('afraidAiGeneratedCount').textContent = String(data.created || 0);
         logAfraidAi(`Saved generated list: ${data.list.name}.`);
         if (data.failed) {
-            logAfraidAi(`${data.failed} AFRAID row(s) failed during creation; verification will use created rows only.`);
+            logAfraidAi(`${data.failed} AFRAID row(s) failed during creation; preparation will use created rows only.`);
         }
         setAfraidAiStep('save', 'done');
         setAfraidAiStep('verify', 'running');
-        setAfraidAiStatus('Opening verification job...', 'muted');
+        setAfraidAiStatus('Opening add & prepare job...', 'muted');
         await openAfraidExternalCfModal(data.list.id, {
             autoStart: true,
             workspaceListId: workspaceList.id,
@@ -2359,7 +2359,7 @@ async function startAfraidAiAutomation() {
         setAfraidAiStep('verify', 'done');
         setAfraidAiStep('background', 'running');
         logAfraidAi(`Sent ${specificAccounts.length || parseAfraidWorkspaceAccounts(workspaceList.raw_accounts).length} related account(s) to the verification modal.`);
-        setAfraidAiStatus('Generation finished. The Add & Verify modal is handling verification.', 'success');
+        setAfraidAiStatus('Generation finished. The Add & Prepare modal is handling Workspace and DNS preparation.', 'success');
     } catch (err) {
         failCurrentAfraidAiStep();
         setAfraidAiStatus(err.message || 'Automation failed.', 'danger');
@@ -2427,10 +2427,10 @@ async function loadAfraidLists() {
                                 ${renderAfraidWorkspaceListOptions()}
                             </select>
                             <div class="btn-group btn-group-sm afraid-list-card-buttons">
-                                <button class="btn afraid-list-icon-btn verify-all" onclick="openAfraidExternalCfModal(${lst.id}, {autoStart: true})" title="Add and verify domains for all selected list accounts" aria-label="Add and verify domains for all selected list accounts">
+                                <button class="btn afraid-list-icon-btn verify-all" onclick="openAfraidExternalCfModal(${lst.id}, {autoStart: true})" title="Add and prepare domains for all selected list accounts" aria-label="Add and prepare domains for all selected list accounts">
                                     <svg class="afraid-svg-icon"><use href="#afraid-icon-cloud-upload"></use></svg><span class="afraid-list-icon-label">All</span>
                                 </button>
-                                <button class="btn afraid-list-icon-btn verify-specific" onclick="openAfraidExternalCfModal(${lst.id}, {specificAccounts: true})" title="Add and verify domains for pasted accounts only" aria-label="Add and verify domains for pasted accounts only">
+                                <button class="btn afraid-list-icon-btn verify-specific" onclick="openAfraidExternalCfModal(${lst.id}, {specificAccounts: true})" title="Add and prepare domains for pasted accounts only" aria-label="Add and prepare domains for pasted accounts only">
                                     <svg class="afraid-svg-icon"><use href="#afraid-icon-filter"></use></svg><span class="afraid-list-icon-label">Pick</span>
                                 </button>
                                 <button class="btn afraid-list-icon-btn delete-users" onclick="openAfraidDeleteUsersModal(${lst.id})" title="Authenticate and delete all users from selected account list" aria-label="Authenticate and delete all users from selected account list">
@@ -2789,8 +2789,8 @@ function renderAfraidExternalCfMessageCell(entry) {
             ${showClearTxt ? `<button type="button" class="btn btn-sm btn-outline-warning" onclick="clearAfraidExternalCfTxt(${index})" title="Delete all TXT records from this Cloudflare zone">
                 <i class="fas fa-eraser"></i> Clear TXT
             </button>` : ''}
-            ${showRetry ? `<button type="button" class="btn btn-sm btn-outline-primary" onclick="retryAfraidExternalCfEntry(${index})" title="Add this domain to Workspace and verify it again">
-                <i class="fas fa-rotate-right"></i> Add &amp; Verify Again
+            ${showRetry ? `<button type="button" class="btn btn-sm btn-outline-primary" onclick="retryAfraidExternalCfEntry(${index})" title="Add this domain to Workspace and prepare its TXT record again">
+                <i class="fas fa-rotate-right"></i> Add &amp; Prepare Again
             </button>` : ''}
         </div>`;
 }
@@ -2852,7 +2852,7 @@ async function openAfraidExternalCfModal(id, options = {}) {
     }
     if (options.autoStart) {
         if (!afraidExternalCfMergedSource) {
-            showAfraidExternalCfAlert('Select a List Management account list from the card dropdown before using Add and verify domains.', 'warning');
+            showAfraidExternalCfAlert('Select a List Management account list from the card dropdown before using Add and prepare domains.', 'warning');
             return;
         }
         if (!workspaceAccounts.length) {
@@ -2944,7 +2944,13 @@ function updateAfraidExternalCfTable(entries) {
         cells[7].innerHTML = getAfraidExternalCfStatusBadge(entry.dnsStatus);
         cells[8].innerHTML = getAfraidExternalCfStatusBadge(entry.verifyStatus);
         cells[9].innerHTML = renderAfraidExternalCfMessageCell(currentEntry || entry);
-        if (entry.verifyStatus === 'success' || entry.authStatus === 'failed' || entry.workspaceStatus === 'failed' || entry.tokenStatus === 'failed' || entry.dnsStatus === 'failed' || entry.verifyStatus === 'failed') {
+        const failed = isAfraidExternalCfFailed(entry);
+        const prepared = entry.authStatus === 'success'
+            && entry.workspaceStatus === 'success'
+            && entry.tokenStatus === 'success'
+            && entry.dnsStatus === 'success'
+            && entry.verifyStatus === 'external';
+        if (failed || prepared) {
             done += 1;
         }
     });
@@ -3042,7 +3048,8 @@ function getAfraidExternalCfStatusBadge(status) {
         running: '<i class="fas fa-spinner fa-spin text-primary"></i>',
         success: '<i class="fas fa-circle-check text-success"></i>',
         failed: '<i class="fas fa-circle-xmark text-danger"></i>',
-        skipped: '<i class="fas fa-forward text-warning"></i>'
+        skipped: '<i class="fas fa-forward text-warning"></i>',
+        external: '<i class="fas fa-arrow-up-right-from-square text-info" title="Handled by the other app"></i>'
     };
     return statuses[status] || statuses.pending;
 }
@@ -3074,7 +3081,7 @@ async function startAfraidExternalCfVerification() {
         }));
     }
     setAfraidExternalCfRunning(true);
-    showAfraidExternalCfAlert(`Starting ${validEntries.length} domain verification job.`, 'info');
+    showAfraidExternalCfAlert(`Starting ${validEntries.length} domain add & prepare job.`, 'info');
     logAfraidExternalCf(afraidExternalCfMergedSource
         ? `Starting job with ${validEntries.length} merged row(s) from ${afraidExternalCfMergedSource.name}.`
         : `Starting job with ${validEntries.length} row(s) using ${account}.`);
@@ -3091,13 +3098,13 @@ async function startAfraidExternalCfVerification() {
         });
         const data = await parseJsonResponse(res);
         if (!data.success) {
-            throw new Error(data.error || 'Could not start verification.');
+            throw new Error(data.error || 'Could not start domain preparation.');
         }
         afraidExternalCfJobId = data.job_id;
         try {
             await markAfraidListUsed(afraidExternalCfSourceList?.id, afraidExternalCfSelectionMode);
         } catch (usageError) {
-            logAfraidExternalCf(`Warning: verification started, but the saved list could not be marked used: ${usageError.message || 'unknown error'}`);
+            logAfraidExternalCf(`Warning: preparation started, but the saved list could not be marked used: ${usageError.message || 'unknown error'}`);
         }
         logAfraidExternalCf(`Job started: ${data.job_id}`);
         pollAfraidExternalCfJob();
@@ -3166,10 +3173,8 @@ function renderAfraidExternalCfLogs(entries) {
         const statusKey = `${afraidExternalCfJobId}:${entry.index}:${entry.authStatus}:${entry.workspaceStatus}:${entry.tokenStatus}:${entry.dnsStatus}:${entry.verifyStatus}`;
         if (!afraidExternalCfStatusSeen[statusKey]) {
             afraidExternalCfStatusSeen[statusKey] = true;
-            if (entry.verifyStatus === 'success') {
-                logAfraidExternalCf(`${entry.externalDomain}: verified in Workspace.`);
-            } else if (entry.dnsStatus === 'success' && entry.verifyStatus === 'running') {
-                logAfraidExternalCf(`${entry.externalDomain}: TXT inserted into ${entry.cloudflareDomain}; verification started.`);
+            if (entry.dnsStatus === 'success' && entry.verifyStatus === 'external') {
+                logAfraidExternalCf(`${entry.externalDomain}: TXT inserted into ${entry.cloudflareDomain}; Workspace verification is handled by the other app.`);
             } else if (entry.authStatus === 'failed' || entry.workspaceStatus === 'failed' || entry.tokenStatus === 'failed' || entry.dnsStatus === 'failed') {
                 logAfraidExternalCf(`${entry.externalDomain}: ${entry.message || 'Failed'}`);
             } else if (entry.verifyStatus === 'failed') {
@@ -3186,15 +3191,15 @@ function finishAfraidExternalCfJob(status) {
     }
     afraidExternalCfJobId = null;
     setAfraidExternalCfRunning(false);
-    showAfraidExternalCfAlert(`Verification job ${status}.`, status === 'completed' ? 'success' : 'secondary');
-    logAfraidExternalCf(`Job ${status}.`);
+    showAfraidExternalCfAlert(`Add & prepare job ${status}.`, status === 'completed' ? 'success' : 'secondary');
+    logAfraidExternalCf(`Add & prepare job ${status}.`);
     if (afraidAiStepState.background === 'running') {
         setAfraidAiStep('background', status === 'completed' ? 'done' : 'failed');
         setAfraidAiStatus(
-            status === 'completed' ? 'Verification completed.' : `Verification job ${status}. Review the Add & Verify log.`,
+            status === 'completed' ? 'Domain preparation completed; verification is handled by the other app.' : `Add & prepare job ${status}. Review the Add & Prepare log.`,
             status === 'completed' ? 'success' : 'warning'
         );
-        logAfraidAi(`Background verification job ${status}.`);
+        logAfraidAi(`Background add & prepare job ${status}.`);
     }
 }
 
@@ -3210,7 +3215,7 @@ function setAfraidExternalCfRunning(isRunning) {
     });
     startBtn.innerHTML = isRunning
         ? '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Running'
-        : '<svg class="afraid-svg-icon me-1"><use href="#afraid-icon-play"></use></svg>Start verification';
+        : '<svg class="afraid-svg-icon me-1"><use href="#afraid-icon-play"></use></svg>Start add &amp; prepare';
 }
 
 function showAfraidExternalCfAlert(message, type) {
