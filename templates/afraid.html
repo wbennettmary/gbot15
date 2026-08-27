@@ -1557,6 +1557,8 @@ async function loadConfig() {
 }
 
 async function loadDomains() {
+    const requestToken = (window.afraidDomainsRequestToken || 0) + 1;
+    window.afraidDomainsRequestToken = requestToken;
     try {
         const tld = document.getElementById('tldSelect')?.value || '';
         const page = window.afraidDomainPage || 1;
@@ -1564,6 +1566,7 @@ async function loadDomains() {
         if (tld) params.set('tld', tld);
         const res = await fetch('/api/afraid/domains?' + params.toString());
         const data = await res.json();
+        if (requestToken !== window.afraidDomainsRequestToken) return;
         const tbody = document.getElementById('domainsTableBody');
 
         tbody.innerHTML = '';
@@ -1640,12 +1643,15 @@ async function loadTlds() {
 }
 
 async function loadSelectedTldDomains() {
+    const requestToken = (window.afraidTldDomainsRequestToken || 0) + 1;
+    window.afraidTldDomainsRequestToken = requestToken;
     try {
         const tld = document.getElementById('tldSelect')?.value || '';
         const params = new URLSearchParams({limit: 5000, include_used: 'true'});
         if (tld) params.set('tld', tld);
         const res = await fetch('/api/afraid/domain-options?' + params.toString());
         const data = await parseJsonResponse(res);
+        if (requestToken !== window.afraidTldDomainsRequestToken) return;
         renderSelectedTldDomains(data.domains || []);
     } catch (err) {
         console.error('Error loading selected TLD domains', err);
@@ -2112,18 +2118,23 @@ async function startProcess() {
             body: JSON.stringify(payload)
         });
         const data = await parseJsonResponse(res);
+        if (!res.ok || !data.success) {
+            throw new Error(data.error || 'CNAME subdomain creation failed.');
+        }
         window.afraidUsedBaseDomains = data.used_base_domains || [];
         renderBatchResults(data);
         if (data.quota_reached) {
             alert('FreeDNS quota reached: ' + (data.quota_message || 'Cleanup existing subdomains before continuing.'));
             showAlert('createAlert', '<i class="fas fa-triangle-exclamation me-1"></i>FreeDNS quota reached. Failed domains were kept available.', 'warning');
         }
-        loadAfraidLists();
-        loadUsedDomains();
-        loadDomains();
-        loadTlds();
-        loadCloudflareDomains();
-        loadSelectedTldDomains();
+        await Promise.allSettled([
+            loadAfraidLists(),
+            loadUsedDomains(),
+            loadDomains(),
+            loadTlds(),
+            loadCloudflareDomains()
+        ]);
+        await loadSelectedTldDomains();
     } catch (err) {
         showAlert('createAlert', escapeHtml(err.message || 'Process failed'), 'danger');
     } finally {
@@ -2748,6 +2759,8 @@ async function markAfraidListUsed(listId, mode) {
     window.afraidLists = (window.afraidLists || []).map(item => item.id === data.list.id ? data.list : item);
     if (afraidExternalCfSourceList?.id === data.list.id) afraidExternalCfSourceList = data.list;
     applyAfraidListUsedState(data.list);
+    await Promise.allSettled([loadDomains(), loadUsedDomains(), loadTlds()]);
+    await loadSelectedTldDomains();
     return data.list;
 }
 

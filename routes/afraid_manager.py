@@ -618,6 +618,54 @@ def create_afraid_result_list(results):
     db.session.commit()
     return lst
 
+def _afraid_domains_in_result_list(lst):
+    """Return AFRAID base-domain names represented by successful list rows."""
+    rows = []
+    if lst.results_json:
+        try:
+            parsed = json.loads(lst.results_json)
+            if isinstance(parsed, list):
+                rows = [item for item in parsed if isinstance(item, dict) and item.get('success', True)]
+        except (TypeError, ValueError):
+            rows = []
+    if not rows:
+        rows = [
+            {'subdomain': line.split(',', 1)[0].strip()}
+            for line in (lst.raw_results or '').splitlines()
+            if line.strip()
+        ]
+
+    known_domains = sorted(
+        (domain.domain_name for domain in AfraidDomain.query.filter(
+            AfraidDomain.registry_status == 'public',
+            AfraidDomain.domain_id.isnot(None),
+        ).all()),
+        key=len,
+        reverse=True,
+    )
+    matched = set()
+    for row in rows:
+        direct_name = (row.get('base_domain') or '').strip().lower().rstrip('.')
+        if direct_name:
+            matched.add(direct_name)
+            continue
+        fqdn = (row.get('subdomain') or '').strip().lower().rstrip('.')
+        for domain_name in known_domains:
+            if fqdn == domain_name or fqdn.endswith('.' + domain_name):
+                matched.add(domain_name)
+                break
+    return matched
+
+def mark_afraid_domains_used(domain_names, used_at=None):
+    domain_names = {str(name).strip().lower().rstrip('.') for name in (domain_names or []) if str(name).strip()}
+    if not domain_names:
+        return 0
+    used_at = used_at or datetime.utcnow()
+    domains = AfraidDomain.query.filter(AfraidDomain.domain_name.in_(domain_names)).all()
+    for domain in domains:
+        domain.last_used_at = used_at
+    return len(domains)
+
 @afraid_manager.route('/api/afraid/lists', methods=['GET'])
 @login_required
 def get_afraid_lists():
@@ -635,11 +683,13 @@ def mark_afraid_list_used(list_id):
     mode = (data.get('mode') or '').strip().lower()
     if mode not in {'all', 'pick'}:
         return jsonify({'success': False, 'error': 'Usage mode must be all or pick'}), 400
+    used_at = datetime.utcnow()
     lst.is_used = True
-    lst.used_at = datetime.utcnow()
+    lst.used_at = used_at
     lst.used_mode = mode
+    domains_marked_used = mark_afraid_domains_used(_afraid_domains_in_result_list(lst), used_at)
     db.session.commit()
-    return jsonify({'success': True, 'list': lst.to_dict()})
+    return jsonify({'success': True, 'list': lst.to_dict(), 'domains_marked_used': domains_marked_used})
 
 @afraid_manager.route('/api/afraid/lists', methods=['POST'])
 @login_required
@@ -949,6 +999,7 @@ def create_batch_subdomains():
         usage = get_or_create_cloudflare_usage(destination)
         usage.use_count = (usage.use_count or 0) + 1
         usage.last_used_at = datetime.utcnow()
+    domains_marked_used = mark_afraid_domains_used(used_base_domains)
     db.session.commit()
     lst = create_afraid_result_list(results)
     return jsonify({
@@ -960,6 +1011,7 @@ def create_batch_subdomains():
         'quota_message': quota_message,
         'used_destinations': sorted(used_destinations),
         'used_base_domains': sorted(used_base_domains),
+        'domains_marked_used': domains_marked_used,
         'list': lst.to_dict() if lst else None
     })
 
