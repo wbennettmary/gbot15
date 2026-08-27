@@ -205,7 +205,7 @@
     }
 
     .afraid-process-shell textarea.form-control {
-        resize: vertical;
+        resize: none;
     }
 
     .afraid-process-shell .btn {
@@ -411,6 +411,74 @@
         color: #153cae;
         font-weight: 800;
         padding: 6px 9px;
+    }
+
+    .afraid-process-shell .table-responsive {
+        border-radius: 14px;
+        overflow-x: auto;
+    }
+
+    .afraid-process-shell .table {
+        color: #263750;
+        margin-bottom: 0;
+    }
+
+    .afraid-process-shell .table > :not(caption) > * > * {
+        background-color: transparent;
+        border-bottom-color: #cbd6e5;
+    }
+
+    .afraid-process-shell .table-striped > tbody > tr:nth-of-type(odd) > * {
+        background-color: rgba(219, 228, 240, .58);
+    }
+
+    .afraid-process-shell .afraid-quota-table tbody tr {
+        transition: background-color .15s ease, box-shadow .15s ease;
+    }
+
+    .afraid-process-shell .afraid-quota-table tbody tr:has(input:checked) > * {
+        background: #c9dcff !important;
+        border-bottom-color: #8db0ef;
+        color: #173b86;
+        font-weight: 700;
+    }
+
+    .afraid-process-shell .afraid-quota-table tbody tr:hover > * {
+        background: #dbe8ff !important;
+    }
+
+    .afraid-process-shell .afraid-quota-section {
+        background: #f0eadb;
+        box-shadow: inset 3px 3px 8px rgba(194, 178, 145, .32), inset -3px -3px 8px rgba(255, 255, 255, .78);
+    }
+
+    .afraid-process-shell .afraid-quota-section .afraid-quota-table-wrap {
+        background: #e8dfcf;
+        border-color: #bda879;
+        box-shadow: inset 3px 3px 7px rgba(183, 163, 123, .36), inset -3px -3px 7px rgba(255, 255, 255, .7);
+    }
+
+    .afraid-process-shell .afraid-quota-section .afraid-quota-table th {
+        background: #d7c59f;
+        color: #4a3511;
+    }
+
+    .afraid-process-shell .afraid-quota-section input[type="checkbox"] {
+        background-color: #fffdf7;
+        border-color: #765b2a;
+    }
+
+    .afraid-process-shell .afraid-quota-section input[type="checkbox"]:checked,
+    .afraid-process-shell .afraid-quota-section input[type="checkbox"]:indeterminate {
+        background-color: #1856dc;
+        border-color: #0f3eaf;
+    }
+
+    .afraid-process-shell .afraid-quota-page-status {
+        background: #d7c59f;
+        border-radius: 999px;
+        color: #4a3511;
+        padding: 5px 9px;
     }
 
     .afraid-list-card {
@@ -1439,7 +1507,7 @@
                                             <span class="input-group-text">Count</span>
                                             <input type="number" class="form-control" id="selectDomainCountInput" min="1" max="5000" value="30" aria-label="Number of domains to select">
                                             <button type="button" class="btn btn-outline-primary" id="btnSelectDescendingDomains" title="Select available domains by descending name">
-                                                <i class="fas fa-arrow-down-wide-short me-1"></i>Select descending
+                                                <i class="fas fa-sort-amount-down me-1"></i>Select descending
                                             </button>
                                         </div>
                                         <div class="afraid-domain-filter-controls" role="group" aria-label="AFRAID domain analytics filter">
@@ -1556,9 +1624,9 @@
                             </table>
                         </div>
                         <div class="d-flex justify-content-between align-items-center mt-3">
-                            <button class="btn btn-sm btn-outline-secondary" id="btnPrevDomainPage"><i class="fas fa-chevron-left me-1"></i>Previous</button>
+                            <button class="btn btn-sm btn-outline-secondary" id="btnPrevDomainPage" type="button"><i class="fas fa-chevron-left me-1"></i>Previous</button>
                             <span class="text-muted small" id="domainPageStatus">Page 1</span>
-                            <button class="btn btn-sm btn-outline-secondary" id="btnNextDomainPage">Next<i class="fas fa-chevron-right ms-1"></i></button>
+                            <button class="btn btn-sm btn-outline-secondary" id="btnNextDomainPage" type="button">Next<i class="fas fa-chevron-right ms-1"></i></button>
                         </div>
                     </div>
                 </section>
@@ -2441,7 +2509,9 @@ function updateUsedDomainSelectAllState() {
     if (!button) return;
     const checkboxes = [...document.querySelectorAll('#tldDomainList .reactivate-domain-check')];
     const allSelected = checkboxes.length > 0 && checkboxes.every(checkbox => checkbox.checked);
-    button.textContent = allSelected ? 'Clear Used Selection' : 'Select All Used';
+    button.innerHTML = allSelected
+        ? '<i class="fas fa-xmark me-1"></i>Clear Used Selection'
+        : '<i class="fas fa-check-double me-1"></i>Select All Used';
     button.classList.toggle('btn-secondary', allSelected);
     button.classList.toggle('btn-outline-secondary', !allSelected);
 }
