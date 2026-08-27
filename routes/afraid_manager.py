@@ -92,12 +92,12 @@ def _completed_inbox_domain_stats():
             item[placement] += 1
     return stats
 
-def _afraid_analytics_tags(domain_names):
+def _afraid_analytics_tags(domain_names, observed=None):
     """Map AFRAID domains to the spam-inbox tag when completed tests observed them."""
     domain_names = {str(name or '').strip().lower().rstrip('.') for name in (domain_names or []) if str(name or '').strip()}
     if not domain_names:
         return {}
-    observed = _completed_inbox_domain_stats()
+    observed = _completed_inbox_domain_stats() if observed is None else observed
     tags = {}
     for domain_name in domain_names:
         inbox_hits = 0
@@ -118,11 +118,33 @@ def _afraid_analytics_tags(domain_names):
             }
     return tags
 
+def _afraid_analytics_filter_match(analytics, requested_tags):
+    """Match an analytics filter against inbox/spam placement counts."""
+    requested_tags = {str(tag or '').strip().lower() for tag in (requested_tags or [])}
+    if not requested_tags:
+        return True
+    if 'spam-inbox' in requested_tags and (analytics.get('inbox_hits', 0) or analytics.get('spam_hits', 0)):
+        return True
+    if 'inbox' in requested_tags and analytics.get('inbox_hits', 0):
+        return True
+    if 'spam' in requested_tags and analytics.get('spam_hits', 0):
+        return True
+    return False
+
+def _afraid_analytics_labels(analytics):
+    labels = []
+    if analytics.get('inbox_hits', 0):
+        labels.append('Domain: inbox')
+    if analytics.get('spam_hits', 0):
+        labels.append('spam-inbox: spam')
+    return labels
+
 def _afraid_domain_analytics_fields(domain, tags=None):
     domain_name = (domain.domain_name or '').strip().lower().rstrip('.')
     analytics = (tags or {}).get(domain_name, {})
     return {
         'analytics_tag': analytics.get('tag', ''),
+        'analytics_tags': _afraid_analytics_labels(analytics),
         'analytics_inbox_hits': analytics.get('inbox_hits', 0),
         'analytics_spam_hits': analytics.get('spam_hits', 0),
     }
@@ -446,10 +468,16 @@ def get_domain_options():
     if tld:
         query = query.filter_by(tld=tld)
     analytics_tag = request.args.get('analytics_tag', '').strip().lower()
-    if analytics_tag == 'spam-inbox':
+    requested_analytics_tags = [tag for tag in analytics_tag.split(',') if tag in {'inbox', 'spam', 'spam-inbox'}]
+    if requested_analytics_tags:
         candidate_names = [row[0] for row in query.with_entities(AfraidDomain.domain_name).all()]
-        tagged_names = _afraid_analytics_tags(candidate_names)
-        query = query.filter(AfraidDomain.domain_name.in_(list(tagged_names)))
+        observed = _completed_inbox_domain_stats()
+        tagged_names = _afraid_analytics_tags(candidate_names, observed)
+        matching_names = [
+            name for name, analytics in tagged_names.items()
+            if _afraid_analytics_filter_match(analytics, requested_analytics_tags)
+        ]
+        query = query.filter(AfraidDomain.domain_name.in_(matching_names))
     if include_used:
         domains = query.order_by(
             AfraidDomain.last_used_at.is_(None).asc(),

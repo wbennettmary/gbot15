@@ -448,6 +448,41 @@
         vertical-align: middle;
     }
 
+    .afraid-analytics-domain-tag.inbox {
+        background: #dcfce7;
+        border-color: #86efac;
+        color: #166534;
+    }
+
+    .afraid-analytics-domain-tag.spam {
+        background: #fef3c7;
+        border-color: #fcd34d;
+        color: #92400e;
+    }
+
+    #tldDomainList {
+        min-width: 0;
+    }
+
+    #tldDomainList > label {
+        align-items: flex-start !important;
+        gap: 12px;
+        min-height: 38px;
+    }
+
+    #tldDomainList > label > span:first-child {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    #tldDomainList > label > span:last-child {
+        flex: 0 1 auto;
+        max-width: 45%;
+        text-align: right;
+        white-space: normal;
+    }
+
     .afraid-used-domain-actions {
         display: grid;
         gap: 8px;
@@ -959,12 +994,12 @@
                                         </div>
                                         <div class="afraid-domain-filter-controls" role="group" aria-label="AFRAID domain analytics filter">
                                             <div class="form-check">
-                                                <input class="form-check-input afraid-domain-filter" type="checkbox" id="afraidDomainFilterDomain" value="domain" checked>
-                                                <label class="form-check-label" for="afraidDomainFilterDomain">Domain</label>
+                                                <input class="form-check-input afraid-domain-filter" type="checkbox" id="afraidDomainFilterInbox" value="inbox">
+                                                <label class="form-check-label" for="afraidDomainFilterInbox">Domain: inbox</label>
                                             </div>
                                             <div class="form-check">
-                                                <input class="form-check-input afraid-domain-filter" type="checkbox" id="afraidDomainFilterSpamInbox" value="spam-inbox">
-                                                <label class="form-check-label" for="afraidDomainFilterSpamInbox">spam-inbox</label>
+                                                <input class="form-check-input afraid-domain-filter" type="checkbox" id="afraidDomainFilterSpam" value="spam">
+                                                <label class="form-check-label" for="afraidDomainFilterSpam">spam-inbox: spam</label>
                                             </div>
                                         </div>
                                     </div>
@@ -1703,10 +1738,8 @@ async function loadDomains() {
         if (data.success && data.domains.length > 0) {
             data.domains.forEach(d => {
                 const tr = document.createElement('tr');
-                const analyticsTag = d.analytics_tag === 'spam-inbox'
-                    ? '<span class="badge rounded-pill afraid-analytics-domain-tag ms-1">spam-inbox</span>'
-                    : '';
-                tr.innerHTML = `<td><strong>${d.domain_name}</strong> ${analyticsTag}
+                const analyticsTags = renderAfraidAnalyticsTags(d);
+                tr.innerHTML = `<td><strong>${d.domain_name}</strong> ${analyticsTags}
                         <div class="text-muted small">.${d.tld || ''} | public | hosts: ${d.hosts_in_use ?? 'n/a'} | created: ${d.registry_created_on || 'n/a'} | ${d.used_this_month ? 'used this month' : 'available'}</div>
                     </td>
                     <td>
@@ -1780,8 +1813,8 @@ async function loadSelectedTldDomains() {
         const tld = document.getElementById('tldSelect')?.value || '';
         const params = new URLSearchParams({limit: 5000, include_used: 'true'});
         if (tld) params.set('tld', tld);
-        const analyticsTag = getAfraidDomainAnalyticsFilter();
-        if (analyticsTag) params.set('analytics_tag', analyticsTag);
+        const analyticsTags = getAfraidDomainAnalyticsFilter();
+        if (analyticsTags.length) params.set('analytics_tag', analyticsTags.join(','));
         const res = await fetch('/api/afraid/domain-options?' + params.toString());
         const data = await parseJsonResponse(res);
         if (requestToken !== window.afraidTldDomainsRequestToken) return;
@@ -1792,22 +1825,27 @@ async function loadSelectedTldDomains() {
 }
 
 function getAfraidDomainAnalyticsFilter() {
-    const spamInbox = document.getElementById('afraidDomainFilterSpamInbox');
-    const domain = document.getElementById('afraidDomainFilterDomain');
-    return spamInbox?.checked && !domain?.checked ? 'spam-inbox' : '';
+    return [...document.querySelectorAll('.afraid-domain-filter:checked')]
+        .map(input => input.value)
+        .filter(value => value === 'inbox' || value === 'spam');
 }
 
 function handleAfraidDomainFilterChange(event) {
-    const domain = document.getElementById('afraidDomainFilterDomain');
-    const spamInbox = document.getElementById('afraidDomainFilterSpamInbox');
-    if (event.target.checked) {
-        if (event.target === domain && spamInbox) spamInbox.checked = false;
-        if (event.target === spamInbox && domain) domain.checked = false;
-    } else if (domain && spamInbox && !domain.checked && !spamInbox.checked) {
-        event.target.checked = true;
-    }
     window.afraidDomainPage = 1;
     loadSelectedTldDomains();
+}
+
+function renderAfraidAnalyticsTags(item) {
+    const tags = [];
+    const inboxHits = Number(item?.analytics_inbox_hits || 0);
+    const spamHits = Number(item?.analytics_spam_hits || 0);
+    if (inboxHits > 0) {
+        tags.push(`<span class="badge rounded-pill afraid-analytics-domain-tag inbox ms-1" title="Observed in Inbox ${inboxHits} time(s)">Domain: inbox</span>`);
+    }
+    if (spamHits > 0) {
+        tags.push(`<span class="badge rounded-pill afraid-analytics-domain-tag spam ms-1" title="Observed in Spam ${spamHits} time(s)">spam-inbox: spam</span>`);
+    }
+    return tags.join('');
 }
 
 async function searchDomainGroup() {
@@ -1857,10 +1895,8 @@ function renderSelectedTldDomains(domains) {
         row.className = `d-flex justify-content-between align-items-center py-1 px-2 border-bottom small ${usedThisMonth ? 'text-muted bg-light' : 'bg-success bg-opacity-10'} ${highlighted ? 'border border-primary bg-primary bg-opacity-10' : ''}`;
         row.style.cursor = 'pointer';
         const checkClass = usedThisMonth ? 'reactivate-domain-check' : 'tld-domain-check';
-        const analyticsTag = item.analytics_tag === 'spam-inbox'
-            ? '<span class="badge rounded-pill afraid-analytics-domain-tag ms-1" title="Observed in completed inbox analytics">spam-inbox</span>'
-            : '';
-        row.innerHTML = `<span><input type="checkbox" class="me-2 ${checkClass}" value="${escapeHtml(item.domain_name)}"> ${escapeHtml(item.domain_name)} ${analyticsTag}</span>
+        const analyticsTags = renderAfraidAnalyticsTags(item);
+        row.innerHTML = `<span><input type="checkbox" class="me-2 ${checkClass}" value="${escapeHtml(item.domain_name)}"> ${escapeHtml(item.domain_name)} ${analyticsTags}</span>
             <span class="text-muted">hosts: ${item.hosts_in_use ?? 'n/a'} | ${item.registry_created_on || 'n/a'} | ${usedThisMonth ? 'used' : 'available'}</span>`;
         const checkbox = row.querySelector('input');
         checkbox.addEventListener('change', () => {
