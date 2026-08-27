@@ -290,6 +290,18 @@ with app.app_context():
             else:
                 logging.debug("Column 'cookies_str' already exists in afraid_config")
 
+            if 'domains_synced_at' not in columns:
+                logging.info("Adding missing 'domains_synced_at' column to afraid_config table...")
+                with db.engine.connect() as conn:
+                    if 'postgresql' in str(db.engine.url):
+                        conn.execute(text('ALTER TABLE "afraid_config" ADD COLUMN domains_synced_at TIMESTAMP'))
+                    else:
+                        conn.execute(text("ALTER TABLE afraid_config ADD COLUMN domains_synced_at TIMESTAMP"))
+                    conn.commit()
+                logging.info("Successfully added 'domains_synced_at' to afraid_config!")
+            else:
+                logging.debug("Column 'domains_synced_at' already exists in afraid_config")
+
     except Exception as e:
         logging.warning(f"Could not auto-migrate cookies_str column for afraid_config: {e}")
         try:
@@ -5958,6 +5970,7 @@ def _agent_classify_test_payload(test_id, sender_context=None):
             'spam': 0,
             'pending': 0,
             'failed': 0,
+            'failure_causes': set(),
             'recipients': set(),
             'sources': set(),
         })
@@ -5968,6 +5981,9 @@ def _agent_classify_test_payload(test_id, sender_context=None):
             item['spam'] += 1
         elif placement == 'FAILED' or (row.status or '').upper() == 'FAILED':
             item['failed'] += 1
+            item['failure_causes'].add(
+                (row.error_message or '').strip()[:500] or 'Message sending or delivery failed.'
+            )
         else:
             item['pending'] += 1
         if row.recipient:
@@ -5980,15 +5996,21 @@ def _agent_classify_test_payload(test_id, sender_context=None):
         payload = dict(item)
         payload['recipients'] = sorted(item['recipients'])
         payload['sources'] = sorted(item['sources'])
+        payload.pop('failure_causes', None)
+        payload['failure_causes'] = sorted(item.get('failure_causes') or [])
+        payload['failure_reason'] = ' | '.join(payload['failure_causes']) or 'Message sending or delivery failed.'
         payload['observed'] = total_observed
         payload['inbox_rate'] = round((item['inbox'] / total_observed) * 100) if total_observed else 0
         payload['copy_line'] = item['email']
+        payload['failed_copy_line'] = f"{item.get('account') or 'unknown-account'},{item['email']} (failed)"
         payload['name_change_line'] = f"{item.get('account') or item['domain']},{item['email']}"
         return payload
 
-    inbox_users, spam_users, grey_users, waiting_users = [], [], [], []
+    inbox_users, spam_users, grey_users, waiting_users, failed_users = [], [], [], [], []
     for item in stats.values():
         payload = finish(item)
+        if item['failed']:
+            failed_users.append(payload)
         if item['inbox'] and item['spam']:
             grey_users.append(payload)
         elif item['spam']:
@@ -6002,6 +6024,7 @@ def _agent_classify_test_payload(test_id, sender_context=None):
     spam_users.sort(key=sort_key)
     grey_users.sort(key=sort_key)
     waiting_users.sort(key=lambda item: item['email'])
+    failed_users.sort(key=lambda item: item['email'])
     return {
         'test_id': test.test_id,
         'status': test.status,
@@ -6019,6 +6042,7 @@ def _agent_classify_test_payload(test_id, sender_context=None):
             'spam_users': spam_users,
             'grey_users': grey_users,
             'waiting_users': waiting_users,
+            'failed_users': failed_users,
             'grey_name_change_lines': [item['name_change_line'] for item in grey_users],
         },
         'next_step': 'change_grey_names' if grey_users else ('retest_spam_users' if spam_users else 'complete'),

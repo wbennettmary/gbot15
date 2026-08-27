@@ -1,6 +1,7 @@
 import logging
 import json
 import re
+import threading
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, session, render_template, redirect, url_for
 from functools import wraps
@@ -13,6 +14,8 @@ from services.cloudflare_dns_service import CloudflareDNSService
 logger = logging.getLogger(__name__)
 fake = Faker()
 MAX_CLOUDFLARE_DESTINATION_USES = 5
+AFRAID_DOMAIN_SYNC_INTERVAL = timedelta(hours=1)
+_AFRAID_DOMAIN_SYNC_LOCK = threading.Lock()
 
 afraid_manager = Blueprint('afraid_manager', __name__)
 
@@ -43,6 +46,154 @@ def available_domain_query():
         AfraidDomain.registry_status == 'public',
         or_(AfraidDomain.last_used_at.is_(None), AfraidDomain.last_used_at < used_cutoff())
     )
+
+def _sync_timestamp_text(value):
+    return value.isoformat() + 'Z' if value else None
+
+def sync_afraid_registry_domains(force=False, start_page=1, end_page=212):
+    """Refresh the FreeDNS registry cache, removing domains no longer public.
+
+    A successful full refresh records the time on AfraidConfig. Calls made within
+    the one-hour freshness window reuse the verified cache instead of hitting
+    FreeDNS again.
+    """
+    config = AfraidConfig.query.first()
+    if not config or not config.cookies_str:
+        return {'success': False, 'error': 'Afraid cookies not configured. Please import your browser cookies.'}
+
+    now = datetime.utcnow()
+    if not force and config.domains_synced_at and now - config.domains_synced_at < AFRAID_DOMAIN_SYNC_INTERVAL:
+        return {
+            'success': True,
+            'skipped': True,
+            'message': 'FreeDNS registry cache is still fresh.',
+            'synced_at': _sync_timestamp_text(config.domains_synced_at),
+            'added': 0,
+            'updated': 0,
+            'total': AfraidDomain.query.filter(
+                AfraidDomain.source == 'registry',
+                AfraidDomain.registry_status == 'public',
+                AfraidDomain.domain_id.isnot(None),
+            ).count(),
+            'seen': 0,
+            'pages': 0,
+            'errors': [],
+        }
+
+    with _AFRAID_DOMAIN_SYNC_LOCK:
+        db.session.expire_all()
+        config = AfraidConfig.query.first()
+        now = datetime.utcnow()
+        if not force and config and config.domains_synced_at and now - config.domains_synced_at < AFRAID_DOMAIN_SYNC_INTERVAL:
+            return {
+                'success': True,
+                'skipped': True,
+                'message': 'FreeDNS registry cache is still fresh.',
+                'synced_at': _sync_timestamp_text(config.domains_synced_at),
+                'added': 0,
+                'updated': 0,
+                'total': AfraidDomain.query.filter(
+                    AfraidDomain.source == 'registry',
+                    AfraidDomain.registry_status == 'public',
+                    AfraidDomain.domain_id.isnot(None),
+                ).count(),
+                'seen': 0,
+                'pages': 0,
+                'errors': [],
+            }
+
+        svc, error = get_service()
+        if error:
+            return {'success': False, 'error': error}
+
+        start_page = max(1, int(start_page or 1))
+        end_page = max(start_page, min(212, int(end_page or 212)))
+        added = 0
+        updated = 0
+        total_seen = 0
+        public_seen = 0
+        errors = []
+        public_domain_names = set()
+
+        for page in range(start_page, end_page + 1):
+            try:
+                registry_domains = svc.fetch_registry_page(page)
+            except Exception as exc:
+                errors.append(f'page {page}: {exc}')
+                continue
+
+            total_seen += len(registry_domains)
+            for item in registry_domains:
+                if item.get('status') != 'public':
+                    continue
+                public_seen += 1
+                domain_name = item['domain_name']
+                public_domain_names.add(domain_name)
+                domain = AfraidDomain.query.filter_by(domain_name=domain_name).first()
+                if not domain:
+                    domain = AfraidDomain(domain_name=domain_name)
+                    db.session.add(domain)
+                    added += 1
+                else:
+                    updated += 1
+                domain.domain_id = item.get('domain_id')
+                domain.tld = item.get('tld')
+                domain.source = 'registry'
+                domain.registry_status = item.get('status')
+                domain.registry_owner = item.get('owner')
+                domain.hosts_in_use = item.get('hosts_in_use')
+                domain.registry_age_text = item.get('age_text')
+                domain.registry_created_on = item.get('created_on')
+
+            if page % 10 == 0:
+                db.session.commit()
+
+        if public_seen == 0:
+            db.session.rollback()
+            return {
+                'success': False,
+                'error': '; '.join(errors[:5]) or 'No domains found in the FreeDNS registry pages.',
+                'added': added,
+                'updated': updated,
+                'total': 0,
+                'seen': total_seen,
+                'pages': end_page - start_page + 1,
+                'errors': errors[:10],
+            }
+
+        if errors:
+            db.session.commit()
+            return {
+                'success': False,
+                'error': f"FreeDNS registry refresh was incomplete ({len(errors)} page error(s)); cached domains were not marked fresh.",
+                'added': added,
+                'updated': updated,
+                'total': public_seen,
+                'seen': total_seen,
+                'pages': end_page - start_page + 1,
+                'errors': errors[:10],
+            }
+
+        stale_query = AfraidDomain.query.filter(AfraidDomain.source == 'registry')
+        if public_domain_names:
+            stale_query = stale_query.filter(~AfraidDomain.domain_name.in_(public_domain_names))
+        stale_query.delete(synchronize_session=False)
+        config = AfraidConfig.query.first()
+        if config:
+            config.domains_synced_at = datetime.utcnow()
+        db.session.commit()
+        return {
+            'success': True,
+            'skipped': False,
+            'message': 'FreeDNS registry cache refreshed successfully.',
+            'synced_at': _sync_timestamp_text(config.domains_synced_at if config else None),
+            'added': added,
+            'updated': updated,
+            'total': public_seen,
+            'seen': total_seen,
+            'pages': end_page - start_page + 1,
+            'errors': [],
+        }
 
 @afraid_manager.route('/afraid', methods=['GET'])
 @login_required
@@ -89,11 +240,12 @@ def save_config():
 
     config = AfraidConfig.query.first()
     if not config:
-        config = AfraidConfig(cookies_str=svc.cookies_str, is_configured=True)
+        config = AfraidConfig(cookies_str=svc.cookies_str, is_configured=True, domains_synced_at=None)
         db.session.add(config)
     else:
         config.cookies_str = svc.cookies_str
         config.is_configured = True
+        config.domains_synced_at = None
 
     db.session.commit()
     return jsonify({'success': True, 'message': 'Cookies saved and verified successfully!'})
@@ -116,6 +268,9 @@ def test_config():
 @afraid_manager.route('/api/afraid/domains', methods=['GET'])
 @login_required
 def get_domains():
+    freshness = sync_afraid_registry_domains(force=False)
+    if not freshness.get('success'):
+        return jsonify(freshness), 503
     tld = request.args.get('tld', '').strip().lower()
     page = max(1, int(request.args.get('page', 1)))
     per_page = min(25, max(1, int(request.args.get('per_page', 5))))
@@ -190,6 +345,9 @@ def update_used_domain_status(domain_id):
 @afraid_manager.route('/api/afraid/domain-options', methods=['GET'])
 @login_required
 def get_domain_options():
+    freshness = sync_afraid_registry_domains(force=False)
+    if not freshness.get('success'):
+        return jsonify(freshness), 503
     tld = request.args.get('tld', '').strip().lower()
     limit = min(5000, max(1, int(request.args.get('limit', 1000))))
     include_used = request.args.get('include_used', '').lower() == 'true'
@@ -223,6 +381,9 @@ def get_domain_options():
 @afraid_manager.route('/api/afraid/domain-search', methods=['GET'])
 @login_required
 def search_afraid_domain():
+    freshness = sync_afraid_registry_domains(force=False)
+    if not freshness.get('success'):
+        return jsonify(freshness), 503
     q = request.args.get('q', '').strip().lower()
     if not q:
         return jsonify({'success': False, 'error': 'Domain search is required'}), 400
@@ -318,80 +479,20 @@ def reactivate_domains():
 @afraid_manager.route('/api/afraid/fetch-domains', methods=['POST'])
 @login_required
 def fetch_domains_from_afraid():
-    svc, error = get_service()
-    if error:
-        return jsonify({'success': False, 'error': error}), 401
-
     data = request.get_json(silent=True) or {}
-    start_page = int(data.get('start_page') or 1)
-    end_page = int(data.get('end_page') or 212)
-    start_page = max(1, start_page)
-    end_page = max(start_page, min(212, end_page))
-
-    added = 0
-    updated = 0
-    total_seen = 0
-    public_seen = 0
-    errors = []
-
-    for page in range(start_page, end_page + 1):
-        try:
-            registry_domains = svc.fetch_registry_page(page)
-        except Exception as e:
-            errors.append(f"page {page}: {e}")
-            continue
-
-        total_seen += len(registry_domains)
-        for item in registry_domains:
-            if item.get('status') != 'public':
-                continue
-            public_seen += 1
-            domain_name = item['domain_name']
-            domain = AfraidDomain.query.filter_by(domain_name=domain_name).first()
-            if not domain:
-                domain = AfraidDomain(domain_name=domain_name)
-                db.session.add(domain)
-                added += 1
-            else:
-                updated += 1
-            domain.domain_id = item.get('domain_id')
-            domain.tld = item.get('tld')
-            domain.source = 'registry'
-            domain.registry_status = item.get('status')
-            domain.registry_owner = item.get('owner')
-            domain.hosts_in_use = item.get('hosts_in_use')
-            domain.registry_age_text = item.get('age_text')
-            domain.registry_created_on = item.get('created_on')
-
-        if page % 10 == 0:
-            db.session.commit()
-
-    AfraidDomain.query.filter(
-        AfraidDomain.source == 'registry'
-    ).filter(
-        or_(AfraidDomain.registry_status != 'public', AfraidDomain.registry_status.is_(None), AfraidDomain.domain_id.is_(None))
-    ).delete(synchronize_session=False)
-    db.session.commit()
-
-    if public_seen == 0:
-        return jsonify({
-            'success': False,
-            'error': '; '.join(errors[:5]) or 'No domains found in the FreeDNS registry pages.'
-        }), 400
-
-    return jsonify({
-        'success': True,
-        'added': added,
-        'updated': updated,
-        'total': public_seen,
-        'seen': total_seen,
-        'pages': end_page - start_page + 1,
-        'errors': errors[:10]
-    })
+    result = sync_afraid_registry_domains(
+        force=bool(data.get('force', True)),
+        start_page=data.get('start_page') or 1,
+        end_page=data.get('end_page') or 212,
+    )
+    return jsonify(result), 200 if result.get('success') else 400
 
 @afraid_manager.route('/api/afraid/tlds', methods=['GET'])
 @login_required
 def get_tld_groups():
+    freshness = sync_afraid_registry_domains(force=False)
+    if not freshness.get('success'):
+        return jsonify(freshness), 503
     rows = db.session.query(AfraidDomain.tld, func.count(AfraidDomain.id)).filter(
         AfraidDomain.tld.isnot(None),
         AfraidDomain.domain_id.isnot(None),
@@ -684,6 +785,12 @@ def delete_existing_subdomains():
 @login_required
 def create_batch_subdomains():
     data = request.get_json(silent=True) or {}
+    freshness = sync_afraid_registry_domains(force=False)
+    if not freshness.get('success'):
+        return jsonify({
+            'success': False,
+            'error': f"Cannot create CNAME subdomains until the FreeDNS registry is refreshed: {freshness.get('error', 'refresh failed')}"
+        }), 503
     tld = data.get('tld', '').strip().lower()
     try:
         base_domain = normalize_domain_name(data.get('base_domain', ''))
@@ -694,8 +801,33 @@ def create_batch_subdomains():
                 base_domains.append(domain_name)
     except ValueError as e:
         return jsonify({'success': False, 'error': str(e)}), 400
+    try:
+        selected_registry_domains = set()
+        for raw_domain in data.get('selected_registry_domains', []):
+            domain_name = normalize_domain_name(raw_domain)
+            if domain_name:
+                selected_registry_domains.add(domain_name)
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
     if base_domain and base_domain not in base_domains:
         base_domains.append(base_domain)
+    if selected_registry_domains:
+        current_registry_domains = {
+            row.domain_name
+            for row in AfraidDomain.query.filter(
+                AfraidDomain.domain_name.in_(selected_registry_domains),
+                AfraidDomain.source == 'registry',
+                AfraidDomain.registry_status == 'public',
+                AfraidDomain.domain_id.isnot(None),
+            ).all()
+        }
+        missing_registry_domains = sorted(selected_registry_domains - current_registry_domains)
+        if missing_registry_domains:
+            return jsonify({
+                'success': False,
+                'error': 'The following selected FreeDNS domain(s) are no longer available after the latest registry sync: '
+                         + ', '.join(missing_registry_domains)
+            }), 409
     raw_afraid_count = data.get('afraid_count')
     afraid_count = None if raw_afraid_count in (None, '') else max(1, min(5000, int(raw_afraid_count)))
     raw_cloudflare_count = data.get('cloudflare_count')
@@ -835,6 +967,12 @@ def create_batch_subdomains():
 @login_required
 def create_subdomain():
     data = request.get_json()
+    freshness = sync_afraid_registry_domains(force=False)
+    if not freshness.get('success'):
+        return jsonify({
+            'success': False,
+            'error': f"Cannot create a CNAME subdomain until the FreeDNS registry is refreshed: {freshness.get('error', 'refresh failed')}"
+        }), 503
     base_domain = data.get('base_domain', '').strip().lower()
     tld = data.get('tld', '').strip().lower()
     rotate_domain = bool(data.get('rotate_domain'))

@@ -818,20 +818,31 @@
                         <div class="row g-3 mb-3 align-items-stretch">
                             <div class="col-lg-6">
                                 <label class="form-label fw-semibold">Domains In Selected TLD</label>
-                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
                                     <div class="small text-muted">Available domains are used for creation. Used domains can be reactivated here.</div>
-                                    <div class="btn-group btn-group-sm" role="group" aria-label="Used domain selection actions">
-                                        <button type="button" class="btn btn-outline-secondary" id="btnSelectAllUsedDomains">
-                                            Select All Used
-                                        </button>
-                                        <button type="button" class="btn btn-primary" id="btnReactivateSelectedDomains">
-                                            Reactivate Selected Used
-                                        </button>
+                                    <div class="d-flex flex-wrap align-items-center gap-2 ms-auto">
+                                        <div class="input-group input-group-sm" style="max-width: 245px;" aria-label="Descending domain selection">
+                                            <span class="input-group-text">Count</span>
+                                            <input type="number" class="form-control" id="selectDomainCountInput" min="1" max="5000" value="10" aria-label="Number of domains to select">
+                                            <button type="button" class="btn btn-outline-primary" id="btnSelectDescendingDomains" title="Select available domains by descending name">
+                                                Select descending
+                                            </button>
+                                        </div>
+                                        <div class="btn-group btn-group-sm" role="group" aria-label="Used domain selection actions">
+                                            <button type="button" class="btn btn-outline-secondary" id="btnSelectAllUsedDomains">
+                                                Select All Used
+                                            </button>
+                                            <button type="button" class="btn btn-primary" id="btnReactivateSelectedDomains">
+                                                Reactivate Selected Used
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                                 <div id="tldDomainList" class="border rounded p-2" style="height: 220px; overflow-y: auto;">
                                     <div class="text-muted small">Select a TLD group to view public domains.</div>
                                 </div>
+                                <div class="form-text">Set a count, then select the available domains in descending name order.</div>
+                                <div class="form-text" id="domainSelectionStatus" aria-live="polite"></div>
                             </div>
                             <div class="col-lg-6">
                                 <label for="manualBaseDomainsInput" class="form-label fw-semibold">Manual Input Domains</label>
@@ -869,8 +880,8 @@
                             <label for="ttlInput" class="form-label">TTL (seconds)</label>
                             <input type="number" class="form-control" id="ttlInput" value="300">
                         </div>
-                        <button type="button" class="btn btn-success w-100" id="btnStartProcess">
-                            <i class="fas fa-play me-1"></i> Start Process & Save List
+                        <button type="button" class="btn btn-success w-100" id="btnCreateCnameSubdomain">
+                            <i class="fas fa-circle-plus me-1"></i> Create CNAME Subdomain
                         </button>
                     </form>
                     <div id="createAlert" class="mt-3"></div>
@@ -883,9 +894,12 @@
     <div class="card mb-4">
         <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
             <h5 class="card-title mb-0"><i class="fas fa-list me-2"></i>Managed FreeDNS Domains</h5>
-            <button class="btn btn-sm btn-light" id="btnFetchDomains">
-                <i class="fas fa-rotate me-1"></i> Fetch Registry
-            </button>
+            <div class="d-flex align-items-center gap-2">
+                <span class="small text-white-50" id="afraidDomainSyncStatus">Checking registry freshness...</span>
+                <button class="btn btn-sm btn-light" id="btnFetchDomains" type="button">
+                    <i class="fas fa-rotate me-1"></i> Sync Registry
+                </button>
+            </div>
         </div>
         <div class="card-body">
             <form id="addDomainForm" class="mb-4">
@@ -1267,11 +1281,16 @@ document.addEventListener('DOMContentLoaded', function() {
     if (document.getElementById('cookieStatus')) {
         loadConfig();
     }
-    loadDomains();
-    loadTlds();
-    loadCloudflareDomains();
-    loadAfraidLists();
-    loadUsedDomains();
+    syncAfraidDomainsIfStale(false).finally(() => {
+        loadDomains();
+        loadTlds();
+        loadCloudflareDomains();
+        loadAfraidLists();
+        loadUsedDomains();
+    });
+    window.afraidDomainSyncTimer = window.setInterval(() => {
+        syncAfraidDomainsIfStale(false);
+    }, 60 * 60 * 1000);
 
     document.getElementById('tldSelect').addEventListener('change', () => {
         window.afraidDomainPage = 1;
@@ -1293,7 +1312,8 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('btnMarkAllSubdomains').addEventListener('click', markAllSubdomains);
     document.getElementById('selectAllSubdomains').addEventListener('change', toggleAllSubdomains);
     document.getElementById('btnDeleteSelectedSubdomains').addEventListener('click', deleteSelectedSubdomains);
-    document.getElementById('btnStartProcess').addEventListener('click', startProcess);
+    document.getElementById('btnCreateCnameSubdomain').addEventListener('click', startProcess);
+    document.getElementById('btnSelectDescendingDomains').addEventListener('click', selectDomainsDescending);
     document.getElementById('btnStartAfraidAiAutomation').addEventListener('click', startAfraidAiAutomation);
     document.getElementById('btnOpenAfraidAiAgent').addEventListener('click', openAfraidAiAgent);
     document.getElementById('btnCloseAfraidAiAgent').addEventListener('click', closeAfraidAiAgent);
@@ -1405,34 +1425,8 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     }
 
-    // Fetch domains from FreeDNS
-    document.getElementById('btnFetchDomains').addEventListener('click', async () => {
-        const btn = document.getElementById('btnFetchDomains');
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Fetching...';
-        try {
-            const res = await fetch('/api/afraid/fetch-domains', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({start_page: 1, end_page: 212})
-            });
-            const data = await parseJsonResponse(res);
-            if (data.success) {
-                alert(`Done! Added ${data.added}, updated ${data.updated}. Parsed ${data.total} registry rows across ${data.pages} pages.`);
-                loadTlds();
-                loadDomains();
-                loadDomainOptions();
-                loadSelectedTldDomains();
-            } else {
-                alert('Error: ' + data.error);
-            }
-        } catch (err) {
-            alert('Request failed');
-        } finally {
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-rotate me-1"></i> Fetch from FreeDNS';
-        }
-    });
+    // Explicit registry refresh
+    document.getElementById('btnFetchDomains').addEventListener('click', () => syncAfraidDomainsIfStale(true));
 
     // Add domain manually
     document.getElementById('addDomainForm').addEventListener('submit', async (e) => {
@@ -1463,6 +1457,55 @@ document.addEventListener('DOMContentLoaded', function() {
         startProcess();
     });
 });
+
+let afraidDomainSyncPromise = null;
+
+async function syncAfraidDomainsIfStale(force = false, options = {}) {
+    if (afraidDomainSyncPromise) return afraidDomainSyncPromise;
+    const status = document.getElementById('afraidDomainSyncStatus');
+    const fetchButton = document.getElementById('btnFetchDomains');
+    const originalButtonHtml = fetchButton?.innerHTML || '';
+    const refreshUi = options.refreshUi !== false;
+    const request = (async () => {
+        if (status) status.textContent = force ? 'Refreshing FreeDNS registry...' : 'Checking registry freshness...';
+        if (fetchButton && force) {
+            fetchButton.disabled = true;
+            fetchButton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Syncing...';
+        }
+        try {
+            const res = await fetch('/api/afraid/fetch-domains', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({start_page: 1, end_page: 212, force: Boolean(force)})
+            });
+            const data = await parseJsonResponse(res);
+            if (!data.success) throw new Error(data.error || 'FreeDNS registry refresh failed.');
+            const syncedAt = data.synced_at ? new Date(data.synced_at).toLocaleString() : 'now';
+            if (status) status.textContent = data.skipped
+                ? `Registry synced ${syncedAt} · cache still fresh`
+                : `Registry synced ${syncedAt} · ${data.total || 0} public domains`;
+            if (refreshUi) {
+                await Promise.allSettled([loadTlds(), loadDomains()]);
+            }
+            return data;
+        } catch (err) {
+            if (status) status.textContent = `Registry sync failed: ${err.message}`;
+            if (force) throw err;
+            return {success: false, error: err.message};
+        } finally {
+            if (fetchButton && force) {
+                fetchButton.disabled = false;
+                fetchButton.innerHTML = originalButtonHtml || '<i class="fas fa-rotate me-1"></i> Sync Registry';
+            }
+        }
+    })();
+    afraidDomainSyncPromise = request;
+    try {
+        return await request;
+    } finally {
+        afraidDomainSyncPromise = null;
+    }
+}
 
 async function loadConfig() {
     try {
@@ -1651,6 +1694,39 @@ function toggleAllUsedDomains() {
     const selectAll = checkboxes.some(checkbox => !checkbox.checked);
     checkboxes.forEach(checkbox => { checkbox.checked = selectAll; });
     updateUsedDomainSelectAllState();
+}
+
+function selectDomainsDescending() {
+    const input = document.getElementById('selectDomainCountInput');
+    const checkboxes = [...document.querySelectorAll('#tldDomainList .tld-domain-check')];
+    const requested = Number.parseInt(input?.value || '', 10);
+    const status = document.getElementById('domainSelectionStatus');
+    const setStatus = (message, kind = 'muted') => {
+        if (!status) return;
+        status.textContent = message;
+        status.className = `form-text${kind === 'muted' ? '' : ` text-${kind}`}`;
+    };
+
+    if (!Number.isInteger(requested) || requested < 1) {
+        setStatus('Enter a number of domains to select.', 'danger');
+        input?.focus();
+        return;
+    }
+    if (!checkboxes.length) {
+        setStatus('No available domains are loaded for this TLD.', 'warning');
+        return;
+    }
+
+    const selected = new Set(
+        checkboxes
+            .slice()
+            .sort((a, b) => b.value.localeCompare(a.value, undefined, {numeric: true, sensitivity: 'base'}))
+            .slice(0, Math.min(requested, checkboxes.length))
+    );
+    checkboxes.forEach(checkbox => { checkbox.checked = selected.has(checkbox); });
+    input.value = String(selected.size);
+    syncSelectedTldDomains();
+    setStatus(`Selected ${selected.size} available domain(s) in descending name order.`, 'success');
 }
 
 function updateUsedDomainSelectAllState() {
@@ -1975,13 +2051,14 @@ async function deleteSelectedSubdomains() {
 }
 
 async function startProcess() {
-    const btn = document.getElementById('btnStartProcess');
+    const btn = document.getElementById('btnCreateCnameSubdomain');
     btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Running...';
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Syncing domains...';
     try {
         const selectedDomains = [...document.querySelectorAll('.tld-domain-check:checked')].map(el => el.value);
         const manualBaseDomains = getManualBaseDomains();
         const baseDomains = [...new Set([...selectedDomains, ...manualBaseDomains])];
+        await syncAfraidDomainsIfStale(true, {refreshUi: false});
         const selectedDestination = document.getElementById('destinationInput').value.trim() || document.getElementById('cloudflareSelect').value;
         const destinations = selectedDestination ? [selectedDestination] : [];
         const manualSubdomains = getManualSubdomains();
@@ -1992,7 +2069,8 @@ async function startProcess() {
             cloudflare_count: document.getElementById('cloudflareCountInput').disabled ? '' : document.getElementById('cloudflareCountInput').value.trim(),
             destinations,
             subdomains: manualSubdomains,
-            ttl: document.getElementById('ttlInput').value
+            ttl: document.getElementById('ttlInput').value,
+            selected_registry_domains: selectedDomains
         };
         if (baseDomains.length) {
             payload.base_domains = baseDomains;
@@ -2020,7 +2098,7 @@ async function startProcess() {
         showAlert('createAlert', escapeHtml(err.message || 'Process failed'), 'danger');
     } finally {
         btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-play me-1"></i> Start Process & Save List';
+        btn.innerHTML = '<i class="fas fa-circle-plus me-1"></i> Create CNAME Subdomain';
     }
 }
 

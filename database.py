@@ -345,6 +345,7 @@ class AfraidConfig(db.Model):
     password = db.Column(db.String(255), nullable=True)
     cookies_str = db.Column(db.Text, nullable=True)  # Raw browser cookie string
     is_configured = db.Column(db.Boolean, default=False)
+    domains_synced_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
     updated_at = db.Column(db.DateTime, default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
 

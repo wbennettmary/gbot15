@@ -1076,6 +1076,35 @@
         align-items: stretch;
     }
 
+    .ii-failed-users-panel {
+        grid-column: 1 / -1;
+        border: 1px solid #fecaca;
+        border-top: 3px solid #dc2626;
+        background: #fffafa;
+    }
+
+    .ii-failed-users-list {
+        display: grid;
+        gap: 6px;
+        max-height: 300px;
+        overflow-y: auto;
+        margin-top: 10px;
+    }
+
+    .ii-failed-user-row {
+        display: grid;
+        grid-template-columns: minmax(220px, 1fr) minmax(260px, 1.4fr) auto;
+        gap: 10px;
+        align-items: start;
+        padding: 9px 0;
+        border-bottom: 1px solid #fee2e2;
+        font-size: 12px;
+    }
+
+    .ii-failed-user-row:last-child { border-bottom: 0; }
+    .ii-failed-user-cause { color: #991b1b; overflow-wrap: anywhere; }
+    .ii-failed-user-line { font-family: 'Courier New', monospace; overflow-wrap: anywhere; }
+
     .ii-copy-stat-button {
         flex: 1 1 150px;
         max-width: 220px;
@@ -4326,7 +4355,7 @@ merge_recipe_id, content_blueprint_id</pre>
         userInboxListAccounts: [],
         userInboxListAccountOnly: false,
         selectedUserInboxListAccountIds: new Set(),
-        userInboxCopyBuckets: {inboxDomains: [], spamDomains: [], inboxUsers: [], spamUsers: [], inboxAccounts: [], spamAccounts: [], inboxUserAccountLines: [], spamUserAccountLines: [], greyDomainNameChangeUsers: []},
+        userInboxCopyBuckets: {inboxDomains: [], spamDomains: [], inboxUsers: [], spamUsers: [], inboxAccounts: [], spamAccounts: [], inboxUserAccountLines: [], spamUserAccountLines: [], failedUserAccountLines: [], greyDomainNameChangeUsers: []},
         serviceAccounts: [],
         activeMessageId: null,
         explorerRefreshToken: 0,
@@ -4368,8 +4397,8 @@ merge_recipe_id, content_blueprint_id</pre>
         stoppedAutomatedTestIds: new Set(),
         inboxSyncPaused: false,
         inboxSyncPauseUpdating: false,
-        automatedCopyBuckets: {inboxUsers: [], inboxDomains: [], spamUsers: [], spamDomains: [], inboxAccounts: [], spamAccounts: [], inboxUserAccountLines: [], spamUserAccountLines: [], greyDomainNameChangeUsers: []},
-        automatedAiResultCopyBuckets: {inbox_users: [], spam_users: [], inbox_domains: [], spam_domains: []},
+        automatedCopyBuckets: {inboxUsers: [], inboxDomains: [], spamUsers: [], spamDomains: [], inboxAccounts: [], spamAccounts: [], inboxUserAccountLines: [], spamUserAccountLines: [], failedUserAccountLines: [], greyDomainNameChangeUsers: []},
+        automatedAiResultCopyBuckets: {inbox_users: [], spam_users: [], inbox_domains: [], spam_domains: [], failed_users: []},
         automatedAiResultAnalysis: null,
         automatedAiResultTestId: null,
         automatedAgentRun: null,
@@ -7981,7 +8010,7 @@ merge_recipe_id, content_blueprint_id</pre>
         if (iiState.automatedAiResultTestId && iiState.automatedAiResultTestId !== currentTestId) {
             iiState.automatedAiResultAnalysis = null;
             iiState.automatedAiResultTestId = null;
-            iiState.automatedAiResultCopyBuckets = {inbox_users: [], spam_users: [], inbox_domains: [], spam_domains: []};
+            iiState.automatedAiResultCopyBuckets = {inbox_users: [], spam_users: [], inbox_domains: [], spam_domains: [], failed_users: []};
         }
         renderAnalyticsSummary('automatedAnalyticsSummary', rows, 'Messages');
         renderAutomatedProAnalytics(rows, test || {});
@@ -7998,8 +8027,8 @@ merge_recipe_id, content_blueprint_id</pre>
     function clearAutomatedAnalytics() {
         iiState.automatedSelectedTestId = null;
         iiState.automatedMessages = [];
-        iiState.automatedCopyBuckets = {inboxUsers: [], inboxDomains: [], spamUsers: [], spamDomains: [], inboxAccounts: [], spamAccounts: [], inboxUserAccountLines: [], spamUserAccountLines: [], greyDomainNameChangeUsers: []};
-        iiState.automatedAiResultCopyBuckets = {inbox_users: [], spam_users: [], inbox_domains: [], spam_domains: []};
+        iiState.automatedCopyBuckets = {inboxUsers: [], inboxDomains: [], spamUsers: [], spamDomains: [], inboxAccounts: [], spamAccounts: [], inboxUserAccountLines: [], spamUserAccountLines: [], failedUserAccountLines: [], greyDomainNameChangeUsers: []};
+        iiState.automatedAiResultCopyBuckets = {inbox_users: [], spam_users: [], inbox_domains: [], spam_domains: [], failed_users: []};
         iiState.automatedAiResultAnalysis = null;
         iiState.automatedAiResultTestId = null;
         const manualInput = document.getElementById('automatedManualTestIdInput');
@@ -8039,11 +8068,18 @@ merge_recipe_id, content_blueprint_id</pre>
         }
         const facts = payload.facts || {};
         const copyLists = analysis.copy_lists || {};
+        const aiFailedUsers = failedUserRecords(iiState.automatedMessages || [], 'sender');
+        const failedUsers = aiFailedUsers.length
+            ? aiFailedUsers
+            : (copyLists.failed_users || []).map((item) => typeof item === 'string'
+                ? {copyLine: item, cause: 'Message sending or delivery failed.', attempts: 1}
+                : {...item, copyLine: item.copyLine || item.failed_copy_line || item.copy_line});
         iiState.automatedAiResultCopyBuckets = {
             inbox_users: copyLists.inbox_users || [],
             spam_users: copyLists.spam_users || [],
             inbox_domains: copyLists.inbox_domains || [],
-            spam_domains: copyLists.spam_domains || []
+            spam_domains: copyLists.spam_domains || [],
+            failed_users: failedUsers.map((item) => item.copyLine || item.failed_copy_line || item.copy_line || '')
         };
         const diagnosis = Array.isArray(analysis.diagnosis) ? analysis.diagnosis : [analysis.diagnosis].filter(Boolean);
         const nextSteps = analysis.next_steps || [];
@@ -8071,11 +8107,13 @@ merge_recipe_id, content_blueprint_id</pre>
                         <button class="ii-btn ii-copy-stat-button spam" type="button" onclick="copyAutomatedAiResultBucket('spam_users')"><i class="fas fa-user-xmark"></i><strong>${iiState.automatedAiResultCopyBuckets.spam_users.length}</strong><span>Spam users</span></button>
                         <button class="ii-btn ii-copy-stat-button inbox" type="button" onclick="copyAutomatedAiResultBucket('inbox_domains')"><i class="fas fa-inbox"></i><strong>${iiState.automatedAiResultCopyBuckets.inbox_domains.length}</strong><span>Inbox domains</span></button>
                         <button class="ii-btn ii-copy-stat-button spam" type="button" onclick="copyAutomatedAiResultBucket('spam_domains')"><i class="fas fa-triangle-exclamation"></i><strong>${iiState.automatedAiResultCopyBuckets.spam_domains.length}</strong><span>Spam domains</span></button>
+                        <button class="ii-btn ii-copy-stat-button spam" type="button" onclick="copyAutomatedAiResultBucket('failed_users')" ${failedUsers.length ? '' : 'disabled'}><i class="fas fa-user-xmark"></i><strong>${failedUsers.length}</strong><span>Copy failed account,user</span></button>
                     </div>
                     ${nextSteps.length ? `<h4 class="mt-3">Next steps</h4><ul class="ii-muted mb-0">${nextSteps.map((step) => `<li>${escapeHtml(step)}</li>`).join('')}</ul>` : ''}
                     ${(retry.steps || []).length ? `<h4 class="mt-3">Retry plan</h4><ul class="ii-muted mb-0">${retry.steps.map((step) => `<li>${escapeHtml(step)}</li>`).join('')}</ul>` : ''}
                     ${(retry.warnings || []).length ? `<div class="ii-muted mt-2">${retry.warnings.map((warning) => escapeHtml(warning)).join(' ')}</div>` : ''}
                 </div>
+                ${renderFailedUsersSection(failedUsers, {title: 'Failed users found by analytics', copyAction: "copyAutomatedAiResultBucket('failed_users')"})}
             </div>`;
     }
 
@@ -8744,9 +8782,13 @@ merge_recipe_id, content_blueprint_id</pre>
             spam_users: [],
             grey_users: [],
             waiting_users: [],
+            failed_users: [],
             grey_name_change_lines: [],
             ...(finalClass.lists || {})
         };
+        if (!(lists.failed_users || []).length) {
+            lists.failed_users = failedUserRecords(iiState.automatedMessages || [], 'sender');
+        }
         const totals = {
             messages: 0,
             inbox: 0,
@@ -8761,7 +8803,7 @@ merge_recipe_id, content_blueprint_id</pre>
         const resultTitle = payload.source_mode === 'bulk_selection'
             ? 'Bulk selected tests'
             : payload.source_mode === 'existing_test' ? 'Existing Test Agent completed' : 'AI Test Agent completed';
-        const noObservedData = !Number(totals.messages || 0) && !(lists.inbox_users || []).length && !(lists.spam_users || []).length && !(lists.grey_users || []).length;
+        const noObservedData = !Number(totals.messages || 0) && !(lists.inbox_users || []).length && !(lists.spam_users || []).length && !(lists.grey_users || []).length && !(lists.failed_users || []).length;
         iiState.automatedAgentRun = payload;
         if (!payload.fromStorage) storeAiAgentResult(payload);
         const observedTotal = Math.max(1, Number(totals.inbox || 0) + Number(totals.spam || 0) + Number(totals.pending || 0));
@@ -8797,6 +8839,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 <div class="ii-analytics-copy-grid">
                     <button class="ii-btn ii-copy-stat-button inbox" type="button" onclick="copyAiAgentBucket('inbox_users')"><i class="fas fa-user-check"></i><strong>${(lists.inbox_users || []).length}</strong><span>Copy inbox users</span></button>
                     <button class="ii-btn ii-copy-stat-button spam" type="button" onclick="copyAiAgentBucket('spam_users')"><i class="fas fa-user-xmark"></i><strong>${(lists.spam_users || []).length}</strong><span>Copy spam users</span></button>
+                    <button class="ii-btn ii-copy-stat-button spam" type="button" onclick="copyAiAgentBucket('failed_users')" ${(lists.failed_users || []).length ? '' : 'disabled'}><i class="fas fa-user-xmark"></i><strong>${(lists.failed_users || []).length}</strong><span>Copy failed account,user</span></button>
                     <button class="ii-btn ii-copy-stat-button account" type="button" onclick="copyAiAgentBucket('grey_users')"><i class="fas fa-cloud"></i><strong>${(lists.grey_users || []).length}</strong><span>Copy grey users</span></button>
                     <button class="ii-btn ii-copy-stat-button account" type="button" onclick="copyAiAgentBucket('grey_name_change_lines')"><i class="fas fa-id-card"></i><strong>${(lists.grey_name_change_lines || []).length}</strong><span>Copy grey name changes</span></button>
                 </div>
@@ -8826,6 +8869,7 @@ merge_recipe_id, content_blueprint_id</pre>
                         ${(payload.name_changes?.failed || []).map((item) => `<div class="ii-agent-list-row"><span class="ii-email-text">${escapeHtml(item.email || 'unknown')}</span><span class="ii-chip red">${escapeHtml(item.error || 'Failed')}</span><span></span></div>`).join('')}
                     </div>
                 </div>
+                ${renderFailedUsersSection(lists.failed_users || [], {title: 'Failed users found by AI test', copyAction: "copyAiAgentBucket('failed_users')"})}
             </div>`;
         if (!payload.fromStorage) {
             switchAnalyticsTab('agentResults');
@@ -9097,8 +9141,8 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     function mergeAgentClassifications(classifications) {
-        const merged = {totals: {messages: 0, inbox: 0, spam: 0, pending: 0, failed: 0, users: 0, grey: 0}, lists: {inbox_users: [], spam_users: [], grey_users: [], waiting_users: [], grey_name_change_lines: []}};
-        const seen = {inbox_users: new Set(), spam_users: new Set(), grey_users: new Set(), waiting_users: new Set(), grey_name_change_lines: new Set()};
+        const merged = {totals: {messages: 0, inbox: 0, spam: 0, pending: 0, failed: 0, users: 0, grey: 0}, lists: {inbox_users: [], spam_users: [], grey_users: [], waiting_users: [], failed_users: [], grey_name_change_lines: []}};
+        const seen = {inbox_users: new Set(), spam_users: new Set(), grey_users: new Set(), waiting_users: new Set(), failed_users: new Set(), grey_name_change_lines: new Set()};
         (classifications || []).forEach((classification) => {
             const totals = classification.totals || {};
             Object.keys(merged.totals).forEach((key) => { merged.totals[key] += Number(totals[key] || 0); });
@@ -9464,7 +9508,9 @@ merge_recipe_id, content_blueprint_id</pre>
         const lists = finalClass.lists || {};
         const value = bucket === 'grey_name_change_lines'
             ? (lists.grey_name_change_lines || []).join('\r\n')
-            : (lists[bucket] || []).map((item) => item.email || item.copy_line || item).join('\r\n');
+            : bucket === 'failed_users'
+                ? (lists.failed_users || []).map((item) => item.failed_copy_line || item.copyLine || item.copy_line || `${item.account || 'unknown-account'},${item.email || item} (failed)`).join('\r\n')
+                : (lists[bucket] || []).map((item) => item.email || item.copy_line || item).join('\r\n');
         copyTextToClipboard(`${value || ''}${value ? '\r\n' : ''}`);
     }
 
@@ -9508,7 +9554,9 @@ merge_recipe_id, content_blueprint_id</pre>
         const inboxAccounts = accountsForSenders(inboxUsers);
         const spamAccounts = accountsForSenders(spamUsers);
         const greyDomainNameChangeUsers = greyDomainNameChangeRows(rows, 'sender');
-        iiState.automatedCopyBuckets = {inboxDomains, spamDomains, inboxUsers, spamUsers, inboxAccounts, spamAccounts, inboxUserAccountLines, spamUserAccountLines, greyDomainNameChangeUsers};
+        const failedUsers = failedUserRecords(rows, 'sender');
+        const failedUserAccountLines = failedUsers.map((item) => item.copyLine);
+        iiState.automatedCopyBuckets = {inboxDomains, spamDomains, inboxUsers, spamUsers, inboxAccounts, spamAccounts, inboxUserAccountLines, spamUserAccountLines, failedUserAccountLines, greyDomainNameChangeUsers};
         const providers = {};
         rows.forEach((row) => {
             const key = recipientProvider(row.recipient);
@@ -9556,6 +9604,7 @@ merge_recipe_id, content_blueprint_id</pre>
                     <button class="ii-btn ii-copy-stat-button inbox" type="button" onclick="copyAutomatedBucket('inboxUserAccountLines')"><i class="fas fa-clipboard-list"></i><strong>${inboxUserAccountLines.length}</strong><span>Inbox account,user</span></button>
                     <button class="ii-btn ii-copy-stat-button spam" type="button" onclick="copyAutomatedBucket('spamUserAccountLines')"><i class="fas fa-clipboard-list"></i><strong>${spamUserAccountLines.length}</strong><span>Spam account,user</span></button>
                     <button class="ii-btn ii-copy-stat-button spam" type="button" onclick="copyAutomatedBucket('spamAccounts')"><i class="fas fa-building-circle-xmark"></i><strong>${spamAccounts.length}</strong><span>Spam account</span></button>
+                    <button class="ii-btn ii-copy-stat-button spam" type="button" onclick="copyAutomatedBucket('failedUserAccountLines')" ${failedUsers.length ? '' : 'disabled'}><i class="fas fa-user-xmark"></i><strong>${failedUsers.length}</strong><span>Copy failed account,user</span></button>
                     <button class="ii-btn ii-copy-stat-button account" type="button" onclick="copyAutomatedBucket('greyDomainNameChangeUsers')"><i class="fas fa-id-card"></i><strong>${greyDomainNameChangeUsers.length}</strong><span>Grey-domain name changes</span></button>
                 </div>
                 <div class="ii-insight-grid mt-3">
@@ -9583,6 +9632,7 @@ merge_recipe_id, content_blueprint_id</pre>
                         ${userRows.map((item) => `<div class="ii-insight-row"><span class="ii-email-text">${escapeHtml(item.key)}</span><span class="ii-chip green">${item.inbox} inbox</span><span class="ii-chip red">${item.spam} spam</span></div>`).join('')}
                         ${!domainRows.length && !userRows.length ? '<div class="ii-muted">No classified domains or users yet.</div>' : ''}
                     </div>
+                    ${renderFailedUsersSection(failedUsers, {copyAction: "copyAutomatedBucket('failedUserAccountLines')"})}
                 </div>
             </div>`;
     }
@@ -11641,6 +11691,7 @@ merge_recipe_id, content_blueprint_id</pre>
         const inboxAccounts = accountsForSenders(inboxUsers);
         const spamAccounts = accountsForSenders(spamUsers);
         const greyDomainNameChangeUsers = greyDomainNameChangeRows(rows, senderField);
+        const failedUsers = failedUserRecords(rows, senderField);
         copyBuckets.inboxDomains = inboxDomains;
         copyBuckets.spamDomains = spamDomains;
         copyBuckets.inboxUsers = inboxUsers;
@@ -11649,6 +11700,7 @@ merge_recipe_id, content_blueprint_id</pre>
         copyBuckets.spamUserAccountLines = spamUserAccountLines;
         copyBuckets.inboxAccounts = inboxAccounts;
         copyBuckets.spamAccounts = spamAccounts;
+        copyBuckets.failedUserAccountLines = failedUsers.map((item) => item.copyLine);
         copyBuckets.greyDomainNameChangeUsers = greyDomainNameChangeUsers;
         const providerMap = {};
         rows.forEach((row) => {
@@ -11715,6 +11767,7 @@ merge_recipe_id, content_blueprint_id</pre>
                     <button class="ii-btn ii-copy-stat-button inbox" type="button" onclick="${copyFn}('inboxUserAccountLines')"><i class="fas fa-clipboard-list"></i><strong>${inboxUserAccountLines.length}</strong><span>Copy inbox account,user</span></button>
                     <button class="ii-btn ii-copy-stat-button spam" type="button" onclick="${copyFn}('spamUserAccountLines')"><i class="fas fa-clipboard-list"></i><strong>${spamUserAccountLines.length}</strong><span>Copy spam account,user</span></button>
                     <button class="ii-btn ii-copy-stat-button spam" type="button" onclick="${copyFn}('spamAccounts')"><i class="fas fa-building-circle-xmark"></i><strong>${spamAccounts.length}</strong><span>Spam account</span></button>
+                    <button class="ii-btn ii-copy-stat-button spam" type="button" onclick="${copyFn}('failedUserAccountLines')" ${failedUsers.length ? '' : 'disabled'}><i class="fas fa-user-xmark"></i><strong>${failedUsers.length}</strong><span>Copy failed account,user</span></button>
                     <button class="ii-btn ii-copy-stat-button account" type="button" onclick="${copyFn}('greyDomainNameChangeUsers')"><i class="fas fa-id-card"></i><strong>${greyDomainNameChangeUsers.length}</strong><span>Copy grey-domain name changes</span></button>
                 </div>
                 <div class="ii-compact-stat-grid mt-2">
@@ -11754,6 +11807,7 @@ merge_recipe_id, content_blueprint_id</pre>
                             ${actionUsers.map((item) => `<div class="ii-insight-row"><span class="ii-email-text">${escapeHtml(item.key)}</span><span class="ii-chip green">${item.inbox} inbox</span><span class="ii-chip red">${item.spam} spam</span></div>`).join('')}
                         ` : '<div class="ii-muted">No spam-targeted domains or users detected.</div>'}
                     </div>
+                    ${renderFailedUsersSection(failedUsers, {copyAction: `${copyFn}('failedUserAccountLines')`})}
                 </div>
             </div>`;
     }
@@ -11837,6 +11891,70 @@ merge_recipe_id, content_blueprint_id</pre>
                 return true;
             })
             .sort((a, b) => a.localeCompare(b));
+    }
+
+    function failedUserRecords(rows, senderField = 'sender') {
+        const grouped = new Map();
+        (rows || []).forEach((row) => {
+            const placement = String(row.placement || '').trim().toUpperCase();
+            const status = String(row.status || '').trim().toUpperCase();
+            if (placement !== 'FAILED' && status !== 'FAILED') return;
+            const user = String(row[senderField] || row.workspace_sender || '').trim().toLowerCase();
+            if (!user) return;
+            const account = cleanAdminAccountLabel(row.workspace_account_email)
+                || adminAccountLabelForSender(user)
+                || 'unknown-account';
+            const cause = String(row.error_message || '').trim()
+                || (status === 'FAILED' ? 'Message sending failed.' : 'Message delivery failed.');
+            const key = user;
+            const existing = grouped.get(key) || {
+                email: user,
+                account,
+                attempts: 0,
+                causes: new Set(),
+            };
+            existing.attempts += 1;
+            existing.causes.add(cause);
+            if (existing.account === 'unknown-account' && account !== 'unknown-account') existing.account = account;
+            grouped.set(key, existing);
+        });
+        return [...grouped.values()]
+            .map((item) => {
+                const causes = [...item.causes].sort((a, b) => a.localeCompare(b));
+                return {
+                    ...item,
+                    causes,
+                    cause: causes.join(' | ') || 'Message sending or delivery failed.',
+                    copyLine: `${item.account},${item.email} (failed)`,
+                };
+            })
+            .sort((a, b) => a.email.localeCompare(b.email));
+    }
+
+    function renderFailedUsersSection(records = [], options = {}) {
+        const copyAction = options.copyAction || '';
+        const title = options.title || 'Failed users';
+        const subtitle = records.length
+            ? `${records.length} user(s) had at least one failed message. Causes are grouped per user.`
+            : 'No failed users in this result.';
+        const copyButton = copyAction
+            ? `<button class="ii-btn ii-copy-stat-button spam" type="button" onclick="${copyAction}" ${records.length ? '' : 'disabled'}><i class="fas fa-copy"></i><strong>${records.length}</strong><span>Copy failed account,user</span></button>`
+            : '';
+        const rowsHtml = records.length
+            ? `<div class="ii-failed-users-list">${records.map((item) => `<div class="ii-failed-user-row">
+                    <span class="ii-failed-user-line">${escapeHtml(item.copyLine || item.failed_copy_line || '')}</span>
+                    <span class="ii-failed-user-cause">${escapeHtml(item.cause || item.failure_reason || 'Message sending or delivery failed.')}</span>
+                    <span class="ii-chip red">${Number(item.attempts || item.failed || 1)} failed</span>
+                </div>`).join('')}</div>`
+            : `<div class="ii-muted mt-2">No failed users were found in the selected test.</div>`;
+        return `<div class="ii-insight-card ii-failed-users-panel">
+            <div class="ii-analytics-panel-head">
+                <div><h4><i class="fas fa-user-xmark text-danger"></i> ${escapeHtml(title)}</h4><span class="ii-muted">${escapeHtml(subtitle)}</span></div>
+                ${copyButton}
+            </div>
+            ${records.length ? '<div class="ii-muted mt-2">Format: account,user (failed) · The cause comes from the send or delivery error.</div>' : ''}
+            ${rowsHtml}
+        </div>`;
     }
 
     function accountsForSenders(emails) {
