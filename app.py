@@ -4039,7 +4039,11 @@ def _serialize_automated_test(test):
 @permission_required('inbox_intelligence')
 def api_inbox_tests():
     if request.method == 'GET':
-        tests = InboxDeliverabilityTest.query.order_by(InboxDeliverabilityTest.created_at.desc()).limit(100).all()
+        tests_query = InboxDeliverabilityTest.query
+        if session.get('role') != 'admin':
+            current_owner = (session.get('user') or '').strip().lower()
+            tests_query = tests_query.filter(func.lower(InboxDeliverabilityTest.created_by) == current_owner)
+        tests = tests_query.order_by(InboxDeliverabilityTest.created_at.desc()).limit(100).all()
         return jsonify({'success': True, 'tests': [{
             'test_id': t.test_id,
             'name': t.name,
@@ -4186,6 +4190,70 @@ def api_inbox_tests():
         ).start()
         return jsonify({'success': True, 'test_id': test_id, 'message': 'Deliverability test queued. Sending continues in the background.', 'sent': 0, 'failed': 0, 'queued': test.total_messages, 'senders': senders})
     return jsonify({'success': True, 'test_id': test_id, 'message': 'Deliverability test created.', 'sent': test.sent_count, 'failed': test.failed_count, 'senders': senders})
+
+
+def _serialize_user_inbox_analytics_test(test):
+    return {
+        'test_id': test.test_id,
+        'name': test.name,
+        'status': (test.status or '').upper(),
+        'subject': test.subject or '',
+        'total_messages': test.total_messages or 0,
+        'sent_count': test.sent_count or 0,
+        'inbox_count': test.inbox_count or 0,
+        'spam_count': test.spam_count or 0,
+        'pending_count': test.pending_count or 0,
+        'failed_count': test.failed_count or 0,
+        'created_at': test.created_at.isoformat() + 'Z' if test.created_at else None,
+        'completed_at': test.completed_at.isoformat() + 'Z' if test.completed_at else None,
+        'created_by': test.created_by or '',
+        'test_type': 'user_inbox',
+    }
+
+
+@app.route('/api/inbox-intelligence/user-inbox-analytics/users', methods=['GET'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_user_inbox_analytics_users():
+    """Return app users and their completed User Inbox tests for analytics selection."""
+    current_owner = (session.get('user') or '').strip().lower()
+    users_query = User.query.filter(func.lower(User.role).in_(['admin', 'mailer']))
+    if session.get('role') != 'admin':
+        users_query = users_query.filter(func.lower(User.username) == current_owner)
+    users = users_query.order_by(User.username.asc()).all()
+    user_by_key = {str(user.username or '').strip().lower(): user for user in users if user.username}
+    user_keys = list(user_by_key.keys())
+
+    tests_by_owner = {key: [] for key in user_keys}
+    if user_keys:
+        user_inbox_type = or_(
+            InboxDeliverabilityTest.test_type == 'user_inbox',
+            and_(
+                InboxDeliverabilityTest.test_type.is_(None),
+                ~InboxDeliverabilityTest.test_id.ilike('AT-%'),
+                ~InboxDeliverabilityTest.name.ilike('Automated:%')
+            )
+        )
+        terminal_status = func.upper(InboxDeliverabilityTest.status).in_({'COMPLETED', 'PARTIAL', 'FAILED', 'STOPPED'})
+        tests = InboxDeliverabilityTest.query.filter(
+            func.lower(InboxDeliverabilityTest.created_by).in_(user_keys),
+            user_inbox_type,
+            terminal_status,
+        ).order_by(InboxDeliverabilityTest.created_at.desc()).all()
+        for test in tests:
+            owner_key = str(test.created_by or '').strip().lower()
+            if owner_key in tests_by_owner:
+                tests_by_owner[owner_key].append(_serialize_user_inbox_analytics_test(test))
+
+    return jsonify({
+        'success': True,
+        'users': [{
+            'username': user.username,
+            'role': (user.role or '').lower(),
+            'tests': tests_by_owner.get(str(user.username or '').strip().lower(), []),
+        } for user in users],
+        'viewer_role': session.get('role') or '',
+    })
 
 @app.route('/api/inbox-intelligence/automated-tests', methods=['GET', 'POST', 'DELETE'])
 @login_required
@@ -5580,6 +5648,8 @@ def api_inbox_test_detail(test_id):
     test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
     if not test:
         return jsonify({'success': False, 'error': 'Test not found'}), 404
+    if session.get('role') != 'admin' and str(test.created_by or '').strip().lower() != (session.get('user') or '').strip().lower():
+        return jsonify({'success': False, 'error': 'You can only view tests created by your account.'}), 403
     messages = InboxDeliverabilityMessage.query.filter_by(test_id=test_id).order_by(InboxDeliverabilityMessage.id.asc()).all()
     source_ids = []
     inbox_account_ids = []

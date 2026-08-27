@@ -4035,12 +4035,20 @@ merge_recipe_id, content_blueprint_id</pre>
                 <div class="ii-row justify-content-between mb-3">
                     <div>
                         <h3>User Inbox Analytics</h3>
-                        <p class="ii-muted mb-0">Live placement, user health, and domain decisions from the latest synced user inbox test.</p>
+                        <p class="ii-muted mb-0">Choose an app user, then select one of that user’s completed User Inbox tests.</p>
                     </div>
                     <div class="ii-row">
                         <div class="ii-field mb-0">
-                            <label>Test ID to sync</label>
-                            <input class="ii-input" id="userInboxManualTestIdInput" placeholder="DLV-82436339">
+                            <label for="userInboxAnalyticsUserSelect">App user</label>
+                            <select class="ii-select" id="userInboxAnalyticsUserSelect" onchange="handleUserInboxAnalyticsUserChange()" style="min-width: 210px;">
+                                <option value="">Loading app users...</option>
+                            </select>
+                        </div>
+                        <div class="ii-field mb-0">
+                            <label for="userInboxAnalyticsTestSelect">Completed User Inbox test</label>
+                            <select class="ii-select" id="userInboxAnalyticsTestSelect" onchange="handleUserInboxAnalyticsTestChange()" style="min-width: 250px;" disabled>
+                                <option value="">Select an app user first</option>
+                            </select>
                         </div>
                         <select class="ii-select" id="userInboxDateFilter">
                             <option value="24h">Last 24h</option>
@@ -4048,8 +4056,9 @@ merge_recipe_id, content_blueprint_id</pre>
                             <option value="7d">Last 7 days</option>
                             <option value="all">All time</option>
                         </select>
+                        <span class="ii-muted" id="userInboxAnalyticsSelectionStatus">Loading app users...</span>
                         <span class="ii-muted" id="userInboxLastSync">No sync yet</span>
-                        <button class="ii-btn" id="userInboxSyncButton" type="button" onclick="syncUserInboxAnalytics()"><i class="fas fa-arrows-rotate"></i> Sync fresh data</button>
+                        <button class="ii-btn" id="userInboxSyncButton" type="button" onclick="syncUserInboxAnalytics()" disabled><i class="fas fa-arrows-rotate"></i> Load selected test</button>
                     </div>
                 </div>
                 <div class="ii-result-summary" id="userInboxAnalyticsSummary">
@@ -4379,6 +4388,9 @@ merge_recipe_id, content_blueprint_id</pre>
         userInboxTemplateNameResolver: null,
         aiAgentRunning: false,
         aiAgentStopRequested: false,
+        userInboxAnalyticsUsers: [],
+        userInboxAnalyticsSelectedUser: '',
+        userInboxAnalyticsSelectedTestId: null,
         automatedMessages: [],
         automatedAiSuggestions: [],
         automatedAiSelectedIndex: 0,
@@ -11147,8 +11159,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 })
             });
             iiState.userInboxTestId = testData.test_id;
-            const manualInput = document.getElementById('userInboxManualTestIdInput');
-            if (manualInput) manualInput.value = testData.test_id;
+            iiState.userInboxAnalyticsSelectedTestId = testData.test_id;
             localStorage.setItem('ii_user_inbox_last_test_id', testData.test_id);
             status.textContent = `Test ${testData.test_id} queued with ${testData.queued || 0} message(s). Sending in background; sync will update as messages arrive.`;
             await pollUserInboxTest(testData.test_id);
@@ -11179,6 +11190,10 @@ merge_recipe_id, content_blueprint_id</pre>
             const diagnostic = pollData.diagnostic ? ` Sync fetched ${pollData.diagnostic.headers_fetched || 0} IMAP message(s), matched ${pollData.diagnostic.matched_rows || 0} of ${pollData.diagnostic.checked_rows || 0} observations, pruned ${pollData.diagnostic.deleted_old_messages || 0} old synced message(s).` : '';
             if (status) status.textContent = userInboxStatusText(data.test, summary, `${diagnostic}${syncWarning}`);
             await loadTests();
+            const refreshedTestStatus = String(data.test?.status || '').toUpperCase();
+            if (['COMPLETED', 'PARTIAL', 'FAILED', 'STOPPED'].includes(refreshedTestStatus)) {
+                await loadUserInboxAnalyticsUsers(testId);
+            }
             await refreshInboxExplorer();
         } catch (err) {
             if (status) status.textContent = `Could not sync analytics: ${err.message}`;
@@ -11193,12 +11208,123 @@ merge_recipe_id, content_blueprint_id</pre>
         const button = document.getElementById('userInboxSyncButton');
         const syncLabel = document.getElementById('userInboxLastSync');
         if (button) {
-            button.disabled = isSyncing;
+            const selectedTestId = document.getElementById('userInboxAnalyticsTestSelect')?.value || '';
+            button.disabled = isSyncing || !selectedTestId;
             button.innerHTML = isSyncing
                 ? '<span class="ii-spinner" aria-hidden="true"></span> Syncing...'
-                : '<i class="fas fa-arrows-rotate"></i> Sync fresh data';
+                : '<i class="fas fa-arrows-rotate"></i> Load selected test';
         }
         if (isSyncing && syncLabel) syncLabel.textContent = label;
+    }
+
+    function renderUserInboxAnalyticsSelectors(preferredUser = '', preferredTestId = '') {
+        const userSelect = document.getElementById('userInboxAnalyticsUserSelect');
+        const testSelect = document.getElementById('userInboxAnalyticsTestSelect');
+        const syncButton = document.getElementById('userInboxSyncButton');
+        const selectionStatus = document.getElementById('userInboxAnalyticsSelectionStatus');
+        const users = iiState.userInboxAnalyticsUsers || [];
+        if (!userSelect || !testSelect) return;
+
+        if (!users.length) {
+            userSelect.innerHTML = '<option value="">No admin or mailer users found</option>';
+            userSelect.disabled = true;
+            testSelect.innerHTML = '<option value="">No completed User Inbox tests found</option>';
+            testSelect.disabled = true;
+            if (syncButton) syncButton.disabled = true;
+            if (selectionStatus) selectionStatus.textContent = 'No completed User Inbox tests are available.';
+            return;
+        }
+
+        const desiredUser = String(preferredUser || iiState.userInboxAnalyticsSelectedUser || II_CURRENT_USER || '').trim().toLowerCase();
+        const selectedUser = users.find((user) => String(user.username || '').toLowerCase() === desiredUser) || users[0];
+        const selectedUsername = String(selectedUser.username || '');
+        iiState.userInboxAnalyticsSelectedUser = selectedUsername;
+        userSelect.disabled = false;
+        userSelect.innerHTML = users.map((user) => {
+            const role = String(user.role || '').toLowerCase();
+            const testCount = (user.tests || []).length;
+            return `<option value="${escapeHtml(user.username)}">${escapeHtml(user.username)} · ${escapeHtml(role)} · ${testCount} completed</option>`;
+        }).join('');
+        userSelect.value = selectedUsername;
+
+        const tests = selectedUser.tests || [];
+        const desiredTest = String(preferredTestId || iiState.userInboxAnalyticsSelectedTestId || iiState.userInboxTestId || '').trim().toUpperCase();
+        const selectedTest = tests.find((test) => String(test.test_id || '').toUpperCase() === desiredTest) || tests[0];
+        testSelect.innerHTML = tests.length
+            ? tests.map((test) => `<option value="${escapeHtml(test.test_id)}">${escapeHtml(test.test_id)} · ${escapeHtml(test.name || 'User Inbox Test')} · ${escapeHtml(test.status || 'COMPLETED')}</option>`).join('')
+            : '<option value="">No completed User Inbox tests for this user</option>';
+        testSelect.disabled = !tests.length;
+        testSelect.value = selectedTest ? selectedTest.test_id : '';
+        iiState.userInboxAnalyticsSelectedTestId = selectedTest?.test_id || null;
+        iiState.userInboxTestId = selectedTest?.test_id || null;
+        if (syncButton) syncButton.disabled = !selectedTest;
+        if (selectionStatus) {
+            selectionStatus.textContent = selectedTest
+                ? `${selectedUsername} · ${tests.length} completed test(s) available.`
+                : `${selectedUsername} has no completed User Inbox tests.`;
+        }
+    }
+
+    function resetUserInboxAnalyticsView(message = 'Select a completed User Inbox test, then load its analytics.') {
+        renderAnalyticsSummary('userInboxAnalyticsSummary', [], 'Users');
+        const cards = document.getElementById('userInboxAnalyticsCards');
+        if (cards) cards.innerHTML = `<div class="ii-analytics-card ii-muted">${escapeHtml(message)}</div>`;
+        ['userInboxProviderSummary', 'userInboxDomainActions', 'userInboxUserActions', 'userInboxSpamInsights'].forEach((id) => {
+            const element = document.getElementById(id);
+            if (element) {
+                element.classList.add('d-none');
+                element.innerHTML = '';
+            }
+        });
+    }
+
+    function handleUserInboxAnalyticsUserChange() {
+        const userSelect = document.getElementById('userInboxAnalyticsUserSelect');
+        const username = userSelect?.value || '';
+        iiState.userInboxAnalyticsSelectedUser = username;
+        iiState.userInboxAnalyticsSelectedTestId = null;
+        renderUserInboxAnalyticsSelectors(username);
+        resetUserInboxAnalyticsView();
+    }
+
+    function handleUserInboxAnalyticsTestChange() {
+        const testSelect = document.getElementById('userInboxAnalyticsTestSelect');
+        const testId = normalizeUserInboxTestId(testSelect?.value || '');
+        iiState.userInboxAnalyticsSelectedTestId = testId || null;
+        iiState.userInboxTestId = testId || null;
+        resetUserInboxAnalyticsView();
+        const selectionStatus = document.getElementById('userInboxAnalyticsSelectionStatus');
+        if (selectionStatus) {
+            selectionStatus.textContent = testId
+                ? `Selected ${testId}. Click Load selected test to view analytics.`
+                : 'Select a completed User Inbox test.';
+        }
+        const syncButton = document.getElementById('userInboxSyncButton');
+        if (syncButton) syncButton.disabled = !testId;
+    }
+
+    async function loadUserInboxAnalyticsUsers(preferredTestId = '') {
+        const selectionStatus = document.getElementById('userInboxAnalyticsSelectionStatus');
+        try {
+            if (selectionStatus) selectionStatus.textContent = 'Loading app users and completed tests...';
+            const data = await iiFetch('/api/inbox-intelligence/user-inbox-analytics/users');
+            iiState.userInboxAnalyticsUsers = data.users || [];
+            renderUserInboxAnalyticsSelectors('', preferredTestId);
+        } catch (err) {
+            const userSelect = document.getElementById('userInboxAnalyticsUserSelect');
+            const testSelect = document.getElementById('userInboxAnalyticsTestSelect');
+            const syncButton = document.getElementById('userInboxSyncButton');
+            if (userSelect) {
+                userSelect.innerHTML = '<option value="">Could not load app users</option>';
+                userSelect.disabled = true;
+            }
+            if (testSelect) {
+                testSelect.innerHTML = '<option value="">Could not load completed tests</option>';
+                testSelect.disabled = true;
+            }
+            if (syncButton) syncButton.disabled = true;
+            if (selectionStatus) selectionStatus.textContent = `Could not load app-user tests: ${err.message}`;
+        }
     }
 
     function normalizeUserInboxTestId(value) {
@@ -11209,17 +11335,16 @@ merge_recipe_id, content_blueprint_id</pre>
 
     async function syncUserInboxAnalytics() {
         const status = document.getElementById('userInboxTestStatus');
-        const manualInput = document.getElementById('userInboxManualTestIdInput');
-        const manualTestId = normalizeUserInboxTestId(manualInput?.value || '');
-        const testId = manualTestId || iiState.userInboxTestId;
+        const testSelect = document.getElementById('userInboxAnalyticsTestSelect');
+        const testId = normalizeUserInboxTestId(testSelect?.value || iiState.userInboxAnalyticsSelectedTestId || iiState.userInboxTestId || '');
         if (!testId) {
-            status.textContent = 'Run a User Inbox Test first, or type an X-Test-ID/Test ID, then sync fresh data.';
+            status.textContent = 'Select a completed User Inbox test, then load its analytics.';
             return;
         }
         iiState.userInboxTestId = testId;
-        if (manualInput) manualInput.value = testId;
+        iiState.userInboxAnalyticsSelectedTestId = testId;
         localStorage.setItem('ii_user_inbox_last_test_id', testId);
-        status.textContent = 'Syncing fresh emails from IMAP servers...';
+        status.textContent = `Loading analytics for ${testId}...`;
         await pollUserInboxTest(testId);
     }
 
@@ -12291,8 +12416,7 @@ merge_recipe_id, content_blueprint_id</pre>
         const savedUserInboxTestId = normalizeUserInboxTestId(localStorage.getItem('ii_user_inbox_last_test_id') || '');
         if (savedUserInboxTestId) {
             iiState.userInboxTestId = savedUserInboxTestId;
-            const manualInput = document.getElementById('userInboxManualTestIdInput');
-            if (manualInput) manualInput.value = savedUserInboxTestId;
+            iiState.userInboxAnalyticsSelectedTestId = savedUserInboxTestId;
         }
         const savedAutomatedTestId = normalizeAutomatedTestId(localStorage.getItem('ii_automated_last_test_id') || '');
         if (savedAutomatedTestId) {
@@ -12312,6 +12436,7 @@ merge_recipe_id, content_blueprint_id</pre>
             loadAgentSavedLists(false),
             loadTemplateAiPrompt(),
             loadTests(),
+            loadUserInboxAnalyticsUsers(),
             loadWorkspaceLists()
         ]).catch((err) => console.error(err));
         loadStoredAiAgentResults();
