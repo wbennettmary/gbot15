@@ -128,6 +128,291 @@
         width: 1em;
     }
 
+    /* Claymorphism treatment is intentionally scoped to the operational Process tab. */
+    .afraid-process-shell {
+        --afraid-clay-blue: #2457e8;
+        --afraid-clay-blue-dark: #153cae;
+        --afraid-clay-surface: #edf2fa;
+        --afraid-clay-shadow: #c2cad8;
+        background: linear-gradient(135deg, #e5ebf5 0%, #f6f2ff 100%);
+        border-radius: 28px;
+        box-shadow: 14px 14px 30px rgba(160, 170, 188, .55), -12px -12px 28px rgba(255, 255, 255, .96);
+        padding: 20px;
+    }
+
+    .afraid-process-shell > .row {
+        margin-left: 0;
+        margin-right: 0;
+    }
+
+    .afraid-process-shell .card {
+        background: var(--afraid-clay-surface);
+        border: 0;
+        border-radius: 20px;
+        box-shadow: 9px 9px 18px rgba(174, 184, 201, .6), -8px -8px 16px rgba(255, 255, 255, .82);
+        overflow: hidden;
+    }
+
+    .afraid-process-shell .card-header {
+        border: 0;
+        padding: 16px 18px;
+    }
+
+    .afraid-process-shell .card-header.bg-success {
+        background: linear-gradient(135deg, #159957, #0c7848) !important;
+        box-shadow: inset 0 -3px 8px rgba(0, 65, 38, .22);
+    }
+
+    .afraid-process-shell .card-header.bg-secondary {
+        background: linear-gradient(135deg, #59677b, #3d4a5c) !important;
+    }
+
+    .afraid-process-shell .card-header.bg-info {
+        background: linear-gradient(135deg, #159ebd, #087b9a) !important;
+    }
+
+    .afraid-process-shell .card-body {
+        padding: 20px;
+    }
+
+    .afraid-process-shell .form-label,
+    .afraid-process-shell h5,
+    .afraid-process-shell h6 {
+        color: #17243a;
+        font-weight: 800;
+    }
+
+    .afraid-process-shell .form-control,
+    .afraid-process-shell .form-select,
+    .afraid-process-shell .input-group-text {
+        background-color: #edf2fa;
+        border: 1px solid #d3dbe9;
+        color: #1e2d44;
+        min-height: 40px;
+    }
+
+    .afraid-process-shell .form-control,
+    .afraid-process-shell .form-select {
+        border-radius: 12px;
+        box-shadow: inset 3px 3px 7px rgba(183, 192, 207, .46), inset -3px -3px 7px rgba(255, 255, 255, .9);
+    }
+
+    .afraid-process-shell .form-control:focus,
+    .afraid-process-shell .form-select:focus {
+        background-color: #f2f6fd;
+        border-color: #6d8ff5;
+        box-shadow: 0 0 0 3px rgba(36, 87, 232, .16), inset 2px 2px 5px rgba(183, 192, 207, .32);
+    }
+
+    .afraid-process-shell textarea.form-control {
+        resize: vertical;
+    }
+
+    .afraid-process-shell .btn {
+        border: 0;
+        border-radius: 11px;
+        box-shadow: 5px 5px 10px rgba(174, 184, 201, .55), -4px -4px 9px rgba(255, 255, 255, .85);
+        font-weight: 750;
+        min-height: 38px;
+        transition: box-shadow .15s ease, transform .15s ease, filter .15s ease;
+    }
+
+    .afraid-process-shell .btn:hover:not(:disabled) {
+        filter: brightness(1.04);
+        transform: translateY(-1px);
+    }
+
+    .afraid-process-shell .btn:active:not(:disabled) {
+        box-shadow: inset 3px 3px 7px rgba(16, 39, 103, .28), inset -2px -2px 5px rgba(255, 255, 255, .3);
+        transform: translateY(0);
+    }
+
+    .afraid-process-shell .btn-primary {
+        background: linear-gradient(135deg, #2d68f4, #1c4fd2);
+    }
+
+    .afraid-process-shell .btn-outline-primary {
+        background: #e3ebff;
+        color: #153cae;
+    }
+
+    .afraid-process-shell .btn-outline-secondary,
+    .afraid-process-shell .btn-outline-dark {
+        background: #e7edf6;
+        color: #263750;
+    }
+
+    .afraid-process-shell .afraid-domain-selection-actions,
+    .afraid-process-shell .afraid-merged-section {
+        background: rgba(232, 238, 248, .64);
+        border: 0;
+        border-radius: 16px;
+        box-shadow: inset 3px 3px 8px rgba(190, 199, 214, .34), inset -3px -3px 8px rgba(255, 255, 255, .78);
+        padding: 14px;
+    }
+
+    .afraid-process-shell .afraid-domain-selection-actions {
+        padding: 10px;
+    }
+
+    .afraid-process-shell .afraid-domain-count-control {
+        background: #e4ebf7;
+        border-radius: 12px;
+        box-shadow: inset 2px 2px 6px rgba(184, 194, 210, .42), inset -2px -2px 6px rgba(255, 255, 255, .84);
+        padding: 4px;
+    }
+
+    .afraid-process-shell .afraid-domain-count-control .input-group-text {
+        background: transparent;
+        border: 0;
+        color: #1a2b47;
+        font-size: .76rem;
+        font-weight: 900;
+        min-height: 32px;
+    }
+
+    .afraid-process-shell .afraid-domain-count-control .form-control {
+        background: #f7faff;
+        border-radius: 8px;
+        min-height: 32px;
+    }
+
+    .afraid-process-shell .afraid-domain-filter-controls {
+        background: #dce6f5;
+        border: 0;
+        border-radius: 12px;
+        box-shadow: inset 2px 2px 6px rgba(183, 194, 211, .5), inset -2px -2px 6px rgba(255, 255, 255, .8);
+        padding: 5px;
+    }
+
+    .afraid-process-shell .afraid-domain-filter-controls .form-check {
+        background: #f1f5fb;
+        border: 1px solid #becae0;
+        border-radius: 9px;
+        box-shadow: 2px 2px 5px rgba(170, 181, 200, .46), -2px -2px 5px rgba(255, 255, 255, .78);
+        padding: 6px 9px;
+    }
+
+    .afraid-process-shell .afraid-domain-filter-controls .form-check:has(input:checked) {
+        background: #1d4ed8;
+        border-color: #153cae;
+        box-shadow: inset 2px 2px 5px rgba(8, 35, 110, .42), 0 0 0 2px rgba(29, 78, 216, .18);
+    }
+
+    .afraid-process-shell .afraid-domain-filter-controls .form-check-label {
+        color: #263750;
+        font-weight: 850;
+    }
+
+    .afraid-process-shell .afraid-domain-filter-controls .form-check:has(input:checked) .form-check-label {
+        color: #fff;
+    }
+
+    .afraid-process-shell #tldDomainList {
+        background: #dfe7f2;
+        border: 0 !important;
+        border-radius: 14px !important;
+        box-shadow: inset 4px 4px 9px rgba(180, 191, 208, .5), inset -4px -4px 9px rgba(255, 255, 255, .86);
+        padding: 10px !important;
+    }
+
+    .afraid-process-shell #tldDomainList > label {
+        background: #eaf1f8 !important;
+        border: 1px solid #c5d2e2 !important;
+        border-radius: 10px;
+        box-shadow: 3px 3px 7px rgba(171, 182, 201, .5), -3px -3px 7px rgba(255, 255, 255, .82);
+        color: #263750;
+        margin-bottom: 7px;
+        padding: 9px 10px !important;
+        transition: background-color .15s ease, box-shadow .15s ease, transform .15s ease;
+    }
+
+    .afraid-process-shell #tldDomainList > label:hover {
+        transform: translateY(-1px);
+    }
+
+    .afraid-process-shell #tldDomainList > label.is-selected,
+    .afraid-process-shell #tldDomainList > label:has(.tld-domain-check:checked),
+    .afraid-process-shell #tldDomainList > label:has(.reactivate-domain-check:checked) {
+        background: linear-gradient(135deg, #2f6cf3, #1b4ccc) !important;
+        border-color: #123aa8 !important;
+        box-shadow: inset 3px 3px 7px rgba(8, 35, 110, .42), 4px 4px 8px rgba(159, 171, 194, .55);
+        color: #fff !important;
+    }
+
+    .afraid-process-shell #tldDomainList > label.is-selected > span:last-child,
+    .afraid-process-shell #tldDomainList > label:has(input:checked) > span:last-child {
+        color: #e8efff !important;
+    }
+
+    .afraid-process-shell .afraid-domain-name {
+        font-weight: 800;
+    }
+
+    .afraid-process-shell .afraid-domain-meta {
+        align-items: center;
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        justify-content: flex-end;
+    }
+
+    .afraid-process-shell .afraid-domain-row-state {
+        background: #d4deed;
+        border-radius: 999px;
+        color: #263750;
+        font-size: .68rem;
+        font-weight: 900;
+        padding: 2px 7px;
+        text-transform: uppercase;
+    }
+
+    .afraid-process-shell #tldDomainList > label:has(input:checked) .afraid-domain-row-state {
+        background: rgba(255, 255, 255, .2);
+        color: #fff;
+    }
+
+    .afraid-process-shell input[type="checkbox"] {
+        background-color: #f8fbff;
+        border: 2px solid #8292aa;
+        border-radius: 5px;
+        box-shadow: inset 2px 2px 4px rgba(180, 190, 207, .38), 1px 1px 2px rgba(255, 255, 255, .8);
+        height: 20px;
+        width: 20px;
+    }
+
+    .afraid-process-shell input[type="checkbox"]:checked {
+        background-color: #1856dc;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='m3 8 3 3 7-7' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+        background-position: center;
+        background-repeat: no-repeat;
+        background-size: 14px 14px;
+        border-color: #0f3eaf;
+        box-shadow: 0 0 0 3px rgba(24, 86, 220, .22);
+    }
+
+    .afraid-process-shell input[type="checkbox"]:indeterminate {
+        background-color: #1856dc;
+        background-image: linear-gradient(#fff, #fff);
+        background-position: center;
+        background-repeat: no-repeat;
+        background-size: 10px 3px;
+        border-color: #0f3eaf;
+    }
+
+    .afraid-process-shell .form-text {
+        color: #53627a;
+    }
+
+    .afraid-process-shell #domainSelectionStatus {
+        background: #dbe8ff;
+        border-left: 4px solid #1d4ed8;
+        border-radius: 7px;
+        color: #153cae;
+        font-weight: 800;
+        padding: 6px 9px;
+    }
+
     .afraid-list-card {
         border: 1px solid #dee2e6;
         transition: border-color .2s ease, box-shadow .2s ease, background-color .2s ease;
@@ -876,6 +1161,27 @@
     }
 
     @media (max-width: 768px) {
+        .afraid-process-shell {
+            border-radius: 20px;
+            padding: 12px;
+        }
+
+        .afraid-process-shell .card-body {
+            padding: 14px;
+        }
+
+        .afraid-process-shell .manual-subdomain-header {
+            align-items: stretch;
+            flex-direction: column;
+        }
+
+        .afraid-process-shell .manual-subdomain-tools {
+            justify-content: flex-start;
+            flex-wrap: wrap;
+            overflow-x: visible;
+            white-space: normal;
+        }
+
         .afraid-verify-toolbar {
             grid-template-columns: 1fr;
         }
@@ -916,6 +1222,24 @@
 
         .afraid-domain-count-row {
             grid-template-columns: 1fr;
+        }
+
+        .afraid-process-shell .afraid-domain-count-control {
+            grid-template-columns: auto minmax(70px, 1fr);
+        }
+
+        .afraid-process-shell .afraid-domain-count-control .btn {
+            grid-column: 1 / -1;
+        }
+
+        .afraid-process-shell #tldDomainList > label {
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .afraid-process-shell #tldDomainList > label > span:last-child {
+            max-width: 100%;
+            text-align: left;
         }
 
         .afraid-list-card-actions {
@@ -1044,7 +1368,7 @@
         </div>
         {% endif %}
 
-        <div class="tab-pane fade {% if session.get('role') != 'admin' %}show active{% endif %}" id="processPane" role="tabpanel" aria-labelledby="process-tab">
+        <div class="tab-pane fade afraid-process-shell {% if session.get('role') != 'admin' %}show active{% endif %}" id="processPane" role="tabpanel" aria-labelledby="process-tab">
             <div class="row">
 
         <!-- Subdomain Generator Card -->
@@ -2030,14 +2354,15 @@ function renderSelectedTldDomains(domains) {
         const usedThisMonth = item.used_this_month || usedNow.has(item.domain_name);
         const row = document.createElement('label');
         const highlighted = window.afraidHighlightedDomain === item.domain_name;
-        row.className = `d-flex justify-content-between align-items-center py-1 px-2 border-bottom small ${usedThisMonth ? 'text-muted bg-light' : 'bg-success bg-opacity-10'} ${highlighted ? 'border border-primary bg-primary bg-opacity-10' : ''}`;
+        row.className = `d-flex justify-content-between align-items-center py-1 px-2 border-bottom small ${usedThisMonth ? 'afraid-domain-row-used' : 'afraid-domain-row-available'} ${highlighted ? 'border border-primary' : ''}`;
         row.style.cursor = 'pointer';
         const checkClass = usedThisMonth ? 'reactivate-domain-check' : 'tld-domain-check';
         const analyticsTags = renderAfraidAnalyticsTags(item);
-        row.innerHTML = `<span><input type="checkbox" class="me-2 ${checkClass}" value="${escapeHtml(item.domain_name)}"> ${escapeHtml(item.domain_name)} ${analyticsTags}</span>
-            <span class="text-muted">hosts: ${item.hosts_in_use ?? 'n/a'} | ${item.registry_created_on || 'n/a'} | ${usedThisMonth ? 'used' : 'available'}</span>`;
+        row.innerHTML = `<span class="afraid-domain-name"><input type="checkbox" class="me-2 ${checkClass}" value="${escapeHtml(item.domain_name)}" aria-label="Select ${escapeHtml(item.domain_name)}"> ${escapeHtml(item.domain_name)} ${analyticsTags}</span>
+            <span class="text-muted afraid-domain-meta"><span>hosts: ${item.hosts_in_use ?? 'n/a'} | ${item.registry_created_on || 'n/a'}</span><span class="afraid-domain-row-state">${usedThisMonth ? 'used' : 'available'}</span></span>`;
         const checkbox = row.querySelector('input');
         checkbox.addEventListener('change', () => {
+            updateDomainRowSelectionState(checkbox);
             if (usedThisMonth) {
                 updateUsedDomainSelectAllState();
             } else {
@@ -2045,9 +2370,20 @@ function renderSelectedTldDomains(domains) {
             }
         });
         list.appendChild(row);
+        updateDomainRowSelectionState(checkbox);
     });
     updateUsedDomainSelectAllState();
     syncSelectedTldDomains();
+}
+
+function updateDomainRowSelectionState(checkbox) {
+    const row = checkbox?.closest('#tldDomainList > label');
+    if (!row) return;
+    const selected = checkbox.checked;
+    const used = checkbox.classList.contains('reactivate-domain-check');
+    row.classList.toggle('is-selected', selected);
+    const state = row.querySelector('.afraid-domain-row-state');
+    if (state) state.textContent = selected ? (used ? 'reactivation selected' : 'selected') : (used ? 'used' : 'available');
 }
 
 function toggleAllUsedDomains() {
@@ -2057,7 +2393,10 @@ function toggleAllUsedDomains() {
         return;
     }
     const selectAll = checkboxes.some(checkbox => !checkbox.checked);
-    checkboxes.forEach(checkbox => { checkbox.checked = selectAll; });
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = selectAll;
+        updateDomainRowSelectionState(checkbox);
+    });
     updateUsedDomainSelectAllState();
 }
 
@@ -2088,7 +2427,10 @@ function selectDomainsDescending() {
             .sort((a, b) => b.value.localeCompare(a.value, undefined, {numeric: true, sensitivity: 'base'}))
             .slice(0, Math.min(requested, checkboxes.length))
     );
-    checkboxes.forEach(checkbox => { checkbox.checked = selected.has(checkbox); });
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = selected.has(checkbox);
+        updateDomainRowSelectionState(checkbox);
+    });
     input.value = String(selected.size);
     syncSelectedTldDomains();
     setStatus(`Selected ${selected.size} available domain(s) in descending name order.`, 'success');
