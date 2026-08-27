@@ -2336,7 +2336,7 @@ async function loadTlds() {
     }
 }
 
-async function loadSelectedTldDomains() {
+async function loadSelectedTldDomains(options = {}) {
     const requestToken = (window.afraidTldDomainsRequestToken || 0) + 1;
     window.afraidTldDomainsRequestToken = requestToken;
     try {
@@ -2348,7 +2348,9 @@ async function loadSelectedTldDomains() {
         const res = await fetch('/api/afraid/domain-options?' + params.toString());
         const data = await parseJsonResponse(res);
         if (requestToken !== window.afraidTldDomainsRequestToken) return;
-        renderSelectedTldDomains(data.domains || []);
+        const activeFilters = getAfraidDomainAnalyticsFilter();
+        renderSelectedTldDomains(data.domains || [], activeFilters.length > 0);
+        if (options.autoSelect) selectDomainsDescending({includeUsed: activeFilters.length > 0});
     } catch (err) {
         console.error('Error loading selected TLD domains', err);
     }
@@ -2362,10 +2364,11 @@ function getAfraidDomainAnalyticsFilter() {
 
 function handleAfraidDomainFilterChange(event) {
     window.afraidDomainPage = 1;
-    loadSelectedTldDomains();
+    loadSelectedTldDomains({autoSelect: true});
 }
 
-function renderAfraidAnalyticsTags(item) {
+function renderAfraidAnalyticsTags(item, visible = true) {
+    if (!visible) return '';
     const tags = [];
     const inboxHits = Number(item?.analytics_inbox_hits || 0);
     const spamHits = Number(item?.analytics_spam_hits || 0);
@@ -2410,7 +2413,7 @@ async function searchDomainGroup() {
     }
 }
 
-function renderSelectedTldDomains(domains) {
+function renderSelectedTldDomains(domains, showAnalyticsTags = false) {
     const list = document.getElementById('tldDomainList');
     list.innerHTML = '';
     const usedNow = new Set(window.afraidUsedBaseDomains || []);
@@ -2425,7 +2428,7 @@ function renderSelectedTldDomains(domains) {
         row.className = `d-flex justify-content-between align-items-center py-1 px-2 border-bottom small ${usedThisMonth ? 'afraid-domain-row-used' : 'afraid-domain-row-available'} ${highlighted ? 'border border-primary' : ''}`;
         row.style.cursor = 'pointer';
         const checkClass = usedThisMonth ? 'reactivate-domain-check' : 'tld-domain-check';
-        const analyticsTags = renderAfraidAnalyticsTags(item);
+        const analyticsTags = renderAfraidAnalyticsTags(item, showAnalyticsTags);
         row.innerHTML = `<span class="afraid-domain-name"><input type="checkbox" class="me-2 ${checkClass}" value="${escapeHtml(item.domain_name)}" aria-label="Select ${escapeHtml(item.domain_name)}"> ${escapeHtml(item.domain_name)} ${analyticsTags}</span>
             <span class="text-muted afraid-domain-meta"><span>hosts: ${item.hosts_in_use ?? 'n/a'} | ${item.registry_created_on || 'n/a'}</span><span class="afraid-domain-row-state">${usedThisMonth ? 'used' : 'available'}</span></span>`;
         const checkbox = row.querySelector('input');
@@ -2468,9 +2471,14 @@ function toggleAllUsedDomains() {
     updateUsedDomainSelectAllState();
 }
 
-function selectDomainsDescending() {
+function selectDomainsDescending(options = {}) {
     const input = document.getElementById('selectDomainCountInput');
-    const checkboxes = [...document.querySelectorAll('#tldDomainList .tld-domain-check')];
+    const filtersActive = getAfraidDomainAnalyticsFilter().length > 0;
+    const includeUsed = options.includeUsed ?? filtersActive;
+    const checkboxSelector = includeUsed
+        ? '#tldDomainList input.tld-domain-check, #tldDomainList input.reactivate-domain-check'
+        : '#tldDomainList .tld-domain-check';
+    const checkboxes = [...document.querySelectorAll(checkboxSelector)];
     const requested = Number.parseInt(input?.value || '', 10);
     const status = document.getElementById('domainSelectionStatus');
     const setStatus = (message, kind = 'muted') => {
@@ -2485,7 +2493,7 @@ function selectDomainsDescending() {
         return;
     }
     if (!checkboxes.length) {
-        setStatus('No available domains are loaded for this TLD.', 'warning');
+        setStatus(includeUsed ? 'No matching domains are loaded for this TLD.' : 'No available domains are loaded for this TLD.', 'warning');
         return;
     }
 
@@ -2501,7 +2509,7 @@ function selectDomainsDescending() {
     });
     input.value = String(selected.size);
     syncSelectedTldDomains();
-    setStatus(`Selected ${selected.size} available domain(s) in descending name order.`, 'success');
+    setStatus(`Selected ${selected.size} ${includeUsed ? 'matching' : 'available'} domain(s) in descending name order.`, 'success');
 }
 
 function updateUsedDomainSelectAllState() {

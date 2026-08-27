@@ -3307,8 +3307,8 @@ The NightOwl Ranch Team</textarea>
                             <span class="ii-muted" id="automatedActiveDateLabel">Today</span>
                         </div>
                         <div class="ii-test-card-controls">
-                            <select class="ii-select" id="automatedOwnerFilter" onchange="changeAutomatedOwnerFilter()" aria-label="Filter active and completed tests by app user">
-                                <option value="all">All app users</option>
+                        <select class="ii-select" id="automatedOwnerFilter" onchange="changeAutomatedOwnerFilter()" aria-label="Filter active and completed tests by admin or mailer user" title="Choose any admin or mailer user">
+                            <option value="all">All admin &amp; mailer users</option>
                                 <option value="">Loading users...</option>
                             </select>
                             <select class="ii-select" id="automatedSectionDateFilter" onchange="syncAutomatedDateFilterFromSection()">
@@ -7612,22 +7612,22 @@ merge_recipe_id, content_blueprint_id</pre>
     function renderAutomatedOwnerFilter() {
         const select = document.getElementById('automatedOwnerFilter');
         if (!select) return;
-        const isAdmin = String(II_CURRENT_ROLE || '').toLowerCase() === 'admin';
+        const canChooseAnyOwner = ['admin', 'mailer'].includes(String(II_CURRENT_ROLE || '').toLowerCase());
         const users = iiState.userInboxAnalyticsUsers || [];
         const currentOwner = String(II_CURRENT_USER || '').trim().toLowerCase();
         const availableUsers = users.filter((user) => ['admin', 'mailer'].includes(String(user.role || '').toLowerCase()));
 
         if (!availableUsers.length) {
-            select.innerHTML = isAdmin
-                ? '<option value="all">All app users</option>'
+            select.innerHTML = canChooseAnyOwner
+                ? '<option value="all">All admin &amp; mailer users</option>'
                 : `<option value="${escapeHtml(currentOwner)}">${escapeHtml(II_CURRENT_USER || 'Current user')}</option>`;
-            select.value = isAdmin ? 'all' : currentOwner;
-            select.disabled = !isAdmin;
+            select.value = canChooseAnyOwner ? 'all' : currentOwner;
+            select.disabled = !canChooseAnyOwner;
             iiState.automatedOwnerFilter = select.value;
             return;
         }
 
-        const options = isAdmin ? ['<option value="all">All app users</option>'] : [];
+        const options = canChooseAnyOwner ? ['<option value="all">All admin &amp; mailer users</option>'] : [];
         availableUsers.forEach((user) => {
             const username = String(user.username || '').trim();
             if (!username) return;
@@ -7635,13 +7635,13 @@ merge_recipe_id, content_blueprint_id</pre>
             options.push(`<option value="${escapeHtml(username)}">${escapeHtml(username)} · ${escapeHtml(role)}</option>`);
         });
         select.innerHTML = options.join('');
-        const desired = isAdmin
+        const desired = canChooseAnyOwner
             ? (iiState.automatedOwnerFilter || 'all')
             : currentOwner;
         const matchingOption = [...select.options].find((option) => option.value.toLowerCase() === desired.toLowerCase());
-        select.value = matchingOption?.value || (isAdmin ? 'all' : currentOwner);
-        iiState.automatedOwnerFilter = select.value || (isAdmin ? 'all' : currentOwner);
-        select.disabled = !isAdmin && !select.value;
+        select.value = matchingOption?.value || (canChooseAnyOwner ? 'all' : currentOwner);
+        iiState.automatedOwnerFilter = select.value || (canChooseAnyOwner ? 'all' : currentOwner);
+        select.disabled = !canChooseAnyOwner && !select.value;
     }
 
     function changeAutomatedOwnerFilter() {
@@ -7688,7 +7688,8 @@ merge_recipe_id, content_blueprint_id</pre>
         }
         page = page || 1;
         const params = new URLSearchParams({page, per_page: iiState.automatedTestsPerPage || 5});
-        const ownerFilter = II_CURRENT_ROLE === 'admin'
+        const canChooseAnyOwner = ['admin', 'mailer'].includes(String(II_CURRENT_ROLE || '').toLowerCase());
+        const ownerFilter = canChooseAnyOwner
             ? (iiState.automatedOwnerFilter || 'all')
             : (II_CURRENT_USER || '');
         if (ownerFilter && ownerFilter !== 'all') params.set('owner', ownerFilter);

@@ -4230,8 +4230,9 @@ def _serialize_user_inbox_analytics_test(test):
 def api_inbox_user_inbox_analytics_users():
     """Return app users and their completed User Inbox tests for analytics selection."""
     current_owner = (session.get('user') or '').strip().lower()
+    viewer_role = (session.get('role') or '').strip().lower()
     users_query = User.query.filter(func.lower(User.role).in_(['admin', 'mailer']))
-    if session.get('role') != 'admin':
+    if viewer_role not in {'admin', 'mailer'}:
         users_query = users_query.filter(func.lower(User.username) == current_owner)
     users = users_query.order_by(User.username.asc()).all()
     user_by_key = {str(user.username or '').strip().lower(): user for user in users if user.username}
@@ -4288,7 +4289,8 @@ def api_inbox_automated_tests():
             InboxDeliverabilityTest.test_id.ilike('AT-%')
         ))
         requested_owner = (request.args.get('owner') or '').strip().lower()
-        if session.get('role') != 'admin':
+        viewer_role = (session.get('role') or '').strip().lower()
+        if viewer_role not in {'admin', 'mailer'}:
             requested_owner = (session.get('user') or '').strip().lower()
         elif requested_owner and requested_owner != 'all':
             valid_owner = User.query.filter(
@@ -4297,6 +4299,15 @@ def api_inbox_automated_tests():
             ).first()
             if not valid_owner:
                 return jsonify({'success': False, 'error': 'Selected app user was not found.'}), 400
+        if viewer_role == 'mailer':
+            visible_owner_keys = [
+                str(username or '').strip().lower()
+                for (username,) in User.query.filter(
+                    func.lower(User.role).in_(['admin', 'mailer'])
+                ).with_entities(User.username).all()
+                if username
+            ]
+            q = q.filter(func.lower(InboxDeliverabilityTest.created_by).in_(visible_owner_keys))
         if requested_owner and requested_owner != 'all':
             q = q.filter(func.lower(InboxDeliverabilityTest.created_by) == requested_owner)
         start_dt, end_dt = _automated_test_date_bounds(
@@ -5673,7 +5684,17 @@ def api_inbox_test_detail(test_id):
     test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
     if not test:
         return jsonify({'success': False, 'error': 'Test not found'}), 404
-    if session.get('role') != 'admin' and str(test.created_by or '').strip().lower() != (session.get('user') or '').strip().lower():
+    viewer_role = (session.get('role') or '').strip().lower()
+    test_owner = str(test.created_by or '').strip().lower()
+    can_view_other_user_test = False
+    if viewer_role == 'admin':
+        can_view_other_user_test = True
+    elif viewer_role == 'mailer' and test_owner:
+        can_view_other_user_test = User.query.filter(
+            func.lower(User.username) == test_owner,
+            func.lower(User.role).in_(['admin', 'mailer']),
+        ).first() is not None
+    if not can_view_other_user_test and test_owner != (session.get('user') or '').strip().lower():
         return jsonify({'success': False, 'error': 'You can only view tests created by your account.'}), 403
     messages = InboxDeliverabilityMessage.query.filter_by(test_id=test_id).order_by(InboxDeliverabilityMessage.id.asc()).all()
     source_ids = []
