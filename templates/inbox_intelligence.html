@@ -1406,7 +1406,7 @@
 
     .ii-test-card-controls {
         display: grid;
-        grid-template-columns: minmax(130px, 150px) minmax(105px, 120px) 40px;
+        grid-template-columns: minmax(170px, 190px) minmax(130px, 150px) minmax(105px, 120px) 40px;
         gap: 8px;
         align-items: center;
         justify-content: end;
@@ -2654,7 +2654,7 @@
             align-items: stretch;
         }
         .ii-test-card-controls {
-            grid-template-columns: minmax(0, 1fr) minmax(100px, 140px) 40px;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(100px, 140px) 40px;
             justify-content: stretch;
         }
         .ii-analytics-copy-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -2733,6 +2733,15 @@
         #automatedTests .ii-test-bulk-actions .ii-btn,
         #automatedTests .ii-test-bulk-actions .ii-select {
             width: auto;
+            max-width: none !important;
+        }
+        #automatedTests .ii-test-card-controls {
+            grid-template-columns: 1fr;
+            width: 100%;
+        }
+        #automatedTests .ii-test-card-controls .ii-select,
+        #automatedTests .ii-test-card-controls .ii-btn {
+            width: 100%;
             max-width: none !important;
         }
         .ii-test-bulk-actions {
@@ -3298,6 +3307,10 @@ The NightOwl Ranch Team</textarea>
                             <span class="ii-muted" id="automatedActiveDateLabel">Today</span>
                         </div>
                         <div class="ii-test-card-controls">
+                            <select class="ii-select" id="automatedOwnerFilter" onchange="changeAutomatedOwnerFilter()" aria-label="Filter active and completed tests by app user">
+                                <option value="all">All app users</option>
+                                <option value="">Loading users...</option>
+                            </select>
                             <select class="ii-select" id="automatedSectionDateFilter" onchange="syncAutomatedDateFilterFromSection()">
                                 <option value="today" selected>Today</option>
                                 <option value="yesterday">Yesterday</option>
@@ -4384,6 +4397,7 @@ merge_recipe_id, content_blueprint_id</pre>
         automatedTestsTotal: 0,
         automatedTestsPage: 1,
         automatedTestsPerPage: 5,
+        automatedOwnerFilter: 'all',
         selectedAutomatedTestIds: new Set(),
         automatedSelectedSourceIds: new Set(),
         automatedActiveSourceTab: 'list',
@@ -7595,6 +7609,49 @@ merge_recipe_id, content_blueprint_id</pre>
         if (el) el.textContent = automatedDateFilterLabel();
     }
 
+    function renderAutomatedOwnerFilter() {
+        const select = document.getElementById('automatedOwnerFilter');
+        if (!select) return;
+        const isAdmin = String(II_CURRENT_ROLE || '').toLowerCase() === 'admin';
+        const users = iiState.userInboxAnalyticsUsers || [];
+        const currentOwner = String(II_CURRENT_USER || '').trim().toLowerCase();
+        const availableUsers = users.filter((user) => ['admin', 'mailer'].includes(String(user.role || '').toLowerCase()));
+
+        if (!availableUsers.length) {
+            select.innerHTML = isAdmin
+                ? '<option value="all">All app users</option>'
+                : `<option value="${escapeHtml(currentOwner)}">${escapeHtml(II_CURRENT_USER || 'Current user')}</option>`;
+            select.value = isAdmin ? 'all' : currentOwner;
+            select.disabled = !isAdmin;
+            iiState.automatedOwnerFilter = select.value;
+            return;
+        }
+
+        const options = isAdmin ? ['<option value="all">All app users</option>'] : [];
+        availableUsers.forEach((user) => {
+            const username = String(user.username || '').trim();
+            if (!username) return;
+            const role = String(user.role || '').toLowerCase();
+            options.push(`<option value="${escapeHtml(username)}">${escapeHtml(username)} · ${escapeHtml(role)}</option>`);
+        });
+        select.innerHTML = options.join('');
+        const desired = isAdmin
+            ? (iiState.automatedOwnerFilter || 'all')
+            : currentOwner;
+        const matchingOption = [...select.options].find((option) => option.value.toLowerCase() === desired.toLowerCase());
+        select.value = matchingOption?.value || (isAdmin ? 'all' : currentOwner);
+        iiState.automatedOwnerFilter = select.value || (isAdmin ? 'all' : currentOwner);
+        select.disabled = !isAdmin && !select.value;
+    }
+
+    function changeAutomatedOwnerFilter() {
+        const select = document.getElementById('automatedOwnerFilter');
+        iiState.automatedOwnerFilter = select?.value || 'all';
+        iiState.selectedAutomatedTestIds = new Set();
+        renderAutomatedBulkSelectionStatus();
+        loadAutomatedTests(1, false);
+    }
+
     function changeAutomatedTestsPageSize() {
         const value = document.getElementById('automatedPageSizeSelect')?.value || '5';
         iiState.automatedTestsPerPage = value === 'all' ? 'all' : Math.max(1, parseInt(value, 10) || 5);
@@ -7631,6 +7688,10 @@ merge_recipe_id, content_blueprint_id</pre>
         }
         page = page || 1;
         const params = new URLSearchParams({page, per_page: iiState.automatedTestsPerPage || 5});
+        const ownerFilter = II_CURRENT_ROLE === 'admin'
+            ? (iiState.automatedOwnerFilter || 'all')
+            : (II_CURRENT_USER || '');
+        if (ownerFilter && ownerFilter !== 'all') params.set('owner', ownerFilter);
         const dateFilter = document.getElementById('automatedDateFilter')?.value || 'today';
         params.set('date_filter', dateFilter);
         if (dateFilter === 'custom') {
@@ -7671,7 +7732,7 @@ merge_recipe_id, content_blueprint_id</pre>
         const isAll = iiState.automatedTestsPerPage === 'all';
         const pageCount = isAll ? 1 : Math.max(1, Math.ceil((iiState.automatedTestsTotal || 0) / (iiState.automatedTestsPerPage || 5)));
         el.innerHTML = `<div class="ii-responsive-table"><table class="ii-pro-compact-table">
-            <tr><th><input type="checkbox" aria-label="Select visible tests" onchange="toggleVisibleAutomatedTests(this.checked)"></th><th>Test ID</th><th>Date</th><th>Started</th><th>Origin</th><th>List</th><th>Status</th><th>Progress</th><th>Users</th><th>Recipients</th><th>Operations</th><th>Actions</th></tr>
+            <tr><th><input type="checkbox" aria-label="Select visible tests" onchange="toggleVisibleAutomatedTests(this.checked)"></th><th>Test ID</th><th>App user</th><th>Date</th><th>Started</th><th>Origin</th><th>List</th><th>Status</th><th>Progress</th><th>Users</th><th>Recipients</th><th>Operations</th><th>Actions</th></tr>
             ${iiState.automatedTests.map((test) => {
             const sent = test.sent_count || 0;
             const total = test.total_messages || sent;
@@ -7710,6 +7771,7 @@ merge_recipe_id, content_blueprint_id</pre>
             <tr onclick="viewAutomatedEmailTest('${escapeHtml(test.test_id)}')" style="cursor:pointer; ${iiState.automatedSelectedTestId === test.test_id ? 'background:#eff6ff;' : ''}">
                 <td onclick="event.stopPropagation()"><input type="checkbox" aria-label="Select ${escapeHtml(test.test_id)}" ${iiState.selectedAutomatedTestIds.has(test.test_id) ? 'checked' : ''} onchange="toggleAutomatedTestSelection('${escapeHtml(test.test_id)}', this.checked)"></td>
                 <td><strong>${escapeHtml(test.test_id)}</strong></td>
+                <td>${escapeHtml(test.created_by || 'Unknown')}</td>
                 <td>${test.created_at ? new Date(test.created_at).toLocaleDateString() : ''}</td>
                 <td>${test.created_at ? new Date(test.created_at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : ''}</td>
                 <td>${automatedTestOriginChip(test)}</td>
@@ -11359,11 +11421,17 @@ merge_recipe_id, content_blueprint_id</pre>
             if (selectionStatus) selectionStatus.textContent = 'Loading app users and completed tests...';
             const data = await iiFetch('/api/inbox-intelligence/user-inbox-analytics/users');
             iiState.userInboxAnalyticsUsers = data.users || [];
+            renderAutomatedOwnerFilter();
             renderUserInboxAnalyticsSelectors('', preferredTestId);
         } catch (err) {
             const userSelect = document.getElementById('userInboxAnalyticsUserSelect');
             const testSelect = document.getElementById('userInboxAnalyticsTestSelect');
             const syncButton = document.getElementById('userInboxSyncButton');
+            const automatedOwnerFilter = document.getElementById('automatedOwnerFilter');
+            if (automatedOwnerFilter) {
+                automatedOwnerFilter.innerHTML = '<option value="">Could not load app users</option>';
+                automatedOwnerFilter.disabled = true;
+            }
             if (userSelect) {
                 userSelect.innerHTML = '<option value="">Could not load app users</option>';
                 userSelect.disabled = true;

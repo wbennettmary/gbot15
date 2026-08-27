@@ -4017,6 +4017,7 @@ def _serialize_automated_test(test):
     return {
         'test_id': test.test_id,
         'name': test.name,
+        'created_by': test.created_by or '',
         'status': test.status,
         'subject': test.subject or '',
         'html_body': test.html_body or '',
@@ -4286,6 +4287,18 @@ def api_inbox_automated_tests():
             InboxDeliverabilityTest.name.ilike('Automated:%'),
             InboxDeliverabilityTest.test_id.ilike('AT-%')
         ))
+        requested_owner = (request.args.get('owner') or '').strip().lower()
+        if session.get('role') != 'admin':
+            requested_owner = (session.get('user') or '').strip().lower()
+        elif requested_owner and requested_owner != 'all':
+            valid_owner = User.query.filter(
+                func.lower(User.username) == requested_owner,
+                func.lower(User.role).in_(['admin', 'mailer']),
+            ).first()
+            if not valid_owner:
+                return jsonify({'success': False, 'error': 'Selected app user was not found.'}), 400
+        if requested_owner and requested_owner != 'all':
+            q = q.filter(func.lower(InboxDeliverabilityTest.created_by) == requested_owner)
         start_dt, end_dt = _automated_test_date_bounds(
             request.args.get('date_filter') or 'today',
             request.args.get('custom_start'),
