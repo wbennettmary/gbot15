@@ -384,6 +384,62 @@
         justify-content: flex-end;
     }
 
+    .afraid-quota-title-row {
+        align-items: center;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .afraid-quota-count {
+        background: #fff7ed;
+        border: 1px solid #fdba74;
+        color: #9a3412;
+        font-size: .7rem;
+        font-weight: 800;
+        letter-spacing: .01em;
+    }
+
+    .afraid-quota-table-wrap {
+        border: 1px solid #fde68a;
+        border-radius: 9px;
+        max-height: 390px;
+        overflow: auto;
+    }
+
+    .afraid-quota-table {
+        min-width: 430px;
+    }
+
+    .afraid-quota-table th {
+        background: #fffbeb;
+        color: #78350f;
+        font-size: .7rem;
+        position: sticky;
+        text-transform: uppercase;
+        top: 0;
+        z-index: 1;
+    }
+
+    .afraid-quota-table td {
+        overflow-wrap: anywhere;
+        vertical-align: middle;
+    }
+
+    .afraid-quota-pagination {
+        align-items: center;
+        display: flex;
+        gap: 8px;
+        justify-content: space-between;
+        margin-top: 10px;
+    }
+
+    .afraid-quota-page-status {
+        color: #78350f;
+        font-size: .75rem;
+        font-weight: 700;
+    }
+
     .afraid-domain-count-control {
         display: grid;
         grid-template-columns: auto minmax(70px, 1fr) auto;
@@ -464,6 +520,13 @@
         min-width: 0;
     }
 
+    .afraid-tld-domain-list {
+        height: 260px;
+        max-height: min(32vh, 320px);
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+
     #tldDomainList > label {
         align-items: flex-start !important;
         gap: 12px;
@@ -481,6 +544,55 @@
         max-width: 45%;
         text-align: right;
         white-space: normal;
+    }
+
+    input[type="checkbox"] {
+        -webkit-appearance: none;
+        appearance: none;
+        background: #fff;
+        border: 1.5px solid #94a3b8;
+        border-radius: 4px;
+        cursor: pointer;
+        display: inline-grid;
+        flex: 0 0 auto;
+        height: 17px;
+        margin: 0;
+        place-content: center;
+        transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease;
+        vertical-align: middle;
+        width: 17px;
+    }
+
+    input[type="checkbox"]::after {
+        border-bottom: 2px solid #fff;
+        border-left: 2px solid #fff;
+        content: "";
+        height: 5px;
+        opacity: 0;
+        transform: rotate(-45deg) scale(.7) translate(1px, -1px);
+        transition: opacity .12s ease, transform .12s ease;
+        width: 9px;
+    }
+
+    input[type="checkbox"]:checked,
+    input[type="checkbox"]:indeterminate {
+        background: #2563eb;
+        border-color: #2563eb;
+    }
+
+    input[type="checkbox"]:checked::after {
+        opacity: 1;
+        transform: rotate(-45deg) scale(1) translate(1px, -1px);
+    }
+
+    input[type="checkbox"]:focus-visible {
+        outline: 0;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, .2);
+    }
+
+    input[type="checkbox"]:disabled {
+        cursor: not-allowed;
+        opacity: .55;
     }
 
     .afraid-used-domain-actions {
@@ -824,6 +936,20 @@
             justify-content: flex-start;
             width: 100%;
         }
+
+        .afraid-quota-pagination {
+            align-items: stretch;
+            flex-direction: column;
+        }
+
+        .afraid-quota-pagination .btn-group {
+            display: flex;
+            width: 100%;
+        }
+
+        .afraid-quota-pagination .btn {
+            flex: 1 1 50%;
+        }
     }
 </style>
 <svg aria-hidden="true" focusable="false" style="position:absolute;width:0;height:0;overflow:hidden">
@@ -943,7 +1069,7 @@
                             <div class="manual-subdomain-header">
                                 <label for="manualSubdomainsInput" class="form-label fw-semibold mb-0">Manual Subdomains</label>
                                 <div class="manual-subdomain-tools" aria-label="Manual subdomain generator controls">
-                                    <input type="number" class="form-control form-control-sm manual-subdomain-count" id="manualSubdomainGenerateCount" min="1" max="5000" value="25" aria-label="Number of subdomains to generate">
+                                    <input type="number" class="form-control form-control-sm manual-subdomain-count" id="manualSubdomainGenerateCount" min="1" max="5000" value="30" aria-label="Number of subdomains to generate">
                                     <label class="manual-subdomain-toggle" for="manualSubdomainAllowDots">
                                         <input class="form-check-input" type="checkbox" id="manualSubdomainAllowDots">
                                         <span>with dots</span>
@@ -972,7 +1098,7 @@
                                     <div class="input-group">
                                         <input type="text" class="form-control" id="domainSearchInput" placeholder="Search cached domain, e.g. 1000pizzas.com">
                                         <button class="btn btn-outline-primary" type="button" id="btnSearchDomainGroup">
-                                            Search Group
+                                            <i class="fas fa-magnifying-glass me-1"></i>Search Group
                                         </button>
                                     </div>
                                     <div class="form-text" id="domainSearchStatus">Search selects the matching TLD group and shows that domain below.</div>
@@ -987,9 +1113,9 @@
                                     <div class="afraid-domain-count-row">
                                         <div class="afraid-domain-count-control input-group input-group-sm" aria-label="Descending domain selection">
                                             <span class="input-group-text">Count</span>
-                                            <input type="number" class="form-control" id="selectDomainCountInput" min="1" max="5000" value="10" aria-label="Number of domains to select">
+                                            <input type="number" class="form-control" id="selectDomainCountInput" min="1" max="5000" value="30" aria-label="Number of domains to select">
                                             <button type="button" class="btn btn-outline-primary" id="btnSelectDescendingDomains" title="Select available domains by descending name">
-                                                Select descending
+                                                <i class="fas fa-arrow-down-wide-short me-1"></i>Select descending
                                             </button>
                                         </div>
                                         <div class="afraid-domain-filter-controls" role="group" aria-label="AFRAID domain analytics filter">
@@ -1005,14 +1131,14 @@
                                     </div>
                                     <div class="afraid-used-domain-actions" role="group" aria-label="Used domain selection actions">
                                         <button type="button" class="btn btn-outline-secondary" id="btnSelectAllUsedDomains">
-                                            Select All Used
+                                            <i class="fas fa-check-double me-1"></i>Select All Used
                                         </button>
                                         <button type="button" class="btn btn-primary" id="btnReactivateSelectedDomains">
-                                            Reactivate Selected Used
+                                            <i class="fas fa-rotate me-1"></i>Reactivate Selected Used
                                         </button>
                                     </div>
                                 </div>
-                                <div id="tldDomainList" class="border rounded p-2" style="height: 220px; overflow-y: auto;">
+                                <div id="tldDomainList" class="border rounded p-2 afraid-tld-domain-list">
                                     <div class="text-muted small">Select a TLD group to view public domains.</div>
                                 </div>
                                 <div class="form-text">Set a count, then select the available domains in descending name order.</div>
@@ -1036,7 +1162,7 @@
                             </div>
                             <div class="col-md-4 mb-3">
                                 <label for="cloudflareCountInput" class="form-label">Cloudflare Domains</label>
-                                <input type="number" class="form-control" id="cloudflareCountInput" min="1" max="50" placeholder="Set rotation count" disabled>
+                                <input type="number" class="form-control" id="cloudflareCountInput" min="1" max="50" value="30" placeholder="Set rotation count" disabled>
                                 <div class="form-text">Active only when Cloudflare destination rotation is used.</div>
                             </div>
                         </div>
@@ -1088,7 +1214,7 @@
                         <form id="addDomainForm" class="mb-4">
                             <div class="input-group">
                                 <input type="text" class="form-control" id="newDomainInput" placeholder="Manually add domain (e.g. chickenkiller.com)">
-                                <button class="btn btn-primary" type="submit">Add Manually</button>
+                                <button class="btn btn-primary" type="submit"><i class="fas fa-plus me-1"></i>Add Manually</button>
                             </div>
                         </form>
 
@@ -1106,9 +1232,9 @@
                             </table>
                         </div>
                         <div class="d-flex justify-content-between align-items-center mt-3">
-                            <button class="btn btn-sm btn-outline-secondary" id="btnPrevDomainPage">Previous</button>
+                            <button class="btn btn-sm btn-outline-secondary" id="btnPrevDomainPage"><i class="fas fa-chevron-left me-1"></i>Previous</button>
                             <span class="text-muted small" id="domainPageStatus">Page 1</span>
-                            <button class="btn btn-sm btn-outline-secondary" id="btnNextDomainPage">Next</button>
+                            <button class="btn btn-sm btn-outline-secondary" id="btnNextDomainPage">Next<i class="fas fa-chevron-right ms-1"></i></button>
                         </div>
                     </div>
                 </section>
@@ -1117,22 +1243,32 @@
                     <div class="afraid-merged-section afraid-quota-section h-100">
                         <div class="afraid-merged-section-header">
                             <div>
-                                <h6 class="mb-1"><i class="fas fa-trash me-2 text-warning"></i>FreeDNS Quota Cleanup</h6>
+                                <div class="afraid-quota-title-row">
+                                    <h6 class="mb-1"><i class="fas fa-trash me-2 text-warning"></i>FreeDNS Quota Cleanup</h6>
+                                    <span class="badge rounded-pill afraid-quota-count" id="afraidQuotaCount" aria-live="polite">0 records loaded</span>
+                                </div>
                                 <div class="small text-muted">Load existing records and remove unused subdomains when capacity is reached.</div>
                             </div>
                             <div class="afraid-quota-actions">
-                                <button class="btn btn-sm btn-light" id="btnLoadSubdomains">Load Existing</button>
-                                <button class="btn btn-sm btn-outline-dark" id="btnMarkAllSubdomains">Mark All</button>
-                                <button class="btn btn-sm btn-danger" id="btnDeleteSelectedSubdomains">Delete Selected</button>
+                                <button class="btn btn-sm btn-light" id="btnLoadSubdomains" type="button"><i class="fas fa-rotate me-1"></i>Load Existing</button>
+                                <button class="btn btn-sm btn-outline-dark" id="btnMarkAllSubdomains" type="button"><i class="fas fa-check-double me-1"></i>Mark All</button>
+                                <button class="btn btn-sm btn-danger" id="btnDeleteSelectedSubdomains" type="button"><i class="fas fa-trash me-1"></i>Delete Selected</button>
                             </div>
                         </div>
-                        <div class="table-responsive">
-                            <table class="table table-sm table-striped mb-0">
-                                <thead><tr><th style="width:40px"><input type="checkbox" id="selectAllSubdomains"></th><th>Subdomain</th><th>Type</th><th>Destination</th></tr></thead>
+                        <div class="table-responsive afraid-quota-table-wrap">
+                            <table class="table table-sm table-striped mb-0 afraid-quota-table">
+                                <thead><tr><th style="width:40px"><input type="checkbox" id="selectAllSubdomains" aria-label="Select visible subdomains"></th><th>Subdomain</th><th>Type</th><th>Destination</th></tr></thead>
                                 <tbody id="subdomainsTableBody">
                                     <tr><td colspan="4" class="text-center text-muted">Load existing records before cleanup.</td></tr>
                                 </tbody>
                             </table>
+                        </div>
+                        <div class="afraid-quota-pagination" id="afraidSubdomainPagination" hidden>
+                            <span class="afraid-quota-page-status" id="afraidSubdomainPageStatus" aria-live="polite">Page 1 of 1</span>
+                            <div class="btn-group btn-group-sm" role="group" aria-label="FreeDNS cleanup pages">
+                                <button class="btn btn-outline-secondary" id="btnPrevSubdomainPage" type="button"><i class="fas fa-chevron-left me-1"></i>Previous</button>
+                                <button class="btn btn-outline-secondary" id="btnNextSubdomainPage" type="button">Next<i class="fas fa-chevron-right ms-1"></i></button>
+                            </div>
                         </div>
                     </div>
                 </section>
@@ -1266,7 +1402,7 @@
                         </div>
                         <div class="col-md-3">
                             <label for="afraidAiCloudflareCount" class="form-label fw-semibold">Cloudflare rotation</label>
-                            <input type="number" class="form-control" id="afraidAiCloudflareCount" min="1" max="50" placeholder="Auto">
+                            <input type="number" class="form-control" id="afraidAiCloudflareCount" min="1" max="50" value="30" placeholder="Auto">
                         </div>
                         <div class="col-md-3">
                             <label for="afraidAiTtl" class="form-label fw-semibold">TTL</label>
@@ -1502,6 +1638,8 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('btnPrevDomainPage').addEventListener('click', () => changeDomainPage(-1));
     document.getElementById('btnNextDomainPage').addEventListener('click', () => changeDomainPage(1));
     document.getElementById('btnLoadSubdomains').addEventListener('click', loadExistingSubdomains);
+    document.getElementById('btnPrevSubdomainPage').addEventListener('click', () => changeSubdomainPage(-1));
+    document.getElementById('btnNextSubdomainPage').addEventListener('click', () => changeSubdomainPage(1));
     document.getElementById('btnMarkAllSubdomains').addEventListener('click', markAllSubdomains);
     document.getElementById('selectAllSubdomains').addEventListener('change', toggleAllSubdomains);
     document.getElementById('btnDeleteSelectedSubdomains').addEventListener('click', deleteSelectedSubdomains);
@@ -2210,28 +2348,95 @@ function updateManualBaseDomainsCount() {
     }
 }
 
+const AFRAID_SUBDOMAIN_PAGE_SIZE = 10;
+let afraidSubdomainRecords = [];
+let afraidSubdomainPage = 1;
+
+function updateAfraidQuotaCount() {
+    const countEl = document.getElementById('afraidQuotaCount');
+    if (!countEl) return;
+    const total = afraidSubdomainRecords.length;
+    const selected = afraidSubdomainRecords.filter(record => record.selected).length;
+    countEl.textContent = `${total} record${total === 1 ? '' : 's'} loaded${selected ? ` · ${selected} selected` : ''}`;
+}
+
+function updateSubdomainPagination() {
+    const pagination = document.getElementById('afraidSubdomainPagination');
+    const status = document.getElementById('afraidSubdomainPageStatus');
+    const previous = document.getElementById('btnPrevSubdomainPage');
+    const next = document.getElementById('btnNextSubdomainPage');
+    const total = afraidSubdomainRecords.length;
+    const totalPages = Math.max(1, Math.ceil(total / AFRAID_SUBDOMAIN_PAGE_SIZE));
+    const start = total ? ((afraidSubdomainPage - 1) * AFRAID_SUBDOMAIN_PAGE_SIZE) + 1 : 0;
+    const end = Math.min(afraidSubdomainPage * AFRAID_SUBDOMAIN_PAGE_SIZE, total);
+    if (status) {
+        status.textContent = total ? `Showing ${start}–${end} of ${total} · Page ${afraidSubdomainPage} of ${totalPages}` : 'No records to page';
+    }
+    if (previous) previous.disabled = afraidSubdomainPage <= 1;
+    if (next) next.disabled = afraidSubdomainPage >= totalPages;
+    if (pagination) pagination.hidden = total <= AFRAID_SUBDOMAIN_PAGE_SIZE;
+}
+
+function renderExistingSubdomainsPage() {
+    const tbody = document.getElementById('subdomainsTableBody');
+    const selectAll = document.getElementById('selectAllSubdomains');
+    const totalPages = Math.max(1, Math.ceil(afraidSubdomainRecords.length / AFRAID_SUBDOMAIN_PAGE_SIZE));
+    afraidSubdomainPage = Math.min(Math.max(afraidSubdomainPage, 1), totalPages);
+    const start = (afraidSubdomainPage - 1) * AFRAID_SUBDOMAIN_PAGE_SIZE;
+    const pageRecords = afraidSubdomainRecords.slice(start, start + AFRAID_SUBDOMAIN_PAGE_SIZE);
+
+    tbody.innerHTML = '';
+    if (!pageRecords.length) {
+        tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted">${afraidSubdomainRecords.length ? 'No records on this page.' : 'No existing subdomains found.'}</td></tr>`;
+    } else {
+        pageRecords.forEach(record => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td><input type="checkbox" class="subdomain-delete-check" value="${escapeHtml(record.delete_value)}" aria-label="Select ${escapeHtml(record.fqdn)}"${record.selected ? ' checked' : ''}></td>
+                <td>${escapeHtml(record.fqdn)}</td><td>${escapeHtml(record.type)}</td><td>${escapeHtml(record.destination)}</td>`;
+            tr.querySelector('input').addEventListener('change', event => {
+                record.selected = event.target.checked;
+                updateSubdomainSelectAllState();
+                updateAfraidQuotaCount();
+            });
+            tbody.appendChild(tr);
+        });
+    }
+    if (selectAll) {
+        selectAll.checked = false;
+        selectAll.indeterminate = false;
+    }
+    updateSubdomainPagination();
+    updateSubdomainSelectAllState();
+    updateAfraidQuotaCount();
+}
+
 async function loadExistingSubdomains() {
     const tbody = document.getElementById('subdomainsTableBody');
-    document.getElementById('selectAllSubdomains').checked = false;
-    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Loading...</td></tr>';
-    const res = await fetch('/api/afraid/subdomains');
-    const data = await parseJsonResponse(res);
-    tbody.innerHTML = '';
-    if (data.error) {
-        showAlert('createAlert', escapeHtml(data.error), data.records.length ? 'warning' : 'danger');
+    const selectAll = document.getElementById('selectAllSubdomains');
+    const countEl = document.getElementById('afraidQuotaCount');
+    afraidSubdomainRecords = [];
+    afraidSubdomainPage = 1;
+    if (selectAll) {
+        selectAll.checked = false;
+        selectAll.indeterminate = false;
     }
-    if (!data.records.length) {
-        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No existing subdomains found.</td></tr>';
-        return;
+    if (countEl) countEl.textContent = 'Loading…';
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Loading existing records…</td></tr>';
+    try {
+        const res = await fetch('/api/afraid/subdomains');
+        const data = await parseJsonResponse(res);
+        const records = Array.isArray(data.records) ? data.records : [];
+        if (data.error) {
+            showAlert('createAlert', escapeHtml(data.error), records.length ? 'warning' : 'danger');
+        }
+        afraidSubdomainRecords = records.map(record => ({...record, selected: false}));
+        renderExistingSubdomainsPage();
+    } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger">${escapeHtml(err.message || 'Could not load existing subdomains.')}</td></tr>`;
+        if (countEl) countEl.textContent = 'Unavailable';
+        updateSubdomainPagination();
+        showAlert('createAlert', escapeHtml(err.message || 'Could not load existing subdomains.'), 'danger');
     }
-    data.records.forEach(r => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td><input type="checkbox" class="subdomain-delete-check" value="${escapeHtml(r.delete_value)}"></td>
-            <td>${escapeHtml(r.fqdn)}</td><td>${escapeHtml(r.type)}</td><td>${escapeHtml(r.destination)}</td>`;
-        tr.querySelector('input').addEventListener('change', updateSubdomainSelectAllState);
-        tbody.appendChild(tr);
-    });
-    updateSubdomainSelectAllState();
 }
 
 function getSubdomainChecks() {
@@ -2239,33 +2444,39 @@ function getSubdomainChecks() {
 }
 
 function toggleAllSubdomains(e) {
-    getSubdomainChecks().forEach(check => {
-        check.checked = e.target.checked;
+    const visibleValues = new Set(getSubdomainChecks().map(check => check.value));
+    afraidSubdomainRecords.forEach(record => {
+        if (visibleValues.has(record.delete_value)) record.selected = e.target.checked;
     });
+    renderExistingSubdomainsPage();
+}
+
+function changeSubdomainPage(delta) {
+    const totalPages = Math.max(1, Math.ceil(afraidSubdomainRecords.length / AFRAID_SUBDOMAIN_PAGE_SIZE));
+    afraidSubdomainPage = Math.min(Math.max(afraidSubdomainPage + delta, 1), totalPages);
+    renderExistingSubdomainsPage();
 }
 
 function markAllSubdomains() {
-    const checks = getSubdomainChecks();
-    if (!checks.length) {
+    if (!afraidSubdomainRecords.length) {
         alert('Load existing subdomains first.');
         return;
     }
-    checks.forEach(check => {
-        check.checked = true;
-    });
-    updateSubdomainSelectAllState();
+    afraidSubdomainRecords.forEach(record => { record.selected = true; });
+    renderExistingSubdomainsPage();
 }
 
 function updateSubdomainSelectAllState() {
     const checks = getSubdomainChecks();
     const selectAll = document.getElementById('selectAllSubdomains');
+    if (!selectAll) return;
     const checked = checks.filter(check => check.checked).length;
     selectAll.checked = checks.length > 0 && checked === checks.length;
     selectAll.indeterminate = checked > 0 && checked < checks.length;
 }
 
 async function deleteSelectedSubdomains() {
-    const delete_values = [...document.querySelectorAll('.subdomain-delete-check:checked')].map(el => el.value);
+    const delete_values = afraidSubdomainRecords.filter(record => record.selected).map(record => record.delete_value);
     if (!delete_values.length || !confirm(`Delete ${delete_values.length} selected subdomain(s)?`)) return;
     const res = await fetch('/api/afraid/subdomains/delete', {
         method: 'POST',
