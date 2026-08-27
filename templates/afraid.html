@@ -2089,12 +2089,16 @@ async function deleteSelectedSubdomains() {
 async function startProcess() {
     const btn = document.getElementById('btnCreateCnameSubdomain');
     btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Syncing domains...';
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Preparing CNAME...';
     try {
         const selectedDomains = [...document.querySelectorAll('.tld-domain-check:checked')].map(el => el.value);
         const manualBaseDomains = getManualBaseDomains();
         const baseDomains = [...new Set([...selectedDomains, ...manualBaseDomains])];
-        await syncAfraidDomainsIfStale(true, {refreshUi: false});
+        const freshness = await syncAfraidDomainsIfStale(false, {refreshUi: false});
+        if (!freshness.success) {
+            throw new Error(freshness.error || 'Could not verify FreeDNS registry freshness.');
+        }
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Creating CNAME...';
         const selectedDestination = document.getElementById('destinationInput').value.trim() || document.getElementById('cloudflareSelect').value;
         const destinations = selectedDestination ? [selectedDestination] : [];
         const manualSubdomains = getManualSubdomains();
@@ -2769,19 +2773,25 @@ function isAfraidExternalCfQuotaError(entry) {
     return /\bquota\b|\brate limit\b|\btoo many\b|\bmaximum\b|\blimit\b/.test(message);
 }
 
+function isAfraidExternalCfFailed(entry) {
+    return ['authStatus', 'workspaceStatus', 'tokenStatus', 'dnsStatus', 'verifyStatus']
+        .some(key => entry?.[key] === 'failed');
+}
+
 function renderAfraidExternalCfMessageCell(entry) {
     const message = escapeHtml(entry?.message || '');
-    const showRecoveryActions = isAfraidExternalCfQuotaError(entry) || Boolean(entry?.recoveryActions);
-    if (!showRecoveryActions) return message;
+    const showClearTxt = isAfraidExternalCfQuotaError(entry) || Boolean(entry?.recoveryActions);
+    const showRetry = isAfraidExternalCfFailed(entry) || Boolean(entry?.recoveryActions);
+    if (!showClearTxt && !showRetry) return message;
     const index = Number(entry?.index || 0);
     return `<div>${message}</div>
         <div class="afraid-external-cf-row-actions">
-            <button type="button" class="btn btn-sm btn-outline-warning" onclick="clearAfraidExternalCfTxt(${index})" title="Delete all TXT records from this Cloudflare zone">
+            ${showClearTxt ? `<button type="button" class="btn btn-sm btn-outline-warning" onclick="clearAfraidExternalCfTxt(${index})" title="Delete all TXT records from this Cloudflare zone">
                 <i class="fas fa-eraser"></i> Clear TXT
-            </button>
-            <button type="button" class="btn btn-sm btn-outline-primary" onclick="retryAfraidExternalCfEntry(${index})" title="Retry this failed row">
-                <i class="fas fa-rotate-right"></i> Retry
-            </button>
+            </button>` : ''}
+            ${showRetry ? `<button type="button" class="btn btn-sm btn-outline-primary" onclick="retryAfraidExternalCfEntry(${index})" title="Add this domain to Workspace and verify it again">
+                <i class="fas fa-rotate-right"></i> Add &amp; Verify Again
+            </button>` : ''}
         </div>`;
 }
 
@@ -2980,6 +2990,10 @@ async function retryAfraidExternalCfEntry(index) {
     const entry = afraidExternalCfEntries.find(item => Number(item.index) === Number(index));
     if (!entry || !entry.account || !entry.externalDomain || !entry.cloudflareDomain) {
         showAfraidExternalCfAlert('This row is missing account, AFRAID domain, or Cloudflare zone data.', 'warning');
+        return;
+    }
+    if (afraidExternalCfJobId) {
+        showAfraidExternalCfAlert('A verification job is already running. Wait for it to finish before retrying another row.', 'warning');
         return;
     }
     const retryEntry = {
@@ -3191,6 +3205,9 @@ function setAfraidExternalCfRunning(isRunning) {
     startBtn.disabled = isRunning;
     stopBtn.disabled = !isRunning;
     accountSelect.disabled = isRunning || Boolean(afraidExternalCfMergedSource);
+    document.querySelectorAll('#afraidExternalCfTableBody .afraid-external-cf-row-actions button').forEach(button => {
+        button.disabled = isRunning;
+    });
     startBtn.innerHTML = isRunning
         ? '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Running'
         : '<svg class="afraid-svg-icon me-1"><use href="#afraid-icon-play"></use></svg>Start verification';
