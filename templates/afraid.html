@@ -1403,7 +1403,9 @@
             <div class="card h-100">
                 <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                     <h5 class="card-title mb-0"><i class="fas fa-cookie-bite me-2"></i>Session Cookies</h5>
-                    <button class="btn btn-sm btn-outline-light" id="btnTestCookies">Test</button>
+                    <button type="button" class="btn btn-sm btn-outline-light" id="btnTestCookies">
+                        <i class="fas fa-vial me-1"></i>Test
+                    </button>
                 </div>
                 <div class="card-body">
                     <div class="alert alert-info py-2 small mb-3">
@@ -1628,7 +1630,7 @@
                         <div class="d-flex justify-content-between align-items-center mt-3">
                             <button class="btn btn-sm btn-outline-secondary" id="btnPrevDomainPage" type="button"><i class="fas fa-chevron-left me-1"></i>Previous</button>
                             <span class="text-muted small" id="domainPageStatus">Page 1</span>
-                            <button class="btn btn-sm btn-outline-secondary" id="btnNextDomainPage" type="button">Next<i class="fas fa-chevron-right ms-1"></i></button>
+                            <button class="btn btn-sm btn-outline-secondary" id="btnNextDomainPage" type="button"><i class="fas fa-chevron-right me-1"></i>Next</button>
                         </div>
                     </div>
                 </section>
@@ -1661,7 +1663,7 @@
                             <span class="afraid-quota-page-status" id="afraidSubdomainPageStatus" aria-live="polite">Page 1 of 1</span>
                             <div class="btn-group btn-group-sm" role="group" aria-label="FreeDNS cleanup pages">
                                 <button class="btn btn-outline-secondary" id="btnPrevSubdomainPage" type="button"><i class="fas fa-chevron-left me-1"></i>Previous</button>
-                                <button class="btn btn-outline-secondary" id="btnNextSubdomainPage" type="button">Next<i class="fas fa-chevron-right ms-1"></i></button>
+                                <button class="btn btn-outline-secondary" id="btnNextSubdomainPage" type="button"><i class="fas fa-chevron-right me-1"></i>Next</button>
                             </div>
                         </div>
                     </div>
@@ -1707,7 +1709,7 @@
                                 <i class="fas fa-floppy-disk me-1"></i> Create List
                             </button>
                             <button type="button" class="btn btn-outline-secondary" id="btnCancelAfraidListEdit" style="display:none">
-                                Cancel Edit
+                                <i class="fas fa-xmark me-1"></i>Cancel Edit
                             </button>
                         </div>
                     </form>
@@ -1821,7 +1823,9 @@
         </div>
         <div class="afraid-ai-modal-foot">
             <div class="small text-muted me-auto" id="afraidAiStatus">Ready. Choose a TLD, count, and related account list.</div>
-            <button type="button" class="btn btn-outline-secondary" id="btnCloseAfraidAiAgentFooter">Close</button>
+            <button type="button" class="btn btn-outline-secondary" id="btnCloseAfraidAiAgentFooter">
+                <i class="fas fa-xmark me-1"></i>Close
+            </button>
             <button type="button" class="btn btn-primary" id="btnStartAfraidAiAutomation">
                 <svg class="afraid-svg-icon me-1"><use href="#afraid-icon-play"></use></svg>Start AI automation
             </button>
@@ -1894,7 +1898,9 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary" id="btnCloseAfraidDeleteUsers" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-outline-secondary" id="btnCloseAfraidDeleteUsers" data-bs-dismiss="modal">
+                    <i class="fas fa-xmark me-1"></i>Close
+                </button>
                 <button type="button" class="btn btn-danger" id="btnStartAfraidDeleteUsers">
                     <svg class="afraid-svg-icon me-1"><use href="#afraid-icon-user-slash"></use></svg>Authenticate & Delete Users
                 </button>
@@ -1987,7 +1993,9 @@
                 <div class="afraid-verify-log" id="afraidExternalCfLog">Ready.</div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-xmark me-1"></i>Close
+                </button>
                 <button type="button" class="btn btn-outline-danger" id="btnStopAfraidExternalCf">
                     <svg class="afraid-svg-icon me-1"><use href="#afraid-icon-stop"></use></svg>Stop
                 </button>
