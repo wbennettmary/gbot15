@@ -1415,14 +1415,16 @@
                         5. Copy the entire value and paste it below
                     </div>
 
-                    <div id="cookieStatus" class="mb-3" style="display:none"></div>
+                    <div id="cookieStatus" class="mb-3" style="display:none" aria-live="polite"></div>
 
-                    <form id="cookieForm">
+                    <form id="cookieForm" novalidate>
                         <div class="mb-3">
                             <label for="cookiesInput" class="form-label fw-semibold">Cookie String</label>
                             <textarea class="form-control font-monospace" id="cookiesInput" rows="4"
-                                placeholder="dns_id=abc123; dns_cookie=xyz456; ..."></textarea>
-                            <div class="form-text">Paste the full Cookie header value here.</div>
+                                placeholder="dns_id=abc123; dns_cookie=xyz456; ..."
+                                aria-describedby="cookiesInputHelp"
+                                style="resize: none; min-height: 112px;"></textarea>
+                            <div class="form-text" id="cookiesInputHelp">Paste the full Cookie header value here. Saving replaces the currently stored cookies.</div>
                         </div>
                         <button type="submit" class="btn btn-primary w-100" id="btnSaveCookies">
                             <i class="fas fa-floppy-disk me-1"></i> Save & Verify Cookies
@@ -2111,11 +2113,11 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             const data = await parseJsonResponse(res);
             if (data.success) {
-                showAlert('configAlert', '<i class="fas fa-circle-check me-1"></i>' + (data.message || 'Cookies saved!'), 'success');
+                showAlert('configAlert', '<i class="fas fa-circle-check me-1"></i>' + escapeHtml(data.message || 'Cookies saved!'), 'success');
                 document.getElementById('cookiesInput').value = '';
-                loadConfig();
+                await loadConfig();
             } else {
-                showAlert('configAlert', '<i class="fas fa-circle-exclamation me-1"></i>' + (data.error || 'Error'), 'danger');
+                showAlert('configAlert', '<i class="fas fa-circle-exclamation me-1"></i>' + escapeHtml(data.error || 'Error'), 'danger');
             }
         } catch (err) {
             showAlert('configAlert', '<i class="fas fa-circle-exclamation me-1"></i>' + escapeHtml(err.message || 'Request failed'), 'danger');
@@ -2235,14 +2237,17 @@ async function syncAfraidDomainsIfStale(force = false, options = {}) {
 
 async function loadConfig() {
     try {
-        const res = await fetch('/api/afraid/config');
-        const data = await res.json();
+        const res = await fetch('/api/afraid/config', {cache: 'no-store'});
+        const data = await parseJsonResponse(res);
         const statusEl = document.getElementById('cookieStatus');
-        if (data.has_cookies) {
+        if (data.has_cookies && statusEl) {
             statusEl.style.display = 'block';
             statusEl.innerHTML = `<div class="alert alert-success py-2 mb-0 small">
-                <i class="fas fa-circle-check me-1"></i> Cookies saved: <code>${data.cookies_preview}</code>
+                <i class="fas fa-circle-check me-1"></i> Cookies saved: <code>${escapeHtml(data.cookies_preview)}</code>
             </div>`;
+        } else if (statusEl) {
+            statusEl.style.display = 'none';
+            statusEl.textContent = '';
         }
     } catch (err) {
         console.error('Error loading config', err);

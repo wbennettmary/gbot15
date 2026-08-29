@@ -29,6 +29,16 @@ _AFRAID_DOMAIN_SYNC_LOCK = threading.Lock()
 
 afraid_manager = Blueprint('afraid_manager', __name__)
 
+def cookie_preview(cookies_str):
+    """Return a safe preview that confirms the saved cookie names without exposing values."""
+    preview = []
+    for pair in (cookies_str or '').split(';'):
+        name, separator, _ = pair.strip().partition('=')
+        if not separator or not name:
+            continue
+        preview.append(f"{name}=***")
+    return '; '.join(preview[:4]) + ('; ...' if len(preview) > 4 else '')
+
 def login_required(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
@@ -314,14 +324,17 @@ def afraid_page():
 def get_config():
     config = AfraidConfig.query.first()
     if config:
-        return jsonify({
+        response = jsonify({
             'success': True,
             'is_configured': bool(config.cookies_str),
             'has_cookies': bool(config.cookies_str),
-            # Show a short preview of the cookie to confirm it's saved
-            'cookies_preview': config.cookies_str[:40] + '...' if config.cookies_str and len(config.cookies_str) > 40 else (config.cookies_str or '')
+            'cookies_preview': cookie_preview(config.cookies_str)
         })
-    return jsonify({'success': False, 'is_configured': False, 'has_cookies': False})
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+    response = jsonify({'success': False, 'is_configured': False, 'has_cookies': False})
+    response.headers['Cache-Control'] = 'no-store'
+    return response
 
 @afraid_manager.route('/api/afraid/config', methods=['POST'])
 @login_required
@@ -340,12 +353,11 @@ def save_config():
             'error': svc.auth_error or 'Cookies appear to be invalid or expired. Please re-export fresh cookies from your browser.'
         }), 401
 
-    domain_map = svc.get_domains_with_ids()
-    if not domain_map:
-        return jsonify({
-            'success': False,
-            'error': svc.last_error or 'Cookies authenticated, but no FreeDNS domains were found in the add-subdomain form.'
-        }), 401
+    # Cookie replacement should not depend on the add-subdomain form being
+    # available. FreeDNS can authenticate successfully while that form is
+    # temporarily unavailable, changed, or empty for the account. The
+    # protected-page check above is the cookie verification; domain operations
+    # perform their own domain-form check when they actually need it.
 
     config = AfraidConfig.query.first()
     if not config:
@@ -356,7 +368,12 @@ def save_config():
         config.is_configured = True
         config.domains_synced_at = None
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+
     return jsonify({'success': True, 'message': 'Cookies saved and verified successfully!'})
 
 @afraid_manager.route('/api/afraid/config/test', methods=['POST'])
