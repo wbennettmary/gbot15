@@ -120,12 +120,28 @@
         flex: 0 0 auto;
         fill: none;
         height: 1em;
+        pointer-events: none;
         stroke: currentColor;
         stroke-linecap: round;
         stroke-linejoin: round;
         stroke-width: 2;
         vertical-align: -0.14em;
         width: 1em;
+    }
+
+    .afraid-svg-icon.afraid-icon-spin {
+        animation: afraid-icon-spin .9s linear infinite;
+        transform-origin: center;
+    }
+
+    @keyframes afraid-icon-spin {
+        to { transform: rotate(360deg); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .afraid-svg-icon.afraid-icon-spin {
+            animation-duration: 1.8s;
+        }
     }
 
     /* Claymorphism treatment is intentionally scoped to the operational Process tab. */
@@ -1344,7 +1360,7 @@
         }
     }
 </style>
-<svg aria-hidden="true" focusable="false" style="position:absolute;width:0;height:0;overflow:hidden">
+<svg aria-hidden="true" focusable="false" xmlns:xlink="http://www.w3.org/1999/xlink" style="position:absolute;width:0;height:0;overflow:hidden">
     <symbol id="afraid-icon-play" viewBox="0 0 24 24"><polygon points="8 5 19 12 8 19 8 5"></polygon></symbol>
     <symbol id="afraid-icon-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"></rect></symbol>
     <symbol id="afraid-icon-cookie" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9 4 4 0 0 0 4 4 4 4 0 0 0 5 5Z"></path><path d="M8 8h.01"></path><path d="M8 15h.01"></path><path d="M13 13h.01"></path></symbol>
@@ -1363,6 +1379,15 @@
     <symbol id="afraid-icon-trash" viewBox="0 0 24 24"><path d="M4 7h16"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M6 7l1 14h10l1-14"></path><path d="M9 7V4h6v3"></path></symbol>
     <symbol id="afraid-icon-user-slash" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="m17 8 5 5"></path><path d="m22 8-5 5"></path></symbol>
     <symbol id="afraid-icon-wand" viewBox="0 0 24 24"><path d="m15 4 5 5"></path><path d="M3 21 17 7"></path><path d="m6 5 1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2Z"></path><path d="m19 14 .7 1.3 1.3.7-1.3.7L19 18l-.7-1.3L17 16l1.3-.7L19 14Z"></path></symbol>
+    <symbol id="afraid-icon-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m16 16 5 5"></path></symbol>
+    <symbol id="afraid-icon-sort" viewBox="0 0 24 24"><path d="M5 6h14"></path><path d="M5 12h10"></path><path d="M5 18h6"></path><path d="m17 15 3 3 3-3"></path><path d="M20 18V6"></path></symbol>
+    <symbol id="afraid-icon-check-double" viewBox="0 0 24 24"><path d="m3 12 4 4L17 6"></path><path d="m9 16 2 2 10-10"></path></symbol>
+    <symbol id="afraid-icon-rotate" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.5-3L3 11"></path><path d="M3 6v5h5"></path><path d="M4 13a8 8 0 0 0 14.5 3L21 13"></path><path d="M21 18v-5h-5"></path></symbol>
+    <symbol id="afraid-icon-circle-plus" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v8"></path><path d="M8 12h8"></path></symbol>
+    <symbol id="afraid-icon-plus" viewBox="0 0 24 24"><path d="M12 5v14"></path><path d="M5 12h14"></path></symbol>
+    <symbol id="afraid-icon-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"></path></symbol>
+    <symbol id="afraid-icon-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></symbol>
+    <symbol id="afraid-icon-xmark" viewBox="0 0 24 24"><path d="m6 6 12 12"></path><path d="m18 6-12 12"></path></symbol>
     <symbol id="afraid-icon-bot" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="12" rx="3"></rect><path d="M12 4v4"></path><path d="M8 13h.01"></path><path d="M16 13h.01"></path><path d="M9 17h6"></path></symbol>
 </svg>
 <div class="container mt-4">
@@ -1475,7 +1500,7 @@
                                         <span>with -</span>
                                     </label>
                                     <button type="button" class="btn btn-sm btn-primary manual-subdomain-generate" id="btnGenerateManualSubdomains">
-                                        <svg class="afraid-svg-icon"><use href="#afraid-icon-wand"></use></svg>Generate
+                                        <svg class="afraid-svg-icon" aria-hidden="true"><use href="#afraid-icon-wand" xlink:href="#afraid-icon-wand"></use></svg>Generate
                                     </button>
                                 </div>
                             </div>
@@ -1494,7 +1519,7 @@
                                     <div class="input-group">
                                         <input type="text" class="form-control" id="domainSearchInput" placeholder="Search cached domain, e.g. 1000pizzas.com">
                                         <button class="btn btn-outline-primary" type="button" id="btnSearchDomainGroup">
-                                            <i class="fas fa-magnifying-glass me-1"></i>Search Group
+                                            <svg class="afraid-svg-icon me-1" aria-hidden="true"><use href="#afraid-icon-search" xlink:href="#afraid-icon-search"></use></svg>Search Group
                                         </button>
                                     </div>
                                     <div class="form-text" id="domainSearchStatus">Search selects the matching TLD group and shows that domain below.</div>
@@ -1511,7 +1536,7 @@
                                             <span class="input-group-text">Count</span>
                                             <input type="number" class="form-control" id="selectDomainCountInput" min="1" max="5000" value="30" aria-label="Number of domains to select">
                                             <button type="button" class="btn btn-outline-primary" id="btnSelectDescendingDomains" title="Select available domains by descending name">
-                                                <i class="fas fa-sort-amount-down me-1"></i>Select descending
+                                                <svg class="afraid-svg-icon me-1" aria-hidden="true"><use href="#afraid-icon-sort" xlink:href="#afraid-icon-sort"></use></svg>Select descending
                                             </button>
                                         </div>
                                         <div class="afraid-domain-filter-controls" role="group" aria-label="AFRAID domain analytics filter">
@@ -1527,10 +1552,10 @@
                                     </div>
                                     <div class="afraid-used-domain-actions" role="group" aria-label="Used domain selection actions">
                                         <button type="button" class="btn btn-outline-secondary" id="btnSelectAllUsedDomains">
-                                            <i class="fas fa-check-double me-1"></i>Select All Used
+                                            <svg class="afraid-svg-icon me-1" aria-hidden="true"><use href="#afraid-icon-check-double" xlink:href="#afraid-icon-check-double"></use></svg>Select All Used
                                         </button>
                                         <button type="button" class="btn btn-primary" id="btnReactivateSelectedDomains">
-                                            <i class="fas fa-rotate me-1"></i>Reactivate Selected Used
+                                            <svg class="afraid-svg-icon me-1" aria-hidden="true"><use href="#afraid-icon-rotate" xlink:href="#afraid-icon-rotate"></use></svg>Reactivate Selected Used
                                         </button>
                                     </div>
                                 </div>
@@ -1577,7 +1602,7 @@
                             <input type="number" class="form-control" id="ttlInput" value="300">
                         </div>
                         <button type="button" class="btn btn-success w-100" id="btnCreateCnameSubdomain">
-                            <i class="fas fa-circle-plus me-1"></i> Create CNAME Subdomain
+                            <svg class="afraid-svg-icon me-1" aria-hidden="true"><use href="#afraid-icon-circle-plus" xlink:href="#afraid-icon-circle-plus"></use></svg> Create CNAME Subdomain
                         </button>
                     </form>
                     <div id="createAlert" class="mt-3"></div>
@@ -1593,7 +1618,7 @@
             <div class="d-flex align-items-center gap-2">
                 <span class="small text-white-50" id="afraidDomainSyncStatus">Checking registry freshness...</span>
                 <button class="btn btn-sm btn-light" id="btnFetchDomains" type="button">
-                    <i class="fas fa-rotate me-1"></i> Sync Registry
+                    <svg class="afraid-svg-icon me-1" aria-hidden="true"><use href="#afraid-icon-rotate" xlink:href="#afraid-icon-rotate"></use></svg> Sync Registry
                 </button>
             </div>
         </div>
@@ -1610,7 +1635,7 @@
                         <form id="addDomainForm" class="mb-4">
                             <div class="input-group">
                                 <input type="text" class="form-control" id="newDomainInput" placeholder="Manually add domain (e.g. chickenkiller.com)">
-                                <button class="btn btn-primary" type="submit"><i class="fas fa-plus me-1"></i>Add Manually</button>
+                                <button class="btn btn-primary" type="submit"><svg class="afraid-svg-icon me-1" aria-hidden="true"><use href="#afraid-icon-plus" xlink:href="#afraid-icon-plus"></use></svg>Add Manually</button>
                             </div>
                         </form>
 
@@ -1628,9 +1653,9 @@
                             </table>
                         </div>
                         <div class="d-flex justify-content-between align-items-center mt-3">
-                            <button class="btn btn-sm btn-outline-secondary" id="btnPrevDomainPage" type="button"><i class="fas fa-chevron-left me-1"></i>Previous</button>
+                            <button class="btn btn-sm btn-outline-secondary" id="btnPrevDomainPage" type="button"><svg class="afraid-svg-icon me-1" aria-hidden="true"><use href="#afraid-icon-chevron-left" xlink:href="#afraid-icon-chevron-left"></use></svg>Previous</button>
                             <span class="text-muted small" id="domainPageStatus">Page 1</span>
-                            <button class="btn btn-sm btn-outline-secondary" id="btnNextDomainPage" type="button"><i class="fas fa-chevron-right me-1"></i>Next</button>
+                            <button class="btn btn-sm btn-outline-secondary" id="btnNextDomainPage" type="button"><svg class="afraid-svg-icon me-1" aria-hidden="true"><use href="#afraid-icon-chevron-right" xlink:href="#afraid-icon-chevron-right"></use></svg>Next</button>
                         </div>
                     </div>
                 </section>
@@ -1646,9 +1671,9 @@
                                 <div class="small text-muted">Load existing records and remove unused subdomains when capacity is reached.</div>
                             </div>
                             <div class="afraid-quota-actions">
-                                <button class="btn btn-sm btn-light" id="btnLoadSubdomains" type="button"><i class="fas fa-rotate me-1"></i>Load Existing</button>
-                                <button class="btn btn-sm btn-outline-dark" id="btnMarkAllSubdomains" type="button"><i class="fas fa-check-double me-1"></i>Mark All</button>
-                                <button class="btn btn-sm btn-danger" id="btnDeleteSelectedSubdomains" type="button"><i class="fas fa-trash me-1"></i>Delete Selected</button>
+                                <button class="btn btn-sm btn-light" id="btnLoadSubdomains" type="button"><svg class="afraid-svg-icon me-1" aria-hidden="true"><use href="#afraid-icon-rotate" xlink:href="#afraid-icon-rotate"></use></svg>Load Existing</button>
+                                <button class="btn btn-sm btn-outline-dark" id="btnMarkAllSubdomains" type="button"><svg class="afraid-svg-icon me-1" aria-hidden="true"><use href="#afraid-icon-check-double" xlink:href="#afraid-icon-check-double"></use></svg>Mark All</button>
+                                <button class="btn btn-sm btn-danger" id="btnDeleteSelectedSubdomains" type="button"><svg class="afraid-svg-icon me-1" aria-hidden="true"><use href="#afraid-icon-trash" xlink:href="#afraid-icon-trash"></use></svg>Delete Selected</button>
                             </div>
                         </div>
                         <div class="table-responsive afraid-quota-table-wrap">
@@ -1662,8 +1687,8 @@
                         <div class="afraid-quota-pagination" id="afraidSubdomainPagination" hidden>
                             <span class="afraid-quota-page-status" id="afraidSubdomainPageStatus" aria-live="polite">Page 1 of 1</span>
                             <div class="btn-group btn-group-sm" role="group" aria-label="FreeDNS cleanup pages">
-                                <button class="btn btn-outline-secondary" id="btnPrevSubdomainPage" type="button"><i class="fas fa-chevron-left me-1"></i>Previous</button>
-                                <button class="btn btn-outline-secondary" id="btnNextSubdomainPage" type="button"><i class="fas fa-chevron-right me-1"></i>Next</button>
+                                <button class="btn btn-outline-secondary" id="btnPrevSubdomainPage" type="button"><svg class="afraid-svg-icon me-1" aria-hidden="true"><use href="#afraid-icon-chevron-left" xlink:href="#afraid-icon-chevron-left"></use></svg>Previous</button>
+                                <button class="btn btn-outline-secondary" id="btnNextSubdomainPage" type="button"><svg class="afraid-svg-icon me-1" aria-hidden="true"><use href="#afraid-icon-chevron-right" xlink:href="#afraid-icon-chevron-right"></use></svg>Next</button>
                             </div>
                         </div>
                     </div>
@@ -2206,7 +2231,7 @@ async function syncAfraidDomainsIfStale(force = false, options = {}) {
         if (status) status.textContent = force ? 'Refreshing FreeDNS registry...' : 'Checking registry freshness...';
         if (fetchButton && force) {
             fetchButton.disabled = true;
-            fetchButton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Syncing...';
+            fetchButton.innerHTML = '<svg class="afraid-svg-icon me-1 afraid-icon-spin" aria-hidden="true"><use href="#afraid-icon-rotate" xlink:href="#afraid-icon-rotate"></use></svg>Syncing...';
         }
         try {
             const res = await fetch('/api/afraid/fetch-domains', {
@@ -2231,7 +2256,7 @@ async function syncAfraidDomainsIfStale(force = false, options = {}) {
         } finally {
             if (fetchButton && force) {
                 fetchButton.disabled = false;
-                fetchButton.innerHTML = originalButtonHtml || '<i class="fas fa-rotate me-1"></i> Sync Registry';
+                fetchButton.innerHTML = originalButtonHtml || '<svg class="afraid-svg-icon me-1" aria-hidden="true"><use href="#afraid-icon-rotate" xlink:href="#afraid-icon-rotate"></use></svg>Sync Registry';
             }
         }
     })();
@@ -2288,9 +2313,9 @@ async function loadDomains() {
                     <td>
                         <div class="btn-group btn-group-sm">
                             ${d.used_this_month ? `<button class="btn btn-outline-primary" onclick="reactivateDomains(['${escapeHtml(d.domain_name)}'])" title="Reactivate">
-                                <i class="fas fa-rotate-left"></i></button>` : ''}
-                            <button class="btn btn-outline-danger" onclick="deleteDomain(${d.id})">
-                                <i class="fas fa-trash"></i></button>
+                                <svg class="afraid-svg-icon" aria-hidden="true"><use href="#afraid-icon-rotate" xlink:href="#afraid-icon-rotate"></use></svg></button>` : ''}
+                            <button class="btn btn-outline-danger" onclick="deleteDomain(${d.id})" title="Delete">
+                                <svg class="afraid-svg-icon" aria-hidden="true"><use href="#afraid-icon-trash" xlink:href="#afraid-icon-trash"></use></svg></button>
                         </div>
                     </td>`;
                 tbody.appendChild(tr);
@@ -2531,8 +2556,8 @@ function updateUsedDomainSelectAllState() {
     const checkboxes = [...document.querySelectorAll('#tldDomainList .reactivate-domain-check')];
     const allSelected = checkboxes.length > 0 && checkboxes.every(checkbox => checkbox.checked);
     button.innerHTML = allSelected
-        ? '<i class="fas fa-xmark me-1"></i>Clear Used Selection'
-        : '<i class="fas fa-check-double me-1"></i>Select All Used';
+        ? '<svg class="afraid-svg-icon me-1" aria-hidden="true"><use href="#afraid-icon-xmark" xlink:href="#afraid-icon-xmark"></use></svg>Clear Used Selection'
+        : '<svg class="afraid-svg-icon me-1" aria-hidden="true"><use href="#afraid-icon-check-double" xlink:href="#afraid-icon-check-double"></use></svg>Select All Used';
     button.classList.toggle('btn-secondary', allSelected);
     button.classList.toggle('btn-outline-secondary', !allSelected);
 }
@@ -2924,7 +2949,7 @@ async function deleteSelectedSubdomains() {
 async function startProcess() {
     const btn = document.getElementById('btnCreateCnameSubdomain');
     btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Preparing CNAME...';
+    btn.innerHTML = '<svg class="afraid-svg-icon me-1 afraid-icon-spin" aria-hidden="true"><use href="#afraid-icon-rotate" xlink:href="#afraid-icon-rotate"></use></svg>Preparing CNAME...';
     try {
         const selectedDomains = [...document.querySelectorAll('.tld-domain-check:checked')].map(el => el.value);
         const manualBaseDomains = getManualBaseDomains();
@@ -2933,7 +2958,7 @@ async function startProcess() {
         if (!freshness.success) {
             throw new Error(freshness.error || 'Could not verify FreeDNS registry freshness.');
         }
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Creating CNAME...';
+        btn.innerHTML = '<svg class="afraid-svg-icon me-1 afraid-icon-spin" aria-hidden="true"><use href="#afraid-icon-rotate" xlink:href="#afraid-icon-rotate"></use></svg>Creating CNAME...';
         const selectedDestination = document.getElementById('destinationInput').value.trim() || document.getElementById('cloudflareSelect').value;
         const destinations = selectedDestination ? [selectedDestination] : [];
         const manualSubdomains = getManualSubdomains();
@@ -2978,7 +3003,7 @@ async function startProcess() {
         showAlert('createAlert', escapeHtml(err.message || 'Process failed'), 'danger');
     } finally {
         btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-circle-plus me-1"></i> Create CNAME Subdomain';
+        btn.innerHTML = '<svg class="afraid-svg-icon me-1" aria-hidden="true"><use href="#afraid-icon-circle-plus" xlink:href="#afraid-icon-circle-plus"></use></svg>Create CNAME Subdomain';
     }
 }
 
@@ -4100,7 +4125,7 @@ async function loadUsedDomains() {
                 </td>
                 <td>
                     <button class="btn btn-sm btn-outline-primary" onclick="reactivateDomains(['${escapeHtml(domain.domain_name)}'])" title="Reactivate">
-                        <i class="fas fa-rotate-left"></i>
+                        <svg class="afraid-svg-icon" aria-hidden="true"><use href="#afraid-icon-rotate" xlink:href="#afraid-icon-rotate"></use></svg>
                     </button>
                 </td>`;
             tr.querySelector('.used-domain-status').addEventListener('change', updateUsedDomainStatus);
