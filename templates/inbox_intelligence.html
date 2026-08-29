@@ -7150,7 +7150,11 @@ merge_recipe_id, content_blueprint_id</pre>
             localStorage.setItem('ii_automated_last_test_id', data.test_id);
             if (status) status.textContent = data.message;
             await loadAutomatedTests(false);
-            pollAutomatedEmailTest(data.test_id, true, {background: true});
+            waitForTestSending(data.test_id, 'automatedStatusText')
+                .then(() => pollAutomatedEmailTest(data.test_id, true, {background: true}))
+                .catch((err) => {
+                    if (status) status.textContent = err.message;
+                });
         } catch (err) {
             if (status) status.textContent = err.message;
         } finally {
@@ -11214,18 +11218,19 @@ merge_recipe_id, content_blueprint_id</pre>
                 text_body: document.getElementById('studioTextInput')?.value || document.getElementById('testTextInput').value,
                 senders: selectedSenders,
                 recipient_emails: parseRecipientInput(),
-                inbox_account_ids: [...iiState.selectedInboxIds]
+                inbox_account_ids: [...iiState.selectedInboxIds],
+                async_send: true
             };
             const data = await iiFetch('/api/inbox-intelligence/tests', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(payload)
             });
-            status.textContent = `Test ${data.test_id} created. Sent ${data.sent}, failed ${data.failed}.`;
+            status.textContent = `Test ${data.test_id} queued with ${data.queued || 0} message(s). Sending in background.`;
             const studioStatus = document.getElementById('studioStatus');
             if (studioStatus) studioStatus.textContent = `Test ${data.test_id} created with selected API senders.`;
             await loadTests();
-            await pollDeliverabilityTest(data.test_id);
+            watchDeliverabilityTest(data.test_id);
         } catch (err) {
             status.textContent = err.message;
             const studioStatus = document.getElementById('studioStatus');
@@ -11281,10 +11286,25 @@ merge_recipe_id, content_blueprint_id</pre>
         }
     }
 
+    async function waitForTestSending(testId, statusElementId) {
+        const status = document.getElementById(statusElementId);
+        const maxAttempts = 1800;
+        for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+            const data = await iiFetch(`/api/inbox-intelligence/tests/${testId}`);
+            const test = data.test || {};
+            const active = ['QUEUED', 'SENDING'].includes(String(test.status || '').toUpperCase());
+            if (!active) return test;
+            if (status) status.textContent = `Test ${testId} is sending: ${test.sent_count || 0}/${test.total_messages || 0} sent; ${test.pending_count || 0} waiting.`;
+            await sleep(1500);
+        }
+        throw new Error(`Test ${testId} is still running in the background. Refresh the test history to follow it.`);
+    }
+
     async function pollUserInboxTest(testId) {
         const status = document.getElementById('userInboxTestStatus');
         const syncLabel = document.getElementById('userInboxLastSync');
         try {
+            await waitForTestSending(testId, 'userInboxTestStatus');
             setUserInboxSyncing(true, 'Syncing recent IMAP messages...');
             const dateRange = document.getElementById('userInboxDateFilter')?.value || '2d';
             const pollPayload = {sync_mode: 'targeted', recent_limit: 500, targeted_only: true, include_text_search: false, skip_deep_scan: false, date_range: dateRange, max_sync_seconds: 55, max_poll_attempts: 45};
@@ -11465,6 +11485,18 @@ merge_recipe_id, content_blueprint_id</pre>
         localStorage.setItem('ii_user_inbox_last_test_id', testId);
         status.textContent = `Loading analytics for ${testId}...`;
         await pollUserInboxTest(testId);
+    }
+
+    async function watchDeliverabilityTest(testId) {
+        const status = document.getElementById('testRunStatus');
+        try {
+            const test = await waitForTestSending(testId, 'testRunStatus');
+            if (status) status.textContent = `Test ${testId}: ${test.status || 'completed'} · ${test.sent_count || 0} sent, ${test.failed_count || 0} failed.`;
+            await loadTests();
+            await pollDeliverabilityTest(testId);
+        } catch (err) {
+            if (status) status.textContent = err.message;
+        }
     }
 
     async function pollDeliverabilityTest(testId) {

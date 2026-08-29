@@ -1742,6 +1742,7 @@
                 style="font-size: 16px; font-weight: 600; color: var(--color-fg-default); margin: 0 0 16px 0; display: flex; align-items: center; gap: 8px;">
                 <i class="fas fa-chart-bar" style="color: var(--color-accent-fg);"></i>
                 SMTP Test Results
+                <span id="smtp-progress-status" style="font-size: 12px; font-weight: 500; color: #6a737d;"></span>
             </h4>
             <div id="smtp-results-log" class="data-display" style="font-family: monospace; font-size: 13px;">
                 <div class="status-info">
@@ -2452,6 +2453,9 @@
         let selectedAccountFromList = null;
         let selectedAccountId = null;
         let smtpTesting = false;
+        let smtpTaskId = null;
+        let smtpPollTimer = null;
+        let smtpRenderedResults = 0;
         let selectedDomain = null;
 
         // Tab switching functionality - Make it globally accessible
@@ -9973,6 +9977,10 @@
         // Tab 4 Functions - SMTP & CSV
 
         function testSMTPCredentials() {
+            if (smtpTesting) {
+                alert('SMTP testing is already running.');
+                return;
+            }
             const credentials = document.getElementById('smtp-credentials').value.trim();
             const recipient = document.getElementById('smtp-recipient').value.trim();
             const server = document.getElementById('smtp-server').value.trim();
@@ -9998,8 +10006,9 @@
             const credentialLines = credentials.split('\n').filter(line => line.trim());
             logSMTPResult(`📊 Testing ${credentialLines.length} credentials...`);
 
-            // Use synchronous API call that returns all results at once
-            fetch('/api/test-smtp-sync', {
+            // Queue the work immediately. The server sends with bounded
+            // concurrency while this page only polls lightweight progress.
+            fetch('/api/test-smtp-fast', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -10011,25 +10020,13 @@
             })
                 .then(response => response.json())
                 .then(data => {
-                    smtpTesting = false;
-
-                    if (data.success) {
-                        const results = data.results || [];
-
-                        // Display each result
-                        results.forEach((result, i) => {
-                            if (result.status === 'success') {
-                                logSMTPResult(`✅ [${i + 1}/${results.length}] ${result.email}: Email sent successfully`);
-                            } else {
-                                logSMTPResult(`❌ [${i + 1}/${results.length}] ${result.email}: ${result.error}`);
-                            }
-                        });
-
-                        logSMTPResult('─'.repeat(50));
-                        logSMTPResult(`📈 Final Summary: ${data.success_count}/${data.total} credentials working`);
-                    } else {
+                    if (!data.success) {
+                        smtpTesting = false;
                         logSMTPResult(`❌ SMTP testing failed: ${data.error}`);
+                        return;
                     }
+                    smtpTaskId = data.task_id;
+                    pollSMTPProgress(smtpTaskId);
                 })
                 .catch(error => {
                     smtpTesting = false;
@@ -10038,19 +10035,66 @@
                 });
         }
 
-
-        function interruptSMTPTesting() {
-            if (smtpTesting) {
+        async function pollSMTPProgress(taskId) {
+            try {
+                const response = await fetch(`/api/smtp-progress/${taskId}`);
+                const data = await response.json();
+                if (!data.success) throw new Error(data.error || 'Could not read SMTP progress');
+                const progress = data.progress || {};
+                const results = progress.results || [];
+                const newResults = results.slice(smtpRenderedResults);
+                if (newResults.length) {
+                    const lines = newResults.map((result, index) => {
+                        const number = smtpRenderedResults + index + 1;
+                        return result.status === 'success'
+                            ? `✅ [${number}/${progress.total}] ${result.email}: Email sent successfully`
+                            : result.status === 'cancelled'
+                                ? `⏹️ [${number}/${progress.total}] ${result.email}: Stopped`
+                                : `❌ [${number}/${progress.total}] ${result.email}: ${result.error || 'Failed'}`;
+                    });
+                    const log = document.getElementById('smtp-results-log');
+                    log.textContent += `${lines.join('\n')}\n`;
+                    log.scrollTop = log.scrollHeight;
+                    smtpRenderedResults = results.length;
+                }
+                const statusLine = `⏳ SMTP progress: ${progress.progress || 0}/${progress.total || 0} tested · ${progress.success_count || 0} sent · ${progress.fail_count || 0} failed`;
+                document.getElementById('smtp-progress-status').textContent = statusLine;
+                if (['completed', 'stopped', 'error'].includes(progress.status)) {
+                    smtpTesting = false;
+                    smtpTaskId = null;
+                    document.getElementById('smtp-progress-status').textContent = progress.message || progress.status;
+                    logSMTPResult('─'.repeat(50));
+                    logSMTPResult(progress.status === 'completed'
+                        ? `📈 Final Summary: ${progress.success_count}/${progress.total} credentials working`
+                        : `📈 SMTP test ${progress.status}: ${progress.success_count} sent, ${progress.fail_count} failed`);
+                    return;
+                }
+                smtpPollTimer = setTimeout(() => pollSMTPProgress(taskId), 600);
+            } catch (error) {
                 smtpTesting = false;
-                logSMTPResult('⏹️ SMTP testing interrupted by user');
-                alert('SMTP testing interrupted');
+                smtpTaskId = null;
+                logSMTPResult(`❌ Progress error: ${error.message}`);
+            }
+        }
+
+
+        async function interruptSMTPTesting() {
+            if (smtpTesting && smtpTaskId) {
+                logSMTPResult('⏹️ Stop requested; active SMTP connections will finish safely...');
+                try {
+                    await fetch(`/api/test-smtp-fast/${smtpTaskId}/stop`, {method: 'POST'});
+                } catch (error) {
+                    logSMTPResult(`❌ Could not stop SMTP testing: ${error.message}`);
+                }
             } else {
                 alert('No SMTP testing in progress');
             }
         }
 
         function clearSMTPResults() {
+            smtpRenderedResults = 0;
             document.getElementById('smtp-results-log').textContent = '';
+            document.getElementById('smtp-progress-status').textContent = '';
         }
 
         function logSMTPResult(message) {

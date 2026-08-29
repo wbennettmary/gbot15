@@ -334,10 +334,14 @@
     }
 
     .afraid-process-shell .afraid-tld-group-button:hover,
-    .afraid-process-shell .afraid-tld-group-button[aria-pressed="true"] {
+    .afraid-process-shell .afraid-tld-group-button:has(input:checked) {
         background: #e8efff;
         border-color: #6d8ff5;
         box-shadow: 0 0 0 2px rgba(36, 87, 232, .12);
+    }
+
+    .afraid-process-shell .afraid-tld-group-button input {
+        flex: 0 0 auto;
     }
 
     .afraid-process-shell .afraid-tld-group-button .afraid-svg-icon {
@@ -1574,13 +1578,16 @@
                             <div class="form-text" id="manualSubdomainsCount">0 manual subdomains</div>
                         </div>
                         <div class="mb-3">
-                            <label for="tldGroupSearchInput" class="form-label fw-semibold">Select FreeDNS TLD Group</label>
+                            <label for="tldGroupSearchInput" class="form-label fw-semibold">Choose FreeDNS TLD Groups</label>
                             <div class="afraid-tld-group-search-panel mb-2">
                                 <div class="afraid-tld-group-search-header">
                                     <div>
-                                        <div class="small fw-bold text-dark">Search groups, then select domains below</div>
-                                        <div class="form-text mt-0">Switch between groups to build one combined selection, such as domains from both <strong>.com</strong> and <strong>.net</strong>.</div>
+                                        <div class="small fw-bold text-dark">Select the groups to fetch</div>
+                                        <div class="form-text mt-0">Choose one or more groups, such as <strong>.com</strong>, <strong>.net</strong>, and <strong>.ca</strong>. Only those groups will be fetched.</div>
                                     </div>
+                                    <button type="button" class="btn btn-sm btn-primary" id="btnLoadSelectedTldGroups">
+                                        <svg class="afraid-svg-icon me-1" aria-hidden="true"><use href="#afraid-icon-check-double" xlink:href="#afraid-icon-check-double"></use></svg>Load selected groups
+                                    </button>
                                 </div>
                                 <div class="input-group input-group-sm">
                                     <span class="input-group-text"><svg class="afraid-svg-icon" aria-hidden="true"><use href="#afraid-icon-search" xlink:href="#afraid-icon-search"></use></svg></span>
@@ -1592,14 +1599,13 @@
                                 <div id="tldGroupSearchResults" class="afraid-tld-group-search-results mt-2" aria-live="polite">
                                     <div class="text-muted small">Loading TLD groups...</div>
                                 </div>
+                                <div class="form-text mt-2" id="tldGroupSearchStatus" aria-live="polite">No groups selected. Select groups, then load their domains.</div>
                             </div>
+                            <select class="d-none" id="tldSelect" aria-hidden="true" tabindex="-1">
+                                <option value="">All TLDs</option>
+                            </select>
                             <div class="row g-2">
-                                <div class="col-lg-5">
-                                    <select class="form-select" id="tldSelect">
-                                        <option value="">All TLDs</option>
-                                    </select>
-                                </div>
-                                <div class="col-lg-7">
+                                <div class="col-12">
                                     <div class="input-group">
                                         <input type="text" class="form-control" id="domainSearchInput" placeholder="Search cached domain, e.g. 1000pizzas.com">
                                         <button class="btn btn-outline-primary" type="button" id="btnSearchDomainGroup">
@@ -1612,7 +1618,7 @@
                         </div>
                         <div class="row g-3 mb-3 align-items-stretch">
                             <div class="col-lg-6">
-                                <label class="form-label fw-semibold">Domains In Selected TLD</label>
+                                <label class="form-label fw-semibold">Domains In Selected TLD Groups</label>
                                 <div class="afraid-domain-selection-actions mb-2">
                                     <div class="small text-muted">Available domains are used for creation. Used domains can be reactivated here.</div>
                                     <div class="afraid-domain-count-row">
@@ -2132,14 +2138,6 @@ document.addEventListener('DOMContentLoaded', function() {
         syncAfraidDomainsIfStale(false);
     }, 60 * 60 * 1000);
 
-    document.getElementById('tldSelect').addEventListener('change', () => {
-        window.afraidDomainPage = 1;
-        window.afraidHighlightedDomain = '';
-        loadDomains();
-        loadDomainOptions();
-        loadSelectedTldDomains();
-        renderTldGroupSearch(afraidTldGroups, document.getElementById('tldGroupSearchInput')?.value || '');
-    });
     document.getElementById('tldGroupSearchInput').addEventListener('input', (event) => {
         const query = event.target.value;
         document.getElementById('btnClearTldGroupSearch').hidden = !query;
@@ -2152,6 +2150,7 @@ document.addEventListener('DOMContentLoaded', function() {
         renderTldGroupSearch(afraidTldGroups);
         input.focus();
     });
+    document.getElementById('btnLoadSelectedTldGroups').addEventListener('click', () => loadSelectedTldDomains());
     document.getElementById('btnSearchDomainGroup').addEventListener('click', searchDomainGroup);
     document.getElementById('domainSearchInput').addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
@@ -2319,6 +2318,7 @@ document.addEventListener('DOMContentLoaded', function() {
 let afraidDomainSyncPromise = null;
 let afraidSelectedRegistryDomains = new Set();
 let afraidTldGroups = [];
+let afraidSelectedTldGroups = new Set();
 
 async function syncAfraidDomainsIfStale(force = false, options = {}) {
     if (afraidDomainSyncPromise) return afraidDomainSyncPromise;
@@ -2428,18 +2428,6 @@ async function loadDomains() {
     }
 }
 
-async function loadDomainOptions() {
-    try {
-        const tld = document.getElementById('tldSelect')?.value || '';
-        const params = new URLSearchParams({limit: 1000});
-        if (tld) params.set('tld', tld);
-        const res = await fetch('/api/afraid/domain-options?' + params.toString());
-        await parseJsonResponse(res);
-    } catch (err) {
-        console.error('Error loading domain options', err);
-    }
-}
-
 function changeDomainPage(delta) {
     window.afraidDomainPage = Math.max(1, (window.afraidDomainPage || 1) + delta);
     loadDomains();
@@ -2457,6 +2445,8 @@ async function loadTlds() {
         if (aiSelect) aiSelect.innerHTML = '<option value="">All TLDs</option>';
         if (data.success) {
             afraidTldGroups = Array.isArray(data.tlds) ? data.tlds : [];
+            const availableTlds = new Set(afraidTldGroups.map(item => String(item.tld || '').trim().toLowerCase()));
+            afraidSelectedTldGroups = new Set([...afraidSelectedTldGroups].filter(tld => availableTlds.has(tld)));
             afraidTldGroups.forEach(item => {
                 const opt = document.createElement('option');
                 opt.value = item.tld;
@@ -2467,24 +2457,11 @@ async function loadTlds() {
             select.value = current;
             if (aiSelect) aiSelect.value = aiCurrent;
             renderTldGroupSearch(afraidTldGroups, document.getElementById('tldGroupSearchInput')?.value || '');
-            loadDomainOptions();
             loadSelectedTldDomains();
         }
     } catch (err) {
         console.error('Error loading TLD groups', err);
     }
-}
-
-function selectTldGroup(tld) {
-    const select = document.getElementById('tldSelect');
-    if (!select) return;
-    select.value = tld;
-    window.afraidDomainPage = 1;
-    window.afraidHighlightedDomain = '';
-    loadDomains();
-    loadDomainOptions();
-    loadSelectedTldDomains();
-    renderTldGroupSearch(afraidTldGroups, document.getElementById('tldGroupSearchInput')?.value || '');
 }
 
 function renderTldGroupSearch(tlds, query = '') {
@@ -2497,39 +2474,75 @@ function renderTldGroupSearch(tlds, query = '') {
         results.innerHTML = '<div class="text-muted small">No matching TLD groups.</div>';
         return;
     }
-    const selectedTld = document.getElementById('tldSelect')?.value || '';
     matches.forEach(item => {
         const tld = String(item.tld || '').trim().toLowerCase();
         if (!tld) return;
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'afraid-tld-group-button';
-        button.dataset.tld = tld;
-        button.setAttribute('aria-pressed', tld === selectedTld ? 'true' : 'false');
-        button.innerHTML = `<svg class="afraid-svg-icon" aria-hidden="true"><use href="#afraid-icon-tags" xlink:href="#afraid-icon-tags"></use></svg>
-            <span class="afraid-tld-group-name">.${escapeHtml(tld)}<small>${Number(item.available || 0)} available · click to browse</small></span>`;
-        button.addEventListener('click', () => selectTldGroup(tld));
-        results.appendChild(button);
+        const option = document.createElement('label');
+        option.className = 'afraid-tld-group-button';
+        option.innerHTML = `<input class="form-check-input mt-0" type="checkbox" value="${escapeHtml(tld)}"${afraidSelectedTldGroups.has(tld) ? ' checked' : ''} aria-label="Include .${escapeHtml(tld)} domains">
+            <svg class="afraid-svg-icon" aria-hidden="true"><use href="#afraid-icon-tags" xlink:href="#afraid-icon-tags"></use></svg>
+            <span class="afraid-tld-group-name">.${escapeHtml(tld)}<small>${Number(item.available || 0)} available</small></span>`;
+        option.querySelector('input').addEventListener('change', (event) => {
+            if (event.target.checked) afraidSelectedTldGroups.add(tld);
+            else afraidSelectedTldGroups.delete(tld);
+            updateTldGroupSelectionStatus();
+        });
+        results.appendChild(option);
     });
+}
+
+function updateTldGroupSelectionStatus(message = '') {
+    const status = document.getElementById('tldGroupSearchStatus');
+    if (!status) return;
+    const selected = [...afraidSelectedTldGroups].map(tld => `.${tld}`);
+    status.textContent = message || (selected.length
+        ? `${selected.length} group${selected.length === 1 ? '' : 's'} selected: ${selected.join(', ')}. Click Load selected groups.`
+        : 'No groups selected. Select groups, then load their domains.');
 }
 
 async function loadSelectedTldDomains(options = {}) {
     const requestToken = (window.afraidTldDomainsRequestToken || 0) + 1;
     window.afraidTldDomainsRequestToken = requestToken;
+    const selectedTlds = [...afraidSelectedTldGroups];
+    const legacyTldSelect = document.getElementById('tldSelect');
+    if (legacyTldSelect) legacyTldSelect.value = selectedTlds.length === 1 ? selectedTlds[0] : '';
+    const status = document.getElementById('tldGroupSearchStatus');
+    const button = document.getElementById('btnLoadSelectedTldGroups');
+    const originalButtonHtml = button?.innerHTML || '';
+    if (!selectedTlds.length) {
+        renderSelectedTldDomains([], false);
+        updateTldGroupSelectionStatus('No groups selected. Select one or more groups before loading domains.');
+        return;
+    }
+    if (button) {
+        button.disabled = true;
+        button.innerHTML = '<svg class="afraid-svg-icon me-1 afraid-icon-spin" aria-hidden="true"><use href="#afraid-icon-rotate" xlink:href="#afraid-icon-rotate"></use></svg>Loading groups...';
+    }
+    if (status) status.textContent = `Fetching domains from ${selectedTlds.map(tld => `.${tld}`).join(', ')} only...`;
     try {
-        const tld = document.getElementById('tldSelect')?.value || '';
-        const params = new URLSearchParams({limit: 5000, include_used: 'true'});
-        if (tld) params.set('tld', tld);
         const analyticsTags = getAfraidDomainAnalyticsFilter();
-        if (analyticsTags.length) params.set('analytics_tag', analyticsTags.join(','));
-        const res = await fetch('/api/afraid/domain-options?' + params.toString());
-        const data = await parseJsonResponse(res);
+        const responses = await Promise.all(selectedTlds.map(async tld => {
+            const params = new URLSearchParams({limit: 5000, include_used: 'true', tld});
+            if (analyticsTags.length) params.set('analytics_tag', analyticsTags.join(','));
+            const res = await fetch('/api/afraid/domain-options?' + params.toString());
+            const data = await parseJsonResponse(res);
+            if (!data.success) throw new Error(data.error || `Could not load .${tld} domains.`);
+            return (data.domains || []).map(domain => ({...domain, tld}));
+        }));
         if (requestToken !== window.afraidTldDomainsRequestToken) return;
         const activeFilters = getAfraidDomainAnalyticsFilter();
-        renderSelectedTldDomains(data.domains || [], activeFilters.length > 0);
+        const domains = [...new Map(responses.flat().map(domain => [domain.domain_name, domain])).values()];
+        renderSelectedTldDomains(domains, activeFilters.length > 0);
+        updateTldGroupSelectionStatus(`Loaded ${domains.length} domain${domains.length === 1 ? '' : 's'} from ${selectedTlds.map(tld => `.${tld}`).join(', ')} only.`);
         if (options.autoSelect) selectDomainsDescending({includeUsed: activeFilters.length > 0});
     } catch (err) {
         console.error('Error loading selected TLD domains', err);
+        updateTldGroupSelectionStatus(err.message || 'Could not load the selected TLD groups.');
+    } finally {
+        if (button && requestToken === window.afraidTldDomainsRequestToken) {
+            button.disabled = false;
+            button.innerHTML = originalButtonHtml || '<svg class="afraid-svg-icon me-1" aria-hidden="true"><use href="#afraid-icon-check-double" xlink:href="#afraid-icon-check-double"></use></svg>Load selected groups';
+        }
     }
 }
 
@@ -2578,12 +2591,13 @@ async function searchDomainGroup() {
             return;
         }
         window.afraidHighlightedDomain = data.domain.domain_name;
-        document.getElementById('tldSelect').value = data.domain.tld || '';
+        const foundTld = String(data.domain.tld || '').trim().toLowerCase();
+        if (foundTld) afraidSelectedTldGroups.add(foundTld);
         window.afraidDomainPage = 1;
         status.textContent = `Found ${data.domain.domain_name} in .${data.domain.tld || ''}.`;
         status.className = 'form-text text-success';
         renderTldGroupSearch(afraidTldGroups, document.getElementById('tldGroupSearchInput')?.value || '');
-        loadDomains();
+        updateTldGroupSelectionStatus(`Added .${foundTld} to the selected groups. Loading its domains...`);
         loadSelectedTldDomains();
     } catch (err) {
         status.textContent = err.message || 'Search failed.';
@@ -2596,7 +2610,7 @@ function renderSelectedTldDomains(domains, showAnalyticsTags = false) {
     list.innerHTML = '';
     const usedNow = new Set(window.afraidUsedBaseDomains || []);
     if (!domains || !domains.length) {
-        list.innerHTML = '<div class="text-muted small">No available public domains for this TLD. Used domains return next month.</div>';
+        list.innerHTML = '<div class="text-muted small">No domains loaded. Select one or more TLD groups above, then click “Load selected groups”.</div>';
         return;
     }
     domains.forEach(item => {

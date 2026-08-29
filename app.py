@@ -58,6 +58,14 @@ if not os.path.exists(PROGRESS_DIR):
     except:
         pass
 
+# SMTP credential tests are kept in memory while their bounded worker pool
+# runs.  The previous UI called the synchronous endpoint, which held the
+# browser request open for every credential and could time out on larger
+# lists.
+progress_lock = threading.RLock()
+progress_tracker = {}
+smtp_stop_events = {}
+
 def get_task_file(task_id):
     # Sanitize task_id just in case
     safe_id = "".join(x for x in str(task_id) if x.isalnum() or x in "-_")
@@ -3107,19 +3115,30 @@ def _send_automated_test_messages_async(test_id, senders, custom_headers='', cus
                     'test_identifier': row.test_identifier,
                     'custom_headers': headers,
                 })
-        results.update(_send_test_payloads_concurrently(payloads))
+        row_by_id = {row.id: row for row in rows}
+        processed_row_ids = set()
+        progress_count = 0
+
+        def persist_send_progress(row_id, result):
+            nonlocal progress_count
+            row = row_by_id.get(row_id)
+            if not row or row_id in processed_row_ids:
+                return
+            _apply_test_send_result(row, result)
+            processed_row_ids.add(row_id)
+            progress_count += 1
+            if progress_count % 25 == 0 or progress_count == len(payloads):
+                test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
+                if test:
+                    _refresh_deliverability_counts(test)
+                db.session.commit()
+
+        results.update(_send_test_payloads_concurrently(payloads, on_result=persist_send_progress))
         for row_index, row in enumerate(rows, 1):
-            result = results.get(row.id) or {'provider_id': None, 'error': 'No send result returned.'}
-            if result.get('error'):
-                row.status = 'FAILED'
-                row.placement = 'FAILED'
-                row.error_message = result['error']
-            else:
-                row.provider_message_id = result['provider_id']
-                row.sent_at = datetime.utcnow()
-                row.status = 'WAITING_FOR_DELIVERY'
-                row.placement = 'PENDING'
-            if row_index % 10 == 0 or row_index == len(rows):
+            if row.id not in processed_row_ids:
+                result = results.get(row.id) or {'provider_id': None, 'error': 'No send result returned.'}
+                _apply_test_send_result(row, result)
+            if row_index % 25 == 0 or row_index == len(rows):
                 test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
                 if test:
                     _refresh_deliverability_counts(test)
@@ -3821,31 +3840,58 @@ def _send_test_email_gmail_api(service_account_id, sender, recipient, subject, h
     result = gmail.users().messages().send(userId='me', body={'raw': raw}).execute()
     return result.get('id') or fallback_message_id
 
-def _send_test_payloads_concurrently(payloads, max_workers=4):
-    """Send prepared test payloads with bounded, thread-local Gmail clients."""
+def _send_test_payloads_concurrently(payloads, max_workers=None, on_result=None):
+    """Send prepared test payloads concurrently with bounded Gmail clients.
+
+    The send operation is network-bound. Keep the pool bounded so a large test
+    does not exhaust the web process, while allowing large batches to make
+    progress without serial request/response handling. Transient Gmail/API
+    throttles are retried in the worker before a row is marked failed.
+    """
     if not payloads:
         return {}
     service_cache = threading.local()
 
     def send_one(payload):
-        try:
-            provider_id = _send_test_email_gmail_api(
-                payload['service_account_id'], payload['sender'], payload['recipient'],
-                payload['subject'], payload['html_body'], payload['text_body'],
-                payload['test_identifier'], payload.get('custom_headers'),
-                payload.get('sender_name'), payload.get('service_account_json'), service_cache
-            )
-            return payload['row_id'], provider_id, None
-        except Exception as exc:
-            return payload['row_id'], None, str(exc)
+        last_error = None
+        for attempt in range(4):
+            try:
+                provider_id = _send_test_email_gmail_api(
+                    payload['service_account_id'], payload['sender'], payload['recipient'],
+                    payload['subject'], payload['html_body'], payload['text_body'],
+                    payload['test_identifier'], payload.get('custom_headers'),
+                    payload.get('sender_name'), payload.get('service_account_json'), service_cache
+                )
+                return payload['row_id'], provider_id, None
+            except Exception as exc:
+                last_error = exc
+                response = getattr(exc, 'resp', None)
+                status_code = getattr(response, 'status', None)
+                retryable = status_code in {429, 500, 502, 503, 504}
+                if not retryable or attempt >= 3:
+                    break
+                time.sleep(0.5 * (2 ** attempt))
+        return payload['row_id'], None, str(last_error or 'Message send failed.')
 
-    workers = max(1, min(int(max_workers or 4), 8, len(payloads)))
+    configured_workers = max_workers
+    if configured_workers is None:
+        try:
+            configured_workers = int(os.environ.get('INBOX_SEND_WORKERS', '16'))
+        except (TypeError, ValueError):
+            configured_workers = 16
+    workers = max(1, min(int(configured_workers), 32, len(payloads)))
     results = {}
     with ThreadPoolExecutor(max_workers=workers) as executor:
         futures = [executor.submit(send_one, payload) for payload in payloads]
         for future in as_completed(futures):
             row_id, provider_id, error = future.result()
-            results[row_id] = {'provider_id': provider_id, 'error': error}
+            result = {'provider_id': provider_id, 'error': error}
+            results[row_id] = result
+            if on_result:
+                try:
+                    on_result(row_id, result)
+                except Exception:
+                    logging.getLogger(__name__).warning('Send progress callback failed for row %s', row_id, exc_info=True)
     return results
 
 def _refresh_deliverability_counts(test, preserve_stopped=True):
@@ -3872,6 +3918,23 @@ def _refresh_deliverability_counts(test, preserve_stopped=True):
     else:
         test.status = 'CHECKING_INBOX'
     return queued
+
+
+def _apply_test_send_result(row, result):
+    """Persist one completed send without waiting for the whole batch."""
+    if result.get('error'):
+        row.status = 'FAILED'
+        row.placement = 'FAILED'
+        row.error_message = result['error']
+        return
+    row.provider_message_id = result['provider_id']
+    row.sent_at = datetime.utcnow()
+    if row.imap_account_id:
+        row.status = 'WAITING_FOR_DELIVERY'
+        row.placement = 'PENDING'
+    else:
+        row.status = 'SENT_EXTERNAL'
+        row.placement = 'UNOBSERVED'
 
 def _mark_stale_missing_observations(test, max_observation_minutes=30):
     """Stop auto-polling old tests by converting long-pending rows to missing."""
@@ -3948,23 +4011,30 @@ def _send_deliverability_test_messages_async(test_id, senders, subject, html_bod
                     'test_identifier': row.test_identifier,
                     'custom_headers': custom_headers,
                 })
-        results.update(_send_test_payloads_concurrently(payloads))
+        row_by_id = {row.id: row for row in rows}
+        processed_row_ids = set()
+        progress_count = 0
+
+        def persist_send_progress(row_id, result):
+            nonlocal progress_count
+            row = row_by_id.get(row_id)
+            if not row or row_id in processed_row_ids:
+                return
+            _apply_test_send_result(row, result)
+            processed_row_ids.add(row_id)
+            progress_count += 1
+            if progress_count % 25 == 0 or progress_count == len(payloads):
+                test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
+                if test:
+                    _refresh_deliverability_counts(test)
+                db.session.commit()
+
+        results.update(_send_test_payloads_concurrently(payloads, on_result=persist_send_progress))
         for row_index, row in enumerate(rows, 1):
-            result = results.get(row.id) or {'provider_id': None, 'error': 'No send result returned.'}
-            if result.get('error'):
-                row.status = 'FAILED'
-                row.placement = 'FAILED'
-                row.error_message = result['error']
-            else:
-                row.provider_message_id = result['provider_id']
-                row.sent_at = datetime.utcnow()
-                if row.imap_account_id:
-                    row.status = 'WAITING_FOR_DELIVERY'
-                    row.placement = 'PENDING'
-                else:
-                    row.status = 'SENT_EXTERNAL'
-                    row.placement = 'UNOBSERVED'
-            if row_index % 10 == 0 or row_index == len(rows):
+            if row.id not in processed_row_ids:
+                result = results.get(row.id) or {'provider_id': None, 'error': 'No send result returned.'}
+                _apply_test_send_result(row, result)
+            if row_index % 25 == 0 or row_index == len(rows):
                 test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
                 if test:
                     _refresh_deliverability_counts(test)
@@ -3974,6 +4044,31 @@ def _send_deliverability_test_messages_async(test_id, senders, subject, html_bod
             _refresh_deliverability_counts(test)
             db.session.commit()
         db.session.remove()
+
+
+def _run_send_worker(test_id, worker, worker_args):
+    """Keep an unexpected sender-worker crash visible and recoverable."""
+    try:
+        worker(*worker_args)
+    except Exception as exc:
+        app.logger.error('[SEND WORKER] %s failed: %s', test_id, exc, exc_info=True)
+        with app.app_context():
+            try:
+                test = InboxDeliverabilityTest.query.filter_by(test_id=test_id).first()
+                queued_rows = InboxDeliverabilityMessage.query.filter_by(test_id=test_id, status='QUEUED').all()
+                for row in queued_rows:
+                    row.status = 'FAILED'
+                    row.placement = 'FAILED'
+                    row.error_message = f'Send worker stopped unexpectedly: {exc}'[:1000]
+                if test:
+                    _refresh_deliverability_counts(test)
+                    if queued_rows:
+                        test.status = 'PARTIAL' if test.sent_count else 'FAILED'
+                        test.completed_at = datetime.utcnow()
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                app.logger.error('[SEND WORKER] Could not persist recovery for %s', test_id, exc_info=True)
 
 def _automated_test_date_bounds(date_filter, custom_start=None, custom_end=None):
     today = datetime.utcnow().date()
@@ -4143,6 +4238,10 @@ def api_inbox_tests():
         recipient_targets = [{'email': inbox.email.lower(), 'imap_account_id': inbox.id} for inbox in inboxes]
     if not recipient_targets:
         return jsonify({'success': False, 'error': 'No valid recipients selected'}), 400
+    # Keep medium and large batches out of the request/response path even when
+    # an older client does not send async_send. The UI must stay responsive and
+    # the sender worker can commit progress while messages finish.
+    async_send = async_send or (len(senders) * len(recipient_targets) >= 10)
     test_id = f"DLV-{uuid.uuid4().hex[:8].upper()}"
     test = InboxDeliverabilityTest(
         test_id=test_id,
@@ -4172,7 +4271,6 @@ def api_inbox_tests():
                 stored_imap_id = 0
             row = InboxDeliverabilityMessage(test_id=test_id, workspace_sender=sender, workspace_account_email=sender_info.get('service_account_admin_email') or '', imap_account_id=stored_imap_id, recipient=recipient_info['email'], test_identifier=identifier, subject=subject, status='QUEUED', placement='PENDING')
             db.session.add(row)
-            db.session.flush()
             if async_send:
                 continue
             try:
@@ -4197,8 +4295,8 @@ def api_inbox_tests():
     db.session.commit()
     if async_send:
         threading.Thread(
-            target=_send_deliverability_test_messages_async,
-            args=(test_id, senders, subject, html_body, text_body, custom_headers),
+            target=_run_send_worker,
+            args=(test_id, _send_deliverability_test_messages_async, (test_id, senders, subject, html_body, text_body, custom_headers)),
             daemon=True
         ).start()
         return jsonify({'success': True, 'test_id': test_id, 'message': 'Deliverability test queued. Sending continues in the background.', 'sent': 0, 'failed': 0, 'queued': test.total_messages, 'senders': senders})
@@ -4547,8 +4645,8 @@ def api_inbox_automated_tests():
     test.total_messages = rows_created
     db.session.commit()
     threading.Thread(
-        target=_send_automated_test_messages_async,
-        args=(test_id, senders, custom_headers, custom_subject, custom_html_body, custom_text_body),
+        target=_run_send_worker,
+        args=(test_id, _send_automated_test_messages_async, (test_id, senders, custom_headers, custom_subject, custom_html_body, custom_text_body)),
         daemon=True
     ).start()
     return jsonify({
@@ -15936,6 +16034,118 @@ def get_smtp_progress(task_id):
     except Exception as e:
         app.logger.error(f"Error getting SMTP progress: {e}")
         return jsonify({'success': False, 'error': str(e)})
+
+
+@app.route('/api/test-smtp-fast', methods=['POST'])
+@login_required
+def test_smtp_credentials_fast():
+    """Run SMTP credential tests in a bounded background pool."""
+    if session.get('role') not in ['admin', 'mailer', 'support']:
+        return jsonify({'success': False, 'error': 'Access denied. Valid user role required.'})
+    try:
+        data = request.get_json(silent=True) or {}
+        credentials_lines = [line.strip() for line in str(data.get('credentials') or '').splitlines() if line.strip()]
+        recipient_email = str(data.get('recipient_email') or '').strip()
+        smtp_server = str(data.get('smtp_server') or 'smtp.gmail.com').strip()
+        smtp_port = int(data.get('smtp_port') or 587)
+        if not credentials_lines:
+            return jsonify({'success': False, 'error': 'No credentials provided'})
+        if '@' not in recipient_email:
+            return jsonify({'success': False, 'error': 'Invalid recipient email'})
+
+        task_id = str(uuid.uuid4())
+        stop_event = threading.Event()
+        with progress_lock:
+            progress_tracker[task_id] = {
+                'status': 'running', 'progress': 0, 'total': len(credentials_lines),
+                'current_email': '', 'message': 'Starting SMTP testing...', 'results': [],
+                'success_count': 0, 'fail_count': 0, 'timestamp': datetime.now().isoformat()
+            }
+            smtp_stop_events[task_id] = stop_event
+
+        def test_one(line):
+            if ':' not in line:
+                return {'email': line, 'status': 'error', 'error': 'Invalid format - use email:password'}
+            email, password = [part.strip() for part in line.split(':', 1)]
+            if not email or not password:
+                return {'email': email or 'unknown', 'status': 'error', 'error': 'Empty email or password'}
+            if stop_event.is_set():
+                return {'email': email, 'status': 'cancelled', 'error': 'Stopped by user'}
+            msg = MIMEMultipart()
+            msg['From'], msg['To'] = email, recipient_email
+            msg['Subject'] = f'SMTP Test from {email}'
+            msg.attach(MIMEText(f'This is a test email sent from {email} using the GBot SMTP tester.\n', 'plain'))
+            try:
+                with smtplib.SMTP(smtp_server, smtp_port, timeout=15) as server:
+                    server.starttls()
+                    server.login(email, password)
+                    server.send_message(msg)
+                return {'email': email, 'status': 'success', 'message': f'Email sent to {recipient_email}'}
+            except smtplib.SMTPAuthenticationError:
+                return {'email': email, 'status': 'error', 'error': 'Authentication failed - check password'}
+            except smtplib.SMTPException as exc:
+                return {'email': email, 'status': 'error', 'error': f'SMTP error: {exc}'}
+            except Exception as exc:
+                return {'email': email, 'status': 'error', 'error': f'Network error: {exc}'}
+
+        def worker():
+            try:
+                try:
+                    configured_workers = int(os.environ.get('SMTP_TEST_WORKERS', '16'))
+                except (TypeError, ValueError):
+                    configured_workers = 16
+                workers = max(1, min(configured_workers, 32, len(credentials_lines)))
+                with ThreadPoolExecutor(max_workers=workers) as executor:
+                    futures = [executor.submit(test_one, line) for line in credentials_lines]
+                    for future in as_completed(futures):
+                        result = future.result()
+                        with progress_lock:
+                            task = progress_tracker.get(task_id)
+                            if not task:
+                                return
+                            task['progress'] += 1
+                            task['current_email'] = result.get('email', '')
+                            task['results'].append(result)
+                            if result['status'] == 'success':
+                                task['success_count'] += 1
+                            elif result['status'] != 'cancelled':
+                                task['fail_count'] += 1
+                            task['message'] = f"Tested {task['progress']}/{task['total']} credentials"
+                with progress_lock:
+                    task = progress_tracker.get(task_id)
+                    if task:
+                        task['status'] = 'stopped' if stop_event.is_set() else 'completed'
+                        task['message'] = 'SMTP testing stopped by user' if stop_event.is_set() else 'SMTP testing completed'
+            except Exception as exc:
+                app.logger.error('[SMTP] Fast worker failed for %s: %s', task_id, exc, exc_info=True)
+                with progress_lock:
+                    task = progress_tracker.get(task_id)
+                    if task:
+                        task['status'] = 'error'
+                        task['message'] = f'Error: {exc}'
+            finally:
+                with progress_lock:
+                    smtp_stop_events.pop(task_id, None)
+
+        threading.Thread(target=worker, daemon=True).start()
+        return jsonify({'success': True, 'task_id': task_id, 'message': f'SMTP testing started for {len(credentials_lines)} credential(s)'})
+    except Exception as exc:
+        app.logger.error(f'Error starting fast SMTP testing: {exc}')
+        return jsonify({'success': False, 'error': f'Server error: {exc}'})
+
+
+@app.route('/api/test-smtp-fast/<task_id>/stop', methods=['POST'])
+@login_required
+def stop_smtp_credentials_fast(task_id):
+    with progress_lock:
+        task = progress_tracker.get(task_id)
+        if not task:
+            return jsonify({'success': False, 'error': 'Task not found or expired'}), 404
+        stop_event = smtp_stop_events.get(task_id)
+        if stop_event:
+            stop_event.set()
+        task['message'] = 'Stopping SMTP testing...'
+    return jsonify({'success': True, 'message': 'Stop requested'})
 
 
 @app.route('/api/test-simple-mega', methods=['POST'])
