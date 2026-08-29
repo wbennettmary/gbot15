@@ -293,7 +293,7 @@
         min-height: 32px;
     }
 
-    .afraid-process-shell .afraid-tld-quota-panel {
+    .afraid-process-shell .afraid-tld-group-search-panel {
         background: #e4ebf7;
         border: 1px solid #c8d4e6;
         border-radius: 14px;
@@ -301,7 +301,7 @@
         padding: 10px;
     }
 
-    .afraid-process-shell .afraid-tld-quota-header {
+    .afraid-process-shell .afraid-tld-group-search-header {
         align-items: center;
         display: flex;
         gap: 10px;
@@ -309,58 +309,54 @@
         margin-bottom: 8px;
     }
 
-    .afraid-process-shell .afraid-tld-quota-grid {
+    .afraid-process-shell .afraid-tld-group-search-results {
         display: grid;
         gap: 7px;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        max-height: 190px;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        max-height: 156px;
         overflow-y: auto;
         padding: 2px;
     }
 
-    .afraid-process-shell .afraid-tld-quota-item {
+    .afraid-process-shell .afraid-tld-group-button {
         align-items: center;
         background: #f4f7fc;
         border: 1px solid #c6d2e2;
         border-radius: 9px;
+        color: #263750;
         display: flex;
         gap: 7px;
-        justify-content: space-between;
-        padding: 5px 7px;
+        justify-content: flex-start;
+        min-height: 42px;
+        padding: 6px 8px;
+        text-align: left;
+        transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
     }
 
-    .afraid-process-shell .afraid-tld-quota-item label {
-        color: #263750;
+    .afraid-process-shell .afraid-tld-group-button:hover,
+    .afraid-process-shell .afraid-tld-group-button[aria-pressed="true"] {
+        background: #e8efff;
+        border-color: #6d8ff5;
+        box-shadow: 0 0 0 2px rgba(36, 87, 232, .12);
+    }
+
+    .afraid-process-shell .afraid-tld-group-button .afraid-svg-icon {
+        color: #3565d4;
+        flex: 0 0 auto;
+    }
+
+    .afraid-process-shell .afraid-tld-group-button .afraid-tld-group-name {
         font-size: .78rem;
-        font-weight: 800;
-        margin: 0;
+        font-weight: 900;
         min-width: 0;
     }
 
-    .afraid-process-shell .afraid-tld-quota-item small {
+    .afraid-process-shell .afraid-tld-group-button small {
         color: #53627a;
         display: block;
         font-size: .66rem;
         font-weight: 600;
-    }
-
-    .afraid-process-shell .afraid-tld-quota-item input {
-        background: #fff;
-        border: 1px solid #b7c5d8;
-        border-radius: 7px;
-        color: #1e2d44;
-        font-size: .8rem;
-        font-weight: 800;
-        min-height: 30px;
-        padding: 3px 5px;
-        text-align: center;
-        width: 54px;
-    }
-
-    .afraid-process-shell .afraid-tld-quota-item input:focus {
-        border-color: #6d8ff5;
-        box-shadow: 0 0 0 2px rgba(36, 87, 232, .16);
-        outline: 0;
+        white-space: nowrap;
     }
 
     .afraid-process-shell .afraid-domain-filter-controls {
@@ -1578,7 +1574,25 @@
                             <div class="form-text" id="manualSubdomainsCount">0 manual subdomains</div>
                         </div>
                         <div class="mb-3">
-                            <label for="tldSelect" class="form-label fw-semibold">Browse FreeDNS TLD Group</label>
+                            <label for="tldGroupSearchInput" class="form-label fw-semibold">Select FreeDNS TLD Group</label>
+                            <div class="afraid-tld-group-search-panel mb-2">
+                                <div class="afraid-tld-group-search-header">
+                                    <div>
+                                        <div class="small fw-bold text-dark">Search groups, then select domains below</div>
+                                        <div class="form-text mt-0">Switch between groups to build one combined selection, such as domains from both <strong>.com</strong> and <strong>.net</strong>.</div>
+                                    </div>
+                                </div>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text"><svg class="afraid-svg-icon" aria-hidden="true"><use href="#afraid-icon-search" xlink:href="#afraid-icon-search"></use></svg></span>
+                                    <input type="search" class="form-control" id="tldGroupSearchInput" placeholder="Search groups, e.g. com or net" aria-label="Search TLD groups" autocomplete="off">
+                                    <button class="btn btn-outline-secondary" type="button" id="btnClearTldGroupSearch" title="Clear TLD group search" aria-label="Clear TLD group search" hidden>
+                                        <svg class="afraid-svg-icon" aria-hidden="true"><use href="#afraid-icon-xmark" xlink:href="#afraid-icon-xmark"></use></svg>
+                                    </button>
+                                </div>
+                                <div id="tldGroupSearchResults" class="afraid-tld-group-search-results mt-2" aria-live="polite">
+                                    <div class="text-muted small">Loading TLD groups...</div>
+                                </div>
+                            </div>
                             <div class="row g-2">
                                 <div class="col-lg-5">
                                     <select class="form-select" id="tldSelect">
@@ -1594,21 +1608,6 @@
                                     </div>
                                     <div class="form-text" id="domainSearchStatus">Search selects the matching TLD group and shows that domain below.</div>
                                 </div>
-                            </div>
-                            <div class="afraid-tld-quota-panel mt-2">
-                                <div class="afraid-tld-quota-header">
-                                    <div>
-                                        <div class="small fw-bold text-dark">Select domains by TLD group</div>
-                                        <div class="form-text mt-0">Enter a count for each group, for example <strong>.com 5</strong> and <strong>.net 3</strong>.</div>
-                                    </div>
-                                    <button type="button" class="btn btn-sm btn-outline-primary" id="btnApplyTldQuotas">
-                                        <svg class="afraid-svg-icon me-1" aria-hidden="true"><use href="#afraid-icon-check-double" xlink:href="#afraid-icon-check-double"></use></svg>Apply group counts
-                                    </button>
-                                </div>
-                                <div id="tldQuotaList" class="afraid-tld-quota-grid" aria-live="polite">
-                                    <div class="text-muted small">Loading TLD groups...</div>
-                                </div>
-                                <div id="tldQuotaStatus" class="form-text mt-2" aria-live="polite"></div>
                             </div>
                         </div>
                         <div class="row g-3 mb-3 align-items-stretch">
@@ -2139,6 +2138,19 @@ document.addEventListener('DOMContentLoaded', function() {
         loadDomains();
         loadDomainOptions();
         loadSelectedTldDomains();
+        renderTldGroupSearch(afraidTldGroups, document.getElementById('tldGroupSearchInput')?.value || '');
+    });
+    document.getElementById('tldGroupSearchInput').addEventListener('input', (event) => {
+        const query = event.target.value;
+        document.getElementById('btnClearTldGroupSearch').hidden = !query;
+        renderTldGroupSearch(afraidTldGroups, query);
+    });
+    document.getElementById('btnClearTldGroupSearch').addEventListener('click', () => {
+        const input = document.getElementById('tldGroupSearchInput');
+        input.value = '';
+        document.getElementById('btnClearTldGroupSearch').hidden = true;
+        renderTldGroupSearch(afraidTldGroups);
+        input.focus();
     });
     document.getElementById('btnSearchDomainGroup').addEventListener('click', searchDomainGroup);
     document.getElementById('domainSearchInput').addEventListener('keydown', (e) => {
@@ -2157,7 +2169,6 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('btnDeleteSelectedSubdomains').addEventListener('click', deleteSelectedSubdomains);
     document.getElementById('btnCreateCnameSubdomain').addEventListener('click', startProcess);
     document.getElementById('btnSelectDescendingDomains').addEventListener('click', selectDomainsDescending);
-    document.getElementById('btnApplyTldQuotas').addEventListener('click', applyTldQuotas);
     document.querySelectorAll('.afraid-domain-filter').forEach(input => {
         input.addEventListener('change', handleAfraidDomainFilterChange);
     });
@@ -2307,7 +2318,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 let afraidDomainSyncPromise = null;
 let afraidSelectedRegistryDomains = new Set();
-let afraidTldQuotaRequestToken = 0;
+let afraidTldGroups = [];
 
 async function syncAfraidDomainsIfStale(force = false, options = {}) {
     if (afraidDomainSyncPromise) return afraidDomainSyncPromise;
@@ -2445,8 +2456,8 @@ async function loadTlds() {
         select.innerHTML = '<option value="">All TLDs</option>';
         if (aiSelect) aiSelect.innerHTML = '<option value="">All TLDs</option>';
         if (data.success) {
-            renderTldQuotaControls(data.tlds || []);
-            data.tlds.forEach(item => {
+            afraidTldGroups = Array.isArray(data.tlds) ? data.tlds : [];
+            afraidTldGroups.forEach(item => {
                 const opt = document.createElement('option');
                 opt.value = item.tld;
                 opt.textContent = `.${item.tld} (${item.available}/${item.count})`;
@@ -2455,6 +2466,7 @@ async function loadTlds() {
             });
             select.value = current;
             if (aiSelect) aiSelect.value = aiCurrent;
+            renderTldGroupSearch(afraidTldGroups, document.getElementById('tldGroupSearchInput')?.value || '');
             loadDomainOptions();
             loadSelectedTldDomains();
         }
@@ -2463,107 +2475,42 @@ async function loadTlds() {
     }
 }
 
-function renderTldQuotaControls(tlds) {
-    const list = document.getElementById('tldQuotaList');
-    if (!list) return;
-    const previousValues = new Map(
-        [...list.querySelectorAll('.afraid-tld-quota-input')]
-            .map(input => [input.dataset.tld, input.value])
-    );
-    list.innerHTML = '';
-    if (!tlds.length) {
-        list.innerHTML = '<div class="text-muted small">No TLD groups are available.</div>';
+function selectTldGroup(tld) {
+    const select = document.getElementById('tldSelect');
+    if (!select) return;
+    select.value = tld;
+    window.afraidDomainPage = 1;
+    window.afraidHighlightedDomain = '';
+    loadDomains();
+    loadDomainOptions();
+    loadSelectedTldDomains();
+    renderTldGroupSearch(afraidTldGroups, document.getElementById('tldGroupSearchInput')?.value || '');
+}
+
+function renderTldGroupSearch(tlds, query = '') {
+    const results = document.getElementById('tldGroupSearchResults');
+    if (!results) return;
+    const normalizedQuery = String(query || '').trim().toLowerCase().replace(/^\./, '');
+    const matches = (tlds || []).filter(item => String(item.tld || '').toLowerCase().includes(normalizedQuery));
+    results.innerHTML = '';
+    if (!matches.length) {
+        results.innerHTML = '<div class="text-muted small">No matching TLD groups.</div>';
         return;
     }
-    tlds.forEach(item => {
+    const selectedTld = document.getElementById('tldSelect')?.value || '';
+    matches.forEach(item => {
         const tld = String(item.tld || '').trim().toLowerCase();
         if (!tld) return;
-        const wrapper = document.createElement('div');
-        wrapper.className = 'afraid-tld-quota-item';
-        wrapper.innerHTML = `<label for="afraidTldQuota-${escapeHtml(tld)}">.${escapeHtml(tld)}<small>${Number(item.available || 0)} available</small></label>
-            <input class="afraid-tld-quota-input" id="afraidTldQuota-${escapeHtml(tld)}" data-tld="${escapeHtml(tld)}" type="number" min="0" max="5000" step="1" inputmode="numeric" placeholder="0" value="${escapeHtml(previousValues.get(tld) || '')}" aria-label="Number of .${escapeHtml(tld)} domains to select">`;
-        list.appendChild(wrapper);
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'afraid-tld-group-button';
+        button.dataset.tld = tld;
+        button.setAttribute('aria-pressed', tld === selectedTld ? 'true' : 'false');
+        button.innerHTML = `<svg class="afraid-svg-icon" aria-hidden="true"><use href="#afraid-icon-tags" xlink:href="#afraid-icon-tags"></use></svg>
+            <span class="afraid-tld-group-name">.${escapeHtml(tld)}<small>${Number(item.available || 0)} available · click to browse</small></span>`;
+        button.addEventListener('click', () => selectTldGroup(tld));
+        results.appendChild(button);
     });
-}
-
-function getTldQuotaPlan() {
-    const plan = {};
-    document.querySelectorAll('.afraid-tld-quota-input').forEach(input => {
-        const tld = String(input.dataset.tld || '').trim().toLowerCase();
-        const count = Number.parseInt(input.value, 10);
-        if (tld && Number.isInteger(count) && count > 0) {
-            plan[tld] = Math.min(5000, count);
-        }
-    });
-    return plan;
-}
-
-async function applyTldQuotas() {
-    const button = document.getElementById('btnApplyTldQuotas');
-    const status = document.getElementById('tldQuotaStatus');
-    const plan = getTldQuotaPlan();
-    const entries = Object.entries(plan);
-    const setStatus = (message, kind = '') => {
-        if (!status) return;
-        status.textContent = message;
-        status.className = `form-text mt-2${kind ? ` text-${kind}` : ''}`;
-    };
-
-    if (!entries.length) {
-        afraidSelectedRegistryDomains = new Set();
-        renderSelectedTldDomains([], false);
-        syncSelectedTldDomains();
-        setStatus('Enter at least one domain count, such as .com 5 and .net 3.', 'warning');
-        return;
-    }
-
-    const requestToken = ++afraidTldQuotaRequestToken;
-    const originalButtonHtml = button?.innerHTML || '';
-    if (button) {
-        button.disabled = true;
-        button.innerHTML = '<svg class="afraid-svg-icon me-1 afraid-icon-spin" aria-hidden="true"><use href="#afraid-icon-rotate" xlink:href="#afraid-icon-rotate"></use></svg>Loading groups...';
-    }
-    setStatus('Loading the requested domains from each TLD group...');
-
-    try {
-        const analyticsTags = getAfraidDomainAnalyticsFilter();
-        const results = await Promise.all(entries.map(async ([tld, count]) => {
-            const params = new URLSearchParams({limit: 5000, tld, include_used: 'false'});
-            if (analyticsTags.length) params.set('analytics_tag', analyticsTags.join(','));
-            const res = await fetch('/api/afraid/domain-options?' + params.toString());
-            const data = await parseJsonResponse(res);
-            if (!data.success) throw new Error(data.error || `Could not load .${tld} domains.`);
-            const domains = (data.domains || [])
-                .filter(domain => domain.domain_name)
-                .sort((a, b) => b.domain_name.localeCompare(a.domain_name, undefined, {numeric: true, sensitivity: 'base'}));
-            return {
-                tld,
-                requested: count,
-                available: domains.length,
-                domains: domains.slice(0, count).map(domain => ({...domain, quota_tld: tld}))
-            };
-        }));
-        if (requestToken !== afraidTldQuotaRequestToken) return;
-
-        const selectedItems = results.flatMap(result => result.domains);
-        afraidSelectedRegistryDomains = new Set(selectedItems.map(domain => domain.domain_name));
-        renderSelectedTldDomains(selectedItems, analyticsTags.length > 0);
-        const summary = results.map(result => `.${result.tld}: ${result.domains.length}/${result.requested}`).join(' · ');
-        const shortages = results.filter(result => result.available < result.requested);
-        setStatus(
-            shortages.length
-                ? `${summary}. Some groups had fewer available domains than requested.`
-                : `${summary} selected (${selectedItems.length} total).`,
-            shortages.length ? 'warning' : 'success'
-        );
-    } catch (err) {
-        if (requestToken === afraidTldQuotaRequestToken) setStatus(err.message || 'Could not apply TLD group counts.', 'danger');
-    } finally {
-        if (button && requestToken === afraidTldQuotaRequestToken) {
-            button.disabled = false;
-            button.innerHTML = originalButtonHtml || '<svg class="afraid-svg-icon me-1" aria-hidden="true"><use href="#afraid-icon-check-double" xlink:href="#afraid-icon-check-double"></use></svg>Apply group counts';
-        }
-    }
 }
 
 async function loadSelectedTldDomains(options = {}) {
@@ -2635,6 +2582,7 @@ async function searchDomainGroup() {
         window.afraidDomainPage = 1;
         status.textContent = `Found ${data.domain.domain_name} in .${data.domain.tld || ''}.`;
         status.className = 'form-text text-success';
+        renderTldGroupSearch(afraidTldGroups, document.getElementById('tldGroupSearchInput')?.value || '');
         loadDomains();
         loadSelectedTldDomains();
     } catch (err) {
@@ -2659,7 +2607,8 @@ function renderSelectedTldDomains(domains, showAnalyticsTags = false) {
         row.style.cursor = 'pointer';
         const checkClass = usedThisMonth ? 'reactivate-domain-check' : 'tld-domain-check';
         const analyticsTags = renderAfraidAnalyticsTags(item, showAnalyticsTags);
-        const groupLabel = item.quota_tld ? `.${item.quota_tld} · ` : '';
+        const itemTld = item.quota_tld || item.tld || '';
+        const groupLabel = itemTld ? `.${itemTld} · ` : '';
         row.innerHTML = `<span class="afraid-domain-name"><input type="checkbox" class="me-2 ${checkClass}" value="${escapeHtml(item.domain_name)}"${!usedThisMonth && afraidSelectedRegistryDomains.has(item.domain_name) ? ' checked' : ''} aria-label="Select ${escapeHtml(item.domain_name)}"> ${escapeHtml(item.domain_name)} ${analyticsTags}</span>
             <span class="text-muted afraid-domain-meta"><span>${groupLabel}hosts: ${item.hosts_in_use ?? 'n/a'} | ${item.registry_created_on || 'n/a'}</span><span class="afraid-domain-row-state">${usedThisMonth ? 'used' : 'available'}</span></span>`;
         const checkbox = row.querySelector('input');
