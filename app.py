@@ -994,7 +994,11 @@ def search_accounts():
     
     if query:
         oauth_query = oauth_query.filter(GoogleAccount.account_name.ilike(f'%{query}%'))
-        service_query = service_query.filter(ServiceAccount.name.ilike(f'%{query}%'))
+        service_query = service_query.filter(or_(
+            ServiceAccount.name.ilike(f'%{query}%'),
+            ServiceAccount.admin_email.ilike(f'%{query}%'),
+            ServiceAccount.client_email.ilike(f'%{query}%'),
+        ))
     
     # Fetch limited results
     oauth_accounts = oauth_query.limit(limit).all()
@@ -1023,6 +1027,18 @@ def search_accounts():
         'accounts': results,
         'count': len(results)
     })
+
+
+def _find_saved_service_account(account_name):
+    """Resolve a saved service account using any identifier shown or entered in the UI."""
+    lookup = (account_name or '').strip().lower()
+    if not lookup:
+        return None
+    return ServiceAccount.query.filter(or_(
+        func.lower(ServiceAccount.admin_email) == lookup,
+        func.lower(ServiceAccount.name) == lookup,
+        func.lower(ServiceAccount.client_email) == lookup,
+    )).first()
 
 @app.route('/api/list-users')
 def list_users():
@@ -8977,13 +8993,16 @@ def api_authenticate():
         data = request.get_json()
         account_name = data.get('account_name')
         account_id = data.get('account_id')
+        account_type = data.get('account_type')
         
         if not account_name and not account_id:
             return jsonify({'success': False, 'error': 'No account specified'})
         
         # 1. Check for Service Account (New Method - Priority)
         service_account = None
-        if account_id:
+        if account_type == 'service_account':
+            service_account = _find_saved_service_account(account_name)
+        elif account_id:
             service_account = ServiceAccount.query.get(account_id)
         
         if not service_account and account_name:
@@ -9580,9 +9599,7 @@ def api_bulk_create_account_users():
                             from database import ServiceAccount, GoogleAccount
                             from services.google_domains_service import GoogleDomainsService
                             
-                            service_account = ServiceAccount.query.filter_by(admin_email=account_name).first()
-                            if not service_account:
-                                service_account = ServiceAccount.query.filter_by(name=account_name).first()
+                            service_account = _find_saved_service_account(account_name)
                             
                             if service_account:
                                 try:
@@ -9998,9 +10015,7 @@ def api_bulk_retrieve_account_users():
                 try:
                     # Try ServiceAccount first (admin_email or name)
                     from database import ServiceAccount
-                    service_account = ServiceAccount.query.filter_by(admin_email=account_name).first()
-                    if not service_account:
-                        service_account = ServiceAccount.query.filter_by(name=account_name).first()
+                    service_account = _find_saved_service_account(account_name)
                     
                     if service_account:
                         # Use GoogleDomainsService for Service Account
@@ -10285,9 +10300,7 @@ def api_bulk_delete_account_users():
                             from services.google_domains_service import GoogleDomainsService
                             
                             # Service Account Check
-                            service_account = ServiceAccount.query.filter_by(admin_email=account_name).first()
-                            if not service_account:
-                                service_account = ServiceAccount.query.filter_by(name=account_name).first()
+                            service_account = _find_saved_service_account(account_name)
                             
                             if service_account:
                                 try:
@@ -10478,9 +10491,7 @@ def api_bulk_randomize_user_aliases():
                             from database import ServiceAccount, GoogleAccount
                             from services.google_domains_service import GoogleDomainsService
 
-                            service_account = ServiceAccount.query.filter_by(admin_email=account_name).first()
-                            if not service_account:
-                                service_account = ServiceAccount.query.filter_by(name=account_name).first()
+                            service_account = _find_saved_service_account(account_name)
 
                             if service_account:
                                 try:
@@ -11205,11 +11216,9 @@ def _unused_duplicate_api_bulk_retrieve_account_users():
             """Authenticate a single account - supports both ServiceAccount and GoogleAccount"""
             with app.app_context():
                 try:
-                    # Try ServiceAccount first (admin_email or name)
+                    # Try ServiceAccount first (admin email, display name, or client email)
                     from database import ServiceAccount
-                    service_account = ServiceAccount.query.filter_by(admin_email=account_name).first()
-                    if not service_account:
-                        service_account = ServiceAccount.query.filter_by(name=account_name).first()
+                    service_account = _find_saved_service_account(account_name)
                     
                     if service_account:
                         # Use GoogleDomainsService for Service Account
@@ -14685,8 +14694,15 @@ def bulk_delete_accounts():
             try:
                 logging.info(f"Deleting account: {account_name}")
                 
-                # Find the account in the database
-                account = GoogleAccount.query.filter_by(account_name=account_name).first()
+                # Saved accounts may be service accounts or legacy OAuth accounts.
+                # Resolve service accounts first using all identifiers shown in the UI.
+                account = _find_saved_service_account(account_name)
+                account_kind = 'service_account' if account else None
+                if not account:
+                    account = GoogleAccount.query.filter(
+                        func.lower(GoogleAccount.account_name) == account_name.lower()
+                    ).first()
+                    account_kind = 'oauth' if account else None
                 
                 if not account:
                     results.append({
@@ -14703,7 +14719,7 @@ def bulk_delete_accounts():
                 results.append({
                     'success': True,
                     'account': account_name,
-                    'message': 'Account deleted successfully'
+                    'message': f'{account_kind.replace("_", " ").title()} deleted successfully'
                 })
                 successful_deletions += 1
                 logging.info(f"Successfully deleted account: {account_name}")
@@ -19789,13 +19805,7 @@ def api_process_single_account():
         # 1. Exact match attempt
         from database import ServiceAccount, GoogleAccount
         
-        service_account = ServiceAccount.query.filter(
-            db.func.lower(ServiceAccount.admin_email) == account_email.lower()
-        ).first()
-        if not service_account:
-            service_account = ServiceAccount.query.filter(
-                db.func.lower(ServiceAccount.name) == account_email.lower()
-            ).first()
+        service_account = _find_saved_service_account(account_email)
             
         google_account = None
         if not service_account:

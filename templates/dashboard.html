@@ -4178,7 +4178,11 @@
             fetch('/api/authenticate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ account_id: accountId, account_name: accountName })
+                body: JSON.stringify({
+                    account_id: accountId,
+                    account_name: accountName,
+                    account_type: selectedOption ? selectedOption.dataset.accountType : null
+                })
             })
                 .then(response => response.json())
                 .then(data => {
@@ -6455,6 +6459,7 @@
                 const option = document.createElement('option');
                 option.value = account.account_name;
                 option.dataset.accountId = account.id;
+                option.dataset.accountType = account.type;
                 option.textContent = account.account_name;
                 selectDropdown.appendChild(option);
             });
