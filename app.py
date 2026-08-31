@@ -8536,6 +8536,98 @@ def api_import_account_from_s3():
         return jsonify({'success': False, 'error': str(e)})
 
 
+def _fetch_service_account_json_from_s3(email):
+    """Fetch one service-account JSON document from the configured S3 locations."""
+    import boto3
+    from botocore.exceptions import ClientError
+
+    aws_config = AwsConfig.query.first()
+    if aws_config and aws_config.access_key_id and aws_config.secret_access_key:
+        aws_session = boto3.Session(
+            aws_access_key_id=aws_config.access_key_id,
+            aws_secret_access_key=aws_config.secret_access_key,
+            region_name=aws_config.region or 'eu-west-1'
+        )
+        s3_client = aws_session.client('s3')
+    else:
+        s3_client = boto3.client('s3', region_name='eu-west-1')
+
+    key = f'workspace-keys/{email}.json'
+    last_error = None
+    for bucket in ('json-files-gw', 'dev-app-passwords'):
+        try:
+            response = s3_client.get_object(Bucket=bucket, Key=key)
+            raw_content = response['Body'].read().decode('utf-8')
+            return raw_content, json.loads(raw_content), None
+        except ClientError as error:
+            code = str(error.response.get('Error', {}).get('Code', ''))
+            if code in {'NoSuchKey', '404', 'NotFound'}:
+                last_error = f'JSON file not found in {bucket}'
+                continue
+            raise
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            raise ValueError(f'Invalid JSON file for {email}')
+
+    return None, None, last_error or f'JSON file not found: {key}'
+
+
+@app.route('/api/sync-saved-account-credentials', methods=['POST'])
+@login_required
+def api_sync_saved_account_credentials():
+    """Refresh every saved service account's JSON credentials from S3 in place."""
+    if session.get('role') not in ['admin', 'mailer', 'support']:
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
+
+    required_keys = ['type', 'project_id', 'private_key_id', 'private_key', 'client_email']
+    accounts = ServiceAccount.query.all()
+    updated = unchanged = missing = 0
+    failed = []
+
+    for account in accounts:
+        try:
+            raw_content, credentials, fetch_error = _fetch_service_account_json_from_s3(account.admin_email)
+            if fetch_error:
+                missing += 1
+                failed.append({'email': account.admin_email, 'error': fetch_error})
+                continue
+
+            missing_keys = [key for key in required_keys if key not in credentials]
+            if missing_keys or credentials.get('type') != 'service_account':
+                detail = f"missing keys: {', '.join(missing_keys)}" if missing_keys else 'not a service account credential'
+                failed.append({'email': account.admin_email, 'error': f'Invalid JSON ({detail})'})
+                continue
+
+            if account.json_content == raw_content:
+                unchanged += 1
+                continue
+
+            account.project_id = credentials['project_id']
+            account.client_email = credentials['client_email']
+            account.private_key_id = credentials['private_key_id']
+            account.json_content = raw_content
+            updated += 1
+        except Exception as error:
+            app.logger.error(f"Credential sync failed for {account.admin_email}: {error}")
+            failed.append({'email': account.admin_email, 'error': str(error)})
+
+    if updated:
+        try:
+            db.session.commit()
+        except Exception as error:
+            db.session.rollback()
+            app.logger.error(f'Credential sync commit failed: {error}')
+            return jsonify({'success': False, 'error': f'Could not save synced credentials: {error}'}), 500
+
+    return jsonify({
+        'success': True,
+        'total': len(accounts),
+        'updated': updated,
+        'unchanged': unchanged,
+        'missing': missing,
+        'failed': failed
+    })
+
+
 @app.route('/api/fix-database-sequences', methods=['POST'])
 @login_required
 def api_fix_database_sequences():
@@ -8983,12 +9075,17 @@ def api_delete_account():
         
         data = request.get_json()
         account_id = data.get('account_id')
+        account_type = data.get('account_type')
         
         if not account_id:
             return jsonify({'success': False, 'error': 'Account ID required'})
         
-        # Try to find in GoogleAccount (OAuth) first
-        account = GoogleAccount.query.get(account_id)
+        # IDs are table-local, so use the account type from the list row when it
+        # is available. This prevents an OAuth account with the same numeric ID
+        # from being deleted when the selected row is a service account.
+        account = None
+        if account_type != 'service_account':
+            account = GoogleAccount.query.get(account_id)
         
         if account:
             account_name = account.account_name
@@ -9019,7 +9116,7 @@ def api_delete_account():
                 logging.error(f"Database error during OAuth account deletion: {db_error}")
                 return jsonify({'success': False, 'error': f'Database error: {str(db_error)}'})
 
-        # If not found in GoogleAccount, try ServiceAccount
+        # If not found in GoogleAccount, or explicitly selected as one, try ServiceAccount.
         service_account = ServiceAccount.query.get(account_id)
         
         if service_account:

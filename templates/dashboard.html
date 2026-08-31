@@ -57,12 +57,18 @@
 <div id="tab1" class="tab-content active">
     <!-- Account Selection & Authentication -->
     <div class="github-card draggable-card" data-id="account-selection">
-        <div class="github-card-header" style="cursor: move;">
+        <div class="github-card-header" style="cursor: move; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
             <h3 class="github-card-title">
                 <i class="fas fa-user-friends"></i>
                 Account Selection & Authentication
             </h3>
+            <button type="button" id="syncSavedCredentialsBtn" onclick="syncSavedCredentials()"
+                class="glass-button" title="Fetch the latest service-account JSON files from S3 for all saved accounts">
+                <i class="fas fa-cloud-download-alt me-2"></i> Sync saved credentials
+            </button>
         </div>
+        <div id="accountCredentialSyncStatus" class="status-box" role="status" aria-live="polite"
+            style="display: none; margin: 12px 0 0;"></div>
 
         <div class="row g-3 align-items-end mb-4">
             <div class="col-md-12">
@@ -2452,6 +2458,7 @@
         let isAuthenticated = false;
         let selectedAccountFromList = null;
         let selectedAccountId = null;
+        let selectedAccountType = null;
         let smtpTesting = false;
         let smtpTaskId = null;
         let smtpPollTimer = null;
@@ -4970,16 +4977,19 @@
         }
 
         // Account list functions
-        function selectAccountFromList(accountName, accountId) {
+        function selectAccountFromList(accountName, accountId, accountType) {
             // Remove previous selection
             document.querySelectorAll('.account-item').forEach(item => {
                 item.classList.remove('selected');
             });
 
-            // Select clicked item
-            event.target.classList.add('selected');
+            // Select the matching row without relying on the deprecated browser-global `event`.
+            const selectedItem = Array.from(document.querySelectorAll('.account-item'))
+                .find(item => item.dataset.accountId === String(accountId));
+            if (selectedItem) selectedItem.classList.add('selected');
             selectedAccountFromList = accountName;
             selectedAccountId = accountId;
+            selectedAccountType = accountType || null;
 
             // Also update dropdown
             document.getElementById('account-select').value = accountName;
@@ -5025,7 +5035,10 @@
             fetch('/api/delete-account', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ account_id: selectedAccountId })
+                body: JSON.stringify({
+                    account_id: selectedAccountId,
+                    account_type: selectedAccountType
+                })
             })
                 .then(response => response.json())
                 .then(data => {
@@ -5033,6 +5046,7 @@
                         alert('✅ Account deleted successfully!');
                         selectedAccountFromList = null;
                         selectedAccountId = null;
+                        selectedAccountType = null;
                         location.reload(); // Reload to refresh the display
                     } else {
                         alert('❌ Error: ' + data.error);
@@ -5042,6 +5056,39 @@
                     console.error('Delete error:', error);
                     alert('❌ Error: ' + error.message);
                 });
+        }
+
+        async function syncSavedCredentials() {
+            const button = document.getElementById('syncSavedCredentialsBtn');
+            const status = document.getElementById('accountCredentialSyncStatus');
+            if (!button || button.disabled) return;
+
+            button.disabled = true;
+            button.setAttribute('aria-busy', 'true');
+            button.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Syncing credentials...';
+            status.style.display = 'block';
+            status.className = 'status-box';
+            status.textContent = 'Fetching the latest saved account JSON files from S3...';
+
+            try {
+                const response = await fetch('/api/sync-saved-account-credentials', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await response.json();
+                if (!response.ok || !data.success) throw new Error(data.error || 'Credential sync failed');
+
+                const failed = data.failed || [];
+                status.textContent = `Sync complete: ${data.updated} updated, ${data.unchanged} unchanged, ${data.missing} missing${failed.length ? `, ${failed.length} failed` : ''}.`;
+                if (failed.length) status.textContent += ` ${failed.slice(0, 3).map(item => `${item.email}: ${item.error}`).join(' · ')}`;
+            } catch (error) {
+                status.textContent = `Credential sync failed: ${error.message}`;
+                status.classList.add('error');
+            } finally {
+                button.disabled = false;
+                button.removeAttribute('aria-busy');
+                button.innerHTML = '<i class="fas fa-cloud-download-alt me-2"></i> Sync saved credentials';
+            }
         }
 
         // Bulk Delete Functions
@@ -6397,7 +6444,7 @@
                     // Add selected class to clicked item
                     item.classList.add('selected');
                     // Call original selection function
-                    selectAccountFromList(account.account_name, account.id);
+                    selectAccountFromList(account.account_name, account.id, account.type);
                 };
                 listArea.appendChild(item);
             });
