@@ -680,6 +680,31 @@ def get_afraid_cloudflare_domains():
         logger.error(f"Error fetching Cloudflare domains for Afraid page: {e}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@afraid_manager.route('/api/afraid/cloudflare-domains/reset-usage', methods=['POST'])
+@login_required
+def reset_afraid_cloudflare_usage():
+    """Reset the AFRAID Cloudflare destination usage counters for all domains."""
+    try:
+        reset_at = datetime.utcnow()
+        updated = AfraidCloudflareDomainUsage.query.update(
+            {
+                AfraidCloudflareDomainUsage.use_count: 0,
+                AfraidCloudflareDomainUsage.last_used_at: None,
+            },
+            synchronize_session=False,
+        )
+        db.session.commit()
+        logger.info('Reset AFRAID Cloudflare destination usage for %s domain(s)', updated)
+        return jsonify({
+            'success': True,
+            'reset': updated,
+            'reset_at': reset_at.isoformat() + 'Z',
+        })
+    except Exception as e:
+        db.session.rollback()
+        logger.error('Error resetting AFRAID Cloudflare destination usage: %s', e, exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 def get_rotated_afraid_domain(tld):
     query = available_domain_query()
     if tld:

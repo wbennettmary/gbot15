@@ -1672,9 +1672,15 @@
                                 <div class="form-text">Blank uses all available rotated domains.</div>
                             </div>
                             <div class="col-md-4 mb-3">
-                                <label for="cloudflareCountInput" class="form-label">Cloudflare Domains</label>
+                                <div class="d-flex align-items-center justify-content-between gap-2">
+                                    <label for="cloudflareCountInput" class="form-label mb-0">Cloudflare Domains</label>
+                                    <button type="button" class="btn btn-sm btn-outline-warning" id="btnResetCloudflareUsage" title="Reset every AFRAID Cloudflare destination counter to 0/5">
+                                        <svg class="afraid-svg-icon me-1" aria-hidden="true"><use href="#afraid-icon-rotate" xlink:href="#afraid-icon-rotate"></use></svg>Reset usage
+                                    </button>
+                                </div>
                                 <input type="number" class="form-control" id="cloudflareCountInput" min="1" max="50" value="30" placeholder="Set rotation count" disabled>
                                 <div class="form-text">Active only when Cloudflare destination rotation is used.</div>
+                                <div class="form-text" id="cloudflareUsageResetStatus" aria-live="polite"></div>
                             </div>
                         </div>
                         <div class="mb-3">
@@ -1696,6 +1702,26 @@
                         </button>
                     </form>
                     <div id="createAlert" class="mt-3"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="resetCloudflareUsageModal" tabindex="-1" aria-labelledby="resetCloudflareUsageModalTitle" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="resetCloudflareUsageModalTitle">
+                        <svg class="afraid-svg-icon me-1 text-warning" aria-hidden="true"><use href="#afraid-icon-rotate" xlink:href="#afraid-icon-rotate"></use></svg>Reset Cloudflare usage?
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    This resets every AFRAID Cloudflare destination counter to <strong>0/5</strong>. It only changes the local usage counters; it does not modify Cloudflare zones or DNS records.
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-warning" id="btnConfirmResetCloudflareUsage">Reset all usage</button>
                 </div>
             </div>
         </div>
@@ -2167,6 +2193,10 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('selectAllSubdomains').addEventListener('change', toggleAllSubdomains);
     document.getElementById('btnDeleteSelectedSubdomains').addEventListener('click', deleteSelectedSubdomains);
     document.getElementById('btnCreateCnameSubdomain').addEventListener('click', startProcess);
+    document.getElementById('btnResetCloudflareUsage').addEventListener('click', () => {
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('resetCloudflareUsageModal')).show();
+    });
+    document.getElementById('btnConfirmResetCloudflareUsage').addEventListener('click', resetCloudflareUsage);
     document.getElementById('btnSelectDescendingDomains').addEventListener('click', selectDomainsDescending);
     document.querySelectorAll('.afraid-domain-filter').forEach(input => {
         input.addEventListener('change', handleAfraidDomainFilterChange);
@@ -2812,6 +2842,41 @@ async function loadCloudflareDomains() {
         }
     } catch (err) {
         console.error('Error loading Cloudflare domains', err);
+    }
+}
+
+async function resetCloudflareUsage() {
+    const resetButton = document.getElementById('btnConfirmResetCloudflareUsage');
+    const status = document.getElementById('cloudflareUsageResetStatus');
+    if (!resetButton) return;
+
+    const originalLabel = resetButton.innerHTML;
+    resetButton.disabled = true;
+    resetButton.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Resetting...';
+    if (status) status.textContent = '';
+
+    try {
+        const res = await fetch('/api/afraid/cloudflare-domains/reset-usage', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'}
+        });
+        const data = await parseJsonResponse(res);
+        if (!res.ok || !data.success) throw new Error(data.error || 'Could not reset Cloudflare usage.');
+
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('resetCloudflareUsageModal')).hide();
+        if (status) {
+            status.className = 'form-text text-success';
+            status.textContent = `Reset ${data.reset || 0} domain counter(s) to 0/5.`;
+        }
+        await loadCloudflareDomains();
+    } catch (err) {
+        if (status) {
+            status.className = 'form-text text-danger';
+            status.textContent = err.message || 'Could not reset Cloudflare usage.';
+        }
+    } finally {
+        resetButton.disabled = false;
+        resetButton.innerHTML = originalLabel;
     }
 }
 
