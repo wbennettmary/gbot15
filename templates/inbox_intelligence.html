@@ -2937,7 +2937,7 @@
                                 <div class="ii-field"><label>Provider</label><select class="ii-select" id="imapProviderInput"><option value="gmail">Gmail</option><option value="google workspace">Google Workspace</option><option value="outlook">Outlook</option><option value="hotmail">Hotmail</option><option value="microsoft 365">Microsoft 365</option><option value="yahoo">Yahoo</option><option value="generic">Generic IMAP</option></select></div>
                                 <div class="ii-field"><label>Email address</label><input class="ii-input" id="imapEmailInput" type="email" placeholder="inbox@example.com" required></div>
                                 <div class="ii-field"><label>IMAP type</label><select class="ii-select" id="imapTypeInput"><option value="both">Both</option><option value="concurrent">Concurrent - template source</option><option value="test">Test - send and analytics</option></select></div>
-                                <div class="ii-field"><label>Owner</label><select class="ii-select" id="imapOwnerInput"><option value="{{ user }}">{{ user }}</option></select></div>
+                                <div class="ii-field"><label>Users with access</label><select class="ii-select" id="imapOwnerInput" multiple size="3"><option value="{{ user }}">{{ user }}</option></select><small class="ii-muted">Hold Ctrl/Cmd to select multiple users.</small></div>
                                 <div class="ii-field"><label>Account status</label><select class="ii-select" id="imapEnabledInput"><option value="true">Enabled</option><option value="false">Disabled</option></select></div>
                                 <div class="ii-field"><label>IMAP hostname</label><input class="ii-input" id="imapHostInput" placeholder="imap.example.com"></div>
                                 <div class="ii-field"><label>Port</label><input class="ii-input" id="imapPortInput" type="number" value="993"></div>
@@ -4368,7 +4368,7 @@ merge_recipe_id, content_blueprint_id</pre>
         userInboxListAccounts: [],
         userInboxListAccountOnly: false,
         selectedUserInboxListAccountIds: new Set(),
-        userInboxCopyBuckets: {inboxDomains: [], spamDomains: [], inboxUsers: [], spamUsers: [], inboxAccounts: [], spamAccounts: [], inboxUserAccountLines: [], spamUserAccountLines: [], failedUserAccountLines: [], greyDomainNameChangeUsers: []},
+        userInboxCopyBuckets: {inboxDomains: [], inboxRootDomains: [], spamDomains: [], inboxUsers: [], spamUsers: [], inboxAccounts: [], spamAccounts: [], inboxUserAccountLines: [], spamUserAccountLines: [], failedUserAccountLines: [], greyDomainNameChangeUsers: []},
         serviceAccounts: [],
         activeMessageId: null,
         explorerRefreshToken: 0,
@@ -4411,7 +4411,7 @@ merge_recipe_id, content_blueprint_id</pre>
         stoppedAutomatedTestIds: new Set(),
         inboxSyncPaused: false,
         inboxSyncPauseUpdating: false,
-        automatedCopyBuckets: {inboxUsers: [], inboxDomains: [], spamUsers: [], spamDomains: [], inboxAccounts: [], spamAccounts: [], inboxUserAccountLines: [], spamUserAccountLines: [], failedUserAccountLines: [], greyDomainNameChangeUsers: []},
+        automatedCopyBuckets: {inboxUsers: [], inboxDomains: [], inboxRootDomains: [], spamUsers: [], spamDomains: [], inboxAccounts: [], spamAccounts: [], inboxUserAccountLines: [], spamUserAccountLines: [], failedUserAccountLines: [], greyDomainNameChangeUsers: []},
         automatedAiResultCopyBuckets: {inbox_users: [], spam_users: [], inbox_domains: [], spam_domains: [], failed_users: []},
         automatedAiResultAnalysis: null,
         automatedAiResultTestId: null,
@@ -5143,22 +5143,22 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     function imapOwnerOptions(currentOwner = '') {
-        const owner = String(currentOwner || '').toLowerCase();
-        const owners = (iiState.imapOwners || []).length ? iiState.imapOwners : [{username: owner || '{{ user }}', label: owner || '{{ user }}'}];
-        const hasCurrent = owners.some((item) => String(item.username || '').toLowerCase() === owner);
-        const list = hasCurrent || !owner ? owners : [{username: owner, label: currentOwner}, ...owners];
+        const selectedOwners = Array.isArray(currentOwner) ? currentOwner.map(String).map(v => v.toLowerCase()) : [String(currentOwner || '').toLowerCase()];
+        const fallbackOwner = selectedOwners.find(Boolean) || '{{ user }}';
+        const owners = (iiState.imapOwners || []).length ? iiState.imapOwners : [{username: fallbackOwner, label: fallbackOwner}];
+        const list = owners;
         return list.map((item) => {
             const username = String(item.username || item.label || '').toLowerCase();
-            return `<option value="${escapeHtml(username)}" ${username === owner ? 'selected' : ''}>${escapeHtml(item.label || username)}</option>`;
+            return `<option value="${escapeHtml(username)}" ${selectedOwners.includes(username) ? 'selected' : ''}>${escapeHtml(item.label || username)}</option>`;
         }).join('');
     }
 
     function renderImapOwnerInput() {
         const select = document.getElementById('imapOwnerInput');
         if (!select) return;
-        const current = (select.value || '{{ user }}').toLowerCase();
+        const current = Array.from(select.selectedOptions).map(option => option.value.toLowerCase());
         select.innerHTML = imapOwnerOptions(current);
-        if (Array.from(select.options).some((option) => option.value === current)) select.value = current;
+        Array.from(select.options).forEach(option => { option.selected = current.includes(option.value); });
     }
 
     function renderImapAccounts() {
@@ -5180,8 +5180,8 @@ merge_recipe_id, content_blueprint_id</pre>
             const enabled = account.is_enabled !== false;
             const disabledClass = enabled ? '' : ' opacity-75';
             const ownerControl = II_CURRENT_ROLE === 'admin'
-                ? `<select class="ii-select" id="imapOwnerSelect${account.id}" style="width:210px;max-width:100%;padding:5px 8px;font-size:12px" title="Owner">${imapOwnerOptions(account.owner || '')}</select>`
-                : `<span class="ii-chip gray" style="font-size:0.75em">Owner: ${escapeHtml(account.owner || 'current user')}</span>`;
+                ? `<select class="ii-select" id="imapOwnerSelect${account.id}" multiple size="2" style="width:210px;max-width:100%;padding:5px 8px;font-size:12px" title="Users with access">${imapOwnerOptions(account.owners || [account.owner || ''])}</select>`
+                : `<span class="ii-chip gray" style="font-size:0.75em">Access: ${escapeHtml((account.owners || [account.owner || 'current user']).join(', '))}</span>`;
             return `
             <div class="ii-inbox-card${disabledClass}">
                 <div class="ii-provider"><i class="fas fa-inbox"></i></div>
@@ -5303,7 +5303,7 @@ merge_recipe_id, content_blueprint_id</pre>
             is_enabled: document.getElementById(`imapEnabledSelect${id}`)?.value !== 'false',
         };
         const ownerSelect = document.getElementById(`imapOwnerSelect${id}`);
-        if (ownerSelect) settings.owner = ownerSelect.value;
+        if (ownerSelect) settings.owners = Array.from(ownerSelect.selectedOptions).map(option => option.value);
         if (status) status.textContent = 'Saving...';
         try {
             await updateImapAccountSettings(id, settings);
@@ -5728,7 +5728,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 username: document.getElementById('imapUsernameInput').value || document.getElementById('imapEmailInput').value,
                 password: document.getElementById('imapPasswordInput').value,
                 account_type: document.getElementById('imapTypeInput')?.value || 'both',
-                owner: document.getElementById('imapOwnerInput')?.value || '',
+                owners: Array.from(document.getElementById('imapOwnerInput')?.selectedOptions || []).map(option => option.value),
                 is_enabled: document.getElementById('imapEnabledInput')?.value !== 'false',
                 test_connection: true,
                 sync_limit: 25
@@ -8094,7 +8094,7 @@ merge_recipe_id, content_blueprint_id</pre>
     function clearAutomatedAnalytics() {
         iiState.automatedSelectedTestId = null;
         iiState.automatedMessages = [];
-        iiState.automatedCopyBuckets = {inboxUsers: [], inboxDomains: [], spamUsers: [], spamDomains: [], inboxAccounts: [], spamAccounts: [], inboxUserAccountLines: [], spamUserAccountLines: [], failedUserAccountLines: [], greyDomainNameChangeUsers: []};
+        iiState.automatedCopyBuckets = {inboxUsers: [], inboxDomains: [], inboxRootDomains: [], spamUsers: [], spamDomains: [], inboxAccounts: [], spamAccounts: [], inboxUserAccountLines: [], spamUserAccountLines: [], failedUserAccountLines: [], greyDomainNameChangeUsers: []};
         iiState.automatedAiResultCopyBuckets = {inbox_users: [], spam_users: [], inbox_domains: [], spam_domains: [], failed_users: []};
         iiState.automatedAiResultAnalysis = null;
         iiState.automatedAiResultTestId = null;
@@ -8439,6 +8439,7 @@ merge_recipe_id, content_blueprint_id</pre>
         const totals = a.totals || {};
         const domains = a.best_domains || [];
         const inboxDomains = domains.filter((item) => Number(item.inbox || 0) > 0).map((item) => String(item.domain || '').toLowerCase()).filter(Boolean);
+        const inboxRootDomains = rootDomains(inboxDomains);
         const spamDomains = domains.filter((item) => Number(item.spam || 0) > 0).map((item) => String(item.domain || '').toLowerCase()).filter(Boolean);
         const inboxAccountUserLines = savedAnalysisAccountUserLines(a, 'inbox_account_user_lines', 'inbox_users');
         const spamAccountUserLines = savedAnalysisAccountUserLines(a, 'spam_account_user_lines', 'spam_users');
@@ -8498,6 +8499,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 <div class="ii-row justify-content-between mb-2"><div><h4>Best domains</h4><div class="ii-muted">Ranked by inbox rate, then observation volume. Assign a saved status for follow-up lists.</div></div><button class="ii-btn" type="button" onclick="copySavedAnalysisBucket('best_domains', 'domain')"><i class="fas fa-copy"></i> Copy all domains</button></div>
                 <div class="ii-analytics-copy-grid mb-2">
                     <button class="ii-btn ii-copy-stat-button inbox" type="button" onclick="copySavedAnalysisDomainBucket('inbox')"><i class="fas fa-inbox"></i><strong>${inboxDomains.length}</strong><span>Copy inbox domains</span></button>
+                    <button class="ii-btn ii-copy-stat-button inbox" type="button" onclick="copySavedAnalysisDomainBucket('inbox-root')"><i class="fas fa-globe"></i><strong>${inboxRootDomains.length}</strong><span>Copy inbox root domains</span></button>
                     <button class="ii-btn ii-copy-stat-button spam" type="button" onclick="copySavedAnalysisDomainBucket('spam')"><i class="fas fa-triangle-exclamation"></i><strong>${spamDomains.length}</strong><span>Copy spam domains</span></button>
                 </div>
                 <div class="ii-saved-domain-summary">
@@ -8633,19 +8635,23 @@ merge_recipe_id, content_blueprint_id</pre>
     async function copySavedAnalysisDomainBucket(status) {
         const row = (iiState.savedAnalyses || []).find((item) => Number(item.id) === Number(iiState.activeSavedAnalysisId));
         const domains = row?.analytics?.best_domains || [];
+        const rootOnly = status === 'inbox-root';
+        const sourceStatus = rootOnly ? 'inbox' : status;
         const values = domains
-            .filter((item) => Number(item?.[status] || 0) > 0)
+            .filter((item) => Number(item?.[sourceStatus] || 0) > 0)
             .map((item) => String(item?.domain || '').trim().toLowerCase())
             .filter(Boolean)
+            .filter((domain, index, items) => items.indexOf(domain) === index)
+            .map((domain) => rootOnly ? rootDomainFromHost(domain) : domain)
             .filter((domain, index, items) => items.indexOf(domain) === index)
             .sort((a, b) => a.localeCompare(b));
         const message = document.getElementById('savedAnalysisStatus');
         if (!values.length) {
-            if (message) message.textContent = `No ${status} domains are available in this analysis.`;
+            if (message) message.textContent = `No ${rootOnly ? 'inbox root' : status} domains are available in this analysis.`;
             return;
         }
         await copyTextToClipboard(`${values.join('\r\n')}\r\n`);
-        if (message) message.textContent = `Copied ${values.length} ${status} domain(s).`;
+        if (message) message.textContent = `Copied ${values.length} ${rootOnly ? 'inbox root' : status} domain(s).`;
     }
 
     function changeSavedBestDomainsPageSize(value) {
@@ -9613,6 +9619,7 @@ merge_recipe_id, content_blueprint_id</pre>
         const domains = userInboxObservationStats(rows, (row) => (row.sender || '').split('@').pop().toLowerCase());
         const users = userInboxObservationStats(rows, (row) => row.sender || '');
         const inboxDomains = domains.filter((item) => item.inbox > 0).map((item) => item.key);
+        const inboxRootDomains = rootDomains(inboxDomains);
         const spamDomains = domains.filter((item) => item.spam > 0).map((item) => item.key);
         const inboxUsers = users.filter((item) => item.inbox > 0).map((item) => item.key);
         const spamUsers = users.filter((item) => item.spam > 0).map((item) => item.key);
@@ -9623,7 +9630,7 @@ merge_recipe_id, content_blueprint_id</pre>
         const greyDomainNameChangeUsers = greyDomainNameChangeRows(rows, 'sender');
         const failedUsers = failedUserRecords(rows, 'sender');
         const failedUserAccountLines = failedUsers.map((item) => item.copyLine);
-        iiState.automatedCopyBuckets = {inboxDomains, spamDomains, inboxUsers, spamUsers, inboxAccounts, spamAccounts, inboxUserAccountLines, spamUserAccountLines, failedUserAccountLines, greyDomainNameChangeUsers};
+        iiState.automatedCopyBuckets = {inboxDomains, inboxRootDomains, spamDomains, inboxUsers, spamUsers, inboxAccounts, spamAccounts, inboxUserAccountLines, spamUserAccountLines, failedUserAccountLines, greyDomainNameChangeUsers};
         const providers = {};
         rows.forEach((row) => {
             const key = recipientProvider(row.recipient);
@@ -9665,6 +9672,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 </div>
                 <div class="ii-analytics-copy-grid">
                     <button class="ii-btn ii-copy-stat-button inbox" type="button" onclick="copyAutomatedBucket('inboxDomains')"><i class="fas fa-inbox"></i><strong>${inboxDomains.length}</strong><span>Inbox domains</span></button>
+                    <button class="ii-btn ii-copy-stat-button inbox" type="button" onclick="copyAutomatedBucket('inboxRootDomains')"><i class="fas fa-globe"></i><strong>${inboxRootDomains.length}</strong><span>Copy inbox root domains</span></button>
                     <button class="ii-btn ii-copy-stat-button spam" type="button" onclick="copyAutomatedBucket('spamDomains')"><i class="fas fa-triangle-exclamation"></i><strong>${spamDomains.length}</strong><span>Spam domains</span></button>
                     <button class="ii-btn ii-copy-stat-button inbox" type="button" onclick="copyAutomatedBucket('inboxUsers')"><i class="fas fa-user-check"></i><strong>${inboxUsers.length}</strong><span>Inbox users</span></button>
                     <button class="ii-btn ii-copy-stat-button spam" type="button" onclick="copyAutomatedBucket('spamUsers')"><i class="fas fa-user-xmark"></i><strong>${spamUsers.length}</strong><span>Spam users</span></button>
@@ -11784,6 +11792,7 @@ merge_recipe_id, content_blueprint_id</pre>
             return {...item, displayName: sender.name || item.key.split('@')[0], domain: item.key.split('@').pop() || ''};
         });
         const inboxDomains = domains.filter((item) => item.inbox > 0).map((item) => item.key);
+        const inboxRootDomains = rootDomains(inboxDomains);
         const spamDomains = domains.filter((item) => item.spam > 0).map((item) => item.key);
         const inboxUsers = users.filter((item) => item.inbox > 0).map((item) => item.key);
         const spamUsers = users.filter((item) => item.spam > 0).map((item) => item.key);
@@ -11794,6 +11803,7 @@ merge_recipe_id, content_blueprint_id</pre>
         const greyDomainNameChangeUsers = greyDomainNameChangeRows(rows, senderField);
         const failedUsers = failedUserRecords(rows, senderField);
         copyBuckets.inboxDomains = inboxDomains;
+        copyBuckets.inboxRootDomains = inboxRootDomains;
         copyBuckets.spamDomains = spamDomains;
         copyBuckets.inboxUsers = inboxUsers;
         copyBuckets.spamUsers = spamUsers;
@@ -11862,6 +11872,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 </div>
                 <div class="ii-analytics-copy-grid">
                     <button class="ii-btn ii-copy-stat-button inbox" type="button" onclick="${copyFn}('inboxDomains')"><i class="fas fa-inbox"></i><strong>${inboxDomains.length}</strong><span>Copy inbox domains</span></button>
+                    <button class="ii-btn ii-copy-stat-button inbox" type="button" onclick="${copyFn}('inboxRootDomains')"><i class="fas fa-globe"></i><strong>${inboxRootDomains.length}</strong><span>Copy inbox root domains</span></button>
                     <button class="ii-btn ii-copy-stat-button spam" type="button" onclick="${copyFn}('spamDomains')"><i class="fas fa-triangle-exclamation"></i><strong>${spamDomains.length}</strong><span>Copy spam domains</span></button>
                     <button class="ii-btn ii-copy-stat-button inbox" type="button" onclick="${copyFn}('inboxUsers')"><i class="fas fa-user-check"></i><strong>${inboxUsers.length}</strong><span>Copy inbox users</span></button>
                     <button class="ii-btn ii-copy-stat-button spam" type="button" onclick="${copyFn}('spamUsers')"><i class="fas fa-user-xmark"></i><strong>${spamUsers.length}</strong><span>Copy spam users</span></button>
@@ -12115,6 +12126,20 @@ merge_recipe_id, content_blueprint_id</pre>
             const spamRate = observed ? Math.round((bucket.spam / observed) * 100) : null;
             return {...bucket, observed, inboxRate, spamRate};
         }).sort((a, b) => (a.inboxRate ?? -1) - (b.inboxRate ?? -1));
+    }
+
+    // Keep the registrable domain while removing mailbox subdomains.
+    function rootDomainFromHost(value) {
+        const host = String(value || '').trim().toLowerCase().replace(/^\.+|\.+$/g, '');
+        const labels = host.split('.').filter(Boolean);
+        if (labels.length <= 2) return host;
+        const twoPartSuffixes = new Set(['co.uk', 'org.uk', 'ac.uk', 'gov.uk', 'com.au', 'net.au', 'org.au', 'co.nz', 'com.br', 'com.cn', 'com.hk', 'com.sg', 'co.jp', 'co.in', 'co.za', 'com.mx', 'com.tr']);
+        const suffix = labels.slice(-2).join('.');
+        return labels.slice(-(twoPartSuffixes.has(suffix) ? 3 : 2)).join('.');
+    }
+
+    function rootDomains(values) {
+        return [...new Set((values || []).map(rootDomainFromHost).filter(Boolean))].sort((a, b) => a.localeCompare(b));
     }
 
     function healthLabel(item) {

@@ -559,6 +559,7 @@ with app.app_context():
             new_columns = {
                 'account_type': "VARCHAR(50) DEFAULT 'both'",
                 'owner': 'VARCHAR(255)',
+                'shared_users': 'TEXT',
                 'is_enabled': 'BOOLEAN DEFAULT TRUE',
             }
             with db.engine.connect() as conn:
@@ -1694,11 +1695,15 @@ def _inbox_test_stopped_response(test_id):
 
 def _serialize_imap_account(account):
     _refresh_account_counts(account)
+    primary_owner = (getattr(account, 'owner', None) or account.created_by or '').strip().lower()
+    shared_users = _normalize_imap_shared_users(getattr(account, 'shared_users', None))
     return {
         'id': account.id,
         'provider': account.provider,
         'account_type': getattr(account, 'account_type', None) or 'both',
-        'owner': getattr(account, 'owner', None) or account.created_by or '',
+        'owner': primary_owner,
+        'shared_users': shared_users,
+        'owners': [u for u in [primary_owner] + shared_users if u],
         'email': account.email,
         'imap_host': account.imap_host,
         'imap_port': account.imap_port,
@@ -1726,14 +1731,37 @@ def _imap_owner_options():
 def _current_inbox_owner():
     return (session.get('user') or '').strip()
 
+def _normalize_imap_shared_users(value):
+    """Normalize usernames used to share one IMAP mailbox."""
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except (TypeError, ValueError):
+            value = value.split(',')
+    if not isinstance(value, (list, tuple, set)):
+        value = []
+    result = []
+    for item in value:
+        username = _normalize_imap_credential(item or '').lower()
+        if username and username not in result:
+            result.append(username)
+    return result
+
+def _imap_shared_users(account):
+    return _normalize_imap_shared_users(getattr(account, 'shared_users', None))
+
+def _imap_access_clause(owner):
+    return or_(
+        func.lower(InboxImapAccount.owner) == owner,
+        func.lower(InboxImapAccount.created_by) == owner,
+        InboxImapAccount.shared_users.ilike(f'%,{owner},%'),
+    )
+
 def _owned_imap_accounts_query():
     if session.get('role') == 'admin':
         return InboxImapAccount.query
     owner = _current_inbox_owner().lower()
-    return InboxImapAccount.query.filter(or_(
-        func.lower(InboxImapAccount.owner) == owner,
-        func.lower(InboxImapAccount.created_by) == owner,
-    ))
+    return InboxImapAccount.query.filter(_imap_access_clause(owner))
 
 def _enabled_imap_accounts_query():
     return _owned_imap_accounts_query().filter(or_(
@@ -1755,10 +1783,7 @@ def _owned_imap_account_ids_query():
     if session.get('role') == 'admin':
         return db.session.query(InboxImapAccount.id)
     owner = _current_inbox_owner().lower()
-    return db.session.query(InboxImapAccount.id).filter(or_(
-        func.lower(InboxImapAccount.owner) == owner,
-        func.lower(InboxImapAccount.created_by) == owner,
-    ))
+    return db.session.query(InboxImapAccount.id).filter(_imap_access_clause(owner))
 
 def _cleanup_old_inbox_email_messages(days=30):
     """Purge very old synced messages. Keeps any row that carries an X-Test-ID header
@@ -2344,7 +2369,11 @@ def api_inbox_imap_accounts():
     account_type = legacy_type_map.get(account_type, account_type)
     if account_type not in ('both', 'concurrent', 'test'):
         account_type = 'both'
-    owner = _normalize_imap_credential(data.get('owner') or session.get('user') or '').lower()
+    requested_owners = data.get('owners', data.get('shared_users'))
+    if requested_owners is None:
+        requested_owners = [data.get('owner') or session.get('user') or '']
+    requested_owners = _normalize_imap_shared_users(requested_owners)
+    owner = requested_owners[0] if requested_owners else (session.get('user') or '').strip().lower()
     if session.get('role') != 'admin':
         owner = (session.get('user') or '').strip().lower()
     if not email_addr or '@' not in email_addr:
@@ -2354,8 +2383,7 @@ def api_inbox_imap_accounts():
     existing = InboxImapAccount.query.filter_by(email=email_addr).first()
     session_owner = (session.get('user') or '').strip().lower()
     existing_owner = (getattr(existing, 'owner', None) or existing.created_by or '').strip().lower() if existing else ''
-    if session.get('role') != 'admin' and existing and existing_owner and existing_owner != session_owner:
-        return jsonify({'success': False, 'error': 'This IMAP account belongs to another user.'}), 403
+    existing_shared_users = _imap_shared_users(existing) if existing else []
     if existing and not password:
         password = _unprotect_secret(existing.encrypted_password)
     if not password:
@@ -2370,7 +2398,16 @@ def api_inbox_imap_accounts():
     account.auto_sync_enabled = auto_sync_enabled
     account.is_enabled = _truthy_setting(data.get('is_enabled'), True)
     account.account_type = account_type
-    account.owner = owner or session.get('user')
+    account.owner = existing_owner or owner or session.get('user')
+    if session.get('role') == 'admin':
+        account.owner = owner or account.owner or session.get('user')
+        requested_owners = requested_owners or [account.owner]
+        account.shared_users = ',' + ','.join(u for u in requested_owners if u != account.owner) + ','
+    else:
+        # Reusing an existing mailbox grants the current user access while
+        # retaining the original primary owner.
+        shared = existing_shared_users + ([session_owner] if session_owner and session_owner != account.owner else [])
+        account.shared_users = ',' + ','.join(_normalize_imap_shared_users(shared)) + ','
     account.connection_status = 'configured'
     account.created_by = account.created_by or session.get('user')
     db.session.add(account)
@@ -2394,8 +2431,11 @@ def api_inbox_update_account_type(account_id):
     if account_type not in ('both', 'concurrent', 'test'):
         return jsonify({'success': False, 'error': 'Invalid IMAP account type'}), 400
     account.account_type = account_type
-    if session.get('role') == 'admin' and data.get('owner'):
-        account.owner = _normalize_imap_credential(data.get('owner')).lower()
+    if session.get('role') == 'admin' and (data.get('owners') is not None or data.get('owner')):
+        owners = _normalize_imap_shared_users(data.get('owners', [data.get('owner')]))
+        if owners:
+            account.owner = owners[0]
+            account.shared_users = ',' + ','.join(owners[1:]) + ','
     db.session.commit()
     return jsonify({'success': True, 'account': _serialize_imap_account(account)})
 
@@ -2416,13 +2456,14 @@ def api_inbox_update_account_settings(account_id):
         account.is_enabled = _truthy_setting(data.get('is_enabled'), True)
     if 'auto_sync_enabled' in data:
         account.auto_sync_enabled = _truthy_setting(data.get('auto_sync_enabled'), True)
-    if 'owner' in data:
+    if 'owner' in data or 'owners' in data:
         if session.get('role') != 'admin':
             return jsonify({'success': False, 'error': 'Only admins can change IMAP account owners.'}), 403
-        owner = _normalize_imap_credential(data.get('owner') or '').lower()
-        if not owner:
+        owners = _normalize_imap_shared_users(data.get('owners', [data.get('owner')]))
+        if not owners:
             return jsonify({'success': False, 'error': 'Owner is required.'}), 400
-        account.owner = owner
+        account.owner = owners[0]
+        account.shared_users = ',' + ','.join(owners[1:]) + ','
     db.session.commit()
     return _json_no_store({'success': True, 'account': _serialize_imap_account(account)})
 

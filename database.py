@@ -409,6 +409,8 @@ class InboxImapAccount(db.Model):
     email = db.Column(db.String(255), unique=True, nullable=False)
     account_type = db.Column(db.String(50), nullable=False, default='both')
     owner = db.Column(db.String(255), nullable=True, index=True)
+    # Normalized usernames with leading/trailing commas, e.g. ",alice,bob,".
+    shared_users = db.Column(db.Text, nullable=True)
     imap_host = db.Column(db.String(255), nullable=False)
     imap_port = db.Column(db.Integer, default=993)
     tls_enabled = db.Column(db.Boolean, default=True)
