@@ -8493,7 +8493,8 @@ def api_add_account_json():
 def api_import_account_from_s3():
     """Import a service account from S3 bucket.
     
-    The JSON file should be stored at: s3://json-files-gw/workspace-keys/{email}.json
+    The JSON file should be stored at:
+    s3://<configured-bucket>/workspace-keys/{email}.json
     """
     try:
         data = request.get_json()
@@ -8507,14 +8508,19 @@ def api_import_account_from_s3():
         if existing_account:
             return jsonify({'success': False, 'error': f'Account {email} already exists'})
         
-        # S3 configuration (Primary and Fallback)
-        primary_bucket = 'json-files-gw'
-        fallback_bucket = 'dev-app-passwords'
+        # S3 configuration (the bucket saved in Settings is authoritative).
+        # Keep the historical buckets as fallbacks so existing deployments
+        # continue to work while they migrate their credentials.
+        aws_config = AwsConfig.query.first()
+        configured_bucket = (aws_config.s3_bucket or '').strip() if aws_config else ''
+        buckets = []
+        for bucket in (configured_bucket, 'json-files-gw', 'dev-app-passwords'):
+            if bucket and bucket not in buckets:
+                buckets.append(bucket)
         s3_key = f'workspace-keys/{email}.json'
         
         # Get AWS credentials from session or database
         try:
-            aws_config = AwsConfig.query.first()
             if aws_config and aws_config.access_key_id and aws_config.secret_access_key:
                 import boto3
                 session = boto3.Session(
@@ -8531,27 +8537,22 @@ def api_import_account_from_s3():
             app.logger.error(f"AWS session error: {aws_err}")
             return jsonify({'success': False, 'error': f'AWS configuration error: {str(aws_err)}'})
         
-        # Fetch JSON file from S3 (with fallback)
+        # Fetch JSON file from S3 (with configured and legacy fallbacks).
         json_content = None
-        try:
-            app.logger.info(f"Trying primary bucket s3://{primary_bucket}/{s3_key}")
-            response = s3_client.get_object(Bucket=primary_bucket, Key=s3_key)
-            json_content_str = response['Body'].read().decode('utf-8')
-            json_content = json.loads(json_content_str)
-        except s3_client.exceptions.NoSuchKey:
-            app.logger.info(f"Not found in primary, trying fallback s3://{fallback_bucket}/{s3_key}")
+        fetch_errors = []
+        for bucket in buckets:
             try:
-                response = s3_client.get_object(Bucket=fallback_bucket, Key=s3_key)
+                app.logger.info(f"Trying S3 bucket s3://{bucket}/{s3_key}")
+                response = s3_client.get_object(Bucket=bucket, Key=s3_key)
                 json_content_str = response['Body'].read().decode('utf-8')
                 json_content = json.loads(json_content_str)
-            except s3_client.exceptions.NoSuchKey:
-                return jsonify({'success': False, 'error': f'JSON file not found in either S3 bucket: {s3_key}'})
-            except Exception as f_err:
-                app.logger.error(f"Fallback S3 fetch error: {f_err}")
-                return jsonify({'success': False, 'error': f'Error fetching from fallback S3: {str(f_err)}'})
-        except Exception as p_err:
-            app.logger.error(f"Primary S3 fetch error: {p_err}")
-            return jsonify({'success': False, 'error': f'Error fetching from primary S3: {str(p_err)}'})
+                break
+            except Exception as fetch_err:
+                fetch_errors.append(f"{bucket}: {fetch_err}")
+                app.logger.warning(f"S3 fetch failed for {bucket}: {fetch_err}")
+
+        if json_content is None:
+            return jsonify({'success': False, 'error': f"Could not fetch {s3_key} from configured or fallback S3 buckets. {'; '.join(fetch_errors)}"})
         
         # Validate JSON content
         required_keys = ['type', 'project_id', 'private_key_id', 'private_key', 'client_email']
@@ -8611,7 +8612,13 @@ def _fetch_service_account_json_from_s3(email):
 
     key = f'workspace-keys/{email}.json'
     last_error = None
-    for bucket in ('json-files-gw', 'dev-app-passwords'):
+    configured_bucket = (aws_config.s3_bucket or '').strip() if aws_config else ''
+    buckets = []
+    for bucket in (configured_bucket, 'json-files-gw', 'dev-app-passwords'):
+        if bucket and bucket not in buckets:
+            buckets.append(bucket)
+
+    for bucket in buckets:
         try:
             response = s3_client.get_object(Bucket=bucket, Key=key)
             raw_content = response['Body'].read().decode('utf-8')
@@ -8620,8 +8627,12 @@ def _fetch_service_account_json_from_s3(email):
             code = str(error.response.get('Error', {}).get('Code', ''))
             if code in {'NoSuchKey', '404', 'NotFound'}:
                 last_error = f'JSON file not found in {bucket}'
-                continue
-            raise
+            else:
+                # A bucket can be present but unavailable to these
+                # credentials (for example, AllAccessDisabled). Try the
+                # configured/legacy alternatives before reporting failure.
+                last_error = f'S3 error in {bucket}: {code or error}'
+            continue
         except (UnicodeDecodeError, json.JSONDecodeError):
             raise ValueError(f'Invalid JSON file for {email}')
 
