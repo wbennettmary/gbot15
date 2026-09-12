@@ -917,6 +917,39 @@ def update_afraid_list(list_id):
     db.session.commit()
     return jsonify({'success': True, 'message': 'Afraid list updated', 'list': lst.to_dict()})
 
+@afraid_manager.route('/api/afraid/lists/bulk-delete', methods=['POST'])
+@login_required
+def bulk_delete_afraid_lists():
+    """Permanently delete the selected saved AFRAID lists in one request."""
+    data = request.get_json(silent=True) or {}
+    raw_ids = data.get('list_ids')
+    if not isinstance(raw_ids, list):
+        return jsonify({'success': False, 'error': 'Select at least one Afraid list to delete'}), 400
+
+    list_ids = list(dict.fromkeys(
+        int(value) for value in raw_ids
+        if str(value).strip().isdigit() and int(value) > 0
+    ))
+    if not list_ids:
+        return jsonify({'success': False, 'error': 'Select at least one Afraid list to delete'}), 400
+
+    lists = AfraidResultList.query.filter(AfraidResultList.id.in_(list_ids)).all()
+    if not lists:
+        return jsonify({'success': False, 'error': 'The selected Afraid lists no longer exist'}), 404
+
+    deleted_names = [lst.name for lst in lists]
+    found_ids = {lst.id for lst in lists}
+    for lst in lists:
+        db.session.delete(lst)
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'deleted': len(lists),
+        'deleted_names': deleted_names,
+        'missing_ids': [list_id for list_id in list_ids if list_id not in found_ids],
+    })
+
 @afraid_manager.route('/api/afraid/lists/<int:list_id>', methods=['DELETE'])
 @login_required
 def delete_afraid_list(list_id):
