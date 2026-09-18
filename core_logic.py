@@ -16,47 +16,100 @@ from config import SCOPES
 _session_services = {}
 
 # ---------------------------------------------------------------------------
-# Large pool of real names for generating unique aliases without digits or
-# dots. Built lazily (cached) from multiple Faker locales; only purely
-# alphabetic names are kept so the concatenated alias "firstnamelastname"
-# contains no dots and no digits. ~3900 first names x ~4900 last names
-# (~19M combinations) guarantees thousands of unique users.
+# Large pools of real names for generating unique aliases without digits or
+# dots. Pools are built lazily from Faker locales and cached by name category.
+# The category mapping is intentionally locale-based: it gives the UI a
+# predictable, explainable source for each requested name style while keeping
+# email local-parts ASCII-safe.
 # ---------------------------------------------------------------------------
-_RANDOM_NAMES_CACHE = None
+NAME_TYPE_LOCALES = {
+    'asian': ('en_IN', 'en_BD', 'en_PH', 'id_ID', 'fil_PH', 'en_TH'),
+    'african': ('zu_ZA', 'tw_GH'),
+    'latin': ('es_AR', 'es_CL', 'es_CO', 'es_ES', 'es_MX', 'pt_BR'),
+    # "Caucasian" is retained as the product-facing option name for
+    # compatibility with the requested UI. The source pool is European and
+    # North American locale data rather than an attempt to infer identity.
+    'caucasian': ('en_US', 'en_GB', 'de_DE', 'fr_FR', 'it_IT', 'nl_NL',
+                  'pl_PL', 'ru_RU', 'uk_UA'),
+}
+
+NAME_TYPE_LABELS = {
+    'asian': 'Asian',
+    'african': 'African',
+    'latin': 'Latin',
+    'caucasian': 'Caucasian',
+}
+
+_LEGACY_NAME_LOCALES = ('en_US', 'en_GB', 'de_DE', 'fr_FR', 'es_ES',
+                        'it_IT', 'nl_NL', 'pt_BR', 'no_NO', 'sv_SE')
+_RANDOM_NAMES_CACHE = {}
 
 
-def get_random_name_pools():
-    """Return (first_names, last_names) — cached large pools of real,
-    purely-alphabetic names (no spaces, apostrophes, hyphens, digits)."""
-    global _RANDOM_NAMES_CACHE
-    if _RANDOM_NAMES_CACHE is not None:
-        return _RANDOM_NAMES_CACHE
+def normalize_name_types(name_types):
+    """Return valid, de-duplicated name types in stable product order."""
+    if isinstance(name_types, str):
+        name_types = [name_types]
+    if not isinstance(name_types, (list, tuple, set)):
+        return []
+
+    requested = {str(value or '').strip().lower() for value in name_types}
+    return [name_type for name_type in NAME_TYPE_LOCALES if name_type in requested]
+
+
+def _name_locales_for_types(name_types):
+    selected = normalize_name_types(name_types)
+    if not selected:
+        return _LEGACY_NAME_LOCALES
+
+    locales = []
+    for name_type in selected:
+        for locale in NAME_TYPE_LOCALES[name_type]:
+            if locale not in locales:
+                locales.append(locale)
+    return tuple(locales)
+
+
+def get_random_name_pools(name_types=None):
+    """Return cached (first_names, last_names) for the requested name types.
+
+    With no argument this preserves the original mixed locale behavior used by
+    existing user-creation flows. When name types are supplied, callers should
+    pass one category at a time if they need first/last names to come from the
+    same category.
+    """
+    selected = normalize_name_types(name_types)
+    locales = _name_locales_for_types(selected if name_types is not None else None)
+    cache_key = tuple(locales)
+    if cache_key in _RANDOM_NAMES_CACHE:
+        return _RANDOM_NAMES_CACHE[cache_key]
 
     from faker import Faker
 
     firsts = set()
     lasts = set()
-    for locale in ('en_US', 'en_GB', 'de_DE', 'fr_FR', 'es_ES', 'it_IT',
-                   'nl_NL', 'pt_BR', 'no_NO', 'sv_SE'):
+    sample_count = 4000 if name_types is None else 2500
+    for locale in locales:
         fake = Faker(locale)
-        for _ in range(4000):
+        for _ in range(sample_count):
             firsts.add(fake.first_name())
             lasts.add(fake.last_name())
 
     firsts = sorted(n for n in firsts if n.isascii() and n.isalpha())
     lasts = sorted(n for n in lasts if n.isascii() and n.isalpha())
+    if not firsts or not lasts:
+        raise RuntimeError('The selected name type does not have an ASCII-safe name pool.')
 
-    _RANDOM_NAMES_CACHE = (firsts, lasts)
-    return _RANDOM_NAMES_CACHE
+    _RANDOM_NAMES_CACHE[cache_key] = (firsts, lasts)
+    return _RANDOM_NAMES_CACHE[cache_key]
 
 
-def unique_random_alias(domain, used_emails):
+def unique_random_alias(domain, used_emails, name_types=None):
     """Return (first_name, last_name, email) where email is a real-name alias
     "firstnamelastname@domain" — no digits, no dots — guaranteed unique against
     used_emails. Raises RuntimeError only if the name pools are exhausted
     (essentially impossible at ~19M combinations)."""
     import random
-    first_names, last_names = get_random_name_pools()
+    first_names, last_names = get_random_name_pools(name_types)
     for _ in range(300):
         first_name = random.choice(first_names)
         last_name = random.choice(last_names)

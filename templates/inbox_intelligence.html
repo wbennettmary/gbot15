@@ -377,6 +377,66 @@
         padding: 12px;
     }
 
+    .ii-name-type-picker {
+        min-width: 0;
+        margin: 0;
+        padding: 10px;
+        border: 1px solid #dbe4ef;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.72);
+    }
+
+    .ii-name-type-picker legend {
+        width: auto;
+        margin: 0;
+        padding: 0 4px;
+        color: #0f172a;
+        font-size: 12px;
+        font-weight: 800;
+    }
+
+    .ii-name-type-options {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 7px;
+    }
+
+    .ii-name-type-option {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        gap: 7px;
+        margin: 0;
+        padding: 8px 9px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        background: #fff;
+        color: #334155;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .ii-name-type-option:hover {
+        border-color: #93c5fd;
+        background: #eff6ff;
+    }
+
+    .ii-name-type-option input {
+        width: 16px;
+        height: 16px;
+        flex: 0 0 auto;
+        margin: 0;
+        accent-color: #2563eb;
+    }
+
+    .ii-name-type-help {
+        margin-top: 8px;
+        color: #64748b;
+        font-size: 11px;
+        line-height: 1.35;
+    }
+
     .ii-targeted-alias-status {
         min-height: 44px;
         font-size: 12px;
@@ -4158,7 +4218,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 <div class="ii-targeted-alias-head">
                     <div>
                         <h4><i class="fas fa-user-edit text-primary"></i> Targeted User Identity Randomization</h4>
-                        <p class="ii-muted mb-0">Paste exact admin account and user pairs to randomize the email local-part and display name for only those non-admin Workspace users.</p>
+                        <p class="ii-muted mb-0">Paste exact admin account and user pairs to randomize the email local-part and display name for only those non-admin Workspace users. Names are generated from locale-specific real-name datasets.</p>
                     </div>
                     <div class="ii-row">
                         <button type="button" class="ii-btn" id="iiTargetedAliasCopyButton" onclick="copyIiTargetedAliasChangedUsers()" disabled title="Copy successful identity changes as account,user pairs for testing">
@@ -4180,6 +4240,29 @@ merge_recipe_id, content_blueprint_id</pre>
                             <strong>Format</strong>
                             <div class="ii-muted mt-1">One pair per line: <code>account,user</code>. A local-part user uses the admin account domain.</div>
                         </div>
+                        <fieldset class="ii-name-type-picker">
+                            <legend>Name type</legend>
+                            <p class="ii-muted mb-2">Select one or more categories. Each new identity chooses one selected category evenly.</p>
+                            <div class="ii-name-type-options">
+                                <label class="ii-name-type-option" for="iiNameTypeAsian">
+                                    <input type="checkbox" id="iiNameTypeAsian" name="ii-targeted-alias-name-type" value="asian" checked onchange="updateIiTargetedAliasPreview()">
+                                    <span>Asian</span>
+                                </label>
+                                <label class="ii-name-type-option" for="iiNameTypeAfrican">
+                                    <input type="checkbox" id="iiNameTypeAfrican" name="ii-targeted-alias-name-type" value="african" checked onchange="updateIiTargetedAliasPreview()">
+                                    <span>African</span>
+                                </label>
+                                <label class="ii-name-type-option" for="iiNameTypeLatin">
+                                    <input type="checkbox" id="iiNameTypeLatin" name="ii-targeted-alias-name-type" value="latin" checked onchange="updateIiTargetedAliasPreview()">
+                                    <span>Latin</span>
+                                </label>
+                                <label class="ii-name-type-option" for="iiNameTypeCaucasian">
+                                    <input type="checkbox" id="iiNameTypeCaucasian" name="ii-targeted-alias-name-type" value="caucasian" checked onchange="updateIiTargetedAliasPreview()">
+                                    <span>Caucasian</span>
+                                </label>
+                            </div>
+                            <div class="ii-name-type-help">Uses locale-specific datasets and keeps generated email local-parts ASCII-safe.</div>
+                        </fieldset>
                         <label class="ii-row mb-0" style="align-items: flex-start; gap: 8px; color: #475569; cursor: pointer;">
                             <input type="checkbox" id="iiTargetedAliasConfirm" style="margin-top: 3px;">
                             <span>I confirm this should update the email local-part and name only for the listed non-admin users.</span>
@@ -4953,9 +5036,26 @@ merge_recipe_id, content_blueprint_id</pre>
         if (bar) bar.style.width = `${Math.max(0, Math.min(100, Number(percent) || 0))}%`;
     }
 
+    function selectedIiTargetedAliasNameTypes() {
+        return Array.from(document.querySelectorAll('input[name="ii-targeted-alias-name-type"]:checked'))
+            .map((input) => String(input.value || '').trim().toLowerCase())
+            .filter(Boolean);
+    }
+
+    function iiTargetedAliasNameTypeLabels(values) {
+        const labels = {
+            asian: 'Asian',
+            african: 'African',
+            latin: 'Latin',
+            caucasian: 'Caucasian',
+        };
+        return (values || []).map((value) => labels[value] || value).filter(Boolean);
+    }
+
     function updateIiTargetedAliasPreview() {
         const countBadge = document.getElementById('iiTargetedAliasCount');
         const parsed = parseIiTargetedAliasPairs();
+        const selectedNameTypes = selectedIiTargetedAliasNameTypes();
         if (countBadge) {
             countBadge.textContent = `${parsed.targets.length} selected`;
             countBadge.className = parsed.errors.length ? 'ii-chip red' : parsed.targets.length ? 'ii-chip green' : 'ii-chip blue';
@@ -4963,9 +5063,12 @@ merge_recipe_id, content_blueprint_id</pre>
 
         if (parsed.errors.length > 0) {
             setIiTargetedAliasStatus(parsed.errors.slice(0, 3).join(' | '), 'error');
+        } else if (!selectedNameTypes.length) {
+            setIiTargetedAliasStatus('Select at least one name type before starting.', 'error');
         } else if (parsed.targets.length > 0) {
             const accountCount = new Set(parsed.targets.map((target) => target.account.toLowerCase())).size;
-            setIiTargetedAliasStatus(`${parsed.targets.length} user(s) ready across ${accountCount} admin account(s).`, 'ready');
+            const labelText = iiTargetedAliasNameTypeLabels(selectedNameTypes).join(', ');
+            setIiTargetedAliasStatus(`${parsed.targets.length} user(s) ready across ${accountCount} admin account(s). Names: ${labelText}.`, 'ready');
         } else {
             setIiTargetedAliasStatus('Paste account,user pairs to prepare a targeted run.');
         }
@@ -5059,10 +5162,16 @@ merge_recipe_id, content_blueprint_id</pre>
 
     async function executeIiTargetedAliasRandomization(event) {
         const parsed = updateIiTargetedAliasPreview();
+        const selectedNameTypes = selectedIiTargetedAliasNameTypes();
         const confirmBox = document.getElementById('iiTargetedAliasConfirm');
         const status = document.getElementById('workspaceRetrieveStatus');
 
         if (parsed.errors.length > 0) return;
+        if (!selectedNameTypes.length) {
+            setIiTargetedAliasStatus('Select at least one name type before starting.', 'error');
+            document.querySelector('input[name="ii-targeted-alias-name-type"]')?.focus();
+            return;
+        }
         if (!parsed.targets.length) {
             setIiTargetedAliasStatus('Add at least one account,user pair before starting.', 'error');
             return;
@@ -5092,13 +5201,14 @@ merge_recipe_id, content_blueprint_id</pre>
                 btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Randomizing identities...';
             }
             setIiTargetedAliasProgress(0);
-            setIiTargetedAliasStatus(`Starting targeted identity randomization for ${parsed.targets.length} user(s)...`, 'ready');
+            const labelText = iiTargetedAliasNameTypeLabels(selectedNameTypes).join(', ');
+            setIiTargetedAliasStatus(`Starting targeted identity randomization for ${parsed.targets.length} user(s) using ${labelText} names...`, 'ready');
             if (status) status.textContent = `Targeted identity randomization started for ${parsed.targets.length} selected user(s).`;
 
             const started = await iiFetch('/api/targeted-randomize-user-aliases', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({targets: parsed.targets})
+                body: JSON.stringify({targets: parsed.targets, name_types: selectedNameTypes})
             });
             const taskId = started.task_id;
             if (!taskId) throw new Error('No task id returned for targeted identity randomization.');

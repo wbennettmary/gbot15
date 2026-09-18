@@ -41,7 +41,14 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import re
 
-from core_logic import google_api, unique_random_alias, get_random_name_pools
+from core_logic import (
+    google_api,
+    unique_random_alias,
+    get_random_name_pools,
+    NAME_TYPE_LABELS,
+    NAME_TYPE_LOCALES,
+    normalize_name_types,
+)
 from database import db, User, WhitelistedIP, UsedDomain, GoogleAccount, GoogleToken, Scope, ServerConfig, UserAppPassword, AutomationAccount, RetrievedUser, NamecheapConfig, DomainOperation, AwsConfig, ServiceAccount, CloudflareConfig, Notification, WorkspaceList, AwsGeneratedPassword, InboxImapAccount, InboxEmailMessage, InboxStaticTemplate, InboxUserTemplate, InboxAgentSavedList, InboxSavedAnalysis, InboxOpenRouterConfig, InboxDeliverabilityTest, InboxDeliverabilityMessage, TestEmailSource, InboxPollJob, ImapFolderSyncState, InboxAiJob, InboxAiSuggestion, InboxAiAuditEvent, InboxAiPromptVersion
 from routes.dns_manager import dns_manager
 from routes.aws_manager import aws_manager
@@ -10825,9 +10832,16 @@ def _normalize_targeted_alias_pairs(raw_targets):
     return normalized, errors
 
 
-def _generate_unique_workspace_identity(existing_aliases_set):
-    first_names, last_names = get_random_name_pools()
+def _generate_unique_workspace_identity(existing_aliases_set, name_types=None):
+    selected_name_types = normalize_name_types(name_types)
     for _ in range(300):
+        # Select one category for the whole identity so a mixed selection does
+        # not combine a first name from one category with a surname from another.
+        pool_types = selected_name_types or [None]
+        selected_type = random.choice(pool_types)
+        first_names, last_names = get_random_name_pools(
+            [selected_type] if selected_type else None
+        )
         first_name = random.choice(first_names)
         last_name = random.choice(last_names)
         clean_first = _latin_name_part(first_name).lower().replace("'", "").replace("-", "").replace(" ", "")
@@ -11017,7 +11031,7 @@ def _collect_workspace_used_alias_locals(service, all_users):
             pass
     return used_aliases
 
-def _randomize_one_workspace_user_identity(service, account_name, user_key, used_aliases):
+def _randomize_one_workspace_user_identity(service, account_name, user_key, used_aliases, name_types=None):
     user, all_users = _find_workspace_user_from_listed_users(service, account_name, user_key)
     if not user:
         raise ValueError(f"{user_key} was not found in the users visible to {account_name}.")
@@ -11035,7 +11049,7 @@ def _randomize_one_workspace_user_identity(service, account_name, user_key, used
 
     domain = primary_email.split('@', 1)[1]
     used_aliases.update(_collect_workspace_used_alias_locals(service, all_users))
-    new_first, new_last, new_local = _generate_unique_workspace_identity(used_aliases)
+    new_first, new_last, new_local = _generate_unique_workspace_identity(used_aliases, name_types)
     new_primary_email = f"{new_local}@{domain}"
 
     service.users().patch(
@@ -11069,6 +11083,27 @@ def api_targeted_randomize_user_aliases():
     data = request.get_json(silent=True) or {}
     targets, parse_errors = _normalize_targeted_alias_pairs(data.get('targets', []))
 
+    raw_name_types = data.get('name_types')
+    selected_name_types = None
+    if raw_name_types is not None:
+        if isinstance(raw_name_types, str):
+            raw_name_types = [raw_name_types]
+        if not isinstance(raw_name_types, (list, tuple, set)):
+            parse_errors.append('Name types must be provided as a list.')
+            raw_name_types = []
+        invalid_name_types = [
+            str(value or '').strip().lower()
+            for value in raw_name_types
+            if str(value or '').strip().lower() not in NAME_TYPE_LOCALES
+        ]
+        if invalid_name_types:
+            parse_errors.append(
+                f"Unsupported name type(s): {', '.join(invalid_name_types)}."
+            )
+        selected_name_types = normalize_name_types(raw_name_types)
+        if not selected_name_types:
+            parse_errors.append('Select at least one name type.')
+
     if parse_errors:
         return jsonify({'success': False, 'error': '; '.join(parse_errors[:5])})
     if not targets:
@@ -11090,7 +11125,7 @@ def api_targeted_randomize_user_aliases():
     task_id = str(uuid.uuid4())
     update_progress(task_id, 0, len(targets), "starting", "Initializing targeted identity randomization...")
 
-    def background_task(task_id, account_targets, resolution_failures):
+    def background_task(task_id, account_targets, resolution_failures, name_types):
         with app.app_context():
             all_results = []
 
@@ -11159,7 +11194,17 @@ def api_targeted_randomize_user_aliases():
                     update_progress(task_id, len(targets), len(targets), "completed", f"Auth Failed: {first_err}", result_data)
                     return
 
-                update_progress(task_id, 0, len(targets), "randomizing", f"Randomizing identities for {len(targets)} selected user(s)...")
+                selected_labels = ', '.join(
+                    NAME_TYPE_LABELS.get(name_type, name_type)
+                    for name_type in (name_types or [])
+                ) or 'the default name pool'
+                update_progress(
+                    task_id,
+                    0,
+                    len(targets),
+                    "randomizing",
+                    f"Randomizing identities for {len(targets)} selected user(s) using {selected_labels} names..."
+                )
 
                 def process_account_targets(account_name, user_keys):
                     with app.app_context():
@@ -11178,7 +11223,13 @@ def api_targeted_randomize_user_aliases():
 
                         for user_key in user_keys:
                             try:
-                                detail = _randomize_one_workspace_user_identity(service, account_name, user_key, used_aliases)
+                                detail = _randomize_one_workspace_user_identity(
+                                    service,
+                                    account_name,
+                                    user_key,
+                                    used_aliases,
+                                    name_types,
+                                )
                                 account_result['details'].append(detail)
                                 if detail.get('success'):
                                     account_result['aliases_added'] += 1
@@ -11220,6 +11271,11 @@ def api_targeted_randomize_user_aliases():
                 final_result = {
                     'success': True,
                     'targeted': True,
+                    'name_types': name_types or [],
+                    'name_type_labels': [
+                        NAME_TYPE_LABELS.get(name_type, name_type)
+                        for name_type in (name_types or [])
+                    ],
                     'total_accounts': len(all_results),
                     'total_users': total_users,
                     'total_targets': len(targets),
@@ -11237,7 +11293,10 @@ def api_targeted_randomize_user_aliases():
                 app.logger.error(traceback.format_exc())
                 update_progress(task_id, 0, 0, "error", f"Task failed: {str(e)}")
 
-    threading.Thread(target=background_task, args=(task_id, account_targets, resolution_failures)).start()
+    threading.Thread(
+        target=background_task,
+        args=(task_id, account_targets, resolution_failures, selected_name_types),
+    ).start()
 
     return jsonify({'success': True, 'task_id': task_id})
 
