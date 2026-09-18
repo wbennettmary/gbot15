@@ -343,13 +343,23 @@
                     </h3>
                 </div>
                 <p style="color: #656d76; margin-bottom: 24px; font-size: 14px;">
-                    Configure Cloudflare API credentials for DNS management. These credentials are used for automated
-                    domain
-                    verification via TXT records.
+                    Connect multiple Cloudflare accounts for DNS management. Domains are loaded from every enabled
+                    connection by default, and the floating Cloudflare loader lets you choose which account(s) to use.
                 </p>
 
                 <form id="cloudflare-config-form">
+                    <input type="hidden" id="cloudflare_config_id" value="">
                     <div class="d-flex flex-wrap gap-3 mb-3">
+                        <div class="flex-grow-1" style="min-width: 250px;">
+                            <label for="cloudflare_name" class="form-label-github">
+                                <i class="fas fa-tag"></i> Account Label
+                            </label>
+                            <input type="text" class="form-control-github w-100" id="cloudflare_name"
+                                placeholder="Marketing Cloudflare" required>
+                            <small style="color: #656d76; font-size: 12px;">
+                                This label appears beside every domain from this connection.
+                            </small>
+                        </div>
                         <div class="flex-grow-1" style="min-width: 250px;">
                             <label for="cloudflare_api_token" class="form-label-github">
                                 <i class="fas fa-key"></i> API Token
@@ -365,25 +375,45 @@
                                 <i class="fas fa-envelope"></i> Email Address
                             </label>
                             <input type="email" class="form-control-github w-100" id="cloudflare_email"
-                                placeholder="your_email@example.com" required>
+                                placeholder="your_email@example.com">
                             <small style="color: #656d76; font-size: 12px;">
-                                Your Cloudflare account email address
+                                Optional for API Tokens; used for legacy Global API Keys.
                             </small>
                         </div>
                     </div>
 
                     <div style="display: flex; gap: 16px; justify-content: center; margin-top: 24px;">
-                        <button type="submit" class="btn-github btn-github-primary">
-                            <i class="fas fa-save"></i> Save Cloudflare Configuration
+                        <button type="submit" class="btn-github btn-github-primary" id="cloudflare-save-btn">
+                            <i class="fas fa-save"></i> Save Cloudflare Account
+                        </button>
+                        <button type="button" class="btn-github" onclick="resetCloudflareAccountForm()"
+                            id="cloudflare-cancel-edit-btn" style="display: none;">
+                            <i class="fas fa-times"></i> Cancel Edit
                         </button>
                         <button type="button" class="btn-github" onclick="fetchCloudflareDomains()"
                             id="fetch-cf-domains-btn">
-                            <i class="fas fa-download"></i> Fetch & Retrieve Domains
+                            <i class="fas fa-download"></i> Load Cloudflare Domains
                         </button>
                     </div>
                 </form>
 
                 <div id="cloudflare-config-status" style="margin-top: 16px; display: none;"></div>
+                <div style="margin-top: 22px; overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                        <thead>
+                            <tr style="border-bottom: 1px solid #d0d7de;">
+                                <th style="padding: 9px; text-align: left;">Account Label</th>
+                                <th style="padding: 9px; text-align: left;">Cloudflare Account</th>
+                                <th style="padding: 9px; text-align: left;">Domains</th>
+                                <th style="padding: 9px; text-align: left;">Status</th>
+                                <th style="padding: 9px; text-align: right;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cloudflare-configs-list">
+                            <tr><td colspan="5" style="padding: 16px; color: #656d76;">Loading Cloudflare accounts...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             <!-- DigitalOcean Configuration Section -->
@@ -3718,84 +3748,109 @@
     }
 
     // Cloudflare Configuration Functions
-    function loadCloudflareConfig() {
-        console.log('Loading Cloudflare configuration...');
+    let cloudflareConfigCache = [];
 
-        fetch('/api/get-cloudflare-config', {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json' }
-        })
+    function renderCloudflareConfigRows(configs) {
+        cloudflareConfigCache = configs || [];
+        const tbody = document.getElementById('cloudflare-configs-list');
+        if (!tbody) return;
+        if (!cloudflareConfigCache.length) {
+            tbody.innerHTML = '<tr><td colspan="5" style="padding: 16px; color: #656d76;">No Cloudflare accounts configured yet.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = cloudflareConfigCache.map(config => `
+            <tr style="border-bottom: 1px solid #d0d7de;">
+                <td style="padding: 9px; font-weight: 600;">${escapeHtml(config.name || 'Cloudflare Account')}</td>
+                <td style="padding: 9px;">${escapeHtml(config.cloudflare_account_name || config.name || 'Account identity loads with domains')}</td>
+                <td style="padding: 9px;">${config.domain_count ?? '—'}</td>
+                <td style="padding: 9px; color: #1a7f37;"><i class="fas fa-circle" style="font-size: 8px;"></i> Enabled</td>
+                <td style="padding: 9px; text-align: right;">
+                    <button type="button" class="btn-github" style="padding: 4px 8px; font-size: 12px;" onclick="editCloudflareConfig(${Number(config.id)})">
+                        <i class="fas fa-pen"></i> Edit
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    function resetCloudflareAccountForm() {
+        $('#cloudflare_config_id').val('');
+        $('#cloudflare_name').val('');
+        $('#cloudflare_api_token').val('');
+        $('#cloudflare_api_token').attr('placeholder', 'your_api_token');
+        $('#cloudflare_email').val('');
+        $('#cloudflare-save-btn').html('<i class="fas fa-save"></i> Save Cloudflare Account');
+        $('#cloudflare-cancel-edit-btn').hide();
+    }
+
+    function editCloudflareConfig(configId) {
+        const config = cloudflareConfigCache.find(item => Number(item.id) === Number(configId));
+        if (!config) return;
+        $('#cloudflare_config_id').val(config.id);
+        $('#cloudflare_name').val(config.name || '');
+        $('#cloudflare_api_token').val('');
+        $('#cloudflare_api_token').attr('placeholder', config.api_token_configured ? 'Leave blank to keep the saved token' : 'your_api_token');
+        $('#cloudflare_email').val(config.email || '');
+        $('#cloudflare-save-btn').html('<i class="fas fa-save"></i> Update Cloudflare Account');
+        $('#cloudflare-cancel-edit-btn').show();
+        showStatus(`Editing Cloudflare account: ${config.name || config.id}`, 'info');
+    }
+
+    function loadCloudflareConfig() {
+        fetch('/api/get-cloudflare-config', {method: 'GET', headers: {'Content-Type': 'application/json'}})
             .then(response => response.json())
             .then(data => {
-                if (data.success && data.config) {
-                    // Populate form fields
-                    $('#cloudflare_email').val(data.config.email || '');
-                    // Don't populate API token for security
-                    $('#cloudflare_api_token').val('');
-
-                    // Show status
-                    const statusDiv = $('#cloudflare-config-status');
-                    statusDiv.html(`
-                <div style="background-color: rgba(45, 164, 78, 0.1); border: 1px solid #2da44e; border-radius: 6px; padding: 12px; color: #2da44e;">
-                    <i class="fas fa-check-circle"></i> Configuration loaded
-                </div>
-            `);
-                    statusDiv.show();
-                } else {
-                    // No configuration found
-                    const statusDiv = $('#cloudflare-config-status');
-                    statusDiv.html(`
-                <div style="background-color: rgba(251, 133, 0, 0.1); border: 1px solid #fb8500; border-radius: 6px; padding: 12px; color: #fb8500;">
-                    <i class="fas fa-exclamation-triangle"></i> No configuration found. Please configure Cloudflare API credentials.
-                </div>
-            `);
-                    statusDiv.show();
-                }
+                if (!data.success) throw new Error(data.error || 'Could not load Cloudflare accounts');
+                renderCloudflareConfigRows(data.configs || []);
+                const statusDiv = $('#cloudflare-config-status');
+                statusDiv.html(data.configs && data.configs.length
+                    ? `<div style="background-color: rgba(45, 164, 78, 0.1); border: 1px solid #2da44e; border-radius: 6px; padding: 12px; color: #2da44e;"><i class="fas fa-check-circle"></i> ${data.configs.length} Cloudflare account connection(s) enabled.</div>`
+                    : `<div style="background-color: rgba(251, 133, 0, 0.1); border: 1px solid #fb8500; border-radius: 6px; padding: 12px; color: #fb8500;"><i class="fas fa-exclamation-triangle"></i> No Cloudflare accounts configured yet.</div>`
+                ).show();
             })
             .catch(error => {
-                console.error('Error loading Cloudflare configuration:', error);
-                showStatus('❌ Error loading Cloudflare configuration: ' + error, 'error');
+                console.error('Error loading Cloudflare configurations:', error);
+                showStatus('❌ Error loading Cloudflare accounts: ' + error.message, 'error');
             });
     }
 
     function saveCloudflareConfig(event) {
         if (event) event.preventDefault();
-        console.log('Saving Cloudflare configuration...');
-
         const config = {
+            id: $('#cloudflare_config_id').val().trim(),
+            name: $('#cloudflare_name').val().trim(),
             api_token: $('#cloudflare_api_token').val().trim(),
             email: $('#cloudflare_email').val().trim()
         };
-
-        // Validate required fields
-        if (!config.api_token || !config.email) {
-            showStatus('Please fill in all required fields', 'error');
+        if (!config.name) {
+            showStatus('Give this Cloudflare connection a label.', 'error');
             return;
         }
-
-        showStatus('Saving Cloudflare configuration...', 'info');
-
+        if (!config.id && !config.api_token) {
+            showStatus('API Token is required for a new Cloudflare account.', 'error');
+            return;
+        }
+        showStatus(config.id ? 'Updating Cloudflare account...' : 'Saving Cloudflare account...', 'info');
         fetch('/api/save-cloudflare-config', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(config)
         })
             .then(response => response.json())
             .then(data => {
-                if (data.success) {
-                    showStatus('✅ Cloudflare configuration saved successfully', 'success');
-                    // Clear API token field for security
-                    $('#cloudflare_api_token').val('');
-                    // Reload configuration to show updated status
-                    loadCloudflareConfig();
-                } else {
-                    showStatus('❌ Failed to save configuration: ' + data.error, 'error');
-                }
+                if (!data.success) throw new Error(data.error || 'Could not save Cloudflare account');
+                showStatus('✅ Cloudflare account saved successfully.', 'success');
+                resetCloudflareAccountForm();
+                loadCloudflareConfig();
             })
             .catch(error => {
                 console.error('Error saving Cloudflare configuration:', error);
-                showStatus('❌ Network error: ' + error, 'error');
+                showStatus('❌ Failed to save Cloudflare account: ' + error.message, 'error');
             });
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, char => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'}[char]));
     }
 
     // Initialize Cloudflare config on load
@@ -3804,81 +3859,8 @@
         $('#cloudflare-config-form').on('submit', saveCloudflareConfig);
     });
 
-    // Cloudflare Domains Functions
-    function fetchCloudflareDomains() {
-        const modal = document.getElementById('cloudflareDomainsModal');
-        const loading = document.getElementById('cloudflare-domains-loading');
-        const content = document.getElementById('cloudflare-domains-content');
-        const errorDiv = document.getElementById('cloudflare-domains-error');
-
-        modal.style.display = 'block';
-        loading.style.display = 'block';
-        content.style.display = 'none';
-        errorDiv.style.display = 'none';
-
-        fetch('/api/cloudflare-domains')
-            .then(response => response.json())
-            .then(data => {
-                loading.style.display = 'none';
-
-                if (data.success) {
-                    content.style.display = 'block';
-                    document.getElementById('cloudflare-domains-count').textContent = `Found ${data.total} domains`;
-
-                    const tbody = document.getElementById('cloudflare-domains-list');
-                    tbody.innerHTML = '';
-
-                    if (data.domains && data.domains.length > 0) {
-                        data.domains.forEach(domain => {
-                            const row = document.createElement('tr');
-                            row.style.borderBottom = '1px solid #d0d7de';
-                            row.innerHTML = `
-                            <td style="padding: 12px; font-family: monospace;">${domain.name}</td>
-                            <td style="padding: 12px;">
-                                <span style="background: ${domain.status === 'active' ? '#dafbe1' : '#f6f8fa'}; color: ${domain.status === 'active' ? '#1a7f37' : '#24292f'}; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: 600;">
-                                    ${domain.status}
-                                </span>
-                            </td>
-                            <td style="padding: 12px; font-family: monospace; font-size: 12px; color: #656d76;">${domain.id}</td>
-                        `;
-                            tbody.appendChild(row);
-                        });
-                    } else {
-                        tbody.innerHTML = '<tr><td colspan="3" style="padding: 20px; text-align: center; color: #656d76;">No domains found</td></tr>';
-                    }
-                } else {
-                    errorDiv.style.display = 'block';
-                    errorDiv.innerHTML = `
-                    <strong>Error fetching domains:</strong><br>
-                    ${data.error}
-                `;
-                }
-            })
-            .catch(error => {
-                loading.style.display = 'none';
-                errorDiv.style.display = 'block';
-                errorDiv.textContent = 'Network error: ' + error.message;
-            });
-    }
-
-    function closeCloudflareDomainsModal() {
-        document.getElementById('cloudflareDomainsModal').style.display = 'none';
-    }
-
-    function copyCloudflareDomains() {
-        const rows = document.querySelectorAll('#cloudflare-domains-list tr');
-        let domains = [];
-        rows.forEach(row => {
-            const domain = row.cells[0].textContent;
-            if (domain) domains.push(domain);
-        });
-
-        if (domains.length > 0) {
-            navigator.clipboard.writeText(domains.join('\n'))
-                .then(() => showStatus('✅ Domains copied to clipboard', 'success'))
-                .catch(err => showStatus('❌ Failed to copy: ' + err, 'error'));
-        }
-    }
+    // Cloudflare domain loading is owned by static/js/domain_manager.js so the
+    // floating icon and Settings use the same account picker and result view.
 
     // Close modal when clicking outside
     window.onclick = function (event) {

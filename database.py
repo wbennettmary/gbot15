@@ -126,8 +126,13 @@ class NamecheapConfig(db.Model):
 
 class CloudflareConfig(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    # Friendly connection label shown in account pickers and domain lists.
+    name = db.Column(db.String(255), nullable=False, default='Cloudflare Account')
     api_token = db.Column(db.String(255), nullable=False)
     email = db.Column(db.String(255), nullable=False)
+    # Populated from Cloudflare zone metadata when available.
+    cloudflare_account_id = db.Column(db.String(255), nullable=True)
+    cloudflare_account_name = db.Column(db.String(255), nullable=True)
     is_configured = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
     updated_at = db.Column(db.DateTime, default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())

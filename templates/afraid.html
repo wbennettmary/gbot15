@@ -1735,6 +1735,13 @@
                             </div>
                         </div>
                         <div class="mb-3">
+                            <fieldset id="afraid-cloudflare-account-picker" class="border rounded p-2 mb-2">
+                                <legend class="float-none w-auto px-1 mb-0 small fw-semibold">Cloudflare accounts to load</legend>
+                                <div id="afraid-cloudflare-account-options" class="d-flex flex-wrap gap-2" aria-live="polite">
+                                    <span class="form-text">Loading configured Cloudflare accounts...</span>
+                                </div>
+                                <div id="afraid-cloudflare-account-status" class="form-text" aria-live="polite"></div>
+                            </fieldset>
                             <label for="destinationInput" class="form-label fw-semibold">Destination (Cloudflare domain)</label>
                             <div class="input-group">
                                 <select class="form-select" id="cloudflareSelect">
@@ -2914,15 +2921,70 @@ function renderSelectedDomainSummary(selected) {
     }
 }
 
-async function loadCloudflareDomains() {
+window.afraidCloudflareConfigIds = null;
+window.afraidCloudflareAccountDirectory = {};
+
+function renderAfraidCloudflareAccountPicker(accounts, selectedIds) {
+    const options = document.getElementById('afraid-cloudflare-account-options');
+    if (!options) return;
+    const directory = window.afraidCloudflareAccountDirectory || {};
+    (accounts || []).forEach(account => {
+        if (account && account.id) directory[String(account.id)] = account;
+    });
+    window.afraidCloudflareAccountDirectory = directory;
+    const selected = new Set((selectedIds || []).map(Number));
+    const sortedAccounts = Object.values(directory).sort((a, b) =>
+        String(a.name || '').localeCompare(String(b.name || ''))
+    );
+    if (!sortedAccounts.length) {
+        options.innerHTML = '<span class="form-text">No configured Cloudflare accounts.</span>';
+        return;
+    }
+    options.innerHTML = sortedAccounts.map(account => `
+        <label class="form-check form-check-inline border rounded px-2 py-1 mb-0" style="cursor: pointer;">
+            <input class="form-check-input" type="checkbox" data-afraid-cloudflare-config-id="${Number(account.id)}" ${selected.has(Number(account.id)) ? 'checked' : ''} onchange="onAfraidCloudflareAccountSelectionChange()">
+            <span class="form-check-label small">${escapeHtml(account.name || `Cloudflare Account ${account.id}`)}</span>
+        </label>
+    `).join('');
+}
+
+function onAfraidCloudflareAccountSelectionChange() {
+    const ids = [...document.querySelectorAll('#afraid-cloudflare-account-options input[data-afraid-cloudflare-config-id]:checked')]
+        .map(input => Number(input.dataset.afraidCloudflareConfigId))
+        .filter(id => Number.isInteger(id) && id > 0);
+    if (!ids.length) {
+        const first = document.querySelector('#afraid-cloudflare-account-options input[data-afraid-cloudflare-config-id]');
+        if (first) first.checked = true;
+        const status = document.getElementById('afraid-cloudflare-account-status');
+        if (status) status.textContent = 'Select at least one Cloudflare account.';
+        return;
+    }
+    window.afraidCloudflareConfigIds = ids;
+    loadCloudflareDomains(ids);
+}
+
+async function loadCloudflareDomains(configIds = window.afraidCloudflareConfigIds) {
     try {
-        const res = await fetch('/api/afraid/cloudflare-domains');
+        const query = configIds && configIds.length
+            ? `?config_ids=${encodeURIComponent(configIds.join(','))}`
+            : '';
+        const res = await fetch(`/api/afraid/cloudflare-domains${query}`);
         const data = await parseJsonResponse(res);
         const select = document.getElementById('cloudflareSelect');
         const list = document.getElementById('cloudflareDomainsList');
         select.innerHTML = '<option value="">Rotate Cloudflare destination</option>';
         list.innerHTML = '';
         if (data.success) {
+            const selectedIds = data.selected_config_ids || configIds || [];
+            if (window.afraidCloudflareConfigIds === null || !window.afraidCloudflareConfigIds) {
+                window.afraidCloudflareConfigIds = selectedIds.map(Number);
+            }
+            renderAfraidCloudflareAccountPicker(data.accounts || [], window.afraidCloudflareConfigIds);
+            const accountStatus = document.getElementById('afraid-cloudflare-account-status');
+            if (accountStatus) {
+                const failed = (data.accounts || []).filter(account => account.error).length;
+                accountStatus.textContent = `Loaded ${data.total || 0} Cloudflare domain(s) from ${selectedIds.length} selected account(s)${failed ? `; ${failed} account load failed` : ''}.`;
+            }
             window.afraidCloudflareDomains = data.domains.map(d => d.name).filter(Boolean);
             window.afraidCloudflareIndex = 0;
             data.domains.forEach(domain => {
@@ -2930,7 +2992,9 @@ async function loadCloudflareDomains() {
                 if (!name) return;
                 const opt = document.createElement('option');
                 opt.value = name;
-                opt.textContent = `${name} (${domain.afraid_use_count || 0}/5)${domain.afraid_skipped ? ' skipped' : ''}`;
+                const accountLabel = domain.account_name || domain.config_name || 'Cloudflare account';
+                const connectionLabel = domain.config_name && domain.config_name !== accountLabel ? ` · ${domain.config_name}` : '';
+                opt.textContent = `${name} — ${accountLabel}${connectionLabel} (${domain.afraid_use_count || 0}/5)${domain.afraid_skipped ? ' skipped' : ''}`;
                 opt.disabled = Boolean(domain.afraid_skipped);
                 select.appendChild(opt);
                 if (!domain.afraid_skipped) {
@@ -3298,7 +3362,8 @@ async function startProcess() {
             destinations,
             subdomains: manualSubdomains,
             ttl: document.getElementById('ttlInput').value,
-            selected_registry_domains: selectedDomains
+            selected_registry_domains: selectedDomains,
+            cloudflare_config_ids: window.afraidCloudflareConfigIds || []
         };
         if (baseDomains.length) {
             payload.base_domains = baseDomains;

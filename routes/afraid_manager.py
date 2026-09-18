@@ -19,11 +19,29 @@ from database import (
     InboxDeliverabilityMessage,
 )
 from services.afraid_dns_service import AfraidDNSService
-from services.cloudflare_dns_service import CloudflareDNSService
+from services.cloudflare_dns_service import CloudflareDNSService, get_configured_cloudflare_configs
 
 logger = logging.getLogger(__name__)
 fake = Faker()
 MAX_CLOUDFLARE_DESTINATION_USES = 5
+
+
+def _parse_cloudflare_config_ids(raw_value):
+    if raw_value in (None, '', []):
+        return None, None
+    values = raw_value.split(',') if isinstance(raw_value, str) else raw_value
+    if not isinstance(values, (list, tuple, set)):
+        return None, 'Cloudflare account selection must be a list of ids.'
+    ids = []
+    for value in values:
+        value = str(value or '').strip()
+        if not value:
+            continue
+        if not value.isdigit() or int(value) <= 0:
+            return None, f'Invalid Cloudflare account id: {value}'
+        if int(value) not in ids:
+            ids.append(int(value))
+    return ids, None
 AFRAID_DOMAIN_SYNC_INTERVAL = timedelta(hours=1)
 _AFRAID_DOMAIN_SYNC_LOCK = threading.Lock()
 
@@ -658,8 +676,48 @@ def get_tld_groups():
 @login_required
 def get_afraid_cloudflare_domains():
     try:
-        service = CloudflareDNSService()
-        zones = service.get_zones()
+        requested_ids, selection_error = _parse_cloudflare_config_ids(
+            request.args.get('config_ids') or request.args.get('config_id')
+        )
+        if selection_error:
+            return jsonify({'success': False, 'error': selection_error}), 400
+        configs = get_configured_cloudflare_configs(requested_ids)
+        if requested_ids:
+            found_ids = {config.id for config in configs}
+            missing_ids = [config_id for config_id in requested_ids if config_id not in found_ids]
+            if missing_ids:
+                return jsonify({
+                    'success': False,
+                    'error': f"Cloudflare account(s) not found or disabled: {', '.join(map(str, missing_ids))}"
+                }), 404
+
+        zones = []
+        accounts = []
+        for config in configs:
+            account_info = {
+                'id': config.id,
+                'name': getattr(config, 'name', None) or config.email or f'Cloudflare Account {config.id}',
+                'email': config.email or '',
+                'domain_count': 0,
+                'error': None,
+            }
+            try:
+                account_zones = CloudflareDNSService(config=config).get_zones()
+                for zone in account_zones:
+                    zone['_afraid_config_id'] = config.id
+                    zone['_afraid_account_name'] = (
+                        zone.get('cloudflare_account_name')
+                        or (zone.get('account') or {}).get('name')
+                        or account_info['name']
+                    )
+                    zone['_afraid_config_name'] = account_info['name']
+                zones.extend(account_zones)
+                account_info['domain_count'] = len(account_zones)
+            except Exception as account_error:
+                account_info['error'] = str(account_error)
+                logger.error('Error fetching AFRAID Cloudflare account %s: %s', config.id, account_error, exc_info=True)
+            accounts.append(account_info)
+
         zone_names = [z['name'].strip().lower() for z in zones if z.get('name')]
         usage_rows = {
             row.domain_name: row
@@ -671,10 +729,15 @@ def get_afraid_cloudflare_domains():
                 'name': z['name'],
                 'id': z['id'],
                 'status': z.get('status'),
+                'config_id': z.get('_afraid_config_id'),
+                'config_name': z.get('_afraid_config_name'),
+                'account_name': z.get('_afraid_account_name') or z.get('cloudflare_config_name'),
                 'afraid_use_count': usage_rows.get(z['name'].strip().lower()).use_count if usage_rows.get(z['name'].strip().lower()) else 0,
                 'afraid_skipped': (usage_rows.get(z['name'].strip().lower()).use_count if usage_rows.get(z['name'].strip().lower()) else 0) >= MAX_CLOUDFLARE_DESTINATION_USES
             } for z in zones],
-            'total': len(zones)
+            'total': len(zones),
+            'accounts': accounts,
+            'selected_config_ids': [config.id for config in configs],
         })
     except Exception as e:
         logger.error(f"Error fetching Cloudflare domains for Afraid page: {e}", exc_info=True)
@@ -1048,6 +1111,20 @@ def create_batch_subdomains():
     data = request.get_json(silent=True) or {}
     if not isinstance(data, dict):
         return jsonify({'success': False, 'error': 'Invalid CNAME creation payload.'}), 400
+    selected_cloudflare_config_ids, cloudflare_selection_error = _parse_cloudflare_config_ids(
+        data.get('cloudflare_config_ids') or data.get('cloudflare_account_ids')
+    )
+    if cloudflare_selection_error:
+        return jsonify({'success': False, 'error': cloudflare_selection_error}), 400
+    cloudflare_configs = get_configured_cloudflare_configs(selected_cloudflare_config_ids)
+    if selected_cloudflare_config_ids:
+        found_ids = {config.id for config in cloudflare_configs}
+        missing_ids = [config_id for config_id in selected_cloudflare_config_ids if config_id not in found_ids]
+        if missing_ids:
+            return jsonify({
+                'success': False,
+                'error': f"Cloudflare account(s) not found or disabled: {', '.join(map(str, missing_ids))}"
+            }), 404
     freshness = sync_afraid_registry_domains(force=False)
     if not freshness.get('success'):
         return jsonify({
@@ -1154,7 +1231,13 @@ def create_batch_subdomains():
         return jsonify({'success': False, 'error': f"No cached FreeDNS domains found for TLD '{tld}'."}), 404
 
     try:
-        cf_zones = [z['name'] for z in CloudflareDNSService().get_zones()]
+        cf_zones = []
+        for config in cloudflare_configs:
+            cf_zones.extend(
+                zone['name']
+                for zone in CloudflareDNSService(config=config).get_zones()
+                if zone.get('name')
+            )
     except Exception as e:
         cf_zones = []
 
@@ -1247,6 +1330,7 @@ def create_batch_subdomains():
         'used_destinations': sorted(used_destinations),
         'used_base_domains': sorted(used_base_domains),
         'domains_marked_used': domains_marked_used,
+        'cloudflare_config_ids': [config.id for config in cloudflare_configs],
         'list': lst.to_dict() if lst else None
     })
 

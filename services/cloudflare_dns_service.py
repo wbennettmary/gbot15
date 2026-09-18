@@ -5,19 +5,52 @@ from database import CloudflareConfig
 
 logger = logging.getLogger(__name__)
 
+
+def get_configured_cloudflare_configs(config_ids=None):
+    """Return configured Cloudflare connections, optionally filtered by id."""
+    query = CloudflareConfig.query.filter_by(is_configured=True).order_by(CloudflareConfig.id.asc())
+    if config_ids in (None, '', []):
+        return query.all()
+
+    if isinstance(config_ids, str):
+        values = [value.strip() for value in config_ids.split(',') if value.strip()]
+    else:
+        values = [str(value).strip() for value in (config_ids or []) if str(value).strip()]
+    ids = []
+    for value in values:
+        if value.isdigit() and int(value) > 0:
+            ids.append(int(value))
+    if not ids:
+        return []
+    return query.filter(CloudflareConfig.id.in_(ids)).all()
+
+
 class CloudflareDNSService:
     """Service for managing DNS records via Cloudflare API."""
     
     BASE_URL = "https://api.cloudflare.com/client/v4"
     
-    def __init__(self):
-        """Initialize service with configuration from database."""
+    def __init__(self, config=None, config_id=None):
+        """Initialize the service for one configured Cloudflare connection."""
         try:
-            config = CloudflareConfig.query.first()
+            if config is None and config_id is not None:
+                config = CloudflareConfig.query.filter_by(
+                    id=int(config_id),
+                    is_configured=True,
+                ).first()
+            if config is None:
+                config = CloudflareConfig.query.filter_by(is_configured=True).order_by(CloudflareConfig.id.asc()).first()
             if not config or not config.is_configured:
                 raise Exception("Cloudflare configuration not found or not configured")
             
             self._config = config
+            self.config_id = config.id
+            self.connection_name = (
+                getattr(config, 'name', None)
+                or getattr(config, 'cloudflare_account_name', None)
+                or getattr(config, 'email', None)
+                or f'Cloudflare Account {config.id}'
+            ).strip()
             
             # Determine Auth Headers based on API Token format
             # If it looks like a Global API Key (37 chars hex) and we have email, use X-Auth-Key
@@ -366,7 +399,6 @@ class CloudflareDNSService:
         """
         try:
             url = f"{self.BASE_URL}/zones"
-            url = f"{self.BASE_URL}/zones"
             params = {'per_page': 50} # Removed status='active' to see all zones
             
             all_zones = []
@@ -388,6 +420,23 @@ class CloudflareDNSService:
                 if not zones:
                     break
                     
+                for zone in zones:
+                    # Cloudflare normally returns the owning account metadata
+                    # on each zone. Preserve it so callers can show the exact
+                    # account beside every domain, while retaining the local
+                    # connection label as a reliable fallback.
+                    account = zone.get('account') or {}
+                    zone['cloudflare_config_id'] = self.config_id
+                    zone['cloudflare_config_name'] = self.connection_name
+                    zone['cloudflare_account_id'] = (
+                        account.get('id')
+                        or getattr(self._config, 'cloudflare_account_id', None)
+                    )
+                    zone['cloudflare_account_name'] = (
+                        account.get('name')
+                        or getattr(self._config, 'cloudflare_account_name', None)
+                        or self.connection_name
+                    )
                 all_zones.extend(zones)
                 
                 # Check pagination
@@ -518,4 +567,3 @@ class CloudflareDNSService:
         except Exception as e:
             logger.error(f"Error yielding delete all TXT records for {domain}: {e}")
             yield {'type': 'error', 'message': str(e)}
-

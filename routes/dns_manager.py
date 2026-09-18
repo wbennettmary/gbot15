@@ -14,7 +14,7 @@ from database import db, DomainOperation, DomainVerificationOperation, GoogleAcc
 from services.zone_utils import to_apex
 from services.google_domains_service import GoogleDomainsService
 from services.namecheap_dns_service import NamecheapDNSService
-from services.cloudflare_dns_service import CloudflareDNSService
+from services.cloudflare_dns_service import CloudflareDNSService, get_configured_cloudflare_configs
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +34,25 @@ def login_required(f):
 active_jobs = {}
 job_lock = threading.Lock()
 SITE_VERIFICATION_SCOPE = 'https://www.googleapis.com/auth/siteverification'
+
+
+def _parse_cloudflare_config_ids(raw_value):
+    """Normalize a query/body account selection and reject malformed ids."""
+    if raw_value in (None, '', []):
+        return None, None
+    values = raw_value.split(',') if isinstance(raw_value, str) else raw_value
+    if not isinstance(values, (list, tuple, set)):
+        return None, 'Cloudflare account selection must be a list of ids.'
+    ids = []
+    for value in values:
+        value = str(value or '').strip()
+        if not value:
+            continue
+        if not value.isdigit() or int(value) <= 0:
+            return None, f'Invalid Cloudflare account id: {value}'
+        if int(value) not in ids:
+            ids.append(int(value))
+    return ids, None
 
 def _get_oauth_site_verification_credentials(account_name: str, admin_email: str = None):
     """Return OAuth user credentials for Site Verification when available."""
@@ -1679,28 +1698,88 @@ def get_domain_verification_status():
 @login_required
 def get_cloudflare_domains():
     """
-    Get list of domains (zones) from Cloudflare account.
+    Get zones from all configured Cloudflare accounts or a selected subset.
     """
     try:
-        logger.info("API: Fetching Cloudflare domains...")
-        dns_service = CloudflareDNSService()
-        zones = dns_service.get_zones()
-        
-        # Format for frontend
+        requested_ids, selection_error = _parse_cloudflare_config_ids(
+            request.args.get('config_ids') or request.args.get('config_id')
+        )
+        if selection_error:
+            return jsonify({'success': False, 'error': selection_error}), 400
+
+        configs = get_configured_cloudflare_configs(requested_ids)
+        if requested_ids:
+            found_ids = {config.id for config in configs}
+            missing_ids = [config_id for config_id in requested_ids if config_id not in found_ids]
+            if missing_ids:
+                return jsonify({
+                    'success': False,
+                    'error': f"Cloudflare account(s) not found or disabled: {', '.join(map(str, missing_ids))}"
+                }), 404
+
+        logger.info(
+            "API: Fetching Cloudflare domains from %s configured account(s)",
+            len(configs),
+        )
         domains = []
-        for zone in zones:
-            domains.append({
-                'name': zone['name'],
-                'id': zone['id'],
-                'status': zone['status'],
-                'expire_date': 'N/A' # Cloudflare doesn't provide expiry in basic zone info
-            })
-            
-        logger.info(f"API: Successfully retrieved {len(domains)} Cloudflare domains")
+        accounts = []
+        for config in configs:
+            account_info = {
+                'id': config.id,
+                'name': getattr(config, 'name', None) or config.email or f'Cloudflare Account {config.id}',
+                'email': config.email or '',
+                'cloudflare_account_id': getattr(config, 'cloudflare_account_id', None),
+                'cloudflare_account_name': getattr(config, 'cloudflare_account_name', None),
+                'domain_count': 0,
+                'error': None,
+            }
+            try:
+                zones = CloudflareDNSService(config=config).get_zones()
+                for zone in zones:
+                    zone_account = zone.get('account') or {}
+                    account_name = (
+                        zone.get('cloudflare_account_name')
+                        or zone_account.get('name')
+                        or account_info['cloudflare_account_name']
+                        or account_info['name']
+                    )
+                    account_id = (
+                        zone.get('cloudflare_account_id')
+                        or zone_account.get('id')
+                        or account_info['cloudflare_account_id']
+                    )
+                    domains.append({
+                        'name': zone['name'],
+                        'id': zone['id'],
+                        'status': zone.get('status'),
+                        'expire_date': 'N/A',
+                        'config_id': config.id,
+                        'config_name': account_info['name'],
+                        'account_id': account_id,
+                        'account_name': account_name,
+                    })
+                account_info['domain_count'] = len(zones)
+                account_info['cloudflare_account_id'] = account_id if zones else account_info['cloudflare_account_id']
+                account_info['cloudflare_account_name'] = account_name if zones else account_info['cloudflare_account_name']
+            except Exception as account_error:
+                account_info['error'] = str(account_error)
+                logger.error(
+                    "Error fetching Cloudflare domains for config %s: %s",
+                    config.id,
+                    account_error,
+                    exc_info=True,
+                )
+            accounts.append(account_info)
+
+        domains.sort(key=lambda item: (str(item.get('account_name') or '').lower(), str(item.get('name') or '').lower()))
+        total_errors = sum(1 for account in accounts if account.get('error'))
         return jsonify({
             'success': True,
             'domains': domains,
-            'total': len(domains)
+            'total': len(domains),
+            'accounts': accounts,
+            'selected_config_ids': [config.id for config in configs],
+            'account_errors': total_errors,
         })
     
     except Exception as e:

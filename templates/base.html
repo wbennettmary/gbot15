@@ -2340,6 +2340,14 @@
                             class="form-control-github" style="width: 100%; padding: 8px; font-size: 13px;"
                             onkeyup="filterCloudflareDomains()">
                     </div>
+                    <fieldset id="cloudflare-account-picker"
+                        style="margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--border-subtle); border-radius: 6px;">
+                        <legend style="width: auto; margin: 0; padding: 0 4px; font-size: 12px; font-weight: 700; color: var(--text-primary);">
+                            Load domains from Cloudflare accounts
+                        </legend>
+                        <div id="cloudflare-account-options" style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px;"></div>
+                        <div id="cloudflare-account-picker-status" style="margin-top: 6px; font-size: 11px; color: var(--text-muted);" aria-live="polite"></div>
+                    </fieldset>
                     <div
                         style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                         <span id="cloudflare-domains-count"
@@ -2359,6 +2367,9 @@
                                         Domain</th>
                                     <th
                                         style="padding: 12px; text-align: left; border-bottom: 1px solid var(--border-subtle); color: var(--text-primary);">
+                                        Cloudflare Account</th>
+                                    <th
+                                        style="padding: 12px; text-align: left; border-bottom: 1px solid var(--border-subtle); color: var(--text-primary);">
                                         Status</th>
                                     <th
                                         style="padding: 12px; text-align: left; border-bottom: 1px solid var(--border-subtle); color: var(--text-primary);">
@@ -2366,7 +2377,7 @@
                                     </th>
                                 </tr>
                             </thead>
-                            <tbody id="cloudflare-domains-list"></tbody>
+                    <tbody id="cloudflare-domains-list"></tbody>
                         </table>
                     </div>
                 </div>

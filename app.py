@@ -255,6 +255,38 @@ if not app.debug:
 with app.app_context():
     db.create_all()
 
+    # Auto-migration: extend the single Cloudflare credential row into
+    # multiple named connections without losing existing credentials.
+    try:
+        from sqlalchemy import inspect
+        inspector = inspect(db.engine)
+        if 'cloudflare_config' in inspector.get_table_names():
+            cloudflare_columns = [col['name'] for col in inspector.get_columns('cloudflare_config')]
+            new_cloudflare_columns = {
+                'name': "VARCHAR(255) DEFAULT 'Cloudflare Account'",
+                'cloudflare_account_id': 'VARCHAR(255)',
+                'cloudflare_account_name': 'VARCHAR(255)',
+            }
+            with db.engine.connect() as conn:
+                for column_name, column_type in new_cloudflare_columns.items():
+                    if column_name not in cloudflare_columns:
+                        logging.info("Adding missing '%s' column to cloudflare_config...", column_name)
+                        if 'postgresql' in str(db.engine.url):
+                            conn.execute(text(f'ALTER TABLE "cloudflare_config" ADD COLUMN {column_name} {column_type}'))
+                        else:
+                            conn.execute(text(f'ALTER TABLE cloudflare_config ADD COLUMN {column_name} {column_type}'))
+                conn.execute(text(
+                    "UPDATE cloudflare_config SET name = 'Cloudflare Account' "
+                    "WHERE name IS NULL OR TRIM(name) = ''"
+                ))
+                conn.commit()
+    except Exception as e:
+        logging.warning("Could not auto-migrate Cloudflare account fields: %s", e)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+
     # Auto-migration: Track whether a saved Afraid result list has been used
     # by the Add & Verify All/Pick actions.
     try:
@@ -21726,87 +21758,140 @@ def api_change_subdomain_status():
 
 
 
+def _cloudflare_config_label(config):
+    return (
+        getattr(config, 'name', None)
+        or getattr(config, 'cloudflare_account_name', None)
+        or getattr(config, 'email', None)
+        or f'Cloudflare Account {config.id}'
+    ).strip()
+
+
+def _serialize_cloudflare_config(config):
+    """Return safe account metadata without exposing API credentials."""
+    return {
+        'id': config.id,
+        'name': _cloudflare_config_label(config),
+        'email': config.email or '',
+        'is_configured': bool(config.is_configured),
+        'api_token_configured': bool(config.api_token),
+        'cloudflare_account_id': getattr(config, 'cloudflare_account_id', None),
+        'cloudflare_account_name': getattr(config, 'cloudflare_account_name', None),
+        'updated_at': config.updated_at.isoformat() if config.updated_at else None,
+    }
+
+
 @app.route('/api/get-cloudflare-config', methods=['GET'])
 @login_required
 def api_get_cloudflare_config():
-    """Get current Cloudflare configuration"""
-    # Allow admin, mailer, and support to access Cloudflare config
+    """Return all configured Cloudflare connections and safe account metadata."""
     allowed_roles = ['admin', 'mailer', 'support']
     if session.get('role') not in allowed_roles:
         return jsonify({'success': False, 'error': 'Access denied'})
-    
+
     try:
-        from database import CloudflareConfig
-        config = CloudflareConfig.query.filter_by(is_configured=True).first()
-        
-        if config:
-            return jsonify({
-                'success': True,
-                'config': {
-                    'api_token': config.api_token,
-                    'email': config.email,
-                    'is_configured': True
-                }
-            })
-        else:
-            return jsonify({
-                'success': True, 
-                'config': {
-                    'api_token': '',
-                    'email': '',
-                    'is_configured': False
-                }
-            })
+        configs = CloudflareConfig.query.filter_by(is_configured=True).order_by(CloudflareConfig.id.asc()).all()
+        serialized = [_serialize_cloudflare_config(config) for config in configs]
+        return jsonify({
+            'success': True,
+            'configs': serialized,
+            # Keep a singular compatibility field for older settings clients.
+            'config': serialized[0] if len(serialized) == 1 else None,
+        })
     except Exception as e:
-        app.logger.error(f"Error getting Cloudflare config: {e}")
+        app.logger.error(f"Error getting Cloudflare configs: {e}")
         return jsonify({'success': False, 'error': str(e)})
+
 
 @app.route('/api/save-cloudflare-config', methods=['POST'])
 @login_required
 def api_save_cloudflare_config():
-    """Save Cloudflare configuration"""
-    # Allow admin, mailer, and support to save Cloudflare config
+    """Create or update one named Cloudflare connection."""
     allowed_roles = ['admin', 'mailer', 'support']
     if session.get('role') not in allowed_roles:
         return jsonify({'success': False, 'error': 'Access denied'})
-    
+
     try:
-        data = request.get_json()
-        api_token = data.get('api_token', '').strip()
-        email = data.get('email', '').strip()
-        
+        data = request.get_json(silent=True) or {}
+        raw_config_id = data.get('id') or data.get('config_id')
+        config = None
+        if raw_config_id not in (None, ''):
+            try:
+                config = CloudflareConfig.query.filter_by(id=int(raw_config_id)).first()
+            except (TypeError, ValueError):
+                return jsonify({'success': False, 'error': 'Invalid Cloudflare account id'}), 400
+            if not config:
+                return jsonify({'success': False, 'error': 'Cloudflare account was not found'}), 404
+
+        api_token = str(data.get('api_token') or '').strip()
+        email = str(data.get('email') or '').strip()
+        label = str(data.get('name') or data.get('label') or '').strip()
+
+        if config is None and not api_token:
+            return jsonify({'success': False, 'error': 'API Token is required for a new account'}), 400
+        if config is not None and not api_token:
+            api_token = config.api_token
         if not api_token:
-            return jsonify({'success': False, 'error': 'API Token is required'})
-            
-        # Email is optional for API Tokens but good to have
-        
-        from database import CloudflareConfig
-        config = CloudflareConfig.query.first()
-        
-        if config:
-            config.api_token = api_token
-            config.email = email
-            config.is_configured = True
-            config.updated_at = datetime.now()
-        else:
+            return jsonify({'success': False, 'error': 'API Token is required'}), 400
+
+        if config is None:
             config = CloudflareConfig(
+                name=label or email or 'Cloudflare Account',
                 api_token=api_token,
                 email=email,
-                is_configured=True
+                is_configured=True,
             )
             db.session.add(config)
-        
+        else:
+            config.name = label or _cloudflare_config_label(config)
+            config.api_token = api_token
+            config.email = email or config.email or ''
+            config.is_configured = True
+            config.updated_at = datetime.now()
+
         db.session.commit()
-        
-        app.logger.info(f"Cloudflare configuration saved by {session.get('user')}")
-        
+
+        app.logger.info(
+            "Cloudflare configuration %s saved by %s",
+            config.id,
+            session.get('user'),
+        )
         return jsonify({
             'success': True,
-            'message': 'Cloudflare configuration saved successfully'
+            'message': 'Cloudflare account saved successfully',
+            'config': _serialize_cloudflare_config(config),
         })
-        
+
     except Exception as e:
+        db.session.rollback()
         app.logger.error(f"Error saving Cloudflare config: {e}")
+        return jsonify({'success': False, 'error': str(e)})
+
+
+@app.route('/api/delete-cloudflare-config', methods=['POST'])
+@login_required
+def api_delete_cloudflare_config():
+    """Disable one Cloudflare connection without exposing its secret."""
+    allowed_roles = ['admin', 'mailer', 'support']
+    if session.get('role') not in allowed_roles:
+        return jsonify({'success': False, 'error': 'Access denied'})
+
+    try:
+        data = request.get_json(silent=True) or {}
+        config_id = int(data.get('id') or data.get('config_id') or 0)
+        config = CloudflareConfig.query.filter_by(id=config_id).first()
+        if not config:
+            return jsonify({'success': False, 'error': 'Cloudflare account was not found'}), 404
+
+        config.is_configured = False
+        config.updated_at = datetime.now()
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Cloudflare account disabled'})
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'A valid Cloudflare account id is required'}), 400
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Error disabling Cloudflare config: {e}")
         return jsonify({'success': False, 'error': str(e)})
 
 # DEBUG ENDPOINT - View all UsedDomain records
