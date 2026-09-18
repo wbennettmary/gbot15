@@ -30,7 +30,7 @@ NAME_TYPE_LOCALES = {
     # compatibility with the requested UI. The source pool is European and
     # North American locale data rather than an attempt to infer identity.
     'caucasian': ('en_US', 'en_GB', 'de_DE', 'fr_FR', 'it_IT', 'nl_NL',
-                  'pl_PL', 'ru_RU', 'uk_UA'),
+                  'pl_PL'),
 }
 
 NAME_TYPE_LABELS = {
@@ -69,6 +69,34 @@ def _name_locales_for_types(name_types):
     return tuple(locales)
 
 
+def get_random_name_pools_for_locale(locale):
+    """Return a cached, locale-coherent (first_names, last_names) pool."""
+    locale = str(locale or '').strip()
+    if not locale:
+        raise RuntimeError('A locale is required for the selected name type.')
+
+    cache_key = ('locale', locale)
+    if cache_key in _RANDOM_NAMES_CACHE:
+        return _RANDOM_NAMES_CACHE[cache_key]
+
+    from faker import Faker
+
+    fake = Faker(locale)
+    firsts = set()
+    lasts = set()
+    for _ in range(3500):
+        firsts.add(fake.first_name())
+        lasts.add(fake.last_name())
+
+    firsts = sorted(n for n in firsts if n.isascii() and n.isalpha())
+    lasts = sorted(n for n in lasts if n.isascii() and n.isalpha())
+    if not firsts or not lasts:
+        raise RuntimeError(f'The {locale} locale does not have an ASCII-safe name pool.')
+
+    _RANDOM_NAMES_CACHE[cache_key] = (firsts, lasts)
+    return _RANDOM_NAMES_CACHE[cache_key]
+
+
 def get_random_name_pools(name_types=None):
     """Return cached (first_names, last_names) for the requested name types.
 
@@ -83,19 +111,15 @@ def get_random_name_pools(name_types=None):
     if cache_key in _RANDOM_NAMES_CACHE:
         return _RANDOM_NAMES_CACHE[cache_key]
 
-    from faker import Faker
-
     firsts = set()
     lasts = set()
-    sample_count = 4000 if name_types is None else 2500
     for locale in locales:
-        fake = Faker(locale)
-        for _ in range(sample_count):
-            firsts.add(fake.first_name())
-            lasts.add(fake.last_name())
+        locale_firsts, locale_lasts = get_random_name_pools_for_locale(locale)
+        firsts.update(locale_firsts)
+        lasts.update(locale_lasts)
 
-    firsts = sorted(n for n in firsts if n.isascii() and n.isalpha())
-    lasts = sorted(n for n in lasts if n.isascii() and n.isalpha())
+    firsts = sorted(firsts)
+    lasts = sorted(lasts)
     if not firsts or not lasts:
         raise RuntimeError('The selected name type does not have an ASCII-safe name pool.')
 

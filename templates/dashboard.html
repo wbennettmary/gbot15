@@ -35,6 +35,61 @@
         }
     }
 
+    .workspace-name-type-picker {
+        width: 100%;
+        margin: 12px 0 4px;
+        padding: 12px;
+        border: 1px solid var(--border-panel);
+        border-radius: 8px;
+        background: var(--bg-panel, rgba(255, 255, 255, 0.72));
+    }
+
+    .workspace-name-type-picker legend {
+        width: auto;
+        margin: 0;
+        padding: 0 5px;
+        color: var(--text-primary);
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .workspace-name-type-picker p {
+        margin: 0 0 10px;
+        color: var(--text-muted);
+        font-size: 12px;
+    }
+
+    .workspace-name-type-options {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .workspace-name-type-option {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 7px 10px;
+        border: 1px solid var(--border-panel);
+        border-radius: 6px;
+        color: var(--text-primary);
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .workspace-name-type-option:hover {
+        border-color: #7c3aed;
+        background: rgba(124, 58, 237, 0.08);
+    }
+
+    .workspace-name-type-option input {
+        width: 16px;
+        height: 16px;
+        margin: 0;
+        accent-color: #7c3aed;
+    }
+
 </style>
 <div class="tab-navigation" style="display: none;">
     <nav>
@@ -802,6 +857,29 @@
                         Add Account Row
                     </button>
                 </div>
+
+                <fieldset class="workspace-name-type-picker" data-workspace-name-type-scope="bulk">
+                    <legend>Name type for identity randomization</legend>
+                    <p>Select one or more categories. Each generated identity stays within one selected locale.</p>
+                    <div class="workspace-name-type-options">
+                        <label class="workspace-name-type-option" for="bulkNameTypeAsian">
+                            <input type="checkbox" id="bulkNameTypeAsian" data-workspace-name-type="asian" checked>
+                            <span>Asian</span>
+                        </label>
+                        <label class="workspace-name-type-option" for="bulkNameTypeAfrican">
+                            <input type="checkbox" id="bulkNameTypeAfrican" data-workspace-name-type="african" checked>
+                            <span>African</span>
+                        </label>
+                        <label class="workspace-name-type-option" for="bulkNameTypeLatin">
+                            <input type="checkbox" id="bulkNameTypeLatin" data-workspace-name-type="latin" checked>
+                            <span>Latin</span>
+                        </label>
+                        <label class="workspace-name-type-option" for="bulkNameTypeCaucasian">
+                            <input type="checkbox" id="bulkNameTypeCaucasian" data-workspace-name-type="caucasian" checked>
+                            <span>Caucasian</span>
+                        </label>
+                    </div>
+                </fieldset>
 
                 <div class="d-flex flex-wrap gap-2 mt-4">
                     <div class="form-group-github d-flex align-items-center mb-3">
@@ -8084,6 +8162,25 @@
         // ═══════════════════════════════════════════════════════════
         //  BULK RANDOMIZE USER ALIASES
         // ═══════════════════════════════════════════════════════════
+        function getWorkspaceNameTypes(scope) {
+            const picker = document.querySelector(`[data-workspace-name-type-scope="${scope}"]`);
+            const selected = picker
+                ? Array.from(picker.querySelectorAll('input[data-workspace-name-type]:checked'))
+                    .map(input => String(input.dataset.workspaceNameType || '').trim().toLowerCase())
+                    .filter(Boolean)
+                : [];
+            if (!selected.length) {
+                alert('Select at least one name type before randomizing identities.');
+                return null;
+            }
+            return selected;
+        }
+
+        function workspaceNameTypeLabels(nameTypes) {
+            const labels = { asian: 'Asian', african: 'African', latin: 'Latin', caucasian: 'Caucasian' };
+            return (nameTypes || []).map(value => labels[value] || value).join(', ');
+        }
+
         function executeBulkRandomizeAliases(event) {
             try {
                 console.log('executeBulkRandomizeAliases called');
@@ -8118,7 +8215,10 @@
                     return;
                 }
 
-                if (!confirm(`This will add a unique random alias for every user inside ${accounts.length} account(s).\n\nAliases use real names, no digits and no dots: firstname.lastname → firstnamelastname@domain\n\nContinue?`)) {
+                const nameTypes = getWorkspaceNameTypes('bulk');
+                if (!nameTypes) return;
+
+                if (!confirm(`This will add a unique identity for every user inside ${accounts.length} account(s).\n\nName types: ${workspaceNameTypeLabels(nameTypes)}\n\nContinue?`)) {
                     return;
                 }
 
@@ -8143,7 +8243,7 @@
                 fetch('/api/bulk-randomize-user-aliases', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ accounts: accounts })
+                    body: JSON.stringify({ accounts: accounts, name_types: nameTypes })
                 })
                 .then(response => response.json())
                 .then(initialData => {
@@ -10408,7 +10508,10 @@
                 return;
             }
 
-            if (!confirm(`This will randomize aliases for all users in ${accounts.length} account(s). Continue?`)) {
+            const nameTypes = getWorkspaceNameTypes('mega');
+            if (!nameTypes) return;
+
+            if (!confirm(`This will randomize identities for all users in ${accounts.length} account(s).\n\nName types: ${workspaceNameTypeLabels(nameTypes)}\n\nContinue?`)) {
                 return;
             }
 
@@ -10436,7 +10539,7 @@
             fetch('/api/bulk-randomize-user-aliases', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ accounts: accounts })
+                body: JSON.stringify({ accounts: accounts, name_types: nameTypes })
             })
             .then(response => response.json())
             .then(initialData => {
@@ -12681,6 +12784,29 @@
                         </div>
                     </div>
                 </div>
+
+                <fieldset class="workspace-name-type-picker" data-workspace-name-type-scope="mega">
+                    <legend>Name type for identity randomization</legend>
+                    <p>These choices are used when you press “Auth + Randomize User Aliases”.</p>
+                    <div class="workspace-name-type-options">
+                        <label class="workspace-name-type-option" for="megaNameTypeAsian">
+                            <input type="checkbox" id="megaNameTypeAsian" data-workspace-name-type="asian" checked>
+                            <span>Asian</span>
+                        </label>
+                        <label class="workspace-name-type-option" for="megaNameTypeAfrican">
+                            <input type="checkbox" id="megaNameTypeAfrican" data-workspace-name-type="african" checked>
+                            <span>African</span>
+                        </label>
+                        <label class="workspace-name-type-option" for="megaNameTypeLatin">
+                            <input type="checkbox" id="megaNameTypeLatin" data-workspace-name-type="latin" checked>
+                            <span>Latin</span>
+                        </label>
+                        <label class="workspace-name-type-option" for="megaNameTypeCaucasian">
+                            <input type="checkbox" id="megaNameTypeCaucasian" data-workspace-name-type="caucasian" checked>
+                            <span>Caucasian</span>
+                        </label>
+                    </div>
+                </fieldset>
 
                 <!-- Action Buttons -->
                 <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">

@@ -45,6 +45,7 @@ from core_logic import (
     google_api,
     unique_random_alias,
     get_random_name_pools,
+    get_random_name_pools_for_locale,
     NAME_TYPE_LABELS,
     NAME_TYPE_LOCALES,
     normalize_name_types,
@@ -10512,16 +10513,30 @@ def api_bulk_randomize_user_aliases():
     Uses the Google Admin SDK users.aliases.insert API.
     """
     cleanup_old_progress()
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     accounts = data.get('accounts', [])
+    selected_name_types, name_type_errors = _normalize_workspace_name_types_payload(data.get('name_types'))
+
+    if name_type_errors:
+        return jsonify({'success': False, 'error': '; '.join(name_type_errors[:5])})
 
     if not accounts or len(accounts) == 0:
         return jsonify({'success': False, 'error': 'No accounts provided'})
 
     task_id = str(uuid.uuid4())
-    update_progress(task_id, 0, len(accounts), "starting", "Initializing bulk alias randomization...")
+    selected_labels = ', '.join(
+        NAME_TYPE_LABELS.get(name_type, name_type)
+        for name_type in (selected_name_types or [])
+    ) or 'the default name pool'
+    update_progress(
+        task_id,
+        0,
+        len(accounts),
+        "starting",
+        f"Initializing bulk alias randomization using {selected_labels} names...",
+    )
 
-    def background_task(task_id, accounts):
+    def background_task(task_id, accounts, name_types):
         with app.app_context():
             from concurrent.futures import ThreadPoolExecutor, as_completed
             all_results = []
@@ -10601,34 +10616,14 @@ def api_bulk_randomize_user_aliases():
                     update_progress(task_id, len(account_list), len(account_list), "completed", f"Auth Failed: {first_err}", result_data)
                     return
 
-                # Step 2: For each authenticated account, list users and randomize their aliases
-                update_progress(task_id, 0, len(authenticated_accounts), "randomizing", f"Randomizing aliases for {len(authenticated_accounts)} accounts...")
-
-                def generate_unique_identity(existing_aliases_set):
-                    """Generate a unique long-tail identity (names and username) using real names
-                    from the large cached pool — alias is "firstlast", no digits, no dots."""
-                    import random as _random
-                    first_names, last_names = get_random_name_pools()
-                    for _ in range(300):  # Up to 300 attempts to avoid collision
-                        f_name = _random.choice(first_names)
-                        l_name = _random.choice(last_names)
-
-                        # Clean names to ensure valid email local part, removing spaces, single quotes, hyphens
-                        clean_f = f_name.lower().replace("'", "").replace("-", "").replace(" ", "")
-                        clean_l = l_name.lower().replace("'", "").replace("-", "").replace(" ", "")
-
-                        candidate_local = f"{clean_f}{clean_l}"
-
-                        if candidate_local not in existing_aliases_set:
-                            existing_aliases_set.add(candidate_local)
-                            return f_name, l_name, candidate_local
-
-                    # Fallback — name pools exhausted (essentially impossible)
-                    fallback_f = "User"
-                    fallback_l = ''.join(_random.choices(string.ascii_uppercase, k=4))
-                    fallback_local = f"user{fallback_l.lower()}"
-                    existing_aliases_set.add(fallback_local)
-                    return fallback_f, fallback_l, fallback_local
+                # Step 2: For each authenticated account, list users and randomize their aliases.
+                update_progress(
+                    task_id,
+                    0,
+                    len(authenticated_accounts),
+                    "randomizing",
+                    f"Randomizing aliases for {len(authenticated_accounts)} accounts using {selected_labels} names...",
+                )
 
 
                 def randomize_aliases_for_account(account_name):
@@ -10698,7 +10693,10 @@ def api_bulk_randomize_user_aliases():
                                 except Exception:
                                     pass
 
-                                new_first, new_last, new_local = generate_unique_identity(used_aliases)
+                                new_first, new_last, new_local = _generate_unique_workspace_identity(
+                                    used_aliases,
+                                    name_types,
+                                )
                                 new_primary_email = f"{new_local}@{domain}"
 
                                 try:
@@ -10769,6 +10767,11 @@ def api_bulk_randomize_user_aliases():
 
                 final_result = {
                     'success': True,
+                    'name_types': name_types or [],
+                    'name_type_labels': [
+                        NAME_TYPE_LABELS.get(name_type, name_type)
+                        for name_type in (name_types or [])
+                    ],
                     'total_accounts': len(all_results),
                     'total_users': total_users,
                     'total_aliases_added': total_aliases_added,
@@ -10784,7 +10787,10 @@ def api_bulk_randomize_user_aliases():
                 app.logger.error(traceback.format_exc())
                 update_progress(task_id, 0, 0, "error", f"Task failed: {str(e)}")
 
-    threading.Thread(target=background_task, args=(task_id, accounts)).start()
+    threading.Thread(
+        target=background_task,
+        args=(task_id, accounts, selected_name_types),
+    ).start()
 
     return jsonify({'success': True, 'task_id': task_id})
 
@@ -10832,16 +10838,50 @@ def _normalize_targeted_alias_pairs(raw_targets):
     return normalized, errors
 
 
+def _normalize_workspace_name_types_payload(raw_name_types):
+    """Normalize the optional name-type selection shared by alias workflows.
+
+    ``None`` means the caller is an older client that did not send a selection;
+    that path keeps the legacy mixed pool. A supplied value must contain at
+    least one supported type.
+    """
+    if raw_name_types is None:
+        return None, []
+
+    if isinstance(raw_name_types, str):
+        raw_name_types = [raw_name_types]
+    if not isinstance(raw_name_types, (list, tuple, set)):
+        return [], ['Name types must be provided as a list.']
+
+    normalized_values = [str(value or '').strip().lower() for value in raw_name_types]
+    invalid_name_types = [value for value in normalized_values if value not in NAME_TYPE_LOCALES]
+    errors = []
+    if invalid_name_types:
+        errors.append(f"Unsupported name type(s): {', '.join(invalid_name_types)}.")
+
+    selected_name_types = normalize_name_types(normalized_values)
+    if not selected_name_types:
+        errors.append('Select at least one name type.')
+    return selected_name_types, errors
+
+
 def _generate_unique_workspace_identity(existing_aliases_set, name_types=None):
     selected_name_types = normalize_name_types(name_types)
+    pool_sources = [
+        (name_type, locale)
+        for name_type in selected_name_types
+        for locale in NAME_TYPE_LOCALES[name_type]
+    ]
     for _ in range(300):
         # Select one category for the whole identity so a mixed selection does
         # not combine a first name from one category with a surname from another.
-        pool_types = selected_name_types or [None]
-        selected_type = random.choice(pool_types)
-        first_names, last_names = get_random_name_pools(
-            [selected_type] if selected_type else None
-        )
+        # Then select one locale within that category so the first and last name
+        # stay coherent at the country/name-set level as well.
+        if selected_name_types:
+            _, selected_locale = random.choice(pool_sources)
+            first_names, last_names = get_random_name_pools_for_locale(selected_locale)
+        else:
+            first_names, last_names = get_random_name_pools()
         first_name = random.choice(first_names)
         last_name = random.choice(last_names)
         clean_first = _latin_name_part(first_name).lower().replace("'", "").replace("-", "").replace(" ", "")
@@ -10852,10 +10892,25 @@ def _generate_unique_workspace_identity(existing_aliases_set, name_types=None):
             existing_aliases_set.add(candidate_local)
             return _latin_name_part(first_name), _latin_name_part(last_name), candidate_local
 
-    fallback_last = ''.join(random.choices(string.ascii_uppercase, k=4))
-    fallback_local = f"user{fallback_last.lower()}"
-    existing_aliases_set.add(fallback_local)
-    return "User", fallback_last, fallback_local
+    # Never fall back to a generic/generated label: even the collision-recovery
+    # path must remain inside the selected locale pools.
+    exhaustive_sources = pool_sources or [(None, None)]
+    random.shuffle(exhaustive_sources)
+    for _, selected_locale in exhaustive_sources:
+        if selected_locale:
+            first_names, last_names = get_random_name_pools_for_locale(selected_locale)
+        else:
+            first_names, last_names = get_random_name_pools()
+        for first_name in first_names:
+            for last_name in last_names:
+                clean_first = _latin_name_part(first_name).lower().replace("'", "").replace("-", "").replace(" ", "")
+                clean_last = _latin_name_part(last_name).lower().replace("'", "").replace("-", "").replace(" ", "")
+                candidate_local = f"{clean_first}{clean_last}"
+                if candidate_local and candidate_local not in existing_aliases_set:
+                    existing_aliases_set.add(candidate_local)
+                    return _latin_name_part(first_name), _latin_name_part(last_name), candidate_local
+
+    raise RuntimeError('The selected name pools are exhausted; no regional identity is available.')
 
 def _latin_name_part(value):
     normalized = unicodedata.normalize('NFKD', str(value or '')).encode('ascii', 'ignore').decode('ascii')
@@ -11082,27 +11137,8 @@ def api_targeted_randomize_user_aliases():
     cleanup_old_progress()
     data = request.get_json(silent=True) or {}
     targets, parse_errors = _normalize_targeted_alias_pairs(data.get('targets', []))
-
-    raw_name_types = data.get('name_types')
-    selected_name_types = None
-    if raw_name_types is not None:
-        if isinstance(raw_name_types, str):
-            raw_name_types = [raw_name_types]
-        if not isinstance(raw_name_types, (list, tuple, set)):
-            parse_errors.append('Name types must be provided as a list.')
-            raw_name_types = []
-        invalid_name_types = [
-            str(value or '').strip().lower()
-            for value in raw_name_types
-            if str(value or '').strip().lower() not in NAME_TYPE_LOCALES
-        ]
-        if invalid_name_types:
-            parse_errors.append(
-                f"Unsupported name type(s): {', '.join(invalid_name_types)}."
-            )
-        selected_name_types = normalize_name_types(raw_name_types)
-        if not selected_name_types:
-            parse_errors.append('Select at least one name type.')
+    selected_name_types, name_type_errors = _normalize_workspace_name_types_payload(data.get('name_types'))
+    parse_errors.extend(name_type_errors)
 
     if parse_errors:
         return jsonify({'success': False, 'error': '; '.join(parse_errors[:5])})
