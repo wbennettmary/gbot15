@@ -127,21 +127,37 @@ def get_random_name_pools(name_types=None):
     return _RANDOM_NAMES_CACHE[cache_key]
 
 
-def unique_random_alias(domain, used_emails, name_types=None):
-    """Return (first_name, last_name, email) where email is a real-name alias
-    "firstnamelastname@domain" — no digits, no dots — guaranteed unique against
-    used_emails. Raises RuntimeError only if the name pools are exhausted
-    (essentially impossible at ~19M combinations)."""
+def _name_identity_key(first_name, last_name):
+    """Return a stable, case-insensitive key for a generated display name."""
+    return f"{str(first_name or '').strip()} {str(last_name or '').strip()}".strip().casefold()
+
+
+def unique_random_alias(domain, used_emails, name_types=None, used_names=None):
+    """Return a unique real-name alias and reserve its display name too.
+
+    ``used_emails`` historically tracked only email addresses.  The name
+    reservation marker kept in that same set preserves compatibility for all
+    existing callers while ensuring repeated first/last-name pairs cannot be
+    generated in one batch.  Callers that already maintain a separate name set
+    can pass it through ``used_names`` as well.
+    """
     import random
     first_names, last_names = get_random_name_pools(name_types)
     for _ in range(300):
         first_name = random.choice(first_names)
         last_name = random.choice(last_names)
         email = f"{first_name.lower()}{last_name.lower()}@{domain}"
-        if email not in used_emails:
+        name_key = _name_identity_key(first_name, last_name)
+        name_marker = f"__generated_name__:{name_key}"
+        if email not in used_emails and name_marker not in used_emails and (
+            used_names is None or name_key not in used_names
+        ):
             used_emails.add(email)
+            used_emails.add(name_marker)
+            if used_names is not None:
+                used_names.add(name_key)
             return first_name, last_name, email
-    raise RuntimeError("Name pools exhausted; cannot generate a unique alias without digits.")
+    raise RuntimeError("Name pools exhausted; cannot generate a unique alias without duplicate names.")
 
 class WebGoogleAPI:
     def get_credentials(self, account_name):

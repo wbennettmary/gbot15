@@ -10657,6 +10657,41 @@ def api_bulk_randomize_user_aliases():
                     f"Randomizing aliases for {len(authenticated_accounts)} accounts using {selected_labels} names...",
                 )
 
+                # One shared reservation pool prevents parallel account
+                # workers from ever generating the same display name. Seed it
+                # with every existing Workspace name before any updates run.
+                workspace_identity_names = set()
+                workspace_identity_lock = threading.RLock()
+                workspace_users_by_account = {}
+
+                for account_name, auth_data in authenticated_accounts.items():
+                    all_users = []
+                    page_token = None
+                    service = auth_data['service']
+                    while True:
+                        try:
+                            request_kwargs = {
+                                'customer': 'my_customer',
+                                'maxResults': 500,
+                            }
+                            if page_token:
+                                request_kwargs['pageToken'] = page_token
+                            users_result = service.users().list(**request_kwargs).execute()
+                            all_users.extend(users_result.get('users', []))
+                            page_token = users_result.get('nextPageToken')
+                            if not page_token:
+                                break
+                        except Exception as list_err:
+                            app.logger.warning(f"[ALIAS] Error listing users for {account_name}: {list_err}")
+                            break
+                    workspace_users_by_account[account_name] = all_users
+                    with workspace_identity_lock:
+                        workspace_identity_names.update(
+                            name_key
+                            for name_key in (_workspace_user_identity_name_key(user) for user in all_users)
+                            if name_key
+                        )
+
 
                 def randomize_aliases_for_account(account_name):
                     with app.app_context():
@@ -10673,27 +10708,9 @@ def api_bulk_randomize_user_aliases():
                             auth_data = authenticated_accounts[account_name]
                             service = auth_data['service']
 
-                            # List all users in this account
-                            all_users = []
-                            page_token = None
-                            while True:
-                                try:
-                                    if page_token:
-                                        users_result = service.users().list(
-                                            customer='my_customer', maxResults=500,
-                                            pageToken=page_token
-                                        ).execute()
-                                    else:
-                                        users_result = service.users().list(
-                                            customer='my_customer', maxResults=500
-                                        ).execute()
-                                    all_users.extend(users_result.get('users', []))
-                                    page_token = users_result.get('nextPageToken')
-                                    if not page_token:
-                                        break
-                                except Exception as list_err:
-                                    app.logger.warning(f"[ALIAS] Error listing users for {account_name}: {list_err}")
-                                    break
+                            # Users were listed and all existing names were
+                            # reserved before the parallel update phase.
+                            all_users = workspace_users_by_account.get(account_name, [])
 
                             account_result['user_count'] = len(all_users)
                             app.logger.info(f"[ALIAS] {account_name}: found {len(all_users)} users")
@@ -10728,6 +10745,8 @@ def api_bulk_randomize_user_aliases():
                                 new_first, new_last, new_local = _generate_unique_workspace_identity(
                                     used_aliases,
                                     name_types,
+                                    workspace_identity_names,
+                                    workspace_identity_lock,
                                 )
                                 new_primary_email = f"{new_local}@{domain}"
 
@@ -10897,13 +10916,89 @@ def _normalize_workspace_name_types_payload(raw_name_types):
     return selected_name_types, errors
 
 
-def _generate_unique_workspace_identity(existing_aliases_set, name_types=None):
+def _workspace_identity_name_key(first_name, last_name):
+    """Normalize a Workspace display name for case-insensitive uniqueness."""
+    clean_first = _latin_name_part(first_name).casefold()
+    clean_last = _latin_name_part(last_name).casefold()
+    if not clean_first or not clean_last:
+        return ''
+    return f'{clean_first} {clean_last}'
+
+
+def _workspace_name_reservation_key(name_key):
+    return f'__workspace_name__:{name_key}'
+
+
+def _workspace_user_identity_name_key(user):
+    """Extract the existing Workspace user's given/family name as a key."""
+    user = user or {}
+    name = user.get('name') or {}
+    given_name = name.get('givenName') or user.get('givenName')
+    family_name = name.get('familyName') or user.get('familyName')
+
+    # Some Admin SDK responses expose only fullName. Preserve that name too,
+    # rather than allowing a later generated pair to duplicate it.
+    if (not given_name or not family_name) and name.get('fullName'):
+        parts = str(name['fullName']).strip().split()
+        if len(parts) >= 2:
+            given_name = given_name or parts[0]
+            family_name = family_name or ' '.join(parts[1:])
+
+    return _workspace_identity_name_key(given_name, family_name)
+
+
+def _generate_unique_workspace_identity(
+    existing_aliases_set,
+    name_types=None,
+    used_identity_names=None,
+    identity_lock=None,
+):
+    """Generate and atomically reserve a unique email local-part and name.
+
+    The name marker is also stored in ``existing_aliases_set`` for backwards
+    compatibility, so callers that only pass the historical alias set still
+    get duplicate display-name protection. ``used_identity_names`` allows
+    concurrent account workers to share one global name reservation pool.
+    """
     selected_name_types = normalize_name_types(name_types)
+    if used_identity_names is None:
+        used_identity_names = set()
     pool_sources = [
         (name_type, locale)
         for name_type in selected_name_types
         for locale in NAME_TYPE_LOCALES[name_type]
     ]
+
+    def reserve_identity(first_name, last_name):
+        clean_first = _latin_name_part(first_name).lower().replace("'", "").replace("-", "").replace(" ", "")
+        clean_last = _latin_name_part(last_name).lower().replace("'", "").replace("-", "").replace(" ", "")
+        candidate_local = f"{clean_first}{clean_last}"
+        name_key = _workspace_identity_name_key(first_name, last_name)
+        if not candidate_local or not name_key:
+            return None
+        name_marker = _workspace_name_reservation_key(name_key)
+
+        def try_reserve():
+            if candidate_local in existing_aliases_set:
+                return False
+            if name_marker in existing_aliases_set or name_key in used_identity_names:
+                return False
+            existing_aliases_set.add(candidate_local)
+            existing_aliases_set.add(name_marker)
+            used_identity_names.add(name_key)
+            return True
+
+        if identity_lock is None:
+            reserved = try_reserve()
+        else:
+            # The check and both reservations must be one critical section;
+            # otherwise parallel account workers can select the same name.
+            with identity_lock:
+                reserved = try_reserve()
+        if not reserved:
+            return None
+        return _latin_name_part(first_name), _latin_name_part(last_name), candidate_local
+
     for _ in range(300):
         # Select one category for the whole identity so a mixed selection does
         # not combine a first name from one category with a surname from another.
@@ -10916,13 +11011,9 @@ def _generate_unique_workspace_identity(existing_aliases_set, name_types=None):
             first_names, last_names = get_random_name_pools()
         first_name = random.choice(first_names)
         last_name = random.choice(last_names)
-        clean_first = _latin_name_part(first_name).lower().replace("'", "").replace("-", "").replace(" ", "")
-        clean_last = _latin_name_part(last_name).lower().replace("'", "").replace("-", "").replace(" ", "")
-        candidate_local = f"{clean_first}{clean_last}"
-
-        if candidate_local not in existing_aliases_set:
-            existing_aliases_set.add(candidate_local)
-            return _latin_name_part(first_name), _latin_name_part(last_name), candidate_local
+        reserved = reserve_identity(first_name, last_name)
+        if reserved:
+            return reserved
 
     # Never fall back to a generic/generated label: even the collision-recovery
     # path must remain inside the selected locale pools.
@@ -10935,12 +11026,9 @@ def _generate_unique_workspace_identity(existing_aliases_set, name_types=None):
             first_names, last_names = get_random_name_pools()
         for first_name in first_names:
             for last_name in last_names:
-                clean_first = _latin_name_part(first_name).lower().replace("'", "").replace("-", "").replace(" ", "")
-                clean_last = _latin_name_part(last_name).lower().replace("'", "").replace("-", "").replace(" ", "")
-                candidate_local = f"{clean_first}{clean_last}"
-                if candidate_local and candidate_local not in existing_aliases_set:
-                    existing_aliases_set.add(candidate_local)
-                    return _latin_name_part(first_name), _latin_name_part(last_name), candidate_local
+                reserved = reserve_identity(first_name, last_name)
+                if reserved:
+                    return reserved
 
     raise RuntimeError('The selected name pools are exhausted; no regional identity is available.')
 
@@ -11098,6 +11186,11 @@ def _find_workspace_user_from_listed_users(service, account_name, user_key):
 def _collect_workspace_used_alias_locals(service, all_users):
     used_aliases = set()
     for existing_user in all_users or []:
+        existing_name_key = _workspace_user_identity_name_key(existing_user)
+        if existing_name_key:
+            # Keep existing display names in the same reservation set used by
+            # the generator, so new identities cannot reuse them.
+            used_aliases.add(_workspace_name_reservation_key(existing_name_key))
         primary_email = str(existing_user.get('primaryEmail') or '').strip().lower()
         if '@' in primary_email:
             used_aliases.add(primary_email.split('@', 1)[0])
@@ -11118,7 +11211,15 @@ def _collect_workspace_used_alias_locals(service, all_users):
             pass
     return used_aliases
 
-def _randomize_one_workspace_user_identity(service, account_name, user_key, used_aliases, name_types=None):
+def _randomize_one_workspace_user_identity(
+    service,
+    account_name,
+    user_key,
+    used_aliases,
+    name_types=None,
+    used_identity_names=None,
+    identity_lock=None,
+):
     user, all_users = _find_workspace_user_from_listed_users(service, account_name, user_key)
     if not user:
         raise ValueError(f"{user_key} was not found in the users visible to {account_name}.")
@@ -11136,7 +11237,12 @@ def _randomize_one_workspace_user_identity(service, account_name, user_key, used
 
     domain = primary_email.split('@', 1)[1]
     used_aliases.update(_collect_workspace_used_alias_locals(service, all_users))
-    new_first, new_last, new_local = _generate_unique_workspace_identity(used_aliases, name_types)
+    new_first, new_last, new_local = _generate_unique_workspace_identity(
+        used_aliases,
+        name_types,
+        used_identity_names,
+        identity_lock,
+    )
     new_primary_email = f"{new_local}@{domain}"
 
     service.users().patch(
@@ -11262,6 +11368,32 @@ def api_targeted_randomize_user_aliases():
                     update_progress(task_id, len(targets), len(targets), "completed", f"Auth Failed: {first_err}", result_data)
                     return
 
+                # Reserve all existing display names before targeted account
+                # workers begin. This covers duplicates against untouched
+                # users as well as duplicates between different accounts.
+                workspace_identity_names = set()
+                workspace_identity_lock = threading.RLock()
+                for account_name, auth_data in authenticated_accounts.items():
+                    try:
+                        existing_users = _list_workspace_users_for_alias_service(
+                            auth_data['service'],
+                            account_name,
+                        )
+                    except Exception as list_err:
+                        app.logger.warning(
+                            f"[TARGETED IDENTITY] Could not pre-load names for {account_name}: {list_err}"
+                        )
+                        existing_users = []
+                    with workspace_identity_lock:
+                        workspace_identity_names.update(
+                            name_key
+                            for name_key in (
+                                _workspace_user_identity_name_key(user)
+                                for user in existing_users
+                            )
+                            if name_key
+                        )
+
                 selected_labels = ', '.join(
                     NAME_TYPE_LABELS.get(name_type, name_type)
                     for name_type in (name_types or [])
@@ -11297,6 +11429,8 @@ def api_targeted_randomize_user_aliases():
                                     user_key,
                                     used_aliases,
                                     name_types,
+                                    workspace_identity_names,
+                                    workspace_identity_lock,
                                 )
                                 account_result['details'].append(detail)
                                 if detail.get('success'):
