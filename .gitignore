@@ -24,3 +24,14 @@ venv/
 
 # Instance folder
 instance/
+
+# Local-only planning, inbox AI, roadmap, and OTP artifacts
+AI_INTEGRATION_ROADMAP.md
+Ai_integration.md
+DESIGN.md
+UX-CONTRACT.md
+Roadmap/
+migrations/add_inbox_ai_tables.py
+otp_ssh_config.json*
+services/inbox_ai_*.py
+tmp_add_models.py
