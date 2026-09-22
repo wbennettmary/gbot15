@@ -3546,6 +3546,28 @@ def _parse_workspace_target_sender_rows(raw_targets):
         rows.append({'account': account, 'user': user_key})
     return rows, errors
 
+def _parse_workspace_account_tokens(raw_accounts):
+    """Normalize pasted Workspace account identifiers and remove duplicates."""
+    if isinstance(raw_accounts, str):
+        raw_accounts = [raw_accounts]
+    elif not isinstance(raw_accounts, (list, tuple, set)):
+        raw_accounts = [raw_accounts]
+    tokens = []
+    seen = set()
+    for raw_value in raw_accounts or []:
+        # Accept one account per line, while also making comma/semicolon paste
+        # convenient for users copying a compact list from another tool.
+        for raw_token in re.split(r'[\r\n,;]+', str(raw_value or '')):
+            token = raw_token.strip()
+            if not token:
+                continue
+            key = token.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            tokens.append(token)
+    return tokens
+
 @app.route('/api/inbox-intelligence/workspace-lists', methods=['GET'])
 @login_required
 @permission_required('inbox_intelligence')
@@ -3604,6 +3626,53 @@ def api_inbox_resolve_target_workspace_senders():
         'service_account_count': len(service_accounts),
         'count': len(senders),
         'errors': errors,
+    })
+
+@app.route('/api/inbox-intelligence/workspace-senders/retrieve-pasted-accounts', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_inbox_retrieve_workspace_senders_from_pasted_accounts():
+    """Resolve pasted saved-account identifiers, authenticate, and retrieve users."""
+    data = request.get_json(silent=True) or {}
+    accounts = _parse_workspace_account_tokens(data.get('accounts') or data.get('raw_accounts') or [])
+    if not accounts:
+        return jsonify({'success': False, 'error': 'Paste at least one Workspace account identifier.'}), 400
+    if len(accounts) > 100:
+        return jsonify({'success': False, 'error': 'Paste no more than 100 Workspace accounts at a time.'}), 400
+
+    service_accounts = {}
+    unmatched = []
+    for token in accounts:
+        service_account = _service_account_for_alias_token(token)
+        if service_account:
+            service_accounts[service_account.id] = service_account
+        else:
+            unmatched.append(token)
+    resolved_accounts = list(service_accounts.values())
+    if not resolved_accounts:
+        return jsonify({
+            'success': False,
+            'error': 'No pasted accounts matched saved Workspace service accounts.',
+            'unmatched': unmatched,
+        }), 400
+
+    senders, errors = _retrieve_workspace_senders_from_service_accounts(resolved_accounts)
+    if not senders and errors:
+        return jsonify({
+            'success': False,
+            'error': f"Could not retrieve users from pasted Workspace accounts: {errors[0].get('error', 'Unknown error')}",
+            'errors': errors,
+            'unmatched': unmatched,
+            'service_accounts': [_workspace_service_account_payload(sa) for sa in resolved_accounts],
+        }), 400
+    return jsonify({
+        'success': True,
+        'senders': senders,
+        'service_accounts': [_workspace_service_account_payload(sa) for sa in resolved_accounts],
+        'errors': errors,
+        'unmatched': unmatched,
+        'count': len(senders),
+        'service_account_count': len(resolved_accounts),
     })
 
 @app.route('/api/inbox-intelligence/workspace-senders/retrieve-list', methods=['POST'])
