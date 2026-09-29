@@ -6307,6 +6307,93 @@ def _serialize_worldwide_name(row):
         'created_at': row.created_at.isoformat() + 'Z' if row.created_at else None,
     }
 
+def _fallback_worldwide_name_key(value):
+    """Normalize a name when the optional service module is not deployed."""
+    text = unicodedata.normalize('NFKD', str(value or ''))
+    text = ''.join(char for char in text if not unicodedata.combining(char)).casefold()
+    return ''.join(char for char in text if char.isalnum())
+
+def _fallback_worldwide_name_candidates(api_key, count, *, region, name_style, guidance, excluded_names, referer):
+    """Self-contained OpenRouter/free fallback for deployments missing the helper module."""
+    import requests
+
+    count = max(1, min(int(count), 180))
+    excluded = [str(value).strip() for value in (excluded_names or []) if str(value).strip()][-180:]
+    excluded_block = '\n'.join(f'- {value}' for value in excluded) or '- none'
+    prompt = f"""Generate {count} complete, plausible human names for a worldwide identity library.
+Geographic scope: {region}.
+Name style: {name_style}.
+Additional guidance: {guidance or 'Use a balanced mix of real naming traditions and scripts appropriate to the requested scope.'}
+Return JSON only: {{"names":[{{"given_name":"...","family_name":"...","region":"...","country":"..."}}]}}.
+Do not use celebrities, fictional characters, placeholders, initials, numbers, emails, or duplicate names.
+Do not return any of these names:
+{excluded_block}
+"""
+    response = requests.post(
+        'https://openrouter.ai/api/v1/chat/completions',
+        headers={
+            'Authorization': f'Bearer {api_key}',
+            'Content-Type': 'application/json',
+            'HTTP-Referer': referer or 'GBot',
+            'X-Title': 'GBot Inbox Intelligence — Worldwide Name Generator',
+        },
+        json={
+            'model': 'openrouter/free',
+            'temperature': 0.85,
+            'max_tokens': 4000,
+            'messages': [
+                {'role': 'system', 'content': 'You are a structured worldwide name data generator. Output only valid JSON.'},
+                {'role': 'user', 'content': prompt},
+            ],
+        },
+        timeout=60,
+    )
+    if response.status_code >= 400:
+        raise RuntimeError(f'OpenRouter returned HTTP {response.status_code}.')
+    payload = response.json()
+    choices = payload.get('choices') if isinstance(payload, dict) else None
+    content = ((choices[0].get('message') or {}).get('content') if choices else '') or ''
+    if isinstance(content, list):
+        content = ''.join(str(item.get('text') or '') for item in content if isinstance(item, dict))
+    content = re.sub(r'^```(?:json)?\s*|\s*```$', '', str(content).strip(), flags=re.IGNORECASE)
+    try:
+        parsed = json.loads(content)
+    except (TypeError, ValueError):
+        start = min([index for index in (content.find('{'), content.find('[')) if index >= 0], default=-1)
+        end = max(content.rfind('}'), content.rfind(']'))
+        parsed = json.loads(content[start:end + 1]) if start >= 0 and end >= start else None
+    raw_names = parsed.get('names', []) if isinstance(parsed, dict) else parsed if isinstance(parsed, list) else []
+    results = []
+    seen = set()
+    for item in raw_names[:count]:
+        if isinstance(item, str):
+            parts = item.strip().split()
+            given_name, family_name = (parts[0], ' '.join(parts[1:])) if len(parts) > 1 else ('', '')
+            item = {'given_name': given_name, 'family_name': family_name}
+        if not isinstance(item, dict):
+            continue
+        given_name = re.sub(r'\s+', ' ', str(item.get('given_name') or item.get('first_name') or '')).strip()
+        family_name = re.sub(r'\s+', ' ', str(item.get('family_name') or item.get('last_name') or '')).strip()
+        if not given_name or not family_name or len(given_name) > 120 or len(family_name) > 120:
+            continue
+        if any(char.isdigit() for char in f'{given_name}{family_name}') or '@' in f'{given_name}{family_name}':
+            continue
+        full_name = f'{given_name} {family_name}'
+        key = _fallback_worldwide_name_key(full_name)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        results.append({
+            'full_name': full_name,
+            'given_name': given_name,
+            'family_name': family_name,
+            'region': str(item.get('region') or '')[:80],
+            'country': str(item.get('country') or '')[:120],
+        })
+    if not results:
+        raise RuntimeError('OpenRouter returned no valid complete names.')
+    return results
+
 @app.route('/api/inbox-intelligence/worldwide-name-generator', methods=['GET'])
 @login_required
 @permission_required('inbox_intelligence')
@@ -6353,7 +6440,14 @@ def api_generate_worldwide_names():
             'error': 'OpenRouter is not configured. Save an API key in Inbox Intelligence settings or set OPENROUTER_API_KEY.',
         }), 400
 
-    from services.worldwide_name_generator import normalize_name_key, request_candidates
+    try:
+        from services.worldwide_name_generator import normalize_name_key, request_candidates
+    except ModuleNotFoundError as exc:
+        # Some deployments copy tracked application files without the helper
+        # module. Keep this endpoint functional instead of returning a raw 500.
+        app.logger.warning('Worldwide name helper module unavailable: %s', exc.name)
+        normalize_name_key = _fallback_worldwide_name_key
+        request_candidates = _fallback_worldwide_name_candidates
 
     reserved_rows = []
     reserved_keys = set()
@@ -6422,7 +6516,9 @@ def api_generate_worldwide_names():
     except Exception as exc:
         db.session.rollback()
         app.logger.warning('Worldwide name generation failed: %s', type(exc).__name__)
-        return jsonify({'success': False, 'error': 'OpenRouter could not generate names right now. Try again shortly.'}), 502
+        detail = str(exc).strip() if isinstance(exc, RuntimeError) else ''
+        message = detail[:180] if detail else 'OpenRouter could not generate names right now. Try again shortly.'
+        return jsonify({'success': False, 'error': message}), 502
 
     if not reserved_rows:
         return jsonify({'success': False, 'error': 'No new unique names were returned. Try again with a broader scope.'}), 502
