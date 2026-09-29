@@ -256,6 +256,35 @@ if not app.debug:
 with app.app_context():
     db.create_all()
 
+    # Auto-migration: track when a reserved worldwide name is consumed by a
+    # targeted Workspace identity update. Existing reservations remain
+    # available until an update actually claims them.
+    try:
+        from sqlalchemy import inspect
+        inspector = inspect(db.engine)
+        if 'inbox_worldwide_name' in inspector.get_table_names():
+            columns = [col['name'] for col in inspector.get_columns('inbox_worldwide_name')]
+            new_columns = {
+                'used_at': 'TIMESTAMP',
+                'used_by': 'VARCHAR(80)',
+                'used_for': 'VARCHAR(255)',
+            }
+            with db.engine.connect() as conn:
+                for column_name, column_type in new_columns.items():
+                    if column_name not in columns:
+                        logging.info("Adding missing '%s' column to inbox_worldwide_name...", column_name)
+                        if 'postgresql' in str(db.engine.url):
+                            conn.execute(text(f'ALTER TABLE "inbox_worldwide_name" ADD COLUMN {column_name} {column_type}'))
+                        else:
+                            conn.execute(text(f'ALTER TABLE inbox_worldwide_name ADD COLUMN {column_name} {column_type}'))
+                conn.commit()
+    except Exception as e:
+        logging.warning("Could not auto-migrate worldwide name usage fields: %s", e)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+
     # Auto-migration: extend the single Cloudflare credential row into
     # multiple named connections without losing existing credentials.
     try:
@@ -6401,11 +6430,13 @@ Do not return any of these names:
 @permission_required('inbox_intelligence')
 def api_worldwide_name_generator_state():
     recent = InboxWorldwideName.query.order_by(InboxWorldwideName.created_at.desc()).limit(60).all()
+    available_count = InboxWorldwideName.query.filter(InboxWorldwideName.used_at.is_(None)).count()
     return jsonify({
         'success': True,
         'provider': 'openrouter',
         'model': 'openrouter/free',
         'total_reserved': InboxWorldwideName.query.count(),
+        'available_count': available_count,
         'recent_names': [_serialize_worldwide_name(row) for row in recent],
     })
 
@@ -11271,6 +11302,78 @@ def _workspace_name_reservation_key(name_key):
     return f'__workspace_name__:{name_key}'
 
 
+def _normalize_targeted_alias_name_source(raw_source):
+    """Normalize the identity source while keeping older clients on local mode."""
+    source = str(raw_source or 'local').strip().lower()
+    if source in {'local', 'built_in', 'builtin', 'random'}:
+        return 'local', []
+    if source in {'worldwide', 'generated', 'worldwide_generated'}:
+        return 'worldwide', []
+    return 'local', ["Identity source must be 'local' or 'worldwide'."]
+
+
+def _claim_next_worldwide_name(task_id, target_email, existing_aliases_set, used_identity_names, identity_lock):
+    """Claim one unused generated name, atomically, for a Workspace update.
+
+    Claims are permanent once an identity update is attempted. That protects
+    against a network response arriving after a retry and accidentally
+    applying the same generated name twice.
+    """
+    for _ in range(120):
+        with identity_lock:
+            row = InboxWorldwideName.query.filter(
+                InboxWorldwideName.used_at.is_(None)
+            ).order_by(InboxWorldwideName.id.asc()).first()
+            if not row:
+                return None
+
+            first_name = _latin_name_part(row.given_name)
+            family_name = _latin_name_part(row.family_name)
+            clean_first = first_name.lower().replace("'", '').replace('-', '').replace(' ', '')
+            clean_last = family_name.lower().replace("'", '').replace('-', '').replace(' ', '')
+            candidate_local = f'{clean_first}{clean_last}'
+            name_key = _workspace_identity_name_key(first_name, family_name)
+            invalid_reason = ''
+            if not candidate_local or not name_key:
+                invalid_reason = 'unsupported-script'
+            elif candidate_local in existing_aliases_set:
+                invalid_reason = 'email-local-collision'
+            elif name_key in used_identity_names:
+                invalid_reason = 'workspace-name-collision'
+
+            update_values = {
+                'used_at': db.func.current_timestamp(),
+                'used_by': str(task_id),
+                'used_for': f'{target_email} ({invalid_reason})' if invalid_reason else str(target_email),
+            }
+            claimed = InboxWorldwideName.query.filter(
+                InboxWorldwideName.id == row.id,
+                InboxWorldwideName.used_at.is_(None),
+            ).update(update_values, synchronize_session=False)
+            if claimed != 1:
+                db.session.rollback()
+                continue
+            db.session.commit()
+
+            if invalid_reason:
+                # The row cannot safely create an ASCII Workspace address or
+                # would duplicate an existing identity; consume it and try the
+                # next reserved name.
+                continue
+
+            existing_aliases_set.add(candidate_local)
+            existing_aliases_set.add(_workspace_name_reservation_key(name_key))
+            used_identity_names.add(name_key)
+            return {
+                'id': row.id,
+                'source_name': row.full_name,
+                'given_name': first_name,
+                'family_name': family_name,
+                'local_part': candidate_local,
+            }
+    return None
+
+
 def _workspace_user_identity_name_key(user):
     """Extract the existing Workspace user's given/family name as a key."""
     user = user or {}
@@ -11561,6 +11664,8 @@ def _randomize_one_workspace_user_identity(
     name_types=None,
     used_identity_names=None,
     identity_lock=None,
+    name_source='local',
+    task_id='',
 ):
     user, all_users = _find_workspace_user_from_listed_users(service, account_name, user_key)
     if not user:
@@ -11579,12 +11684,27 @@ def _randomize_one_workspace_user_identity(
 
     domain = primary_email.split('@', 1)[1]
     used_aliases.update(_collect_workspace_used_alias_locals(service, all_users))
-    new_first, new_last, new_local = _generate_unique_workspace_identity(
-        used_aliases,
-        name_types,
-        used_identity_names,
-        identity_lock,
-    )
+    worldwide_name = None
+    if name_source == 'worldwide':
+        worldwide_name = _claim_next_worldwide_name(
+            task_id,
+            primary_email,
+            used_aliases,
+            used_identity_names,
+            identity_lock,
+        )
+        if not worldwide_name:
+            raise RuntimeError('No unused Workspace-compatible Worldwide Name Generator names are available.')
+        new_first = worldwide_name['given_name']
+        new_last = worldwide_name['family_name']
+        new_local = worldwide_name['local_part']
+    else:
+        new_first, new_last, new_local = _generate_unique_workspace_identity(
+            used_aliases,
+            name_types,
+            used_identity_names,
+            identity_lock,
+        )
     new_primary_email = f"{new_local}@{domain}"
 
     service.users().patch(
@@ -11603,6 +11723,9 @@ def _randomize_one_workspace_user_identity(
         'new_primary': new_primary_email,
         'new_name': f"{new_first} {new_last}",
         'changed_field': 'identity',
+        'name_source': name_source,
+        'worldwide_name_id': worldwide_name['id'] if worldwide_name else None,
+        'worldwide_source_name': worldwide_name['source_name'] if worldwide_name else None,
         'success': True
     }
 
@@ -11617,13 +11740,28 @@ def api_targeted_randomize_user_aliases():
     cleanup_old_progress()
     data = request.get_json(silent=True) or {}
     targets, parse_errors = _normalize_targeted_alias_pairs(data.get('targets', []))
-    selected_name_types, name_type_errors = _normalize_workspace_name_types_payload(data.get('name_types'))
-    parse_errors.extend(name_type_errors)
+    name_source, name_source_errors = _normalize_targeted_alias_name_source(data.get('name_source'))
+    parse_errors.extend(name_source_errors)
+    if name_source == 'worldwide':
+        selected_name_types = []
+    else:
+        selected_name_types, name_type_errors = _normalize_workspace_name_types_payload(data.get('name_types'))
+        parse_errors.extend(name_type_errors)
 
     if parse_errors:
         return jsonify({'success': False, 'error': '; '.join(parse_errors[:5])})
     if not targets:
         return jsonify({'success': False, 'error': 'No targeted users provided'})
+
+    if name_source == 'worldwide':
+        available_count = InboxWorldwideName.query.filter(InboxWorldwideName.used_at.is_(None)).count()
+        if available_count < len(targets):
+            return jsonify({
+                'success': False,
+                'error': f'Worldwide Name Generator has {available_count} unused name(s), but this run needs {len(targets)}. Generate more names first.',
+                'available_count': available_count,
+                'required_count': len(targets),
+            }), 409
 
     account_targets = {}
     resolution_failures = []
@@ -11641,7 +11779,7 @@ def api_targeted_randomize_user_aliases():
     task_id = str(uuid.uuid4())
     update_progress(task_id, 0, len(targets), "starting", "Initializing targeted identity randomization...")
 
-    def background_task(task_id, account_targets, resolution_failures, name_types):
+    def background_task(task_id, account_targets, resolution_failures, name_types, identity_source):
         with app.app_context():
             all_results = []
 
@@ -11736,10 +11874,14 @@ def api_targeted_randomize_user_aliases():
                             if name_key
                         )
 
-                selected_labels = ', '.join(
-                    NAME_TYPE_LABELS.get(name_type, name_type)
-                    for name_type in (name_types or [])
-                ) or 'the default name pool'
+                selected_labels = (
+                    'reserved Worldwide Name Generator names'
+                    if identity_source == 'worldwide' else
+                    ', '.join(
+                        NAME_TYPE_LABELS.get(name_type, name_type)
+                        for name_type in (name_types or [])
+                    ) or 'the default name pool'
+                )
                 update_progress(
                     task_id,
                     0,
@@ -11773,6 +11915,8 @@ def api_targeted_randomize_user_aliases():
                                     name_types,
                                     workspace_identity_names,
                                     workspace_identity_lock,
+                                    identity_source,
+                                    task_id,
                                 )
                                 account_result['details'].append(detail)
                                 if detail.get('success'):
@@ -11815,6 +11959,8 @@ def api_targeted_randomize_user_aliases():
                 final_result = {
                     'success': True,
                     'targeted': True,
+                    'name_source': identity_source,
+                    'name_source_label': 'Worldwide Name Generator' if identity_source == 'worldwide' else 'Built-in random pool',
                     'name_types': name_types or [],
                     'name_type_labels': [
                         NAME_TYPE_LABELS.get(name_type, name_type)
@@ -11839,7 +11985,7 @@ def api_targeted_randomize_user_aliases():
 
     threading.Thread(
         target=background_task,
-        args=(task_id, account_targets, resolution_failures, selected_name_types),
+        args=(task_id, account_targets, resolution_failures, selected_name_types, name_source),
     ).start()
 
     return jsonify({'success': True, 'task_id': task_id})
