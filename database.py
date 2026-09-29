@@ -552,6 +552,8 @@ class InboxWorldwideName(db.Model):
     used_at = db.Column(db.DateTime, nullable=True, index=True)
     used_by = db.Column(db.String(80), nullable=True, index=True)
     used_for = db.Column(db.String(255), nullable=True)
+    archived_at = db.Column(db.DateTime, nullable=True, index=True)
+    archived_by = db.Column(db.String(255), nullable=True)
 
 class InboxDeliverabilityTest(db.Model):
     id = db.Column(db.Integer, primary_key=True)

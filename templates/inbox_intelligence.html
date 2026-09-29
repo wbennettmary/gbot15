@@ -683,6 +683,118 @@
         font-weight: 800;
     }
 
+    .ii-worldwide-name-card-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 12px;
+    }
+
+    .ii-worldwide-name-card {
+        display: grid;
+        gap: 11px;
+        min-width: 0;
+        padding: 14px;
+        border: 1px solid #dbe4ef;
+        border-radius: 10px;
+        background: #fff;
+        box-shadow: 0 5px 14px rgba(15, 23, 42, 0.04);
+    }
+
+    .ii-worldwide-name-card-head,
+    .ii-worldwide-name-card-meta,
+    .ii-worldwide-name-card-actions {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 8px;
+    }
+
+    .ii-worldwide-name-card-head {
+        min-width: 0;
+    }
+
+    .ii-worldwide-name-card-title {
+        min-width: 0;
+        overflow-wrap: anywhere;
+        color: #1e1b4b;
+        font-size: 15px;
+        font-weight: 850;
+        line-height: 1.25;
+    }
+
+    .ii-worldwide-name-card-source,
+    .ii-worldwide-name-card-meta,
+    .ii-worldwide-name-card-note {
+        color: #64748b;
+        font-size: 11px;
+        line-height: 1.45;
+    }
+
+    .ii-worldwide-name-card-meta {
+        justify-content: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .ii-worldwide-name-card-details {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 5px 9px;
+        padding: 9px 10px;
+        border: 1px solid #eef2f7;
+        border-radius: 8px;
+        background: #f8fafc;
+        color: #334155;
+        font-size: 12px;
+    }
+
+    .ii-worldwide-name-card-details dt {
+        color: #64748b;
+        font-weight: 750;
+    }
+
+    .ii-worldwide-name-card-details dd {
+        min-width: 0;
+        margin: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .ii-worldwide-name-card-actions {
+        align-items: center;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .ii-worldwide-name-card-actions .ii-btn {
+        padding: 6px 9px;
+        font-size: 11px;
+    }
+
+    .ii-worldwide-name-card-actions .ii-btn.ii-btn-danger {
+        border-color: #fecaca;
+        color: #b91c1c;
+        background: #fff7f7;
+    }
+
+    .ii-worldwide-name-card-actions .ii-btn.ii-btn-danger:hover {
+        border-color: #fca5a5;
+        background: #fef2f2;
+    }
+
+    .ii-worldwide-name-card-actions .ii-btn:disabled {
+        cursor: not-allowed;
+        opacity: 0.58;
+    }
+
+    .ii-worldwide-name-empty {
+        grid-column: 1 / -1;
+        padding: 28px 18px;
+        border: 1px dashed #cbd5e1;
+        border-radius: 10px;
+        color: #64748b;
+        text-align: center;
+        background: #fff;
+    }
+
     .ii-name-generator-empty {
         display: grid;
         place-items: center;
@@ -4720,6 +4832,7 @@ merge_recipe_id, content_blueprint_id</pre>
                                 <option value="available">Available only</option>
                                 <option value="used">Used only</option>
                                 <option value="retired">Retired previous batches</option>
+                                <option value="deleted">Deleted / archived</option>
                             </select>
                             <button class="ii-btn" id="worldwideNameLedgerRefreshButton" type="button"><i class="fas fa-arrows-rotate"></i> Refresh ledger</button>
                             <button class="ii-btn" id="worldwideNameCopyButton" type="button"><i class="fas fa-copy"></i> Copy names</button>
@@ -4754,17 +4867,13 @@ merge_recipe_id, content_blueprint_id</pre>
                                 <option value="available">Available only</option>
                                 <option value="used">Used only</option>
                                 <option value="retired">Retired previous batches</option>
+                                <option value="deleted">Deleted / archived</option>
                             </select>
                             <button class="ii-btn" id="worldwideStoredLedgerRefreshButton" type="button"><i class="fas fa-arrows-rotate"></i> Refresh</button>
                         </div>
                     </div>
                     <div class="ii-muted mb-2" id="worldwideStoredLedgerSummary">No stored names loaded.</div>
-                    <div class="ii-table-wrap">
-                        <table class="ii-table ii-name-generator-table">
-                            <thead><tr><th>Complete name</th><th>Source</th><th>Region</th><th>Country</th><th>Status</th><th>Used for</th><th>Used at</th><th>Manage</th></tr></thead>
-                            <tbody id="worldwideStoredLedgerBody"></tbody>
-                        </table>
-                    </div>
+                    <div id="worldwideStoredLedgerCards" class="ii-worldwide-name-card-grid" aria-live="polite"></div>
                 </div>
             </div>
             </div>
@@ -4887,6 +4996,58 @@ merge_recipe_id, content_blueprint_id</pre>
     </div>
 </div>
 
+<div class="ii-modal-backdrop" id="worldwideNameEditModal" aria-hidden="true" onclick="closeWorldwideNameEditModal(event)">
+    <div class="ii-modal ii-save-name-modal" role="dialog" aria-modal="true" aria-labelledby="worldwideNameEditTitle" aria-describedby="worldwideNameEditDescription" onclick="event.stopPropagation()">
+        <div class="ii-row justify-content-between mb-3">
+            <div>
+                <h3 id="worldwideNameEditTitle">Edit stored name</h3>
+                <p class="ii-muted mb-0" id="worldwideNameEditDescription">Only an unused, non-archived name can be edited. The permanent uniqueness ledger will check the new complete name.</p>
+            </div>
+            <button class="ii-btn" type="button" aria-label="Close edit dialog" onclick="closeWorldwideNameEditModal()"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="ii-grid ii-layout-2">
+            <label class="ii-field">
+                <span>Given name</span>
+                <input class="ii-input" id="worldwideNameEditGivenInput" autocomplete="given-name">
+            </label>
+            <label class="ii-field">
+                <span>Family name</span>
+                <input class="ii-input" id="worldwideNameEditFamilyInput" autocomplete="family-name">
+            </label>
+            <label class="ii-field">
+                <span>Region</span>
+                <input class="ii-input" id="worldwideNameEditRegionInput">
+            </label>
+            <label class="ii-field">
+                <span>Country</span>
+                <input class="ii-input" id="worldwideNameEditCountryInput" autocomplete="country-name">
+            </label>
+        </div>
+        <div class="ii-name-generator-status mt-2" id="worldwideNameEditStatus" role="status" aria-live="polite"></div>
+        <div class="ii-row justify-content-end mt-3">
+            <button class="ii-btn" type="button" onclick="closeWorldwideNameEditModal()">Cancel</button>
+            <button class="ii-btn ii-btn-primary" id="worldwideNameEditSaveButton" type="button" onclick="saveWorldwideNameEdit()"><i class="fas fa-save"></i> Save changes</button>
+        </div>
+    </div>
+</div>
+
+<div class="ii-modal-backdrop" id="worldwideNameActionModal" aria-hidden="true" onclick="closeWorldwideNameActionModal(event)">
+    <div class="ii-modal ii-save-name-modal" role="dialog" aria-modal="true" aria-labelledby="worldwideNameActionTitle" aria-describedby="worldwideNameActionDescription" onclick="event.stopPropagation()">
+        <div class="ii-row justify-content-between mb-3">
+            <div>
+                <h3 id="worldwideNameActionTitle">Archive stored name?</h3>
+                <p class="ii-muted mb-0" id="worldwideNameActionDescription">The name will disappear from available names but remain permanently protected against future generation.</p>
+            </div>
+            <button class="ii-btn" type="button" aria-label="Close archive dialog" onclick="closeWorldwideNameActionModal()"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="ii-card" id="worldwideNameActionName"></div>
+        <div class="ii-row justify-content-end mt-3">
+            <button class="ii-btn" type="button" onclick="closeWorldwideNameActionModal()">Cancel</button>
+            <button class="ii-btn ii-btn-danger" id="worldwideNameActionConfirmButton" type="button" onclick="confirmWorldwideNameAction()"><i class="fas fa-box-archive"></i> Archive name</button>
+        </div>
+    </div>
+</div>
+
 <script>
     const II_AI_ENABLED = '{{ "1" if inbox_ai_enabled else "0" }}' === '1';
     const II_CURRENT_ROLE = '{{ role or "" }}';
@@ -4951,6 +5112,8 @@ merge_recipe_id, content_blueprint_id</pre>
         worldwideNames: [],
         worldwideStoredNames: [],
         worldwideNameAvailableCount: 0,
+        worldwideNameEditingId: null,
+        worldwideNameActionId: null,
         selectedInboxIds: new Set(),
         activeExplorerFolder: '',
         automatedQueue: [],
@@ -5586,8 +5749,9 @@ merge_recipe_id, content_blueprint_id</pre>
         const availableCount = rows.filter((row) => row.status === 'available' || (!row.status && !row.used_at)).length;
         const usedCount = rows.filter((row) => row.status === 'used' || row.used_at).length;
         const retiredCount = rows.filter((row) => row.status === 'retired').length;
+        const deletedCount = rows.filter((row) => row.status === 'deleted').length;
         summary.textContent = hasRows
-            ? `${rows.length} name(s) listed · ${availableCount} available · ${usedCount} used${retiredCount ? ` · ${retiredCount} retired` : ''}. Each was reserved before display.`
+            ? `${rows.length} name(s) listed · ${availableCount} available · ${usedCount} used${retiredCount ? ` · ${retiredCount} retired` : ''}${deletedCount ? ` · ${deletedCount} archived` : ''}. Each was reserved before display.`
             : 'No names in the current set.';
         body.innerHTML = rows.map((row) => `
             <tr>
@@ -5596,7 +5760,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 <td>${escapeHtml(row.family_name || '')}</td>
                 <td>${escapeHtml(row.region || '')}</td>
                 <td>${escapeHtml(row.country || '')}</td>
-                <td><span class="ii-chip ${row.status === 'used' || row.used_at ? 'gray' : row.status === 'retired' ? 'yellow' : 'green'}">${row.status === 'used' || row.used_at ? 'Used' : row.status === 'retired' ? 'Retired' : 'Available'}</span></td>
+                <td><span class="ii-chip ${row.status === 'deleted' ? 'gray' : row.status === 'used' || row.used_at ? 'gray' : row.status === 'retired' ? 'yellow' : 'green'}">${row.status === 'deleted' ? 'Archived' : row.status === 'used' || row.used_at ? 'Used' : row.status === 'retired' ? 'Retired' : 'Available'}</span></td>
                 <td>${escapeHtml(row.used_for || '—')}</td>
                 <td>${escapeHtml(row.used_at ? new Date(row.used_at).toLocaleString() : '—')}</td>
             </tr>`).join('');
@@ -5617,7 +5781,7 @@ merge_recipe_id, content_blueprint_id</pre>
         if (stored) loadStoredWorldwideNames();
     }
 
-    function renderStoredWorldwideNames() {
+    function renderStoredWorldwideNamesLegacy() {
         const rows = iiState.worldwideStoredNames || [];
         const body = document.getElementById('worldwideStoredLedgerBody');
         const summary = document.getElementById('worldwideStoredLedgerSummary');
@@ -5643,6 +5807,56 @@ merge_recipe_id, content_blueprint_id</pre>
         }).join('');
     }
 
+    function renderStoredWorldwideNames() {
+        const rows = iiState.worldwideStoredNames || [];
+        const cards = document.getElementById('worldwideStoredLedgerCards');
+        const summary = document.getElementById('worldwideStoredLedgerSummary');
+        if (!cards || !summary) return;
+        const available = rows.filter((row) => row.status === 'available').length;
+        const used = rows.filter((row) => row.status === 'used' || row.used_at).length;
+        const retired = rows.filter((row) => row.status === 'retired').length;
+        const deleted = rows.filter((row) => row.status === 'deleted').length;
+        summary.textContent = rows.length + ' stored name(s) listed · ' + available + ' available · ' + used + ' used'
+            + (retired ? ' · ' + retired + ' retired' : '')
+            + (deleted ? ' · ' + deleted + ' archived' : '')
+            + '. Workspace assignments mark names Used automatically. Used names stay locked forever.';
+        if (!rows.length) {
+            cards.innerHTML = '<div class="ii-worldwide-name-empty"><i class="fas fa-box-open fa-2x mb-2 text-primary"></i><div><strong>No names match this view.</strong></div><div>Generate a new batch or change the scope/status filters.</div></div>';
+            return;
+        }
+        cards.innerHTML = rows.map((row) => {
+            const status = row.status || (row.used_at ? 'used' : 'available');
+            const isUsed = status === 'used' || Boolean(row.used_at);
+            const isDeleted = status === 'deleted';
+            const canEdit = !isUsed && !isDeleted;
+            const chipClass = status === 'available' ? 'green' : status === 'retired' ? 'yellow' : 'gray';
+            const statusLabel = status === 'available' ? 'Available' : status === 'used' ? 'Used — locked' : status === 'retired' ? 'Retired' : 'Archived';
+            const id = Number(row.id) || 0;
+            const actionButtons = [
+                '<button class="ii-btn" type="button" aria-label="Copy ' + escapeHtml(row.full_name || 'name') + '" onclick="copyStoredWorldwideName(' + id + ')"><i class="fas fa-copy"></i> Copy</button>',
+                canEdit ? '<button class="ii-btn" type="button" onclick="editStoredWorldwideName(' + id + ')"><i class="fas fa-pen"></i> Edit</button>' : '',
+                !isUsed && !isDeleted ? '<button class="ii-btn" type="button" onclick="updateStoredWorldwideNameStatus(' + id + ', \'used\')"><i class="fas fa-check"></i> Mark used</button>' : '',
+                isDeleted ? '<button class="ii-btn" type="button" onclick="updateStoredWorldwideNameStatus(' + id + ', \'restore\')"><i class="fas fa-rotate-left"></i> Restore</button>' : '',
+                !isDeleted ? '<button class="ii-btn ii-btn-danger" type="button" onclick="requestWorldwideNameDelete(' + id + ')"><i class="fas fa-trash"></i> Delete</button>' : '',
+            ].filter(Boolean).join('');
+            return '<article class="ii-worldwide-name-card">'
+                + '<div class="ii-worldwide-name-card-head">'
+                + '<div><div class="ii-worldwide-name-card-title">' + escapeHtml(row.full_name || '') + '</div>'
+                + '<div class="ii-worldwide-name-card-source">' + escapeHtml(row.provider || 'unknown') + ' · ' + escapeHtml(row.model || '') + '</div></div>'
+                + '<span class="ii-chip ' + chipClass + '">' + statusLabel + '</span></div>'
+                + '<div class="ii-worldwide-name-card-meta"><span><i class="fas fa-location-dot"></i> ' + escapeHtml(row.region || 'Worldwide') + '</span><span>·</span><span>' + escapeHtml(row.country || 'Country not set') + '</span></div>'
+                + '<dl class="ii-worldwide-name-card-details">'
+                + '<dt>Given</dt><dd>' + escapeHtml(row.given_name || '—') + '</dd>'
+                + '<dt>Family</dt><dd>' + escapeHtml(row.family_name || '—') + '</dd>'
+                + '<dt>Created</dt><dd>' + escapeHtml(row.created_at ? new Date(row.created_at).toLocaleString() : '—') + '</dd>'
+                + '<dt>' + (isDeleted ? 'Archived' : 'Used for') + '</dt><dd>' + escapeHtml(isDeleted ? (row.archived_at ? new Date(row.archived_at).toLocaleString() : '—') : (row.used_for || 'Not used yet')) + '</dd>'
+                + '</dl>'
+                + (isUsed ? '<div class="ii-worldwide-name-card-note"><i class="fas fa-lock"></i> Consumed names cannot be restored to available or edited.</div>' : '')
+                + '<div class="ii-worldwide-name-card-actions">' + actionButtons + '</div>'
+                + '</article>';
+        }).join('');
+    }
+
     async function loadStoredWorldwideNames() {
         try {
             const scope = document.getElementById('worldwideStoredLedgerScope')?.value || 'latest';
@@ -5658,19 +5872,127 @@ merge_recipe_id, content_blueprint_id</pre>
         }
     }
 
-    async function updateStoredWorldwideNameStatus(nameId) {
+    async function updateStoredWorldwideNameStatus(nameId, action = 'used') {
         if (!nameId) return;
         try {
-            const data = await iiFetch(`/api/inbox-intelligence/worldwide-name-generator/names/${nameId}/status`, {
+            const data = await iiFetch('/api/inbox-intelligence/worldwide-name-generator/names/' + nameId + '/status', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({status: 'used'}),
+                body: JSON.stringify({status: action}),
             });
             setWorldwideNameStatus(data.message || 'Stored name status updated.', 'ready');
             await Promise.all([loadStoredWorldwideNames(), loadWorldwideNameGeneratorState()]);
         } catch (err) {
             setWorldwideNameStatus(err.message || 'Could not update stored name status.', 'error');
         }
+    }
+
+    async function copyStoredWorldwideName(nameId) {
+        const row = (iiState.worldwideStoredNames || []).find((item) => Number(item.id) === Number(nameId));
+        if (!row) return;
+        try {
+            await copyTextToClipboard(String(row.full_name || '').trim() + '\r\n');
+            setWorldwideNameStatus('Copied ' + row.full_name + '.', 'ready');
+        } catch (err) {
+            setWorldwideNameStatus('Clipboard access failed. Select the name manually and copy it.', 'error');
+        }
+    }
+
+    function closeWorldwideNameEditModal(event) {
+        if (event && event.target !== event.currentTarget) return;
+        const modal = document.getElementById('worldwideNameEditModal');
+        if (!modal) return;
+        modal.classList.remove('active');
+        modal.setAttribute('aria-hidden', 'true');
+        iiState.worldwideNameEditingId = null;
+    }
+
+    function editStoredWorldwideName(nameId) {
+        const row = (iiState.worldwideStoredNames || []).find((item) => Number(item.id) === Number(nameId));
+        if (!row || row.status === 'used' || row.status === 'deleted' || row.used_at) return;
+        iiState.worldwideNameEditingId = Number(nameId);
+        document.getElementById('worldwideNameEditGivenInput').value = row.given_name || '';
+        document.getElementById('worldwideNameEditFamilyInput').value = row.family_name || '';
+        document.getElementById('worldwideNameEditRegionInput').value = row.region || '';
+        document.getElementById('worldwideNameEditCountryInput').value = row.country || '';
+        const status = document.getElementById('worldwideNameEditStatus');
+        if (status) {
+            status.className = 'ii-name-generator-status mt-2';
+            status.textContent = '';
+        }
+        const modal = document.getElementById('worldwideNameEditModal');
+        modal?.classList.add('active');
+        modal?.setAttribute('aria-hidden', 'false');
+        document.getElementById('worldwideNameEditGivenInput')?.focus();
+    }
+
+    async function saveWorldwideNameEdit() {
+        const nameId = iiState.worldwideNameEditingId;
+        if (!nameId) return;
+        const button = document.getElementById('worldwideNameEditSaveButton');
+        const status = document.getElementById('worldwideNameEditStatus');
+        const setEditStatus = (message, tone = '') => {
+            if (!status) return;
+            status.classList.remove('is-error', 'is-ready');
+            if (tone === 'error') status.classList.add('is-error');
+            if (tone === 'ready') status.classList.add('is-ready');
+            status.textContent = message;
+        };
+        if (button) {
+            button.disabled = true;
+            button.setAttribute('aria-busy', 'true');
+        }
+        try {
+            const data = await iiFetch('/api/inbox-intelligence/worldwide-name-generator/names/' + nameId, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    given_name: document.getElementById('worldwideNameEditGivenInput')?.value || '',
+                    family_name: document.getElementById('worldwideNameEditFamilyInput')?.value || '',
+                    region: document.getElementById('worldwideNameEditRegionInput')?.value || '',
+                    country: document.getElementById('worldwideNameEditCountryInput')?.value || '',
+                }),
+            });
+            setEditStatus(data.message || 'Name updated.', 'ready');
+            setWorldwideNameStatus(data.message || 'Stored name updated.', 'ready');
+            await Promise.all([loadStoredWorldwideNames(), loadWorldwideNameGeneratorState()]);
+            setTimeout(closeWorldwideNameEditModal, 300);
+        } catch (err) {
+            setEditStatus(err.message || 'Could not update this name.', 'error');
+        } finally {
+            if (button) {
+                button.disabled = false;
+                button.removeAttribute('aria-busy');
+            }
+        }
+    }
+
+    function closeWorldwideNameActionModal(event) {
+        if (event && event.target !== event.currentTarget) return;
+        const modal = document.getElementById('worldwideNameActionModal');
+        if (!modal) return;
+        modal.classList.remove('active');
+        modal.setAttribute('aria-hidden', 'true');
+        iiState.worldwideNameActionId = null;
+    }
+
+    function requestWorldwideNameDelete(nameId) {
+        const row = (iiState.worldwideStoredNames || []).find((item) => Number(item.id) === Number(nameId));
+        if (!row || row.status === 'deleted') return;
+        iiState.worldwideNameActionId = Number(nameId);
+        const label = document.getElementById('worldwideNameActionName');
+        if (label) label.textContent = row.full_name || 'Stored name';
+        const modal = document.getElementById('worldwideNameActionModal');
+        modal?.classList.add('active');
+        modal?.setAttribute('aria-hidden', 'false');
+        document.getElementById('worldwideNameActionConfirmButton')?.focus();
+    }
+
+    async function confirmWorldwideNameAction() {
+        const nameId = iiState.worldwideNameActionId;
+        if (!nameId) return;
+        closeWorldwideNameActionModal();
+        await updateStoredWorldwideNameStatus(nameId, 'delete');
     }
 
     function updateWorldwideNameReservedCount(total) {
@@ -13699,6 +14021,11 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     document.addEventListener('DOMContentLoaded', function () {
+        document.addEventListener('keydown', (event) => {
+            if (event.key !== 'Escape') return;
+            if (document.getElementById('worldwideNameEditModal')?.classList.contains('active')) closeWorldwideNameEditModal();
+            if (document.getElementById('worldwideNameActionModal')?.classList.contains('active')) closeWorldwideNameActionModal();
+        });
         document.querySelectorAll('.ii-tab').forEach((tab) => {
             tab.addEventListener('click', () => {
                 activateInboxTab(tab.dataset.tab);

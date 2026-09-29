@@ -269,6 +269,8 @@ with app.app_context():
                 'used_at': 'TIMESTAMP',
                 'used_by': 'VARCHAR(80)',
                 'used_for': 'VARCHAR(255)',
+                'archived_at': 'TIMESTAMP',
+                'archived_by': 'VARCHAR(255)',
             }
             with db.engine.connect() as conn:
                 for column_name, column_type in new_columns.items():
@@ -283,6 +285,11 @@ with app.app_context():
                     conn.execute(text(
                         'CREATE INDEX ix_inbox_worldwide_name_generation_batch_id '
                         'ON inbox_worldwide_name (generation_batch_id)'
+                    ))
+                if 'ix_inbox_worldwide_name_archived_at' not in index_names:
+                    conn.execute(text(
+                        'CREATE INDEX ix_inbox_worldwide_name_archived_at '
+                        'ON inbox_worldwide_name (archived_at)'
                     ))
                 conn.commit()
     except Exception as e:
@@ -6331,8 +6338,14 @@ def _inbox_openrouter_api_key():
 
 def _serialize_worldwide_name(row, latest_batch_id=None):
     used_at = row.used_at.isoformat() + 'Z' if row.used_at else None
+    archived_at = row.archived_at.isoformat() + 'Z' if row.archived_at else None
     latest_batch_id = latest_batch_id if latest_batch_id is not None else _latest_worldwide_name_batch_id()
-    status = 'used' if used_at else ('available' if row.generation_batch_id and row.generation_batch_id == latest_batch_id else 'retired')
+    if archived_at:
+        status = 'deleted'
+    elif used_at:
+        status = 'used'
+    else:
+        status = 'available' if row.generation_batch_id and row.generation_batch_id == latest_batch_id else 'retired'
     return {
         'id': row.id,
         'full_name': row.full_name,
@@ -6349,6 +6362,8 @@ def _serialize_worldwide_name(row, latest_batch_id=None):
         'used_at': used_at,
         'used_by': row.used_by or '',
         'used_for': row.used_for or '',
+        'archived_at': archived_at,
+        'archived_by': row.archived_by or '',
     }
 
 
@@ -6368,7 +6383,10 @@ def _latest_worldwide_name_batch_id():
 
 
 def _worldwide_available_query(batch_id=None):
-    query = InboxWorldwideName.query.filter(InboxWorldwideName.used_at.is_(None))
+    query = InboxWorldwideName.query.filter(
+        InboxWorldwideName.used_at.is_(None),
+        InboxWorldwideName.archived_at.is_(None),
+    )
     if batch_id:
         query = query.filter(InboxWorldwideName.generation_batch_id == batch_id)
     else:
@@ -6500,7 +6518,7 @@ def api_worldwide_name_generator_state():
     if scope not in {'latest', 'all'}:
         scope = 'latest'
     status_filter = str(request.args.get('status') or 'all').strip().lower()
-    if status_filter not in {'all', 'available', 'used', 'retired'}:
+    if status_filter not in {'all', 'available', 'used', 'retired', 'deleted'}:
         status_filter = 'all'
     try:
         limit = min(max(int(request.args.get('limit') or 1000), 1), 5000)
@@ -6523,17 +6541,23 @@ def api_worldwide_name_generator_state():
     if status_filter == 'available':
         names_query = names_query.filter(
             InboxWorldwideName.used_at.is_(None),
+            InboxWorldwideName.archived_at.is_(None),
             InboxWorldwideName.generation_batch_id == latest_batch_id,
         ) if latest_batch_id else names_query.filter(InboxWorldwideName.id == -1)
     elif status_filter == 'used':
         names_query = names_query.filter(InboxWorldwideName.used_at.isnot(None))
     elif status_filter == 'retired':
-        names_query = names_query.filter(InboxWorldwideName.used_at.is_(None))
+        names_query = names_query.filter(
+            InboxWorldwideName.used_at.is_(None),
+            InboxWorldwideName.archived_at.is_(None),
+        )
         if latest_batch_id:
             names_query = names_query.filter(
                 (InboxWorldwideName.generation_batch_id != latest_batch_id)
                 | InboxWorldwideName.generation_batch_id.is_(None)
             )
+    elif status_filter == 'deleted':
+        names_query = names_query.filter(InboxWorldwideName.archived_at.isnot(None))
     names = names_query.order_by(
         InboxWorldwideName.created_at.desc(),
         InboxWorldwideName.id.desc(),
@@ -6559,35 +6583,105 @@ def api_worldwide_name_generator_state():
 @login_required
 @permission_required('inbox_intelligence')
 def api_update_worldwide_name_status(name_id):
-    """Allow the stored-name manager to explicitly consume a name."""
+    """Manage a stored name without breaking the permanent uniqueness ledger."""
     row = InboxWorldwideName.query.get(name_id)
     if not row:
         return jsonify({'success': False, 'error': 'Stored generated name not found.'}), 404
     data = request.get_json(silent=True) or {}
     status = str(data.get('status') or '').strip().lower()
-    if status != 'used':
-        return jsonify({'success': False, 'error': 'Only available names can be marked used; used names remain permanently consumed.'}), 400
-
-    if row.used_at:
-        latest_batch_id = _latest_worldwide_name_batch_id()
-        return jsonify({
-            'success': True,
-            'name': _serialize_worldwide_name(row, latest_batch_id),
-            'available_count': _worldwide_available_query(latest_batch_id).count(),
-            'message': f"'{row.full_name}' is already marked used and remains locked.",
-        })
+    actor = (session.get('user') or session.get('username') or 'manual')[:255]
+    if status == 'used':
+        if row.archived_at:
+            return jsonify({'success': False, 'error': 'Restore this archived name before marking it used.'}), 400
+        if row.used_at:
+            message = f"'{row.full_name}' is already marked used and remains locked."
+        else:
+            row.used_at = datetime.utcnow()
+            row.used_by = actor[:80]
+            row.used_for = str(data.get('used_for') or 'Manually marked used')[:255]
+            message = f"Marked '{row.full_name}' as used."
+    elif status in {'delete', 'deleted', 'archive', 'archived'}:
+        if not row.archived_at:
+            row.archived_at = datetime.utcnow()
+            row.archived_by = actor
+        message = f"Archived '{row.full_name}'. It stays protected from future generation."
+    elif status in {'restore', 'available'}:
+        if row.used_at:
+            message = f"'{row.full_name}' is used and remains locked; it cannot become available again."
+        else:
+            row.archived_at = None
+            row.archived_by = None
+            message = f"Restored '{row.full_name}' to available status."
     else:
-        row.used_at = datetime.utcnow()
-        row.used_by = (session.get('user') or session.get('username') or 'manual')[:80]
-        row.used_for = str(data.get('used_for') or 'Manually marked used')[:255]
-    db.session.commit()
+        return jsonify({'success': False, 'error': 'Choose used, delete, or restore. Used names cannot be made available again.'}), 400
+
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
 
     latest_batch_id = _latest_worldwide_name_batch_id()
     return jsonify({
         'success': True,
         'name': _serialize_worldwide_name(row, latest_batch_id),
         'available_count': _worldwide_available_query(latest_batch_id).count(),
-        'message': f"Marked '{row.full_name}' as {status}.",
+        'message': message,
+    })
+
+
+@app.route('/api/inbox-intelligence/worldwide-name-generator/names/<int:name_id>', methods=['PUT'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_edit_worldwide_name(name_id):
+    """Edit an unused, non-archived ledger row while preserving its unique key."""
+    row = InboxWorldwideName.query.get(name_id)
+    if not row:
+        return jsonify({'success': False, 'error': 'Stored generated name not found.'}), 404
+    if row.used_at:
+        return jsonify({'success': False, 'error': 'Used names are permanently locked and cannot be edited.'}), 409
+    if row.archived_at:
+        return jsonify({'success': False, 'error': 'Restore the archived name before editing it.'}), 409
+
+    data = request.get_json(silent=True) or {}
+    given_name = _clean_worldwide_name_part(data.get('given_name'))
+    family_name = _clean_worldwide_name_part(data.get('family_name'))
+    if (not given_name or not family_name) and data.get('full_name'):
+        parts = str(data.get('full_name')).strip().split()
+        if len(parts) > 1:
+            given_name = _clean_worldwide_name_part(parts[0])
+            family_name = _clean_worldwide_name_part(' '.join(parts[1:]))
+    region = _clean_worldwide_name_part(data.get('region'), max_length=80)
+    country = _clean_worldwide_name_part(data.get('country'), max_length=120)
+    full_name = f'{given_name} {family_name}'.strip()
+    normalized_name = _fallback_worldwide_name_key(full_name)
+    if not given_name or not family_name or not normalized_name or len(full_name) > 255:
+        return jsonify({'success': False, 'error': 'Provide a valid complete given name and family name.'}), 400
+
+    duplicate = InboxWorldwideName.query.filter(
+        InboxWorldwideName.normalized_name == normalized_name,
+        InboxWorldwideName.id != row.id,
+    ).first()
+    if duplicate:
+        return jsonify({'success': False, 'error': 'That complete name already exists in the permanent ledger.'}), 409
+
+    row.full_name = full_name
+    row.given_name = given_name
+    row.family_name = family_name
+    row.normalized_name = normalized_name
+    row.region = region
+    row.country = country
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': 'That complete name already exists in the permanent ledger.'}), 409
+
+    latest_batch_id = _latest_worldwide_name_batch_id()
+    return jsonify({
+        'success': True,
+        'name': _serialize_worldwide_name(row, latest_batch_id),
+        'message': f"Updated '{row.full_name}'.",
     })
 
 @app.route('/api/inbox-intelligence/worldwide-name-generator/generate', methods=['POST'])
@@ -11786,6 +11880,7 @@ def _claim_next_worldwide_name(task_id, target_email, existing_aliases_set, used
                 return None
             row = InboxWorldwideName.query.filter(
                 InboxWorldwideName.used_at.is_(None),
+                InboxWorldwideName.archived_at.is_(None),
                 InboxWorldwideName.generation_batch_id == latest_batch_id,
             ).order_by(InboxWorldwideName.id.asc()).first()
             if not row:
@@ -11813,6 +11908,7 @@ def _claim_next_worldwide_name(task_id, target_email, existing_aliases_set, used
             claimed = InboxWorldwideName.query.filter(
                 InboxWorldwideName.id == row.id,
                 InboxWorldwideName.used_at.is_(None),
+                InboxWorldwideName.archived_at.is_(None),
                 InboxWorldwideName.generation_batch_id == latest_batch_id,
             ).update(update_values, synchronize_session=False)
             if claimed != 1:
