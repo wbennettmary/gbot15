@@ -5390,7 +5390,7 @@ merge_recipe_id, content_blueprint_id</pre>
             button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating and reserving...';
         }
         setWorldwideNameProgress(true);
-        setWorldwideNameStatus(`Asking openrouter/free for ${count} candidate name(s), then checking the global ledger...`);
+        setWorldwideNameStatus(`Asking openrouter/free for ${count} candidate name(s). This can take up to 30 seconds while the global ledger is checked...`);
 
         try {
             const data = await iiFetch('/api/inbox-intelligence/worldwide-name-generator/generate', {

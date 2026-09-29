@@ -6340,13 +6340,13 @@ Do not return any of these names:
         json={
             'model': 'openrouter/free',
             'temperature': 0.85,
-            'max_tokens': 4000,
+        'max_tokens': 2400,
             'messages': [
                 {'role': 'system', 'content': 'You are a structured worldwide name data generator. Output only valid JSON.'},
                 {'role': 'user', 'content': prompt},
             ],
         },
-        timeout=60,
+        timeout=30,
     )
     if response.status_code >= 400:
         raise RuntimeError(f'OpenRouter returned HTTP {response.status_code}.')
@@ -6459,7 +6459,7 @@ def api_generate_worldwide_names():
             remaining = count - len(reserved_rows)
             if remaining <= 0:
                 break
-            request_count = min(180, max(remaining + 8, int(remaining * 1.8)))
+            request_count = min(120, max(remaining + 4, int(remaining * 1.3)))
             try:
                 candidates = request_candidates(
                     api_key,
