@@ -4563,6 +4563,13 @@ merge_recipe_id, content_blueprint_id</pre>
                         style="font-family: 'Courier New', monospace; font-size: 13px; resize: none;"></textarea>
                 </div>
             </div>
+            <div id="worldwideNameExternalWrap" class="ii-card ii-name-generator-external mb-3" role="region" aria-label="External names">
+                <h4 class="mb-1"><i class="fas fa-paste text-primary"></i> External names</h4>
+                <p class="ii-muted mb-2">Paste manual names here. In the Worldwide Name Generator below, select <strong>External — paste complete names</strong> to reserve these names.</p>
+                <label for="worldwideNameExternalInput">Complete names</label>
+                <textarea class="ii-textarea" id="worldwideNameExternalInput" rows="5" maxlength="100000" placeholder="One complete name per line, for example:\nAmina Okafor\nJean-Luc Moreau\nYou may also paste Given Name, Family Name or simple JSON."></textarea>
+                <div class="ii-muted mt-1">Duplicate or incomplete lines will be reported and skipped. Only names successfully reserved in the global ledger can be used for Workspace users.</div>
+            </div>
             <div class="ii-row mb-3">
                 <input class="ii-input" id="workspaceSenderSearchInput" style="max-width: 420px;" placeholder="Search retrieved API sender email, domain, or name">
                 <button class="ii-btn" type="button" onclick="searchWorkspaceSenders()"><i class="fas fa-search"></i> Search Senders</button>
@@ -4628,11 +4635,6 @@ merge_recipe_id, content_blueprint_id</pre>
                                 <option value="external">External — paste complete names</option>
                             </select>
                             <div class="ii-name-generator-method-help" id="worldwideNameMethodHelp">OpenRouter/free generates candidates in batches; the database reserves only names that are still unique.</div>
-                        </div>
-                        <div class="ii-name-generator-external" id="worldwideNameExternalWrap">
-                            <label for="worldwideNameExternalInput">External names <span class="ii-muted">(used when “External — paste complete names” is selected)</span></label>
-                            <textarea class="ii-textarea" id="worldwideNameExternalInput" rows="5" maxlength="100000" placeholder="One complete name per line, for example:\nAmina Okafor\nJean-Luc Moreau\nYou may also paste Given Name, Family Name or simple JSON."></textarea>
-                            <div class="ii-muted mt-1">Choose the External method above to use these names. The first requested number of valid names is reserved; duplicate or incomplete lines are reported below.</div>
                         </div>
                         <div class="ii-field mb-0">
                             <label for="worldwideNameGuidanceInput">Optional guidance</label>
@@ -5432,6 +5434,15 @@ merge_recipe_id, content_blueprint_id</pre>
         if (externalInput) externalInput.setAttribute('aria-describedby', 'worldwideNameMethodHelp');
     }
 
+    function autoSelectExternalNameMethod() {
+        const externalInput = document.getElementById('worldwideNameExternalInput');
+        const methodInput = document.getElementById('worldwideNameMethodInput');
+        if (externalInput?.value.trim() && methodInput && methodInput.value !== 'external') {
+            methodInput.value = 'external';
+            updateWorldwideNameMethod();
+        }
+    }
+
     async function waitForWorldwideNameGeneration(taskId, requestedCount) {
         let pollingFailures = 0;
         while (true) {
@@ -5526,6 +5537,7 @@ merge_recipe_id, content_blueprint_id</pre>
         event?.preventDefault();
         const countInput = document.getElementById('worldwideNameCountInput');
         const count = Number(countInput?.value || 0);
+        autoSelectExternalNameMethod();
         const method = document.getElementById('worldwideNameMethodInput')?.value || 'ai';
         const externalNames = document.getElementById('worldwideNameExternalInput')?.value || '';
         if (!Number.isInteger(count) || count < 1 || count > 1000) {
@@ -13511,6 +13523,7 @@ merge_recipe_id, content_blueprint_id</pre>
         document.getElementById('worldwideNameClearButton')?.addEventListener('click', clearWorldwideNameResults);
         document.getElementById('worldwideNameCopyButton')?.addEventListener('click', copyWorldwideNames);
         document.getElementById('worldwideNameDownloadButton')?.addEventListener('click', downloadWorldwideNamesCsv);
+        document.getElementById('worldwideNameExternalInput')?.addEventListener('input', autoSelectExternalNameMethod);
         updateWorldwideNameMethod();
         loadWorldwideNameGeneratorState();
         updateIiTargetedAliasNameSource();

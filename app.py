@@ -6476,8 +6476,13 @@ def api_generate_worldwide_names():
     if name_style not in allowed_styles:
         return jsonify({'success': False, 'error': 'Choose a supported name style.'}), 400
 
-    guidance = str(data.get('guidance') or '').strip()[:400]
     external_names = str(data.get('external_names') or data.get('pasted_names') or '')
+    # A filled manual-name box is authoritative. This prevents an accidental
+    # AI run when the user has supplied external names and expects those exact
+    # names to be reserved.
+    if external_names.strip():
+        method = 'external'
+    guidance = str(data.get('guidance') or '').strip()[:400]
     if method == 'external' and not external_names.strip():
         return jsonify({'success': False, 'error': 'Paste at least one complete name before starting an external run.'}), 400
 
@@ -6686,6 +6691,18 @@ def _run_worldwide_name_generation_task(task_id, count, method, region, name_sty
         rejected_names = []
         provider = {'integrated': 'integrated', 'ai': 'openrouter', 'external': 'external'}[method]
         model = {'integrated': 'built-in', 'ai': 'openrouter/free', 'external': 'pasted'}[method]
+
+        # Load the complete normalized ledger before accepting any candidate.
+        # This prevents provider repeats from even reaching INSERT in the
+        # normal path; the database unique constraint below still protects
+        # against another worker reserving the same name concurrently.
+        reserved_keys.update(
+            normalized_name
+            for (normalized_name,) in InboxWorldwideName.query.with_entities(
+                InboxWorldwideName.normalized_name
+            ).all()
+            if normalized_name
+        )
 
         def result_data(include_names=False):
             data = {
