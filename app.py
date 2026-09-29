@@ -6342,7 +6342,7 @@ def _fallback_worldwide_name_key(value):
     text = ''.join(char for char in text if not unicodedata.combining(char)).casefold()
     return ''.join(char for char in text if char.isalnum())
 
-def _fallback_worldwide_name_candidates(api_key, count, *, region, name_style, guidance, excluded_names, referer):
+def _fallback_worldwide_name_candidates(api_key, count, *, region, name_style, guidance, excluded_names, referer, timeout=60):
     """Self-contained OpenRouter/free fallback for deployments missing the helper module."""
     import requests
 
@@ -6371,13 +6371,13 @@ Do not return any of these names:
         json={
             'model': 'openrouter/free',
             'temperature': 0.85,
-        'max_tokens': 2400,
+            'max_tokens': 5000,
             'messages': [
                 {'role': 'system', 'content': 'You are a structured worldwide name data generator. Output only valid JSON.'},
                 {'role': 'user', 'content': prompt},
             ],
         },
-        timeout=30,
+        timeout=timeout,
     )
     if response.status_code >= 400:
         raise RuntimeError(f'OpenRouter returned HTTP {response.status_code}.')
@@ -6444,13 +6444,24 @@ def api_worldwide_name_generator_state():
 @login_required
 @permission_required('inbox_intelligence')
 def api_generate_worldwide_names():
+    """Start a long-running worldwide name generation task.
+
+    The previous version held the browser request open for the provider call.
+    That made a normal OpenRouter delay look like an immediate proxy 502.  All
+    three sources now use the same background task and progress endpoint.
+    """
     data = request.get_json(silent=True) or {}
     try:
         count = int(data.get('count') or 0)
     except (TypeError, ValueError):
         count = 0
-    if count < 1 or count > 100:
-        return jsonify({'success': False, 'error': 'Choose between 1 and 100 names per run.'}), 400
+    if count < 1 or count > 1000:
+        return jsonify({'success': False, 'error': 'Choose between 1 and 1,000 names per run.'}), 400
+
+    allowed_methods = {'integrated', 'ai', 'external'}
+    method = str(data.get('method') or data.get('generation_method') or 'ai').strip().lower()
+    if method not in allowed_methods:
+        return jsonify({'success': False, 'error': 'Choose integrated, AI, or external paste generation.'}), 400
 
     allowed_regions = {
         'worldwide', 'africa', 'americas', 'east_asia', 'south_asia',
@@ -6466,114 +6477,377 @@ def api_generate_worldwide_names():
         return jsonify({'success': False, 'error': 'Choose a supported name style.'}), 400
 
     guidance = str(data.get('guidance') or '').strip()[:400]
-    api_key = _inbox_openrouter_api_key()
-    if not api_key:
+    external_names = str(data.get('external_names') or data.get('pasted_names') or '')
+    if method == 'external' and not external_names.strip():
+        return jsonify({'success': False, 'error': 'Paste at least one complete name before starting an external run.'}), 400
+
+    api_key = _inbox_openrouter_api_key() if method == 'ai' else ''
+    if method == 'ai' and not api_key:
         return jsonify({
             'success': False,
             'error': 'OpenRouter is not configured. Save an API key in Inbox Intelligence settings or set OPENROUTER_API_KEY.',
         }), 400
 
-    try:
-        from services.worldwide_name_generator import normalize_name_key, request_candidates
-    except ModuleNotFoundError as exc:
-        # Some deployments copy tracked application files without the helper
-        # module. Keep this endpoint functional instead of returning a raw 500.
-        app.logger.warning('Worldwide name helper module unavailable: %s', exc.name)
-        normalize_name_key = _fallback_worldwide_name_key
-        request_candidates = _fallback_worldwide_name_candidates
+    task_id = str(uuid.uuid4())
+    referer = request.host_url.rstrip('/')
+    creator = session.get('user') or session.get('username') or 'inbox-intelligence'
+    method_label = {
+        'integrated': 'integrated name pool',
+        'ai': 'openrouter/free AI',
+        'external': 'external pasted names',
+    }[method]
+    update_progress(task_id, 0, count, 'starting', f'Preparing {count:,} name(s) with {method_label}...')
 
-    reserved_rows = []
-    reserved_keys = set()
-    excluded_names = []
-    rejected_names = []
-    max_attempts = 3
-    try:
-        for _attempt in range(max_attempts):
-            remaining = count - len(reserved_rows)
-            if remaining <= 0:
-                break
-            request_count = min(120, max(remaining + 4, int(remaining * 1.3)))
-            try:
-                candidates = request_candidates(
-                    api_key,
-                    request_count,
-                    region=region,
+    threading.Thread(
+        target=_run_worldwide_name_generation_task,
+        args=(task_id, count, method, region, name_style, guidance, external_names, api_key, referer, creator),
+        daemon=True,
+        name=f'worldwide-names-{task_id[:8]}',
+    ).start()
+
+    return jsonify({'success': True, 'task_id': task_id, 'requested_count': count, 'method': method}), 202
+
+
+def _clean_worldwide_name_part(value, max_length=120):
+    value = unicodedata.normalize('NFKC', str(value or ''))
+    value = ''.join(char for char in value if not unicodedata.category(char).startswith('C'))
+    value = re.sub(r'\s+', ' ', value).strip()
+    if not value or len(value) > max_length:
+        return ''
+    if any(char.isdigit() for char in value) or '@' in value:
+        return ''
+    return value
+
+
+def _normalize_worldwide_name_candidates(raw_payload, limit=1000):
+    """Normalize AI, integrated, and pasted candidates through one validator."""
+    if isinstance(raw_payload, dict):
+        raw_names = raw_payload.get('names') or raw_payload.get('results') or []
+    elif isinstance(raw_payload, list):
+        raw_names = raw_payload
+    else:
+        raw_names = []
+
+    normalized = []
+    seen = set()
+    for item in raw_names[:max(1, int(limit))]:
+        if isinstance(item, str):
+            pieces = item.strip().split()
+            given_name = _clean_worldwide_name_part(pieces[0]) if len(pieces) > 1 else ''
+            family_name = _clean_worldwide_name_part(' '.join(pieces[1:])) if len(pieces) > 1 else ''
+            region = ''
+            country = ''
+        elif isinstance(item, dict):
+            given_name = _clean_worldwide_name_part(item.get('given_name') or item.get('first_name'))
+            family_name = _clean_worldwide_name_part(item.get('family_name') or item.get('last_name'))
+            if (not given_name or not family_name) and item.get('full_name'):
+                pieces = str(item.get('full_name')).strip().split()
+                if len(pieces) > 1:
+                    given_name = _clean_worldwide_name_part(pieces[0])
+                    family_name = _clean_worldwide_name_part(' '.join(pieces[1:]))
+            region = _clean_worldwide_name_part(item.get('region'))[:80]
+            country = _clean_worldwide_name_part(item.get('country'))[:120]
+        else:
+            continue
+
+        if not given_name or not family_name:
+            continue
+        full_name = f'{given_name} {family_name}'
+        key = _fallback_worldwide_name_key(full_name)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        normalized.append({
+            'full_name': full_name,
+            'given_name': given_name,
+            'family_name': family_name,
+            'region': region,
+            'country': country,
+            'normalized_name': key,
+        })
+    return normalized
+
+
+def _parse_external_worldwide_names(raw_text, limit):
+    """Parse one complete name per line, plus simple CSV/JSON paste formats."""
+    text = str(raw_text or '').replace('\r\n', '\n').replace('\r', '\n').strip()
+    errors = []
+    if not text:
+        return [], ['The external name box is empty.']
+
+    parsed_payload = None
+    if text[:1] in {'[', '{'}:
+        try:
+            parsed_payload = json.loads(text)
+        except (TypeError, ValueError):
+            errors.append('The pasted JSON could not be parsed; falling back to line-by-line names.')
+
+    if parsed_payload is not None:
+        candidates = _normalize_worldwide_name_candidates(parsed_payload, limit=limit)
+        if not candidates:
+            errors.append('The pasted JSON contained no valid complete given/family name pairs.')
+        return candidates[:limit], errors
+
+    raw_items = []
+    for line_number, original_line in enumerate(text.split('\n'), start=1):
+        line = re.sub(r'^\s*(?:[-*•]|\d+[.)])\s*', '', original_line).strip()
+        if not line:
+            continue
+        if ',' in line:
+            parts = [part.strip() for part in line.split(',')]
+            given_name, family_name = parts[0], parts[1] if len(parts) > 1 else ''
+        elif '|' in line:
+            given_name, family_name = [part.strip() for part in line.split('|', 1)]
+        else:
+            pieces = line.split()
+            given_name = pieces[0] if len(pieces) > 1 else ''
+            family_name = ' '.join(pieces[1:]) if len(pieces) > 1 else ''
+        if not given_name or not family_name:
+            errors.append(f'Line {line_number} was skipped because it is not a complete given/family name.')
+            continue
+        raw_items.append({'given_name': given_name, 'family_name': family_name})
+
+    candidates = _normalize_worldwide_name_candidates(raw_items, limit=limit)
+    if len(candidates) < len(raw_items):
+        errors.append(f'{len(raw_items) - len(candidates):,} pasted line(s) were duplicate or invalid and were skipped.')
+    if not candidates:
+        errors.append('No valid complete names were found in the pasted text.')
+    return candidates[:limit], errors[:30]
+
+
+def _integrated_worldwide_name_candidates(count, region):
+    """Build candidates from the application's existing integrated name pools."""
+    first_names, last_names = get_random_name_pools()
+    if not first_names or not last_names:
+        return []
+    raw_items = []
+    seen = set()
+    for _ in range(max(500, count * 20)):
+        first_name = random.choice(first_names)
+        last_name = random.choice(last_names)
+        key = _fallback_worldwide_name_key(f'{first_name} {last_name}')
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        raw_items.append({
+            'given_name': first_name,
+            'family_name': last_name,
+            'region': 'Integrated pool',
+            'country': region.replace('_', ' ').title(),
+        })
+        if len(raw_items) >= count:
+            break
+    return _normalize_worldwide_name_candidates(raw_items, limit=count)
+
+
+def _reserve_worldwide_name_candidates(candidates, count, *, name_style, provider, model, creator, reserved_rows, reserved_keys, on_reserved=None):
+    """Commit valid candidates one at a time so the DB remains the arbiter."""
+    conflicts = 0
+    for candidate in candidates:
+        if len(reserved_rows) >= count:
+            break
+        normalized_name = _fallback_worldwide_name_key(candidate.get('full_name'))
+        if not normalized_name or normalized_name in reserved_keys:
+            continue
+        row = InboxWorldwideName(
+            full_name=candidate['full_name'],
+            given_name=candidate['given_name'],
+            family_name=candidate['family_name'],
+            normalized_name=normalized_name,
+            region=candidate.get('region') or 'worldwide',
+            country=candidate.get('country') or '',
+            name_style=name_style,
+            provider=provider,
+            model=model,
+            created_by=creator,
+        )
+        db.session.add(row)
+        try:
+            # The unique constraint is the final arbiter across workers and
+            # browser sessions, not the provider's self-reported list.
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            conflicts += 1
+            continue
+        reserved_rows.append(row)
+        reserved_keys.add(normalized_name)
+        if on_reserved:
+            on_reserved(row)
+    return conflicts
+
+
+def _run_worldwide_name_generation_task(task_id, count, method, region, name_style, guidance, external_names, api_key, referer, creator):
+    """Worker for integrated, OpenRouter/free, and external-paste generation."""
+    with app.app_context():
+        reserved_rows = []
+        reserved_keys = set()
+        errors = []
+        rejected_names = []
+        provider = {'integrated': 'integrated', 'ai': 'openrouter', 'external': 'external'}[method]
+        model = {'integrated': 'built-in', 'ai': 'openrouter/free', 'external': 'pasted'}[method]
+
+        def result_data(include_names=False):
+            data = {
+                'success': bool(reserved_rows),
+                'method': method,
+                'provider': provider,
+                'model': model,
+                'requested_count': count,
+                'generated_count': len(reserved_rows),
+                'errors': errors[-30:],
+            }
+            # Progress is written frequently. Keep interim files small and
+            # send the full result list only once the task is finished.
+            if include_names:
+                data['names'] = [_serialize_worldwide_name(row) for row in reserved_rows]
+            return data
+
+        def update(current, status, message):
+            update_progress(task_id, current, count, status, message, result_data())
+
+        try:
+            if method == 'external':
+                update(0, 'parsing', f'Parsing up to {count:,} pasted name(s)...')
+                candidates, parse_errors = _parse_external_worldwide_names(external_names, count)
+                errors.extend(parse_errors)
+                conflicts = _reserve_worldwide_name_candidates(
+                    candidates,
+                    count,
                     name_style=name_style,
-                    guidance=guidance,
-                    excluded_names=(excluded_names + rejected_names)[-180:],
-                    referer=request.host_url.rstrip('/'),
+                    provider=provider,
+                    model=model,
+                    creator=creator,
+                    reserved_rows=reserved_rows,
+                    reserved_keys=reserved_keys,
+                    on_reserved=lambda row: update(len(reserved_rows), 'reserving', f'Reserved {len(reserved_rows):,}/{count:,} pasted name(s)...'),
                 )
-            except Exception as provider_exc:
-                # Earlier rows are already committed and must be returned to
-                # the caller rather than silently consumed if a retry fails.
-                if reserved_rows:
-                    app.logger.warning('Worldwide name retry stopped: %s', type(provider_exc).__name__)
-                    break
-                raise
-            added_this_attempt = 0
-            for candidate in candidates:
-                if len(reserved_rows) >= count:
-                    break
-                normalized_name = normalize_name_key(candidate['full_name'])
-                if not normalized_name or normalized_name in reserved_keys:
-                    continue
-                row = InboxWorldwideName(
-                    full_name=candidate['full_name'],
-                    given_name=candidate['given_name'],
-                    family_name=candidate['family_name'],
-                    normalized_name=normalized_name,
-                    region=candidate.get('region') or region,
-                    country=candidate.get('country') or '',
+                if conflicts:
+                    errors.append(f'{conflicts} pasted name(s) were already reserved and were skipped.')
+                if len(candidates) < count:
+                    errors.append(f'Only {len(candidates):,} valid pasted name(s) were available for {count:,} requested.')
+
+            elif method == 'integrated':
+                update(0, 'generating', f'Building up to {count:,} name(s) from the integrated pool...')
+                candidates = _integrated_worldwide_name_candidates(count, region)
+                conflicts = _reserve_worldwide_name_candidates(
+                    candidates,
+                    count,
                     name_style=name_style,
-                    provider='openrouter',
-                    model='openrouter/free',
-                    created_by=session.get('user'),
+                    provider=provider,
+                    model=model,
+                    creator=creator,
+                    reserved_rows=reserved_rows,
+                    reserved_keys=reserved_keys,
+                    on_reserved=lambda row: update(len(reserved_rows), 'reserving', f'Reserved {len(reserved_rows):,}/{count:,} integrated name(s)...'),
                 )
-                db.session.add(row)
+                if conflicts:
+                    errors.append(f'{conflicts} integrated candidate(s) were already reserved and were skipped.')
+                if len(candidates) < count:
+                    errors.append(f'The integrated name pools supplied only {len(candidates):,} valid candidate(s) for {count:,} requested.')
+
+            else:
                 try:
-                    # The unique constraint is the final arbiter across workers
-                    # and browser sessions, not the model's self-reported list.
-                    db.session.commit()
-                except IntegrityError:
-                    db.session.rollback()
-                    rejected_names.append(candidate['full_name'])
-                    continue
-                reserved_rows.append(row)
-                reserved_keys.add(normalized_name)
-                excluded_names.append(candidate['full_name'])
-                added_this_attempt += 1
-            if added_this_attempt == 0 and candidates:
-                # A fresh provider attempt gets a new exclusion list when the
-                # provider repeated names already reserved by another request.
-                rejected_names.extend(item['full_name'] for item in candidates)
-    except Exception as exc:
-        db.session.rollback()
-        app.logger.warning('Worldwide name generation failed: %s', type(exc).__name__)
-        detail = str(exc).strip() if isinstance(exc, RuntimeError) else ''
-        message = detail[:180] if detail else 'OpenRouter could not generate names right now. Try again shortly.'
-        return jsonify({'success': False, 'error': message}), 502
+                    from services.worldwide_name_generator import request_candidates
+                except ModuleNotFoundError as exc:
+                    # Keep older deployments functional when the optional
+                    # service file was not copied beside app.py.
+                    app.logger.warning('Worldwide name helper module unavailable: %s', exc.name)
+                    request_candidates = _fallback_worldwide_name_candidates
 
-    if not reserved_rows:
-        return jsonify({'success': False, 'error': 'No new unique names were returned. Try again with a broader scope.'}), 502
+                max_batches = max(6, ((count + 39) // 40) * 5)
+                batch_number = 0
+                consecutive_failures = 0
+                update(0, 'starting', f'Generating {count:,} AI name(s) in provider batches; this may take several minutes...')
+                while len(reserved_rows) < count and batch_number < max_batches:
+                    batch_number += 1
+                    remaining = count - len(reserved_rows)
+                    request_count = min(40, remaining + 8)
+                    candidates = []
+                    batch_error = None
+                    for attempt in range(1, 3):
+                        try:
+                            update(
+                                len(reserved_rows),
+                                'requesting',
+                                f'OpenRouter/free batch {batch_number} in progress — {len(reserved_rows):,}/{count:,} reserved...',
+                            )
+                            candidates = request_candidates(
+                                api_key,
+                                request_count,
+                                region=region,
+                                name_style=name_style,
+                                guidance=guidance,
+                                excluded_names=(
+                                    [row.full_name for row in reserved_rows]
+                                    + rejected_names
+                                )[-180:],
+                                referer=referer,
+                                timeout=60,
+                            )
+                            batch_error = None
+                            break
+                        except Exception as provider_exc:
+                            batch_error = str(provider_exc).strip() or f'{type(provider_exc).__name__}'
+                            if attempt < 2:
+                                update(len(reserved_rows), 'retrying', f'AI batch {batch_number} needs a retry ({batch_error[:120]}).')
+                    if batch_error:
+                        errors.append(f'AI batch {batch_number} failed after 2 attempts: {batch_error[:220]}')
+                        consecutive_failures += 1
+                        if consecutive_failures >= 3:
+                            errors.append('AI generation stopped after three consecutive failed batches.')
+                            break
+                        continue
 
-    generated = [_serialize_worldwide_name(row) for row in reserved_rows]
-    generated_count = len(generated)
-    shortfall = generated_count < count
-    message = (
-        f'Reserved {generated_count} unique worldwide name(s) with openrouter/free.'
-        if not shortfall else
-        f'Reserved {generated_count} unique name(s) of {count} requested. Try again to fill the remaining set.'
-    )
-    return jsonify({
-        'success': True,
-        'provider': 'openrouter',
-        'model': 'openrouter/free',
-        'names': generated,
-        'requested_count': count,
-        'generated_count': generated_count,
-        'total_reserved': InboxWorldwideName.query.count(),
-        'message': message,
-    })
+                    consecutive_failures = 0
+                    conflicts = _reserve_worldwide_name_candidates(
+                        candidates,
+                        count,
+                        name_style=name_style,
+                        provider=provider,
+                        model=model,
+                        creator=creator,
+                        reserved_rows=reserved_rows,
+                        reserved_keys=reserved_keys,
+                        on_reserved=lambda row: update(len(reserved_rows), 'reserving', f'Reserved {len(reserved_rows):,}/{count:,} AI name(s)...'),
+                    )
+                    rejected_names.extend(item.get('full_name', '') for item in candidates if item.get('full_name'))
+                    if conflicts:
+                        errors.append(f'AI batch {batch_number}: {conflicts} provider candidate(s) were already reserved.')
+                    if not candidates:
+                        errors.append(f'AI batch {batch_number} returned no usable names.')
+                        consecutive_failures += 1
+                        if consecutive_failures >= 3:
+                            errors.append('AI generation stopped after three consecutive empty batches.')
+                            break
+
+                if len(reserved_rows) < count:
+                    errors.append(f'AI generation finished with {len(reserved_rows):,} of {count:,} requested name(s).')
+
+        except Exception as exc:
+            db.session.rollback()
+            errors.append(f'Generation task failed: {str(exc).strip()[:220] or type(exc).__name__}.')
+            app.logger.exception('Worldwide name generation task %s failed', task_id)
+
+        generated_count = len(reserved_rows)
+        total_reserved = InboxWorldwideName.query.count()
+        if generated_count:
+            if errors:
+                message = f'Finished with {generated_count:,}/{count:,} unique name(s); review the reported issues below.'
+            else:
+                message = f'Finished and reserved all {generated_count:,} unique name(s).'
+            update_progress(task_id, generated_count, count, 'completed', message, {
+                **result_data(include_names=True),
+                'total_reserved': total_reserved,
+                'available_count': InboxWorldwideName.query.filter(InboxWorldwideName.used_at.is_(None)).count(),
+            })
+        else:
+            message = errors[0] if errors else 'No new unique names were generated.'
+            update_progress(task_id, 0, count, 'error', message, {
+                **result_data(include_names=True),
+                'total_reserved': total_reserved,
+                'available_count': InboxWorldwideName.query.filter(InboxWorldwideName.used_at.is_(None)).count(),
+            })
 
 @app.route('/api/settings/openrouter-config/test', methods=['POST'])
 @login_required

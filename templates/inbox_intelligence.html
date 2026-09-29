@@ -391,6 +391,10 @@
         background: linear-gradient(135deg, rgba(245, 243, 255, 0.9), rgba(255, 255, 255, 0.82));
     }
 
+    .ii-name-source-picker .ii-name-type-options {
+        grid-template-columns: 1fr;
+    }
+
     .ii-name-source-option {
         align-items: flex-start;
     }
@@ -516,35 +520,6 @@
     .ii-targeted-alias-results.is-visible {
         display: block;
     }
-
-    .ii-workspace-tablist {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        margin: 0 0 16px;
-        padding-bottom: 10px;
-        border-bottom: 1px solid #e2e8f0;
-    }
-
-    .ii-workspace-tab {
-        border: 1px solid #dbe4ef;
-        border-radius: 8px;
-        background: #fff;
-        color: #475569;
-        padding: 9px 12px;
-        font-size: 13px;
-        font-weight: 750;
-        cursor: pointer;
-    }
-
-    .ii-workspace-tab.active {
-        border-color: #7c3aed;
-        background: #f5f3ff;
-        color: #5b21b6;
-        box-shadow: 0 8px 18px rgba(124, 58, 237, 0.1);
-    }
-
-    .ii-workspace-pane[hidden] { display: none !important; }
 
     .ii-name-studio-hero {
         display: flex;
@@ -701,13 +676,50 @@
     }
 
     .ii-name-generator-progress.is-busy span {
-        width: 45%;
-        animation: ii-name-generator-progress 1.2s ease-in-out infinite;
+        animation: none;
     }
 
-    @keyframes ii-name-generator-progress {
-        0% { transform: translateX(-110%); }
-        100% { transform: translateX(245%); }
+    .ii-name-generator-progress-meta {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 6px;
+        color: #64748b;
+        font-size: 11px;
+    }
+
+    .ii-name-generator-method-help {
+        margin-top: 5px;
+        color: #64748b;
+        font-size: 11px;
+    }
+
+    .ii-name-generator-external {
+        margin-top: 10px;
+        padding: 10px;
+        border: 1px solid #dbeafe;
+        border-radius: 8px;
+        background: #f8fbff;
+    }
+
+    .ii-name-generator-errors {
+        margin-top: 10px;
+        padding: 9px 11px;
+        border: 1px solid #fecaca;
+        border-radius: 8px;
+        color: #991b1b;
+        background: #fff7f7;
+        font-size: 12px;
+    }
+
+    .ii-name-generator-errors strong {
+        display: block;
+        margin-bottom: 4px;
+    }
+
+    .ii-name-generator-errors ul {
+        margin: 0;
+        padding-left: 18px;
     }
 
     @media (max-width: 860px) {
@@ -4438,16 +4450,8 @@ merge_recipe_id, content_blueprint_id</pre>
 
     <section id="senders" class="ii-tabpane">
         <div class="ii-panel">
-            <div class="ii-row justify-content-between mb-3"><h3>Workspace Accounts & API Senders</h3><div class="ii-row"><select class="ii-select" style="width: 160px;"><option>All domains</option></select><select class="ii-select" style="width: 160px;"><option>All statuses</option></select></div></div>
-            <div class="ii-workspace-tablist" role="tablist" aria-label="Workspace Accounts tools">
-                <button class="ii-workspace-tab active" id="workspaceAccountsUsersTab" type="button" role="tab" aria-selected="true" aria-controls="workspaceAccountsUsersPane" data-workspace-pane="workspaceAccountsUsersPane">
-                    <i class="fas fa-users"></i> Workspace users
-                </button>
-                <button class="ii-workspace-tab" id="worldwideNameGeneratorTab" type="button" role="tab" aria-selected="false" aria-controls="worldwideNameGeneratorPane" data-workspace-pane="worldwideNameGeneratorPane">
-                    <i class="fas fa-earth-americas"></i> Worldwide Name Generator <span class="ii-chip blue">OpenRouter/free</span>
-                </button>
-            </div>
-            <div id="workspaceAccountsUsersPane" class="ii-workspace-pane" role="tabpanel" aria-labelledby="workspaceAccountsUsersTab">
+            <div class="ii-row justify-content-between mb-3"><div class="ii-row"><h3 class="mb-0">Workspace Accounts & API Senders</h3><span class="ii-chip blue"><i class="fas fa-sparkles"></i> Worldwide Name Generator · OpenRouter/free</span></div><div class="ii-row"><select class="ii-select" style="width: 160px;"><option>All domains</option></select><select class="ii-select" style="width: 160px;"><option>All statuses</option></select></div></div>
+            <div id="workspaceAccountsUsersPane" class="ii-workspace-pane" role="region" aria-label="Workspace users and worldwide name generation">
             <div class="ii-card mb-3">
                 <div class="ii-row justify-content-between">
                     <div>
@@ -4508,16 +4512,12 @@ merge_recipe_id, content_blueprint_id</pre>
                         <fieldset class="ii-name-type-picker ii-name-source-picker">
                             <legend>Identity source</legend>
                             <div class="ii-name-type-options">
-                                <label class="ii-name-type-option ii-name-source-option" for="iiTargetedAliasSourceLocal">
-                                    <input type="radio" id="iiTargetedAliasSourceLocal" name="ii-targeted-alias-source" value="local" checked onchange="updateIiTargetedAliasNameSource()">
-                                    <span><strong>Built-in random pool</strong><small>Current behavior with locale categories</small></span>
-                                </label>
-                                <label class="ii-name-type-option ii-name-source-option" for="iiTargetedAliasSourceWorldwide">
-                                    <input type="radio" id="iiTargetedAliasSourceWorldwide" name="ii-targeted-alias-source" value="worldwide" onchange="updateIiTargetedAliasNameSource()">
-                                    <span><strong>Worldwide generated names</strong><small>Uses the next unused <em id="iiTargetedAliasWorldwideAvailability">0 available</em></small></span>
+                                <label class="ii-name-type-option ii-name-source-option" for="iiTargetedAliasUseWorldwide">
+                                    <input type="checkbox" id="iiTargetedAliasUseWorldwide" onchange="updateIiTargetedAliasNameSource()">
+                                    <span><strong>Use AI-generated worldwide names</strong><small>Unchecked uses the built-in pool. Checked uses the next unused <em id="iiTargetedAliasWorldwideAvailability">0 available</em> name(s) from OpenRouter/free.</small></span>
                                 </label>
                             </div>
-                            <div class="ii-name-type-help" id="iiTargetedAliasSourceHelp">Choose Worldwide generated names to consume reserved names from the global ledger. Generate more names if the available count is lower than your targets.</div>
+                            <div class="ii-name-type-help" id="iiTargetedAliasSourceHelp">The existing built-in random pool is selected. Turn on the checkbox to consume names reserved by Worldwide Name Generator.</div>
                         </fieldset>
                         <fieldset class="ii-name-type-picker" id="iiTargetedAliasNameTypePicker">
                             <legend>Name type</legend>
@@ -4571,13 +4571,12 @@ merge_recipe_id, content_blueprint_id</pre>
                 <tr><th>Sender</th><th>Status</th><th>Tests</th><th>Inbox Rate</th><th>Spam Rate</th><th>Selection</th></tr>
                 <tr><td colspan="6" class="text-center ii-muted">Retrieve users from selected Workspace accounts or search previously retrieved API sender users manually.</td></tr>
             </table>
-            </div>
-            <div id="worldwideNameGeneratorPane" class="ii-workspace-pane" role="tabpanel" aria-labelledby="worldwideNameGeneratorTab" hidden>
+            <div id="worldwideNameGeneratorPane" class="ii-card ii-worldwide-name-generator-card mb-3" role="region" aria-label="Worldwide name generator">
                 <div class="ii-name-studio-hero">
                     <div>
                         <div class="ii-name-studio-eyebrow">Global identity library</div>
                         <h3>Generate complete worldwide names</h3>
-                        <p class="ii-muted mb-0">Use OpenRouter/free to propose culturally coherent given and family names. Every accepted name is reserved in this app’s global ledger before it is shown.</p>
+                        <p class="ii-muted mb-0">Choose the integrated pool, OpenRouter/free AI, or external paste. Every accepted complete name is reserved in this app’s global ledger before it is shown.</p>
                     </div>
                     <div class="ii-name-studio-meta">
                         <span class="ii-chip blue"><i class="fas fa-sparkles"></i> Model: openrouter/free</span>
@@ -4594,8 +4593,8 @@ merge_recipe_id, content_blueprint_id</pre>
                         <div class="ii-name-generator-control-grid">
                             <div class="ii-field mb-0">
                                 <label for="worldwideNameCountInput">Number of names</label>
-                                <input class="ii-input" id="worldwideNameCountInput" type="number" min="1" max="100" value="12" inputmode="numeric" aria-describedby="worldwideNameCountHelp">
-                                <div class="ii-muted mt-1" id="worldwideNameCountHelp">1–100 names per run</div>
+                                <input class="ii-input" id="worldwideNameCountInput" type="number" min="1" max="1000" value="12" inputmode="numeric" aria-describedby="worldwideNameCountHelp">
+                                <div class="ii-muted mt-1" id="worldwideNameCountHelp">1–1,000 names per run. AI runs in batches and stays open until finished.</div>
                             </div>
                             <div class="ii-field mb-0">
                                 <label for="worldwideNameRegionInput">Geographic scope</label>
@@ -4622,11 +4621,27 @@ merge_recipe_id, content_blueprint_id</pre>
                             </div>
                         </div>
                         <div class="ii-field mb-0">
+                            <label for="worldwideNameMethodInput">Generation method</label>
+                            <select class="ii-select" id="worldwideNameMethodInput" onchange="updateWorldwideNameMethod()">
+                                <option value="ai" selected>AI — OpenRouter/free</option>
+                                <option value="integrated">Integrated — built-in name pool</option>
+                                <option value="external">External — paste complete names</option>
+                            </select>
+                            <div class="ii-name-generator-method-help" id="worldwideNameMethodHelp">OpenRouter/free generates candidates in batches; the database reserves only names that are still unique.</div>
+                        </div>
+                        <div class="ii-name-generator-external" id="worldwideNameExternalWrap" hidden>
+                            <label for="worldwideNameExternalInput">External names</label>
+                            <textarea class="ii-textarea" id="worldwideNameExternalInput" rows="5" maxlength="100000" placeholder="One complete name per line, for example:\nAmina Okafor\nJean-Luc Moreau\nYou may also paste Given Name, Family Name or simple JSON."></textarea>
+                            <div class="ii-muted mt-1">The first requested number of valid names is reserved. Duplicate or incomplete lines are reported below.</div>
+                        </div>
+                        <div class="ii-field mb-0">
                             <label for="worldwideNameGuidanceInput">Optional guidance</label>
                             <textarea class="ii-textarea" id="worldwideNameGuidanceInput" rows="3" style="min-height: 74px; resize: none;" maxlength="400" placeholder="Example: favor less common but plausible names; avoid celebrity names."></textarea>
                         </div>
                         <div id="worldwideNameGeneratorStatus" class="ii-name-generator-status" role="status" aria-live="polite">Ready to generate a new unique batch.</div>
-                        <div id="worldwideNameGeneratorProgress" class="ii-name-generator-progress" aria-hidden="true"><span></span></div>
+                        <div id="worldwideNameGeneratorProgress" class="ii-name-generator-progress" role="progressbar" aria-label="Worldwide name generation progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div>
+                        <div class="ii-name-generator-progress-meta"><span id="worldwideNameGeneratorProgressStage">Ready</span><span id="worldwideNameGeneratorProgressCount">0 / 0</span></div>
+                        <div id="worldwideNameGeneratorErrors" class="ii-name-generator-errors" role="alert" hidden></div>
                         <div class="ii-actions">
                             <button class="ii-btn ii-btn-primary" id="worldwideNameGenerateButton" type="submit"><i class="fas fa-wand-magic-sparkles"></i> Generate unique names</button>
                             <button class="ii-btn" id="worldwideNameClearButton" type="button"><i class="fas fa-eraser"></i> Clear current set</button>
@@ -4637,7 +4652,7 @@ merge_recipe_id, content_blueprint_id</pre>
                         <div class="ii-name-generator-rule"><i class="fas fa-database"></i><span>Accepted names are saved in a permanent database ledger for this app.</span></div>
                         <div class="ii-name-generator-rule"><i class="fas fa-fingerprint"></i><span>Matching ignores case, accents, punctuation, and extra spaces.</span></div>
                         <div class="ii-name-generator-rule"><i class="fas fa-rotate"></i><span>Provider repeats are rejected and retried automatically within the run.</span></div>
-                        <div class="ii-name-generator-rule"><i class="fas fa-circle-info"></i><span>OpenRouter/free supplies suggestions; it does not decide whether a name is accepted.</span></div>
+                        <div class="ii-name-generator-rule"><i class="fas fa-circle-info"></i><span>AI supplies suggestions only; integrated and pasted names use the same uniqueness ledger.</span></div>
                     </aside>
                 </form>
 
@@ -4662,6 +4677,7 @@ merge_recipe_id, content_blueprint_id</pre>
                 <div id="worldwideNameEmpty" class="ii-name-generator-empty mt-3">
                     <div><i class="fas fa-earth-americas fa-2x mb-2 text-primary"></i><div><strong>No names generated in this view yet.</strong></div><div class="ii-muted">Set a quantity, then generate a fresh globally unique batch.</div></div>
                 </div>
+            </div>
             </div>
         </div>
     </section>
@@ -5365,20 +5381,6 @@ merge_recipe_id, content_blueprint_id</pre>
         return data;
     }
 
-    function activateWorkspacePane(paneId) {
-        document.querySelectorAll('.ii-workspace-tab').forEach((tab) => {
-            const active = tab.dataset.workspacePane === paneId;
-            tab.classList.toggle('active', active);
-            tab.setAttribute('aria-selected', active ? 'true' : 'false');
-        });
-        document.querySelectorAll('.ii-workspace-pane').forEach((pane) => {
-            const active = pane.id === paneId;
-            pane.classList.toggle('active', active);
-            pane.hidden = !active;
-        });
-        if (paneId === 'worldwideNameGeneratorPane') loadWorldwideNameGeneratorState();
-    }
-
     function setWorldwideNameStatus(message, tone = '') {
         const status = document.getElementById('worldwideNameGeneratorStatus');
         if (!status) return;
@@ -5388,11 +5390,85 @@ merge_recipe_id, content_blueprint_id</pre>
         status.textContent = message;
     }
 
-    function setWorldwideNameProgress(busy = false) {
+    function renderWorldwideNameErrors(errors = []) {
+        const panel = document.getElementById('worldwideNameGeneratorErrors');
+        if (!panel) return;
+        const visibleErrors = (Array.isArray(errors) ? errors : [errors])
+            .map((error) => String(error || '').trim())
+            .filter(Boolean);
+        panel.hidden = !visibleErrors.length;
+        panel.innerHTML = visibleErrors.length
+            ? `<strong><i class="fas fa-triangle-exclamation"></i> Issues reported during this run</strong><ul>${visibleErrors.map((error) => `<li>${escapeHtml(error)}</li>`).join('')}</ul>`
+            : '';
+    }
+
+    function setWorldwideNameProgress(busy = false, percentage = 0, current = 0, total = 0, stage = '') {
         const progress = document.getElementById('worldwideNameGeneratorProgress');
-        if (!progress) return;
-        progress.classList.toggle('is-busy', busy);
-        if (!busy) progress.querySelector('span').style.width = '0';
+        const safePercentage = Math.max(0, Math.min(100, Number(percentage) || 0));
+        if (progress) {
+            progress.classList.toggle('is-busy', busy);
+            progress.querySelector('span').style.width = `${safePercentage}%`;
+            progress.setAttribute('aria-valuenow', String(Math.round(safePercentage)));
+        }
+        const stageEl = document.getElementById('worldwideNameGeneratorProgressStage');
+        const countEl = document.getElementById('worldwideNameGeneratorProgressCount');
+        if (stageEl) stageEl.textContent = stage || (busy ? 'Working…' : 'Ready');
+        if (countEl) countEl.textContent = `${Number(current) || 0} / ${Number(total) || 0}`;
+    }
+
+    function updateWorldwideNameMethod() {
+        const method = document.getElementById('worldwideNameMethodInput')?.value || 'ai';
+        const externalWrap = document.getElementById('worldwideNameExternalWrap');
+        const help = document.getElementById('worldwideNameMethodHelp');
+        if (externalWrap) externalWrap.hidden = method !== 'external';
+        if (help) {
+            help.textContent = method === 'ai'
+                ? 'OpenRouter/free generates candidates in batches; the database reserves only names that are still unique.'
+                : method === 'integrated'
+                    ? 'Uses the application’s built-in name pools. No external API call is made.'
+                    : 'Paste one complete name per line. Duplicate or incomplete lines are reported and skipped.';
+        }
+        if (method !== 'external') {
+            const externalInput = document.getElementById('worldwideNameExternalInput');
+            if (externalInput) externalInput.setAttribute('aria-hidden', 'true');
+        } else {
+            const externalInput = document.getElementById('worldwideNameExternalInput');
+            if (externalInput) externalInput.removeAttribute('aria-hidden');
+        }
+    }
+
+    async function waitForWorldwideNameGeneration(taskId, requestedCount) {
+        let pollingFailures = 0;
+        while (true) {
+            let progress;
+            try {
+                progress = await iiFetch(`/api/task-progress/${encodeURIComponent(taskId)}`);
+                pollingFailures = 0;
+            } catch (err) {
+                pollingFailures += 1;
+                if (pollingFailures >= 3) throw new Error(`Could not read generation progress: ${err.message}`);
+                await new Promise((resolve) => setTimeout(resolve, 1000));
+                continue;
+            }
+
+            const result = progress.result_data || {};
+            const total = Number(progress.total) || requestedCount;
+            const current = Number(progress.current) || 0;
+            const percentage = Number(progress.percentage) || 0;
+            setWorldwideNameProgress(
+                !['completed', 'error'].includes(progress.status),
+                percentage,
+                current,
+                total,
+                progress.message || progress.status || 'Working…',
+            );
+            renderWorldwideNameErrors(result.errors || []);
+
+            if (progress.status === 'completed' || progress.status === 'error') {
+                return {progress, result};
+            }
+            await new Promise((resolve) => setTimeout(resolve, 800));
+        }
     }
 
     function renderWorldwideNameResults() {
@@ -5449,9 +5525,16 @@ merge_recipe_id, content_blueprint_id</pre>
         event?.preventDefault();
         const countInput = document.getElementById('worldwideNameCountInput');
         const count = Number(countInput?.value || 0);
-        if (!Number.isInteger(count) || count < 1 || count > 100) {
-            setWorldwideNameStatus('Choose a whole number from 1 to 100.', 'error');
+        const method = document.getElementById('worldwideNameMethodInput')?.value || 'ai';
+        const externalNames = document.getElementById('worldwideNameExternalInput')?.value || '';
+        if (!Number.isInteger(count) || count < 1 || count > 1000) {
+            setWorldwideNameStatus('Choose a whole number from 1 to 1,000.', 'error');
             countInput?.focus();
+            return;
+        }
+        if (method === 'external' && !externalNames.trim()) {
+            setWorldwideNameStatus('Paste at least one complete name for the external method.', 'error');
+            document.getElementById('worldwideNameExternalInput')?.focus();
             return;
         }
 
@@ -5460,31 +5543,52 @@ merge_recipe_id, content_blueprint_id</pre>
         if (button) {
             button.disabled = true;
             button.setAttribute('aria-busy', 'true');
-            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating and reserving...';
+            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Starting generation...';
         }
-        setWorldwideNameProgress(true);
-        setWorldwideNameStatus(`Asking openrouter/free for ${count} candidate name(s). This can take up to 30 seconds while the global ledger is checked...`);
+        renderWorldwideNameErrors([]);
+        setWorldwideNameProgress(true, 0, 0, count, 'Starting…');
+        setWorldwideNameStatus(
+            method === 'ai'
+                ? `OpenRouter/free is generating ${count.toLocaleString()} name(s) in batches. The app will wait until the task finishes...`
+                : `Preparing ${count.toLocaleString()} name(s) with the selected method...`
+        );
 
+        let lastGenerationErrors = [];
+        let lastGenerationProgress = null;
         try {
-            const data = await iiFetch('/api/inbox-intelligence/worldwide-name-generator/generate', {
+            const started = await iiFetch('/api/inbox-intelligence/worldwide-name-generator/generate', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
                     count,
+                    method,
                     region: document.getElementById('worldwideNameRegionInput')?.value || 'worldwide',
                     name_style: document.getElementById('worldwideNameStyleInput')?.value || 'balanced',
                     guidance: document.getElementById('worldwideNameGuidanceInput')?.value || '',
+                    external_names: externalNames,
                 }),
             });
-            iiState.worldwideNames = data.names || [];
+            const {progress, result} = await waitForWorldwideNameGeneration(started.task_id, count);
+            lastGenerationProgress = progress;
+            lastGenerationErrors = Array.isArray(result.errors) ? result.errors : [];
+            iiState.worldwideNames = result.names || [];
             renderWorldwideNameResults();
-            updateWorldwideNameReservedCount(data.total_reserved);
-            updateWorldwideNameAvailability(data.available_count);
-            setWorldwideNameStatus(data.message || 'Unique names generated and reserved.', 'ready');
+            updateWorldwideNameReservedCount(result.total_reserved);
+            updateWorldwideNameAvailability(result.available_count);
+            setWorldwideNameProgress(false, progress.percentage, progress.current, progress.total, progress.status === 'completed' ? 'Complete' : 'Stopped');
+            if (progress.status === 'error') throw new Error(progress.message || 'Name generation failed.');
+            setWorldwideNameStatus(progress.message || 'Unique names generated and reserved.', result.errors?.length ? 'error' : 'ready');
         } catch (err) {
             setWorldwideNameStatus(err.message || 'Name generation failed.', 'error');
+            renderWorldwideNameErrors([...lastGenerationErrors, err.message || 'Name generation failed.']);
+            setWorldwideNameProgress(
+                false,
+                lastGenerationProgress?.percentage || 0,
+                lastGenerationProgress?.current || 0,
+                lastGenerationProgress?.total || count,
+                'Stopped',
+            );
         } finally {
-            setWorldwideNameProgress(false);
             if (button) {
                 button.disabled = false;
                 button.removeAttribute('aria-busy');
@@ -5496,6 +5600,8 @@ merge_recipe_id, content_blueprint_id</pre>
     function clearWorldwideNameResults() {
         iiState.worldwideNames = [];
         renderWorldwideNameResults();
+        renderWorldwideNameErrors([]);
+        setWorldwideNameProgress(false, 0, 0, 0, 'Ready');
         setWorldwideNameStatus('Current set cleared. Reserved names remain protected in the global ledger.', 'ready');
     }
 
@@ -5589,7 +5695,7 @@ merge_recipe_id, content_blueprint_id</pre>
     }
 
     function selectedIiTargetedAliasNameSource() {
-        return document.querySelector('input[name="ii-targeted-alias-source"]:checked')?.value === 'worldwide'
+        return document.getElementById('iiTargetedAliasUseWorldwide')?.checked
             ? 'worldwide'
             : 'local';
     }
@@ -13400,13 +13506,11 @@ merge_recipe_id, content_blueprint_id</pre>
             });
         });
 
-        document.querySelectorAll('.ii-workspace-tab').forEach((tab) => {
-            tab.addEventListener('click', () => activateWorkspacePane(tab.dataset.workspacePane));
-        });
         document.getElementById('worldwideNameGeneratorForm')?.addEventListener('submit', generateWorldwideNames);
         document.getElementById('worldwideNameClearButton')?.addEventListener('click', clearWorldwideNameResults);
         document.getElementById('worldwideNameCopyButton')?.addEventListener('click', copyWorldwideNames);
         document.getElementById('worldwideNameDownloadButton')?.addEventListener('click', downloadWorldwideNamesCsv);
+        updateWorldwideNameMethod();
         loadWorldwideNameGeneratorState();
         updateIiTargetedAliasNameSource();
 
