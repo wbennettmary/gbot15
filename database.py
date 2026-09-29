@@ -548,6 +548,7 @@ class InboxWorldwideName(db.Model):
     model = db.Column(db.String(120), nullable=False, default='openrouter/free')
     created_by = db.Column(db.String(255), nullable=True, index=True)
     created_at = db.Column(db.DateTime, default=db.func.current_timestamp(), index=True)
+    generation_batch_id = db.Column(db.String(36), nullable=True, index=True)
     used_at = db.Column(db.DateTime, nullable=True, index=True)
     used_by = db.Column(db.String(80), nullable=True, index=True)
     used_for = db.Column(db.String(255), nullable=True)

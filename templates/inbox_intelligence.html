@@ -4514,10 +4514,10 @@ merge_recipe_id, content_blueprint_id</pre>
                             <div class="ii-name-type-options">
                                 <label class="ii-name-type-option ii-name-source-option" for="iiTargetedAliasUseWorldwide">
                                     <input type="checkbox" id="iiTargetedAliasUseWorldwide" onchange="updateIiTargetedAliasNameSource()">
-                                    <span><strong>Use AI-generated worldwide names</strong><small>Unchecked uses the built-in pool. Checked uses the next unused <em id="iiTargetedAliasWorldwideAvailability">0 available</em> name(s) from OpenRouter/free.</small></span>
+                                    <span><strong>Use AI-generated worldwide names</strong><small>Unchecked uses the built-in pool. Checked uses only the latest generated batch: <em id="iiTargetedAliasWorldwideAvailability">0 available</em> name(s) from OpenRouter/free.</small></span>
                                 </label>
                             </div>
-                            <div class="ii-name-type-help" id="iiTargetedAliasSourceHelp">The existing built-in random pool is selected. Turn on the checkbox to consume names reserved by Worldwide Name Generator.</div>
+                            <div class="ii-name-type-help" id="iiTargetedAliasSourceHelp">The existing built-in random pool is selected. Turn on the checkbox to consume names from the latest Worldwide Name Generator batch.</div>
                         </fieldset>
                         <fieldset class="ii-name-type-picker" id="iiTargetedAliasNameTypePicker">
                             <legend>Name type</legend>
@@ -4587,7 +4587,8 @@ merge_recipe_id, content_blueprint_id</pre>
                     </div>
                     <div class="ii-name-studio-meta">
                         <span class="ii-chip blue"><i class="fas fa-sparkles"></i> Model: openrouter/free</span>
-                        <span class="ii-muted" id="worldwideNameReservedCount">0 names reserved</span>
+                        <span class="ii-muted" id="worldwideNameReservedCount">0 total names reserved</span>
+                        <span class="ii-muted" id="worldwideNameLatestAvailable">0 latest-batch names available</span>
                     </div>
                 </div>
 
@@ -5509,7 +5510,7 @@ merge_recipe_id, content_blueprint_id</pre>
 
     function updateWorldwideNameReservedCount(total) {
         const el = document.getElementById('worldwideNameReservedCount');
-        if (el) el.textContent = `${Number(total) || 0} name(s) reserved`;
+        if (el) el.textContent = `${Number(total) || 0} total name(s) reserved`;
     }
 
     function updateWorldwideNameAvailability(total) {
@@ -5517,9 +5518,11 @@ merge_recipe_id, content_blueprint_id</pre>
         iiState.worldwideNameAvailableCount = available;
         const el = document.getElementById('iiTargetedAliasWorldwideAvailability');
         if (el) el.textContent = `${available} available`;
+        const latestEl = document.getElementById('worldwideNameLatestAvailable');
+        if (latestEl) latestEl.textContent = `${available} latest-batch name(s) available`;
         const sourceHelp = document.getElementById('iiTargetedAliasSourceHelp');
         if (sourceHelp && selectedIiTargetedAliasNameSource() === 'worldwide') {
-            sourceHelp.textContent = `The next unused reserved names will be assigned in target order. ${available} name(s) are currently available.`;
+            sourceHelp.textContent = `The next unused names from the latest generated batch will be assigned in target order. ${available} name(s) are currently available.`;
         }
     }
 

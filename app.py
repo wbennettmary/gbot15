@@ -265,6 +265,7 @@ with app.app_context():
         if 'inbox_worldwide_name' in inspector.get_table_names():
             columns = [col['name'] for col in inspector.get_columns('inbox_worldwide_name')]
             new_columns = {
+                'generation_batch_id': 'VARCHAR(36)',
                 'used_at': 'TIMESTAMP',
                 'used_by': 'VARCHAR(80)',
                 'used_for': 'VARCHAR(255)',
@@ -277,6 +278,12 @@ with app.app_context():
                             conn.execute(text(f'ALTER TABLE "inbox_worldwide_name" ADD COLUMN {column_name} {column_type}'))
                         else:
                             conn.execute(text(f'ALTER TABLE inbox_worldwide_name ADD COLUMN {column_name} {column_type}'))
+                index_names = {index['name'] for index in inspector.get_indexes('inbox_worldwide_name')}
+                if 'ix_inbox_worldwide_name_generation_batch_id' not in index_names:
+                    conn.execute(text(
+                        'CREATE INDEX ix_inbox_worldwide_name_generation_batch_id '
+                        'ON inbox_worldwide_name (generation_batch_id)'
+                    ))
                 conn.commit()
     except Exception as e:
         logging.warning("Could not auto-migrate worldwide name usage fields: %s", e)
@@ -6336,11 +6343,56 @@ def _serialize_worldwide_name(row):
         'created_at': row.created_at.isoformat() + 'Z' if row.created_at else None,
     }
 
+
+def _latest_worldwide_name_batch_id():
+    """Return the batch that was generated most recently.
+
+    Older rows may have no batch id; they remain in the permanent uniqueness
+    ledger but are intentionally not eligible for new Workspace assignments.
+    """
+    row = InboxWorldwideName.query.filter(
+        InboxWorldwideName.generation_batch_id.isnot(None)
+    ).order_by(
+        InboxWorldwideName.created_at.desc(),
+        InboxWorldwideName.id.desc(),
+    ).first()
+    return row.generation_batch_id if row else None
+
+
+def _worldwide_available_query(batch_id=None):
+    query = InboxWorldwideName.query.filter(InboxWorldwideName.used_at.is_(None))
+    if batch_id:
+        query = query.filter(InboxWorldwideName.generation_batch_id == batch_id)
+    else:
+        # Do not expose legacy rows or a previous run when no current batch
+        # exists. A new generation will establish the next eligible batch.
+        query = query.filter(InboxWorldwideName.id == -1)
+    return query
+
 def _fallback_worldwide_name_key(value):
     """Normalize a name when the optional service module is not deployed."""
     text = unicodedata.normalize('NFKD', str(value or ''))
     text = ''.join(char for char in text if not unicodedata.combining(char)).casefold()
     return ''.join(char for char in text if char.isalnum())
+
+
+def _fallback_recover_worldwide_name_objects(content):
+    """Recover complete name objects from a truncated OpenRouter JSON reply."""
+    decoder = json.JSONDecoder()
+    recovered = []
+    text = str(content or '')
+    for match in re.finditer(r'\{', text):
+        try:
+            item, _end = decoder.raw_decode(text, match.start())
+        except (TypeError, ValueError):
+            continue
+        if isinstance(item, dict) and (
+            item.get('given_name') or item.get('first_name')
+        ) and (
+            item.get('family_name') or item.get('last_name')
+        ):
+            recovered.append(item)
+    return recovered
 
 def _fallback_worldwide_name_candidates(api_key, count, *, region, name_style, guidance, excluded_names, referer, timeout=60):
     """Self-contained OpenRouter/free fallback for deployments missing the helper module."""
@@ -6392,7 +6444,14 @@ Do not return any of these names:
     except (TypeError, ValueError):
         start = min([index for index in (content.find('{'), content.find('[')) if index >= 0], default=-1)
         end = max(content.rfind('}'), content.rfind(']'))
-        parsed = json.loads(content[start:end + 1]) if start >= 0 and end >= start else None
+        parsed = None
+        if start >= 0 and end >= start:
+            try:
+                parsed = json.loads(content[start:end + 1])
+            except (TypeError, ValueError):
+                parsed = None
+        if parsed is None:
+            parsed = {'names': _fallback_recover_worldwide_name_objects(content)}
     raw_names = parsed.get('names', []) if isinstance(parsed, dict) else parsed if isinstance(parsed, list) else []
     results = []
     seen = set()
@@ -6430,13 +6489,15 @@ Do not return any of these names:
 @permission_required('inbox_intelligence')
 def api_worldwide_name_generator_state():
     recent = InboxWorldwideName.query.order_by(InboxWorldwideName.created_at.desc()).limit(60).all()
-    available_count = InboxWorldwideName.query.filter(InboxWorldwideName.used_at.is_(None)).count()
+    latest_batch_id = _latest_worldwide_name_batch_id()
+    available_count = _worldwide_available_query(latest_batch_id).count()
     return jsonify({
         'success': True,
         'provider': 'openrouter',
         'model': 'openrouter/free',
         'total_reserved': InboxWorldwideName.query.count(),
         'available_count': available_count,
+        'latest_batch_id': latest_batch_id,
         'recent_names': [_serialize_worldwide_name(row) for row in recent],
     })
 
@@ -6645,7 +6706,7 @@ def _integrated_worldwide_name_candidates(count, region):
     return _normalize_worldwide_name_candidates(raw_items, limit=count)
 
 
-def _reserve_worldwide_name_candidates(candidates, count, *, name_style, provider, model, creator, reserved_rows, reserved_keys, on_reserved=None):
+def _reserve_worldwide_name_candidates(candidates, count, *, name_style, provider, model, creator, generation_batch_id, reserved_rows, reserved_keys, on_reserved=None):
     """Commit valid candidates one at a time so the DB remains the arbiter."""
     conflicts = 0
     for candidate in candidates:
@@ -6665,6 +6726,7 @@ def _reserve_worldwide_name_candidates(candidates, count, *, name_style, provide
             provider=provider,
             model=model,
             created_by=creator,
+            generation_batch_id=generation_batch_id,
         )
         db.session.add(row)
         try:
@@ -6742,6 +6804,7 @@ def _run_worldwide_name_generation_task(task_id, count, method, region, name_sty
                     provider=provider,
                     model=model,
                     creator=creator,
+                    generation_batch_id=task_id,
                     reserved_rows=reserved_rows,
                     reserved_keys=reserved_keys,
                     on_reserved=lambda row: report_reservation('pasted name(s)'),
@@ -6761,6 +6824,7 @@ def _run_worldwide_name_generation_task(task_id, count, method, region, name_sty
                     provider=provider,
                     model=model,
                     creator=creator,
+                    generation_batch_id=task_id,
                     reserved_rows=reserved_rows,
                     reserved_keys=reserved_keys,
                     on_reserved=lambda row: report_reservation('integrated name(s)'),
@@ -6779,7 +6843,9 @@ def _run_worldwide_name_generation_task(task_id, count, method, region, name_sty
                     app.logger.warning('Worldwide name helper module unavailable: %s', exc.name)
                     request_candidates = _fallback_worldwide_name_candidates
 
-                max_batches = max(6, ((count + 39) // 40) * 5)
+                # Allow several recovery batches so a single malformed/free
+                # provider response cannot end a large run prematurely.
+                max_batches = max(12, ((count + 39) // 40) * 8)
                 batch_number = 0
                 consecutive_failures = 0
                 update(0, 'starting', f'Generating {count:,} AI name(s) in provider batches; this may take several minutes...')
@@ -6789,7 +6855,7 @@ def _run_worldwide_name_generation_task(task_id, count, method, region, name_sty
                     request_count = min(40, remaining + 8)
                     candidates = []
                     batch_error = None
-                    for attempt in range(1, 3):
+                    for attempt in range(1, 5):
                         try:
                             update(
                                 len(reserved_rows),
@@ -6813,13 +6879,13 @@ def _run_worldwide_name_generation_task(task_id, count, method, region, name_sty
                             break
                         except Exception as provider_exc:
                             batch_error = str(provider_exc).strip() or f'{type(provider_exc).__name__}'
-                            if attempt < 2:
+                            if attempt < 4:
                                 update(len(reserved_rows), 'retrying', f'AI batch {batch_number} needs a retry ({batch_error[:120]}).')
                     if batch_error:
-                        errors.append(f'AI batch {batch_number} failed after 2 attempts: {batch_error[:220]}')
+                        errors.append(f'AI batch {batch_number} failed after 4 attempts: {batch_error[:220]}')
                         consecutive_failures += 1
-                        if consecutive_failures >= 3:
-                            errors.append('AI generation stopped after three consecutive failed batches.')
+                        if consecutive_failures >= 5:
+                            errors.append('AI generation stopped after five consecutive failed batches; the requested total was not reached.')
                             break
                         continue
 
@@ -6831,6 +6897,7 @@ def _run_worldwide_name_generation_task(task_id, count, method, region, name_sty
                         provider=provider,
                         model=model,
                         creator=creator,
+                        generation_batch_id=task_id,
                         reserved_rows=reserved_rows,
                         reserved_keys=reserved_keys,
                         on_reserved=lambda row: report_reservation('AI name(s)'),
@@ -6841,8 +6908,8 @@ def _run_worldwide_name_generation_task(task_id, count, method, region, name_sty
                     if not candidates:
                         errors.append(f'AI batch {batch_number} returned no usable names.')
                         consecutive_failures += 1
-                        if consecutive_failures >= 3:
-                            errors.append('AI generation stopped after three consecutive empty batches.')
+                        if consecutive_failures >= 5:
+                            errors.append('AI generation stopped after five consecutive empty batches; the requested total was not reached.')
                             break
 
                 if len(reserved_rows) < count:
@@ -6855,22 +6922,28 @@ def _run_worldwide_name_generation_task(task_id, count, method, region, name_sty
 
         generated_count = len(reserved_rows)
         total_reserved = InboxWorldwideName.query.count()
-        if generated_count:
+        if generated_count >= count:
+            message = f'Finished and reserved all {generated_count:,} unique name(s).'
             if errors:
-                message = f'Finished with {generated_count:,}/{count:,} unique name(s); review the reported issues below.'
-            else:
-                message = f'Finished and reserved all {generated_count:,} unique name(s).'
+                message += ' Recoverable provider issues occurred; review the details below.'
             update_progress(task_id, generated_count, count, 'completed', message, {
                 **result_data(include_names=True),
                 'total_reserved': total_reserved,
-                'available_count': InboxWorldwideName.query.filter(InboxWorldwideName.used_at.is_(None)).count(),
+                'available_count': _worldwide_available_query(_latest_worldwide_name_batch_id()).count(),
+            })
+        elif generated_count:
+            message = f'Generation stopped before completion: {generated_count:,}/{count:,} unique name(s) reserved.'
+            update_progress(task_id, generated_count, count, 'error', message, {
+                **result_data(include_names=True),
+                'total_reserved': total_reserved,
+                'available_count': _worldwide_available_query(_latest_worldwide_name_batch_id()).count(),
             })
         else:
             message = errors[0] if errors else 'No new unique names were generated.'
             update_progress(task_id, 0, count, 'error', message, {
                 **result_data(include_names=True),
                 'total_reserved': total_reserved,
-                'available_count': InboxWorldwideName.query.filter(InboxWorldwideName.used_at.is_(None)).count(),
+                'available_count': _worldwide_available_query(_latest_worldwide_name_batch_id()).count(),
             })
 
 @app.route('/api/settings/openrouter-config/test', methods=['POST'])
@@ -11619,8 +11692,12 @@ def _claim_next_worldwide_name(task_id, target_email, existing_aliases_set, used
     """
     for _ in range(120):
         with identity_lock:
+            latest_batch_id = _latest_worldwide_name_batch_id()
+            if not latest_batch_id:
+                return None
             row = InboxWorldwideName.query.filter(
-                InboxWorldwideName.used_at.is_(None)
+                InboxWorldwideName.used_at.is_(None),
+                InboxWorldwideName.generation_batch_id == latest_batch_id,
             ).order_by(InboxWorldwideName.id.asc()).first()
             if not row:
                 return None
@@ -11647,6 +11724,7 @@ def _claim_next_worldwide_name(task_id, target_email, existing_aliases_set, used
             claimed = InboxWorldwideName.query.filter(
                 InboxWorldwideName.id == row.id,
                 InboxWorldwideName.used_at.is_(None),
+                InboxWorldwideName.generation_batch_id == latest_batch_id,
             ).update(update_values, synchronize_session=False)
             if claimed != 1:
                 db.session.rollback()
@@ -12052,11 +12130,11 @@ def api_targeted_randomize_user_aliases():
         return jsonify({'success': False, 'error': 'No targeted users provided'})
 
     if name_source == 'worldwide':
-        available_count = InboxWorldwideName.query.filter(InboxWorldwideName.used_at.is_(None)).count()
+        available_count = _worldwide_available_query(_latest_worldwide_name_batch_id()).count()
         if available_count < len(targets):
             return jsonify({
                 'success': False,
-                'error': f'Worldwide Name Generator has {available_count} unused name(s), but this run needs {len(targets)}. Generate more names first.',
+                'error': f'The latest Worldwide Name Generator batch has {available_count} unused name(s), but this run needs {len(targets)}. Generate a newer batch first.',
                 'available_count': available_count,
                 'required_count': len(targets),
             }), 409
