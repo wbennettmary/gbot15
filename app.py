@@ -6453,12 +6453,19 @@ def api_settings_openrouter_config_test():
         return jsonify({'success': False, 'error': 'Access denied'}), 403
     try:
         import requests
-        from services.inbox_ai_gateway import OPENROUTER_URL, load_settings
-        settings = load_settings(decrypt_secret=_unprotect_secret)
-        if not settings.api_key:
+        config = InboxOpenRouterConfig.query.first()
+        api_key = _inbox_openrouter_api_key()
+        if not api_key:
             return jsonify({'success': False, 'error': 'No OpenRouter API key is configured.'}), 400
+        model = (
+            (getattr(config, 'custom_model', None) if config else None)
+            or (getattr(config, 'default_model', None) if config else None)
+            or (getattr(config, 'fallback_model', None) if config else None)
+            or os.environ.get('OPENROUTER_MODEL')
+            or 'openai/gpt-4o-mini'
+        ).strip()
         payload = {
-            'model': settings.model,
+            'model': model,
             'temperature': 0,
             'max_tokens': 8,
             'messages': [
@@ -6467,9 +6474,9 @@ def api_settings_openrouter_config_test():
             ],
         }
         response = requests.post(
-            OPENROUTER_URL,
+            'https://openrouter.ai/api/v1/chat/completions',
             headers={
-                'Authorization': f'Bearer {settings.api_key}',
+                'Authorization': f'Bearer {api_key}',
                 'Content-Type': 'application/json',
                 'HTTP-Referer': request.host_url.rstrip('/'),
                 'X-Title': 'GBot Inbox Intelligence',
@@ -6480,8 +6487,9 @@ def api_settings_openrouter_config_test():
         if response.status_code >= 400:
             return jsonify({'success': False, 'error': f'OpenRouter test failed with HTTP {response.status_code}.'}), 400
         data = response.json()
-        model = data.get('model') or settings.model
-        return jsonify({'success': True, 'message': f'OpenRouter credentials are working with {model}.', 'model': model})
+        response_model = data.get('model') if isinstance(data, dict) else None
+        response_model = response_model or model
+        return jsonify({'success': True, 'message': f'OpenRouter credentials are working with {response_model}.', 'model': response_model})
     except Exception as exc:
         return jsonify({'success': False, 'error': f'OpenRouter test failed: {type(exc).__name__}'}), 400
 
