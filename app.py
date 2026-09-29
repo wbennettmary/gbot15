@@ -6335,7 +6335,9 @@ Do not return any of these names:
             'Authorization': f'Bearer {api_key}',
             'Content-Type': 'application/json',
             'HTTP-Referer': referer or 'GBot',
-            'X-Title': 'GBot Inbox Intelligence — Worldwide Name Generator',
+            # HTTP headers must be Latin-1/ASCII encodable; keep this title
+            # free of typographic punctuation so requests can send it.
+            'X-Title': 'GBot Inbox Intelligence - Worldwide Name Generator',
         },
         json={
             'model': 'openrouter/free',
