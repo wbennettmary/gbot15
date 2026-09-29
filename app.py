@@ -6697,14 +6697,21 @@ def _run_worldwide_name_generation_task(task_id, count, method, region, name_sty
                 'generated_count': len(reserved_rows),
                 'errors': errors[-30:],
             }
-            # Progress is written frequently. Keep interim files small and
-            # send the full result list only once the task is finished.
+            # Include the current reserved set during progress so the browser
+            # can render names while later provider batches are still running.
             if include_names:
                 data['names'] = [_serialize_worldwide_name(row) for row in reserved_rows]
             return data
 
         def update(current, status, message):
-            update_progress(task_id, current, count, status, message, result_data())
+            update_progress(task_id, current, count, status, message, result_data(include_names=bool(reserved_rows)))
+
+        def report_reservation(label):
+            current = len(reserved_rows)
+            # Avoid writing a large result file for every row in a 1,000-name
+            # run while still giving the browser frequent live updates.
+            if current <= 3 or current % 5 == 0 or current >= count:
+                update(current, 'reserving', f'Reserved {current:,}/{count:,} {label}...')
 
         try:
             if method == 'external':
@@ -6720,7 +6727,7 @@ def _run_worldwide_name_generation_task(task_id, count, method, region, name_sty
                     creator=creator,
                     reserved_rows=reserved_rows,
                     reserved_keys=reserved_keys,
-                    on_reserved=lambda row: update(len(reserved_rows), 'reserving', f'Reserved {len(reserved_rows):,}/{count:,} pasted name(s)...'),
+                    on_reserved=lambda row: report_reservation('pasted name(s)'),
                 )
                 if conflicts:
                     errors.append(f'{conflicts} pasted name(s) were already reserved and were skipped.')
@@ -6739,7 +6746,7 @@ def _run_worldwide_name_generation_task(task_id, count, method, region, name_sty
                     creator=creator,
                     reserved_rows=reserved_rows,
                     reserved_keys=reserved_keys,
-                    on_reserved=lambda row: update(len(reserved_rows), 'reserving', f'Reserved {len(reserved_rows):,}/{count:,} integrated name(s)...'),
+                    on_reserved=lambda row: report_reservation('integrated name(s)'),
                 )
                 if conflicts:
                     errors.append(f'{conflicts} integrated candidate(s) were already reserved and were skipped.')
@@ -6809,7 +6816,7 @@ def _run_worldwide_name_generation_task(task_id, count, method, region, name_sty
                         creator=creator,
                         reserved_rows=reserved_rows,
                         reserved_keys=reserved_keys,
-                        on_reserved=lambda row: update(len(reserved_rows), 'reserving', f'Reserved {len(reserved_rows):,}/{count:,} AI name(s)...'),
+                        on_reserved=lambda row: report_reservation('AI name(s)'),
                     )
                     rejected_names.extend(item.get('full_name', '') for item in candidates if item.get('full_name'))
                     if conflicts:

@@ -4629,10 +4629,10 @@ merge_recipe_id, content_blueprint_id</pre>
                             </select>
                             <div class="ii-name-generator-method-help" id="worldwideNameMethodHelp">OpenRouter/free generates candidates in batches; the database reserves only names that are still unique.</div>
                         </div>
-                        <div class="ii-name-generator-external" id="worldwideNameExternalWrap" hidden>
-                            <label for="worldwideNameExternalInput">External names</label>
+                        <div class="ii-name-generator-external" id="worldwideNameExternalWrap">
+                            <label for="worldwideNameExternalInput">External names <span class="ii-muted">(used when “External — paste complete names” is selected)</span></label>
                             <textarea class="ii-textarea" id="worldwideNameExternalInput" rows="5" maxlength="100000" placeholder="One complete name per line, for example:\nAmina Okafor\nJean-Luc Moreau\nYou may also paste Given Name, Family Name or simple JSON."></textarea>
-                            <div class="ii-muted mt-1">The first requested number of valid names is reserved. Duplicate or incomplete lines are reported below.</div>
+                            <div class="ii-muted mt-1">Choose the External method above to use these names. The first requested number of valid names is reserved; duplicate or incomplete lines are reported below.</div>
                         </div>
                         <div class="ii-field mb-0">
                             <label for="worldwideNameGuidanceInput">Optional guidance</label>
@@ -5420,7 +5420,7 @@ merge_recipe_id, content_blueprint_id</pre>
         const method = document.getElementById('worldwideNameMethodInput')?.value || 'ai';
         const externalWrap = document.getElementById('worldwideNameExternalWrap');
         const help = document.getElementById('worldwideNameMethodHelp');
-        if (externalWrap) externalWrap.hidden = method !== 'external';
+        if (externalWrap) externalWrap.dataset.active = method === 'external' ? 'true' : 'false';
         if (help) {
             help.textContent = method === 'ai'
                 ? 'OpenRouter/free generates candidates in batches; the database reserves only names that are still unique.'
@@ -5428,13 +5428,8 @@ merge_recipe_id, content_blueprint_id</pre>
                     ? 'Uses the application’s built-in name pools. No external API call is made.'
                     : 'Paste one complete name per line. Duplicate or incomplete lines are reported and skipped.';
         }
-        if (method !== 'external') {
-            const externalInput = document.getElementById('worldwideNameExternalInput');
-            if (externalInput) externalInput.setAttribute('aria-hidden', 'true');
-        } else {
-            const externalInput = document.getElementById('worldwideNameExternalInput');
-            if (externalInput) externalInput.removeAttribute('aria-hidden');
-        }
+        const externalInput = document.getElementById('worldwideNameExternalInput');
+        if (externalInput) externalInput.setAttribute('aria-describedby', 'worldwideNameMethodHelp');
     }
 
     async function waitForWorldwideNameGeneration(taskId, requestedCount) {
@@ -5455,6 +5450,12 @@ merge_recipe_id, content_blueprint_id</pre>
             const total = Number(progress.total) || requestedCount;
             const current = Number(progress.current) || 0;
             const percentage = Number(progress.percentage) || 0;
+            if (Array.isArray(result.names)) {
+                iiState.worldwideNames = result.names;
+                renderWorldwideNameResults();
+            }
+            if (result.total_reserved !== undefined) updateWorldwideNameReservedCount(result.total_reserved);
+            if (result.available_count !== undefined) updateWorldwideNameAvailability(result.available_count);
             setWorldwideNameProgress(
                 !['completed', 'error'].includes(progress.status),
                 percentage,
