@@ -804,6 +804,27 @@
         gap: 10px;
     }
 
+    .ii-worldwide-name-batch-summary {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 11px 12px;
+        border: 1px dashed #c4b5fd;
+        border-radius: 9px;
+        color: #5b21b6;
+        background: #faf5ff;
+        font-size: 12px;
+    }
+
+    .ii-worldwide-name-batch-modal {
+        width: min(1080px, 100%);
+    }
+
+    .ii-worldwide-name-batch-modal .ii-worldwide-name-list {
+        max-height: 62vh;
+        overflow: auto;
+    }
+
     .ii-worldwide-name-batch-title {
         color: #312e81;
         font-size: 15px;
@@ -5148,6 +5169,24 @@ merge_recipe_id, content_blueprint_id</pre>
     </div>
 </div>
 
+<div class="ii-modal-backdrop" id="worldwideNameBatchModal" aria-hidden="true" onclick="closeWorldwideNameBatchModal(event)">
+    <div class="ii-modal ii-worldwide-name-batch-modal" role="dialog" aria-modal="true" aria-labelledby="worldwideNameBatchTitle" aria-describedby="worldwideNameBatchDescription" onclick="event.stopPropagation()">
+        <div class="ii-row justify-content-between mb-3">
+            <div>
+                <h3 id="worldwideNameBatchTitle">Generated name list</h3>
+                <p class="ii-muted mb-0" id="worldwideNameBatchDescription">Review and manage every name created by this execution.</p>
+            </div>
+            <button class="ii-btn" type="button" aria-label="Close generated name list" onclick="closeWorldwideNameBatchModal()"><i class="fas fa-xmark"></i> Close</button>
+        </div>
+        <div class="ii-muted mb-2" id="worldwideNameBatchMeta"></div>
+        <div id="worldwideNameBatchModalBody" class="ii-worldwide-name-list" role="list"></div>
+        <div class="ii-row justify-content-end mt-3">
+            <button class="ii-btn" type="button" id="worldwideNameBatchCopyButton" onclick="copyActiveWorldwideNameBatch()"><i class="fas fa-copy"></i> Copy this list</button>
+            <button class="ii-btn ii-btn-primary" type="button" onclick="closeWorldwideNameBatchModal()">Done</button>
+        </div>
+    </div>
+</div>
+
 <script>
     const II_AI_ENABLED = '{{ "1" if inbox_ai_enabled else "0" }}' === '1';
     const II_CURRENT_ROLE = '{{ role or "" }}';
@@ -5212,6 +5251,7 @@ merge_recipe_id, content_blueprint_id</pre>
         worldwideNames: [],
         worldwideStoredNames: [],
         worldwideStoredBatches: [],
+        worldwideStoredActiveBatchIndex: null,
         worldwideNameAvailableCount: 0,
         worldwideNameEditingId: null,
         worldwideNameActionId: null,
@@ -6016,18 +6056,60 @@ merge_recipe_id, content_blueprint_id</pre>
                     + '<div><span class="ii-chip ' + chipClass + '">' + statusLabel + '</span>'
                     + '<div class="ii-worldwide-name-list-meta">' + escapeHtml(isDeleted ? (row.archived_at ? new Date(row.archived_at).toLocaleString() : 'Archived') : (row.used_for || 'Not used yet')) + '</div></div>'
                     + '<div class="ii-worldwide-name-list-actions">' + actions + '</div>'
-                    + '</div>';
+                + '</div>';
             }).join('');
+            batch.itemHtml = itemHtml;
             return '<article class="ii-worldwide-name-batch-card">'
                 + '<div class="ii-worldwide-name-batch-head"><div><div class="ii-worldwide-name-batch-title"><i class="fas fa-layer-group"></i> ' + batchLabel + '</div>'
                 + '<div class="ii-worldwide-name-batch-source">' + escapeHtml(source) + ' · ' + batch.rows.length + ' name(s)</div></div>'
                 + '<span class="ii-chip blue">' + batchAvailable + ' available</span></div>'
                 + '<div class="ii-worldwide-name-batch-meta"><span><i class="fas fa-clock"></i> ' + escapeHtml(createdAt) + '</span><span>·</span><span>' + batchUsed + ' used</span>'
                 + (batchDeleted ? '<span>·</span><span>' + batchDeleted + ' archived</span>' : '') + '</div>'
-                + '<div class="ii-worldwide-name-batch-actions"><button class="ii-btn" type="button" onclick="copyWorldwideNameBatch(' + batchIndex + ')"><i class="fas fa-copy"></i> Copy this list</button></div>'
-                + '<div class="ii-worldwide-name-list" role="list">' + itemHtml + '</div>'
+                + '<div class="ii-worldwide-name-batch-summary"><i class="fas fa-list-check"></i><span>' + batch.rows.length + ' complete name(s) are saved in this execution.</span></div>'
+                + '<div class="ii-worldwide-name-batch-actions"><button class="ii-btn ii-btn-primary" type="button" onclick="openWorldwideNameBatch(' + batchIndex + ')"><i class="fas fa-folder-open"></i> Open list and manage</button><button class="ii-btn" type="button" onclick="copyWorldwideNameBatch(' + batchIndex + ')"><i class="fas fa-copy"></i> Copy this list</button></div>'
                 + '</article>';
         }).join('');
+        if (iiState.worldwideStoredActiveBatchIndex !== null && document.getElementById('worldwideNameBatchModal')?.classList.contains('active')) {
+            renderWorldwideNameBatchModal();
+        }
+    }
+
+    function renderWorldwideNameBatchModal() {
+        const batch = (iiState.worldwideStoredBatches || [])[Number(iiState.worldwideStoredActiveBatchIndex)];
+        const modal = document.getElementById('worldwideNameBatchModal');
+        const body = document.getElementById('worldwideNameBatchModalBody');
+        const title = document.getElementById('worldwideNameBatchTitle');
+        const meta = document.getElementById('worldwideNameBatchMeta');
+        if (!batch || !modal || !body || !title || !meta) return;
+        const first = batch.rows[0] || {};
+        const createdAt = first.created_at ? new Date(first.created_at).toLocaleString() : 'Earlier run';
+        const source = Array.from(new Set(batch.rows.map((row) => row.provider || 'unknown'))).join(', ');
+        title.textContent = batch.key === 'legacy' ? 'Older stored names' : 'Generated name list';
+        meta.textContent = batch.rows.length + ' name(s) · ' + source + ' · created ' + createdAt;
+        body.innerHTML = batch.itemHtml || '';
+    }
+
+    function openWorldwideNameBatch(batchIndex) {
+        iiState.worldwideStoredActiveBatchIndex = Number(batchIndex);
+        renderWorldwideNameBatchModal();
+        const modal = document.getElementById('worldwideNameBatchModal');
+        modal?.classList.add('active');
+        modal?.setAttribute('aria-hidden', 'false');
+        modal?.querySelector('button')?.focus();
+    }
+
+    function closeWorldwideNameBatchModal(event) {
+        if (event && event.target !== event.currentTarget) return;
+        const modal = document.getElementById('worldwideNameBatchModal');
+        if (!modal) return;
+        modal.classList.remove('active');
+        modal.setAttribute('aria-hidden', 'true');
+        iiState.worldwideStoredActiveBatchIndex = null;
+    }
+
+    async function copyActiveWorldwideNameBatch() {
+        if (iiState.worldwideStoredActiveBatchIndex === null) return;
+        await copyWorldwideNameBatch(iiState.worldwideStoredActiveBatchIndex);
     }
 
     async function loadStoredWorldwideNames() {
@@ -14208,6 +14290,7 @@ merge_recipe_id, content_blueprint_id</pre>
     document.addEventListener('DOMContentLoaded', function () {
         document.addEventListener('keydown', (event) => {
             if (event.key !== 'Escape') return;
+            if (document.getElementById('worldwideNameBatchModal')?.classList.contains('active')) closeWorldwideNameBatchModal();
             if (document.getElementById('worldwideNameEditModal')?.classList.contains('active')) closeWorldwideNameEditModal();
             if (document.getElementById('worldwideNameActionModal')?.classList.contains('active')) closeWorldwideNameActionModal();
         });
