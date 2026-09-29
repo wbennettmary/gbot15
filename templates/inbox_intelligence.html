@@ -480,6 +480,199 @@
         display: block;
     }
 
+    .ii-workspace-tablist {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin: 0 0 16px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .ii-workspace-tab {
+        border: 1px solid #dbe4ef;
+        border-radius: 8px;
+        background: #fff;
+        color: #475569;
+        padding: 9px 12px;
+        font-size: 13px;
+        font-weight: 750;
+        cursor: pointer;
+    }
+
+    .ii-workspace-tab.active {
+        border-color: #7c3aed;
+        background: #f5f3ff;
+        color: #5b21b6;
+        box-shadow: 0 8px 18px rgba(124, 58, 237, 0.1);
+    }
+
+    .ii-workspace-pane[hidden] { display: none !important; }
+
+    .ii-name-studio-hero {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 18px;
+        border: 1px solid #c4b5fd;
+        border-left: 4px solid #7c3aed;
+        border-radius: 8px;
+        background: linear-gradient(135deg, #f5f3ff 0%, #ffffff 58%, #eff6ff 100%);
+    }
+
+    .ii-name-studio-eyebrow {
+        color: #6d28d9;
+        font-size: 11px;
+        font-weight: 850;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+
+    .ii-name-studio-hero h3 {
+        margin: 4px 0 5px;
+        color: #1e1b4b;
+    }
+
+    .ii-name-studio-meta {
+        display: grid;
+        justify-items: end;
+        gap: 8px;
+        min-width: 154px;
+    }
+
+    .ii-name-generator-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1.25fr) minmax(260px, 0.75fr);
+        gap: 14px;
+        margin-top: 14px;
+    }
+
+    .ii-name-generator-controls,
+    .ii-name-generator-rules {
+        padding: 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background: #fff;
+    }
+
+    .ii-name-generator-controls {
+        display: grid;
+        gap: 12px;
+    }
+
+    .ii-name-generator-control-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .ii-name-generator-rules {
+        display: grid;
+        align-content: start;
+        gap: 10px;
+        background: #fafafa;
+    }
+
+    .ii-name-generator-rule {
+        display: grid;
+        grid-template-columns: 28px 1fr;
+        gap: 9px;
+        align-items: start;
+        color: #475569;
+        font-size: 12px;
+        line-height: 1.45;
+    }
+
+    .ii-name-generator-rule i {
+        display: grid;
+        place-items: center;
+        width: 26px;
+        height: 26px;
+        border-radius: 7px;
+        background: #ede9fe;
+        color: #6d28d9;
+    }
+
+    .ii-name-generator-status {
+        min-height: 40px;
+        padding: 9px 10px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        color: #64748b;
+        font-size: 12px;
+        line-height: 1.4;
+    }
+
+    .ii-name-generator-status.is-error {
+        border-color: #fecaca;
+        background: #fef2f2;
+        color: #b91c1c;
+    }
+
+    .ii-name-generator-status.is-ready {
+        border-color: #bbf7d0;
+        background: #f0fdf4;
+        color: #15803d;
+    }
+
+    .ii-name-generator-results {
+        margin-top: 14px;
+        padding: 14px;
+        border: 1px solid #dbe4ef;
+        border-radius: 8px;
+        background: #f8fafc;
+    }
+
+    .ii-name-generator-results[hidden] { display: none !important; }
+
+    .ii-name-generator-table {
+        min-width: 620px;
+    }
+
+    .ii-name-generator-table td:first-child {
+        color: #1e1b4b;
+        font-weight: 800;
+    }
+
+    .ii-name-generator-empty {
+        display: grid;
+        place-items: center;
+        min-height: 150px;
+        padding: 20px;
+        text-align: center;
+        border: 1px dashed #cbd5e1;
+        border-radius: 8px;
+        color: #64748b;
+        background: #fff;
+    }
+
+    .ii-name-generator-progress {
+        height: 7px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: #ede9fe;
+    }
+
+    .ii-name-generator-progress span {
+        display: block;
+        width: 0;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #7c3aed, #2563eb);
+        transition: width 0.2s ease;
+    }
+
+    .ii-name-generator-progress.is-busy span {
+        width: 45%;
+        animation: ii-name-generator-progress 1.2s ease-in-out infinite;
+    }
+
+    @keyframes ii-name-generator-progress {
+        0% { transform: translateX(-110%); }
+        100% { transform: translateX(245%); }
+    }
+
     @media (max-width: 860px) {
         .ii-targeted-alias-head,
         .ii-targeted-alias-grid {
@@ -492,6 +685,20 @@
         }
 
         .ii-targeted-alias-side {
+            margin-top: 12px;
+        }
+
+        .ii-name-generator-layout,
+        .ii-name-generator-control-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .ii-name-studio-hero {
+            display: block;
+        }
+
+        .ii-name-studio-meta {
+            justify-items: start;
             margin-top: 12px;
         }
     }
@@ -4195,6 +4402,15 @@ merge_recipe_id, content_blueprint_id</pre>
     <section id="senders" class="ii-tabpane">
         <div class="ii-panel">
             <div class="ii-row justify-content-between mb-3"><h3>Workspace Accounts & API Senders</h3><div class="ii-row"><select class="ii-select" style="width: 160px;"><option>All domains</option></select><select class="ii-select" style="width: 160px;"><option>All statuses</option></select></div></div>
+            <div class="ii-workspace-tablist" role="tablist" aria-label="Workspace Accounts tools">
+                <button class="ii-workspace-tab active" id="workspaceAccountsUsersTab" type="button" role="tab" aria-selected="true" aria-controls="workspaceAccountsUsersPane" data-workspace-pane="workspaceAccountsUsersPane">
+                    <i class="fas fa-users"></i> Workspace users
+                </button>
+                <button class="ii-workspace-tab" id="worldwideNameGeneratorTab" type="button" role="tab" aria-selected="false" aria-controls="worldwideNameGeneratorPane" data-workspace-pane="worldwideNameGeneratorPane">
+                    <i class="fas fa-earth-americas"></i> Worldwide Name Generator <span class="ii-chip blue">OpenRouter/free</span>
+                </button>
+            </div>
+            <div id="workspaceAccountsUsersPane" class="ii-workspace-pane" role="tabpanel" aria-labelledby="workspaceAccountsUsersTab">
             <div class="ii-card mb-3">
                 <div class="ii-row justify-content-between">
                     <div>
@@ -4304,6 +4520,98 @@ merge_recipe_id, content_blueprint_id</pre>
                 <tr><th>Sender</th><th>Status</th><th>Tests</th><th>Inbox Rate</th><th>Spam Rate</th><th>Selection</th></tr>
                 <tr><td colspan="6" class="text-center ii-muted">Retrieve users from selected Workspace accounts or search previously retrieved API sender users manually.</td></tr>
             </table>
+            </div>
+            <div id="worldwideNameGeneratorPane" class="ii-workspace-pane" role="tabpanel" aria-labelledby="worldwideNameGeneratorTab" hidden>
+                <div class="ii-name-studio-hero">
+                    <div>
+                        <div class="ii-name-studio-eyebrow">Global identity library</div>
+                        <h3>Generate complete worldwide names</h3>
+                        <p class="ii-muted mb-0">Use OpenRouter/free to propose culturally coherent given and family names. Every accepted name is reserved in this app’s global ledger before it is shown.</p>
+                    </div>
+                    <div class="ii-name-studio-meta">
+                        <span class="ii-chip blue"><i class="fas fa-sparkles"></i> Model: openrouter/free</span>
+                        <span class="ii-muted" id="worldwideNameReservedCount">0 names reserved</span>
+                    </div>
+                </div>
+
+                <form id="worldwideNameGeneratorForm" class="ii-name-generator-layout" novalidate>
+                    <div class="ii-name-generator-controls">
+                        <div>
+                            <h4 class="mb-1">Generation controls</h4>
+                            <p class="ii-muted mb-0">Choose the batch size and naming profile. The model generates candidates; the database enforces uniqueness.</p>
+                        </div>
+                        <div class="ii-name-generator-control-grid">
+                            <div class="ii-field mb-0">
+                                <label for="worldwideNameCountInput">Number of names</label>
+                                <input class="ii-input" id="worldwideNameCountInput" type="number" min="1" max="100" value="12" inputmode="numeric" aria-describedby="worldwideNameCountHelp">
+                                <div class="ii-muted mt-1" id="worldwideNameCountHelp">1–100 names per run</div>
+                            </div>
+                            <div class="ii-field mb-0">
+                                <label for="worldwideNameRegionInput">Geographic scope</label>
+                                <select class="ii-select" id="worldwideNameRegionInput">
+                                    <option value="worldwide" selected>Worldwide balanced mix</option>
+                                    <option value="africa">Africa</option>
+                                    <option value="americas">Americas</option>
+                                    <option value="east_asia">East Asia</option>
+                                    <option value="south_asia">South Asia</option>
+                                    <option value="southeast_asia">Southeast Asia</option>
+                                    <option value="europe">Europe</option>
+                                    <option value="middle_east">Middle East</option>
+                                    <option value="oceania">Oceania</option>
+                                </select>
+                            </div>
+                            <div class="ii-field mb-0">
+                                <label for="worldwideNameStyleInput">Name style</label>
+                                <select class="ii-select" id="worldwideNameStyleInput">
+                                    <option value="balanced" selected>Balanced</option>
+                                    <option value="feminine">Feminine-presenting</option>
+                                    <option value="masculine">Masculine-presenting</option>
+                                    <option value="unisex">Unisex-leaning</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="ii-field mb-0">
+                            <label for="worldwideNameGuidanceInput">Optional guidance</label>
+                            <textarea class="ii-textarea" id="worldwideNameGuidanceInput" rows="3" style="min-height: 74px; resize: none;" maxlength="400" placeholder="Example: favor less common but plausible names; avoid celebrity names."></textarea>
+                        </div>
+                        <div id="worldwideNameGeneratorStatus" class="ii-name-generator-status" role="status" aria-live="polite">Ready to generate a new unique batch.</div>
+                        <div id="worldwideNameGeneratorProgress" class="ii-name-generator-progress" aria-hidden="true"><span></span></div>
+                        <div class="ii-actions">
+                            <button class="ii-btn ii-btn-primary" id="worldwideNameGenerateButton" type="submit"><i class="fas fa-wand-magic-sparkles"></i> Generate unique names</button>
+                            <button class="ii-btn" id="worldwideNameClearButton" type="button"><i class="fas fa-eraser"></i> Clear current set</button>
+                        </div>
+                    </div>
+                    <aside class="ii-name-generator-rules" aria-label="Uniqueness rules">
+                        <strong><i class="fas fa-shield-halved text-primary"></i> Reservation rules</strong>
+                        <div class="ii-name-generator-rule"><i class="fas fa-database"></i><span>Accepted names are saved in a permanent database ledger for this app.</span></div>
+                        <div class="ii-name-generator-rule"><i class="fas fa-fingerprint"></i><span>Matching ignores case, accents, punctuation, and extra spaces.</span></div>
+                        <div class="ii-name-generator-rule"><i class="fas fa-rotate"></i><span>Provider repeats are rejected and retried automatically within the run.</span></div>
+                        <div class="ii-name-generator-rule"><i class="fas fa-circle-info"></i><span>OpenRouter/free supplies suggestions; it does not decide whether a name is accepted.</span></div>
+                    </aside>
+                </form>
+
+                <div id="worldwideNameResults" class="ii-name-generator-results" hidden>
+                    <div class="ii-row justify-content-between mb-2">
+                        <div>
+                            <h4 class="mb-1">Current generated set</h4>
+                            <div class="ii-muted" id="worldwideNameResultSummary">No names in the current set.</div>
+                        </div>
+                        <div class="ii-actions">
+                            <button class="ii-btn" id="worldwideNameCopyButton" type="button"><i class="fas fa-copy"></i> Copy names</button>
+                            <button class="ii-btn" id="worldwideNameDownloadButton" type="button"><i class="fas fa-download"></i> Download CSV</button>
+                        </div>
+                    </div>
+                    <div class="ii-table-wrap">
+                        <table class="ii-table ii-name-generator-table">
+                            <thead><tr><th>Complete name</th><th>Given name</th><th>Family name</th><th>Region</th><th>Country</th></tr></thead>
+                            <tbody id="worldwideNameResultsBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div id="worldwideNameEmpty" class="ii-name-generator-empty mt-3">
+                    <div><i class="fas fa-earth-americas fa-2x mb-2 text-primary"></i><div><strong>No names generated in this view yet.</strong></div><div class="ii-muted">Set a quantity, then generate a fresh globally unique batch.</div></div>
+                </div>
+            </div>
         </div>
     </section>
 
@@ -4483,6 +4791,7 @@ merge_recipe_id, content_blueprint_id</pre>
         selectedSenderEmails: new Set(),
         automatedNameTestUserRows: [],
         targetedAliasChangedPairs: [],
+        worldwideNames: [],
         selectedInboxIds: new Set(),
         activeExplorerFolder: '',
         automatedQueue: [],
@@ -4993,6 +5302,161 @@ merge_recipe_id, content_blueprint_id</pre>
             throw new Error(data.error || data.message || fallback);
         }
         return data;
+    }
+
+    function activateWorkspacePane(paneId) {
+        document.querySelectorAll('.ii-workspace-tab').forEach((tab) => {
+            const active = tab.dataset.workspacePane === paneId;
+            tab.classList.toggle('active', active);
+            tab.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+        document.querySelectorAll('.ii-workspace-pane').forEach((pane) => {
+            const active = pane.id === paneId;
+            pane.classList.toggle('active', active);
+            pane.hidden = !active;
+        });
+        if (paneId === 'worldwideNameGeneratorPane') loadWorldwideNameGeneratorState();
+    }
+
+    function setWorldwideNameStatus(message, tone = '') {
+        const status = document.getElementById('worldwideNameGeneratorStatus');
+        if (!status) return;
+        status.classList.remove('is-error', 'is-ready');
+        if (tone === 'error') status.classList.add('is-error');
+        if (tone === 'ready') status.classList.add('is-ready');
+        status.textContent = message;
+    }
+
+    function setWorldwideNameProgress(busy = false) {
+        const progress = document.getElementById('worldwideNameGeneratorProgress');
+        if (!progress) return;
+        progress.classList.toggle('is-busy', busy);
+        if (!busy) progress.querySelector('span').style.width = '0';
+    }
+
+    function renderWorldwideNameResults() {
+        const rows = iiState.worldwideNames || [];
+        const results = document.getElementById('worldwideNameResults');
+        const empty = document.getElementById('worldwideNameEmpty');
+        const body = document.getElementById('worldwideNameResultsBody');
+        const summary = document.getElementById('worldwideNameResultSummary');
+        if (!results || !empty || !body || !summary) return;
+
+        const hasRows = rows.length > 0;
+        results.hidden = !hasRows;
+        empty.hidden = hasRows;
+        summary.textContent = hasRows
+            ? `${rows.length} name(s) in the current set. Each was reserved before display.`
+            : 'No names in the current set.';
+        body.innerHTML = rows.map((row) => `
+            <tr>
+                <td>${escapeHtml(row.full_name || '')}</td>
+                <td>${escapeHtml(row.given_name || '')}</td>
+                <td>${escapeHtml(row.family_name || '')}</td>
+                <td>${escapeHtml(row.region || '')}</td>
+                <td>${escapeHtml(row.country || '')}</td>
+            </tr>`).join('');
+    }
+
+    function updateWorldwideNameReservedCount(total) {
+        const el = document.getElementById('worldwideNameReservedCount');
+        if (el) el.textContent = `${Number(total) || 0} name(s) reserved`;
+    }
+
+    async function loadWorldwideNameGeneratorState() {
+        try {
+            const data = await iiFetch('/api/inbox-intelligence/worldwide-name-generator');
+            updateWorldwideNameReservedCount(data.total_reserved);
+        } catch (err) {
+            setWorldwideNameStatus(`Could not load the reservation count: ${err.message}`, 'error');
+        }
+    }
+
+    async function generateWorldwideNames(event) {
+        event?.preventDefault();
+        const countInput = document.getElementById('worldwideNameCountInput');
+        const count = Number(countInput?.value || 0);
+        if (!Number.isInteger(count) || count < 1 || count > 100) {
+            setWorldwideNameStatus('Choose a whole number from 1 to 100.', 'error');
+            countInput?.focus();
+            return;
+        }
+
+        const button = document.getElementById('worldwideNameGenerateButton');
+        const originalButtonHtml = button?.innerHTML || '';
+        if (button) {
+            button.disabled = true;
+            button.setAttribute('aria-busy', 'true');
+            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating and reserving...';
+        }
+        setWorldwideNameProgress(true);
+        setWorldwideNameStatus(`Asking openrouter/free for ${count} candidate name(s), then checking the global ledger...`);
+
+        try {
+            const data = await iiFetch('/api/inbox-intelligence/worldwide-name-generator/generate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    count,
+                    region: document.getElementById('worldwideNameRegionInput')?.value || 'worldwide',
+                    name_style: document.getElementById('worldwideNameStyleInput')?.value || 'balanced',
+                    guidance: document.getElementById('worldwideNameGuidanceInput')?.value || '',
+                }),
+            });
+            iiState.worldwideNames = data.names || [];
+            renderWorldwideNameResults();
+            updateWorldwideNameReservedCount(data.total_reserved);
+            setWorldwideNameStatus(data.message || 'Unique names generated and reserved.', 'ready');
+        } catch (err) {
+            setWorldwideNameStatus(err.message || 'Name generation failed.', 'error');
+        } finally {
+            setWorldwideNameProgress(false);
+            if (button) {
+                button.disabled = false;
+                button.removeAttribute('aria-busy');
+                button.innerHTML = originalButtonHtml || '<i class="fas fa-wand-magic-sparkles"></i> Generate unique names';
+            }
+        }
+    }
+
+    function clearWorldwideNameResults() {
+        iiState.worldwideNames = [];
+        renderWorldwideNameResults();
+        setWorldwideNameStatus('Current set cleared. Reserved names remain protected in the global ledger.', 'ready');
+    }
+
+    async function copyWorldwideNames() {
+        const values = (iiState.worldwideNames || []).map((row) => String(row.full_name || '').trim()).filter(Boolean);
+        if (!values.length) {
+            setWorldwideNameStatus('Generate a name set before copying.', 'error');
+            return;
+        }
+        try {
+            await copyTextToClipboard(`${values.join('\r\n')}\r\n`);
+            setWorldwideNameStatus(`Copied ${values.length} complete name(s).`, 'ready');
+        } catch (err) {
+            setWorldwideNameStatus('Clipboard access failed. Select the names in the table and copy them manually.', 'error');
+        }
+    }
+
+    function downloadWorldwideNamesCsv() {
+        const rows = iiState.worldwideNames || [];
+        if (!rows.length) {
+            setWorldwideNameStatus('Generate a name set before downloading.', 'error');
+            return;
+        }
+        const csvRows = [['full_name', 'given_name', 'family_name', 'region', 'country']];
+        rows.forEach((row) => csvRows.push([row.full_name, row.given_name, row.family_name, row.region, row.country]));
+        const csv = csvRows.map((row) => row.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+        const url = URL.createObjectURL(new Blob([csv], {type: 'text/csv;charset=utf-8'}));
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'worldwide-unique-names.csv';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        setWorldwideNameStatus(`Downloaded ${rows.length} complete name(s) as CSV.`, 'ready');
     }
 
     function parseIiTargetedAliasPairs() {
@@ -12823,6 +13287,15 @@ merge_recipe_id, content_blueprint_id</pre>
                 activateInboxTab(tab.dataset.tab);
             });
         });
+
+        document.querySelectorAll('.ii-workspace-tab').forEach((tab) => {
+            tab.addEventListener('click', () => activateWorkspacePane(tab.dataset.workspacePane));
+        });
+        document.getElementById('worldwideNameGeneratorForm')?.addEventListener('submit', generateWorldwideNames);
+        document.getElementById('worldwideNameClearButton')?.addEventListener('click', clearWorldwideNameResults);
+        document.getElementById('worldwideNameCopyButton')?.addEventListener('click', copyWorldwideNames);
+        document.getElementById('worldwideNameDownloadButton')?.addEventListener('click', downloadWorldwideNamesCsv);
+        loadWorldwideNameGeneratorState();
 
         const previewToggle = document.getElementById('togglePreviewMode');
         const preview = document.getElementById('templatePreview');

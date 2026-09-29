@@ -527,6 +527,28 @@ class InboxOpenRouterConfig(db.Model):
     max_tokens = db.Column(db.Integer, default=1800)
     updated_at = db.Column(db.DateTime, default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
 
+class InboxWorldwideName(db.Model):
+    """Names reserved by the Inbox Intelligence worldwide name generator.
+
+    The normalized key is unique at the database level so a provider retry,
+    concurrent request, or repeated generation run cannot reserve the same
+    complete name twice.
+    """
+    __tablename__ = 'inbox_worldwide_name'
+
+    id = db.Column(db.Integer, primary_key=True)
+    full_name = db.Column(db.String(255), nullable=False)
+    given_name = db.Column(db.String(120), nullable=False)
+    family_name = db.Column(db.String(135), nullable=False)
+    normalized_name = db.Column(db.String(255), nullable=False, unique=True, index=True)
+    region = db.Column(db.String(80), nullable=True)
+    country = db.Column(db.String(120), nullable=True)
+    name_style = db.Column(db.String(30), nullable=True)
+    provider = db.Column(db.String(50), nullable=False, default='openrouter')
+    model = db.Column(db.String(120), nullable=False, default='openrouter/free')
+    created_by = db.Column(db.String(255), nullable=True, index=True)
+    created_at = db.Column(db.DateTime, default=db.func.current_timestamp(), index=True)
+
 class InboxDeliverabilityTest(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     test_id = db.Column(db.String(80), unique=True, nullable=False)

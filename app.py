@@ -24,6 +24,7 @@ from email import message_from_bytes
 from email.header import decode_header, make_header
 from email.utils import parsedate_to_datetime, parseaddr, formatdate, make_msgid, formataddr
 from sqlalchemy import text, or_, and_, func
+from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash, check_password_hash
 import logging.handlers
 import threading
@@ -50,7 +51,7 @@ from core_logic import (
     NAME_TYPE_LOCALES,
     normalize_name_types,
 )
-from database import db, User, WhitelistedIP, UsedDomain, GoogleAccount, GoogleToken, Scope, ServerConfig, UserAppPassword, AutomationAccount, RetrievedUser, NamecheapConfig, DomainOperation, AwsConfig, ServiceAccount, CloudflareConfig, Notification, WorkspaceList, AwsGeneratedPassword, InboxImapAccount, InboxEmailMessage, InboxStaticTemplate, InboxUserTemplate, InboxAgentSavedList, InboxSavedAnalysis, InboxOpenRouterConfig, InboxDeliverabilityTest, InboxDeliverabilityMessage, TestEmailSource, InboxPollJob, ImapFolderSyncState, InboxAiJob, InboxAiSuggestion, InboxAiAuditEvent, InboxAiPromptVersion
+from database import db, User, WhitelistedIP, UsedDomain, GoogleAccount, GoogleToken, Scope, ServerConfig, UserAppPassword, AutomationAccount, RetrievedUser, NamecheapConfig, DomainOperation, AwsConfig, ServiceAccount, CloudflareConfig, Notification, WorkspaceList, AwsGeneratedPassword, InboxImapAccount, InboxEmailMessage, InboxStaticTemplate, InboxUserTemplate, InboxAgentSavedList, InboxSavedAnalysis, InboxOpenRouterConfig, InboxWorldwideName, InboxDeliverabilityTest, InboxDeliverabilityMessage, TestEmailSource, InboxPollJob, ImapFolderSyncState, InboxAiJob, InboxAiSuggestion, InboxAiAuditEvent, InboxAiPromptVersion
 from routes.dns_manager import dns_manager
 from routes.aws_manager import aws_manager
 from routes.digitalocean_manager import digitalocean_manager
@@ -6278,6 +6279,172 @@ def api_inbox_openrouter_config():
     config.max_tokens = int(data.get('max_tokens') or 1800)
     db.session.commit()
     return jsonify({'success': True, 'message': 'OpenRouter configuration saved'})
+
+def _inbox_openrouter_api_key():
+    """Resolve the existing encrypted Inbox Intelligence key without exposing it."""
+    config = InboxOpenRouterConfig.query.first()
+    encrypted_key = getattr(config, 'encrypted_api_key', None) if config else None
+    if encrypted_key:
+        try:
+            key = (_unprotect_secret(encrypted_key) or '').strip()
+            if key:
+                return key
+        except Exception as exc:
+            app.logger.warning('Worldwide name generator key decryption failed: %s', type(exc).__name__)
+    return (os.environ.get('OPENROUTER_API_KEY') or '').strip()
+
+def _serialize_worldwide_name(row):
+    return {
+        'id': row.id,
+        'full_name': row.full_name,
+        'given_name': row.given_name,
+        'family_name': row.family_name,
+        'region': row.region or '',
+        'country': row.country or '',
+        'name_style': row.name_style or '',
+        'provider': row.provider or 'openrouter',
+        'model': row.model or 'openrouter/free',
+        'created_at': row.created_at.isoformat() + 'Z' if row.created_at else None,
+    }
+
+@app.route('/api/inbox-intelligence/worldwide-name-generator', methods=['GET'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_worldwide_name_generator_state():
+    recent = InboxWorldwideName.query.order_by(InboxWorldwideName.created_at.desc()).limit(60).all()
+    return jsonify({
+        'success': True,
+        'provider': 'openrouter',
+        'model': 'openrouter/free',
+        'total_reserved': InboxWorldwideName.query.count(),
+        'recent_names': [_serialize_worldwide_name(row) for row in recent],
+    })
+
+@app.route('/api/inbox-intelligence/worldwide-name-generator/generate', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_generate_worldwide_names():
+    data = request.get_json(silent=True) or {}
+    try:
+        count = int(data.get('count') or 0)
+    except (TypeError, ValueError):
+        count = 0
+    if count < 1 or count > 100:
+        return jsonify({'success': False, 'error': 'Choose between 1 and 100 names per run.'}), 400
+
+    allowed_regions = {
+        'worldwide', 'africa', 'americas', 'east_asia', 'south_asia',
+        'southeast_asia', 'europe', 'middle_east', 'oceania',
+    }
+    region = str(data.get('region') or 'worldwide').strip().lower()
+    if region not in allowed_regions:
+        return jsonify({'success': False, 'error': 'Choose a supported geographic scope.'}), 400
+
+    allowed_styles = {'balanced', 'feminine', 'masculine', 'unisex'}
+    name_style = str(data.get('name_style') or 'balanced').strip().lower()
+    if name_style not in allowed_styles:
+        return jsonify({'success': False, 'error': 'Choose a supported name style.'}), 400
+
+    guidance = str(data.get('guidance') or '').strip()[:400]
+    api_key = _inbox_openrouter_api_key()
+    if not api_key:
+        return jsonify({
+            'success': False,
+            'error': 'OpenRouter is not configured. Save an API key in Inbox Intelligence settings or set OPENROUTER_API_KEY.',
+        }), 400
+
+    from services.worldwide_name_generator import normalize_name_key, request_candidates
+
+    reserved_rows = []
+    reserved_keys = set()
+    excluded_names = []
+    rejected_names = []
+    max_attempts = 3
+    try:
+        for _attempt in range(max_attempts):
+            remaining = count - len(reserved_rows)
+            if remaining <= 0:
+                break
+            request_count = min(180, max(remaining + 8, int(remaining * 1.8)))
+            try:
+                candidates = request_candidates(
+                    api_key,
+                    request_count,
+                    region=region,
+                    name_style=name_style,
+                    guidance=guidance,
+                    excluded_names=(excluded_names + rejected_names)[-180:],
+                    referer=request.host_url.rstrip('/'),
+                )
+            except Exception as provider_exc:
+                # Earlier rows are already committed and must be returned to
+                # the caller rather than silently consumed if a retry fails.
+                if reserved_rows:
+                    app.logger.warning('Worldwide name retry stopped: %s', type(provider_exc).__name__)
+                    break
+                raise
+            added_this_attempt = 0
+            for candidate in candidates:
+                if len(reserved_rows) >= count:
+                    break
+                normalized_name = normalize_name_key(candidate['full_name'])
+                if not normalized_name or normalized_name in reserved_keys:
+                    continue
+                row = InboxWorldwideName(
+                    full_name=candidate['full_name'],
+                    given_name=candidate['given_name'],
+                    family_name=candidate['family_name'],
+                    normalized_name=normalized_name,
+                    region=candidate.get('region') or region,
+                    country=candidate.get('country') or '',
+                    name_style=name_style,
+                    provider='openrouter',
+                    model='openrouter/free',
+                    created_by=session.get('user'),
+                )
+                db.session.add(row)
+                try:
+                    # The unique constraint is the final arbiter across workers
+                    # and browser sessions, not the model's self-reported list.
+                    db.session.commit()
+                except IntegrityError:
+                    db.session.rollback()
+                    rejected_names.append(candidate['full_name'])
+                    continue
+                reserved_rows.append(row)
+                reserved_keys.add(normalized_name)
+                excluded_names.append(candidate['full_name'])
+                added_this_attempt += 1
+            if added_this_attempt == 0 and candidates:
+                # A fresh provider attempt gets a new exclusion list when the
+                # provider repeated names already reserved by another request.
+                rejected_names.extend(item['full_name'] for item in candidates)
+    except Exception as exc:
+        db.session.rollback()
+        app.logger.warning('Worldwide name generation failed: %s', type(exc).__name__)
+        return jsonify({'success': False, 'error': 'OpenRouter could not generate names right now. Try again shortly.'}), 502
+
+    if not reserved_rows:
+        return jsonify({'success': False, 'error': 'No new unique names were returned. Try again with a broader scope.'}), 502
+
+    generated = [_serialize_worldwide_name(row) for row in reserved_rows]
+    generated_count = len(generated)
+    shortfall = generated_count < count
+    message = (
+        f'Reserved {generated_count} unique worldwide name(s) with openrouter/free.'
+        if not shortfall else
+        f'Reserved {generated_count} unique name(s) of {count} requested. Try again to fill the remaining set.'
+    )
+    return jsonify({
+        'success': True,
+        'provider': 'openrouter',
+        'model': 'openrouter/free',
+        'names': generated,
+        'requested_count': count,
+        'generated_count': generated_count,
+        'total_reserved': InboxWorldwideName.query.count(),
+        'message': message,
+    })
 
 @app.route('/api/settings/openrouter-config/test', methods=['POST'])
 @login_required
