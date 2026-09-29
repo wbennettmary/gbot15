@@ -5292,14 +5292,23 @@ merge_recipe_id, content_blueprint_id</pre>
 
     async function iiFetch(url, options = {}) {
         const res = await fetch(url, {cache: 'no-store', ...options});
-        const data = await res.json().catch(() => ({}));
+        const raw = await res.text();
+        let data = {};
+        try {
+            data = raw ? JSON.parse(raw) : {};
+        } catch (_) {
+            // Reverse proxies often return an HTML/plain-text error page.
+        }
         if (!res.ok || data.success === false) {
             const fallback = res.status === 429
                 ? 'Too many requests. Please wait a moment and try again.'
                 : res.status === 503
                     ? 'Service is temporarily unavailable. Please try again shortly.'
                     : `Request failed: ${res.status}`;
-            throw new Error(data.error || data.message || fallback);
+            const proxyDetail = !data.error && !data.message && raw
+                ? raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 240)
+                : '';
+            throw new Error(data.error || data.message || proxyDetail || fallback);
         }
         return data;
     }
