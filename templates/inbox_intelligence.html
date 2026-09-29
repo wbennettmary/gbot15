@@ -560,6 +560,42 @@
         margin-top: 14px;
     }
 
+    .ii-name-library-tabs {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin: 0 0 12px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .ii-name-library-tab {
+        border: 1px solid #dbe4ef;
+        border-radius: 8px;
+        background: #fff;
+        color: #475569;
+        padding: 9px 12px;
+        font-size: 13px;
+        font-weight: 750;
+        cursor: pointer;
+    }
+
+    .ii-name-library-tab.active {
+        border-color: #7c3aed;
+        background: #f5f3ff;
+        color: #5b21b6;
+        box-shadow: 0 8px 18px rgba(124, 58, 237, 0.1);
+    }
+
+    .ii-name-library-pane[hidden] { display: none !important; }
+
+    .ii-name-library-manage {
+        padding: 14px;
+        border: 1px solid #dbe4ef;
+        border-radius: 10px;
+        background: #fff;
+    }
+
     .ii-name-generator-controls,
     .ii-name-generator-rules {
         padding: 14px;
@@ -4578,7 +4614,16 @@ merge_recipe_id, content_blueprint_id</pre>
                 <tr><th>Sender</th><th>Status</th><th>Tests</th><th>Inbox Rate</th><th>Spam Rate</th><th>Selection</th></tr>
                 <tr><td colspan="6" class="text-center ii-muted">Retrieve users from selected Workspace accounts or search previously retrieved API sender users manually.</td></tr>
             </table>
-            <div id="worldwideNameGeneratorPane" class="ii-card ii-worldwide-name-generator-card mb-3" role="region" aria-label="Worldwide name generator">
+            <div id="worldwideNameLibrary">
+                <div class="ii-name-library-tabs" role="tablist" aria-label="Worldwide name tools">
+                    <button class="ii-name-library-tab active" id="worldwideNameGenerateTab" type="button" role="tab" aria-selected="true" aria-controls="worldwideNameGeneratorPane" onclick="activateWorldwideNameLibraryTab('generate')">
+                        <i class="fas fa-wand-magic-sparkles"></i> Generate names
+                    </button>
+                    <button class="ii-name-library-tab" id="worldwideNameStoredTab" type="button" role="tab" aria-selected="false" aria-controls="worldwideNameStoredPane" onclick="activateWorldwideNameLibraryTab('stored')">
+                        <i class="fas fa-list-check"></i> Stored generated names
+                    </button>
+                </div>
+            <div id="worldwideNameGeneratorPane" class="ii-card ii-worldwide-name-generator-card mb-3 ii-name-library-pane" role="tabpanel" aria-label="Worldwide name generator">
                 <div class="ii-name-studio-hero">
                     <div>
                         <div class="ii-name-studio-eyebrow">Global identity library</div>
@@ -4662,17 +4707,28 @@ merge_recipe_id, content_blueprint_id</pre>
                 <div id="worldwideNameResults" class="ii-name-generator-results" hidden>
                     <div class="ii-row justify-content-between mb-2">
                         <div>
-                            <h4 class="mb-1">Current generated set</h4>
+                            <h4 class="mb-1">Generated names ledger</h4>
                             <div class="ii-muted" id="worldwideNameResultSummary">No names in the current set.</div>
                         </div>
                         <div class="ii-actions">
+                            <select class="ii-select" id="worldwideNameLedgerScope" aria-label="Name ledger scope">
+                                <option value="latest" selected>Latest batch</option>
+                                <option value="all">All reserved names</option>
+                            </select>
+                            <select class="ii-select" id="worldwideNameLedgerStatus" aria-label="Name ledger status">
+                                <option value="all" selected>All statuses</option>
+                                <option value="available">Available only</option>
+                                <option value="used">Used only</option>
+                                <option value="retired">Retired previous batches</option>
+                            </select>
+                            <button class="ii-btn" id="worldwideNameLedgerRefreshButton" type="button"><i class="fas fa-arrows-rotate"></i> Refresh ledger</button>
                             <button class="ii-btn" id="worldwideNameCopyButton" type="button"><i class="fas fa-copy"></i> Copy names</button>
                             <button class="ii-btn" id="worldwideNameDownloadButton" type="button"><i class="fas fa-download"></i> Download CSV</button>
                         </div>
                     </div>
                     <div class="ii-table-wrap">
                         <table class="ii-table ii-name-generator-table">
-                            <thead><tr><th>Complete name</th><th>Given name</th><th>Family name</th><th>Region</th><th>Country</th></tr></thead>
+                            <thead><tr><th>Complete name</th><th>Given name</th><th>Family name</th><th>Region</th><th>Country</th><th>Status</th><th>Used for</th><th>Used at</th></tr></thead>
                             <tbody id="worldwideNameResultsBody"></tbody>
                         </table>
                     </div>
@@ -4681,7 +4737,38 @@ merge_recipe_id, content_blueprint_id</pre>
                     <div><i class="fas fa-earth-americas fa-2x mb-2 text-primary"></i><div><strong>No names generated in this view yet.</strong></div><div class="ii-muted">Set a quantity, then generate a fresh globally unique batch.</div></div>
                 </div>
             </div>
+            <div id="worldwideNameStoredPane" class="ii-name-library-pane" role="tabpanel" aria-labelledby="worldwideNameStoredTab" hidden>
+                <div class="ii-name-library-manage">
+                    <div class="ii-row justify-content-between mb-2">
+                        <div>
+                            <h3 class="mb-1"><i class="fas fa-list-check text-primary"></i> Stored generated names</h3>
+                            <p class="ii-muted mb-0">Names generated by AI, the integrated pool, or external paste are stored here. Workspace assignments mark them Used automatically.</p>
+                        </div>
+                        <div class="ii-actions">
+                            <select class="ii-select" id="worldwideStoredLedgerScope" aria-label="Stored name scope">
+                                <option value="latest" selected>Latest batch</option>
+                                <option value="all">All stored names</option>
+                            </select>
+                            <select class="ii-select" id="worldwideStoredLedgerStatus" aria-label="Stored name status">
+                                <option value="all" selected>All statuses</option>
+                                <option value="available">Available only</option>
+                                <option value="used">Used only</option>
+                                <option value="retired">Retired previous batches</option>
+                            </select>
+                            <button class="ii-btn" id="worldwideStoredLedgerRefreshButton" type="button"><i class="fas fa-arrows-rotate"></i> Refresh</button>
+                        </div>
+                    </div>
+                    <div class="ii-muted mb-2" id="worldwideStoredLedgerSummary">No stored names loaded.</div>
+                    <div class="ii-table-wrap">
+                        <table class="ii-table ii-name-generator-table">
+                            <thead><tr><th>Complete name</th><th>Source</th><th>Region</th><th>Country</th><th>Status</th><th>Used for</th><th>Used at</th><th>Manage</th></tr></thead>
+                            <tbody id="worldwideStoredLedgerBody"></tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
+            </div>
+        </div>
         </div>
     </section>
 
@@ -4862,6 +4949,7 @@ merge_recipe_id, content_blueprint_id</pre>
         automatedNameTestUserRows: [],
         targetedAliasChangedPairs: [],
         worldwideNames: [],
+        worldwideStoredNames: [],
         worldwideNameAvailableCount: 0,
         selectedInboxIds: new Set(),
         activeExplorerFolder: '',
@@ -5495,8 +5583,11 @@ merge_recipe_id, content_blueprint_id</pre>
         const hasRows = rows.length > 0;
         results.hidden = !hasRows;
         empty.hidden = hasRows;
+        const availableCount = rows.filter((row) => row.status === 'available' || (!row.status && !row.used_at)).length;
+        const usedCount = rows.filter((row) => row.status === 'used' || row.used_at).length;
+        const retiredCount = rows.filter((row) => row.status === 'retired').length;
         summary.textContent = hasRows
-            ? `${rows.length} name(s) in the current set. Each was reserved before display.`
+            ? `${rows.length} name(s) listed · ${availableCount} available · ${usedCount} used${retiredCount ? ` · ${retiredCount} retired` : ''}. Each was reserved before display.`
             : 'No names in the current set.';
         body.innerHTML = rows.map((row) => `
             <tr>
@@ -5505,7 +5596,81 @@ merge_recipe_id, content_blueprint_id</pre>
                 <td>${escapeHtml(row.family_name || '')}</td>
                 <td>${escapeHtml(row.region || '')}</td>
                 <td>${escapeHtml(row.country || '')}</td>
+                <td><span class="ii-chip ${row.status === 'used' || row.used_at ? 'gray' : row.status === 'retired' ? 'yellow' : 'green'}">${row.status === 'used' || row.used_at ? 'Used' : row.status === 'retired' ? 'Retired' : 'Available'}</span></td>
+                <td>${escapeHtml(row.used_for || '—')}</td>
+                <td>${escapeHtml(row.used_at ? new Date(row.used_at).toLocaleString() : '—')}</td>
             </tr>`).join('');
+    }
+
+    function activateWorldwideNameLibraryTab(tabName = 'generate') {
+        const generateTab = document.getElementById('worldwideNameGenerateTab');
+        const storedTab = document.getElementById('worldwideNameStoredTab');
+        const generatePane = document.getElementById('worldwideNameGeneratorPane');
+        const storedPane = document.getElementById('worldwideNameStoredPane');
+        const stored = tabName === 'stored';
+        generateTab?.classList.toggle('active', !stored);
+        storedTab?.classList.toggle('active', stored);
+        generateTab?.setAttribute('aria-selected', stored ? 'false' : 'true');
+        storedTab?.setAttribute('aria-selected', stored ? 'true' : 'false');
+        if (generatePane) generatePane.hidden = stored;
+        if (storedPane) storedPane.hidden = !stored;
+        if (stored) loadStoredWorldwideNames();
+    }
+
+    function renderStoredWorldwideNames() {
+        const rows = iiState.worldwideStoredNames || [];
+        const body = document.getElementById('worldwideStoredLedgerBody');
+        const summary = document.getElementById('worldwideStoredLedgerSummary');
+        if (!body || !summary) return;
+        const available = rows.filter((row) => row.status === 'available').length;
+        const used = rows.filter((row) => row.status === 'used' || row.used_at).length;
+        const retired = rows.filter((row) => row.status === 'retired').length;
+        summary.textContent = `${rows.length} stored name(s) listed · ${available} available · ${used} used${retired ? ` · ${retired} retired` : ''}. Status is updated automatically when Workspace identities consume a name.`;
+        body.innerHTML = rows.map((row) => {
+            const status = row.status || (row.used_at ? 'used' : 'available');
+            const isUsed = status === 'used' || Boolean(row.used_at);
+            const chipClass = status === 'used' ? 'gray' : status === 'retired' ? 'yellow' : 'green';
+            return `<tr>
+                <td>${escapeHtml(row.full_name || '')}</td>
+                <td>${escapeHtml(row.provider || '')}</td>
+                <td>${escapeHtml(row.region || '')}</td>
+                <td>${escapeHtml(row.country || '')}</td>
+                <td><span class="ii-chip ${chipClass}">${escapeHtml(status)}</span></td>
+                <td>${escapeHtml(row.used_for || '—')}</td>
+                <td>${escapeHtml(row.used_at ? new Date(row.used_at).toLocaleString() : '—')}</td>
+                <td>${isUsed ? '<span class="ii-muted">Consumed</span>' : `<button class="ii-btn" type="button" onclick="updateStoredWorldwideNameStatus(${Number(row.id) || 0})">Mark used</button>`}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    async function loadStoredWorldwideNames() {
+        try {
+            const scope = document.getElementById('worldwideStoredLedgerScope')?.value || 'latest';
+            const status = document.getElementById('worldwideStoredLedgerStatus')?.value || 'all';
+            const data = await iiFetch(`/api/inbox-intelligence/worldwide-name-generator?scope=${encodeURIComponent(scope)}&status=${encodeURIComponent(status)}&limit=5000`);
+            iiState.worldwideStoredNames = data.names || [];
+            renderStoredWorldwideNames();
+            updateWorldwideNameReservedCount(data.total_reserved);
+            updateWorldwideNameAvailability(data.available_count);
+        } catch (err) {
+            const summary = document.getElementById('worldwideStoredLedgerSummary');
+            if (summary) summary.textContent = `Could not load stored names: ${err.message}`;
+        }
+    }
+
+    async function updateStoredWorldwideNameStatus(nameId) {
+        if (!nameId) return;
+        try {
+            const data = await iiFetch(`/api/inbox-intelligence/worldwide-name-generator/names/${nameId}/status`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({status: 'used'}),
+            });
+            setWorldwideNameStatus(data.message || 'Stored name status updated.', 'ready');
+            await Promise.all([loadStoredWorldwideNames(), loadWorldwideNameGeneratorState()]);
+        } catch (err) {
+            setWorldwideNameStatus(err.message || 'Could not update stored name status.', 'error');
+        }
     }
 
     function updateWorldwideNameReservedCount(total) {
@@ -5528,7 +5693,11 @@ merge_recipe_id, content_blueprint_id</pre>
 
     async function loadWorldwideNameGeneratorState() {
         try {
-            const data = await iiFetch('/api/inbox-intelligence/worldwide-name-generator');
+            const scope = document.getElementById('worldwideNameLedgerScope')?.value || 'latest';
+            const status = document.getElementById('worldwideNameLedgerStatus')?.value || 'all';
+            const data = await iiFetch(`/api/inbox-intelligence/worldwide-name-generator?scope=${encodeURIComponent(scope)}&status=${encodeURIComponent(status)}&limit=5000`);
+            iiState.worldwideNames = data.names || [];
+            renderWorldwideNameResults();
             updateWorldwideNameReservedCount(data.total_reserved);
             updateWorldwideNameAvailability(data.available_count);
         } catch (err) {
@@ -5591,6 +5760,7 @@ merge_recipe_id, content_blueprint_id</pre>
             renderWorldwideNameResults();
             updateWorldwideNameReservedCount(result.total_reserved);
             updateWorldwideNameAvailability(result.available_count);
+            loadStoredWorldwideNames();
             setWorldwideNameProgress(false, progress.percentage, progress.current, progress.total, progress.status === 'completed' ? 'Complete' : 'Stopped');
             if (progress.status === 'error') throw new Error(progress.message || 'Name generation failed.');
             setWorldwideNameStatus(progress.message || 'Unique names generated and reserved.', result.errors?.length ? 'error' : 'ready');
@@ -5641,8 +5811,17 @@ merge_recipe_id, content_blueprint_id</pre>
             setWorldwideNameStatus('Generate a name set before downloading.', 'error');
             return;
         }
-        const csvRows = [['full_name', 'given_name', 'family_name', 'region', 'country']];
-        rows.forEach((row) => csvRows.push([row.full_name, row.given_name, row.family_name, row.region, row.country]));
+        const csvRows = [['full_name', 'given_name', 'family_name', 'region', 'country', 'status', 'used_for', 'used_at']];
+        rows.forEach((row) => csvRows.push([
+            row.full_name,
+            row.given_name,
+            row.family_name,
+            row.region,
+            row.country,
+            row.status || ((row.used_at) ? 'used' : 'available'),
+            row.used_for || '',
+            row.used_at || '',
+        ]));
         const csv = csvRows.map((row) => row.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
         const url = URL.createObjectURL(new Blob([csv], {type: 'text/csv;charset=utf-8'}));
         const link = document.createElement('a');
@@ -5935,6 +6114,8 @@ merge_recipe_id, content_blueprint_id</pre>
                     if (progress.status === 'completed') {
                         resetButton();
                         const result = progress.result_data || {};
+                        loadWorldwideNameGeneratorState();
+                        loadStoredWorldwideNames();
                         if (result.success) {
                             setIiTargetedAliasProgress(100);
                             setIiTargetedAliasStatus('Targeted run finished. Review the results below.', 'ready');
@@ -5946,6 +6127,8 @@ merge_recipe_id, content_blueprint_id</pre>
                     }
                     if (progress.status === 'error') {
                         resetButton();
+                        loadWorldwideNameGeneratorState();
+                        loadStoredWorldwideNames();
                         setIiTargetedAliasStatus(progress.message || 'Targeted task failed.', 'error');
                         return;
                     }
@@ -13526,9 +13709,16 @@ merge_recipe_id, content_blueprint_id</pre>
         document.getElementById('worldwideNameClearButton')?.addEventListener('click', clearWorldwideNameResults);
         document.getElementById('worldwideNameCopyButton')?.addEventListener('click', copyWorldwideNames);
         document.getElementById('worldwideNameDownloadButton')?.addEventListener('click', downloadWorldwideNamesCsv);
+        document.getElementById('worldwideNameLedgerScope')?.addEventListener('change', loadWorldwideNameGeneratorState);
+        document.getElementById('worldwideNameLedgerStatus')?.addEventListener('change', loadWorldwideNameGeneratorState);
+        document.getElementById('worldwideNameLedgerRefreshButton')?.addEventListener('click', loadWorldwideNameGeneratorState);
+        document.getElementById('worldwideStoredLedgerScope')?.addEventListener('change', loadStoredWorldwideNames);
+        document.getElementById('worldwideStoredLedgerStatus')?.addEventListener('change', loadStoredWorldwideNames);
+        document.getElementById('worldwideStoredLedgerRefreshButton')?.addEventListener('click', loadStoredWorldwideNames);
         document.getElementById('worldwideNameExternalInput')?.addEventListener('input', autoSelectExternalNameMethod);
         updateWorldwideNameMethod();
         loadWorldwideNameGeneratorState();
+        loadStoredWorldwideNames();
         updateIiTargetedAliasNameSource();
 
         const previewToggle = document.getElementById('togglePreviewMode');

@@ -6329,7 +6329,10 @@ def _inbox_openrouter_api_key():
             app.logger.warning('Worldwide name generator key decryption failed: %s', type(exc).__name__)
     return (os.environ.get('OPENROUTER_API_KEY') or '').strip()
 
-def _serialize_worldwide_name(row):
+def _serialize_worldwide_name(row, latest_batch_id=None):
+    used_at = row.used_at.isoformat() + 'Z' if row.used_at else None
+    latest_batch_id = latest_batch_id if latest_batch_id is not None else _latest_worldwide_name_batch_id()
+    status = 'used' if used_at else ('available' if row.generation_batch_id and row.generation_batch_id == latest_batch_id else 'retired')
     return {
         'id': row.id,
         'full_name': row.full_name,
@@ -6341,6 +6344,11 @@ def _serialize_worldwide_name(row):
         'provider': row.provider or 'openrouter',
         'model': row.model or 'openrouter/free',
         'created_at': row.created_at.isoformat() + 'Z' if row.created_at else None,
+        'generation_batch_id': row.generation_batch_id or '',
+        'status': status,
+        'used_at': used_at,
+        'used_by': row.used_by or '',
+        'used_for': row.used_for or '',
     }
 
 
@@ -6488,9 +6496,48 @@ Do not return any of these names:
 @login_required
 @permission_required('inbox_intelligence')
 def api_worldwide_name_generator_state():
-    recent = InboxWorldwideName.query.order_by(InboxWorldwideName.created_at.desc()).limit(60).all()
+    scope = str(request.args.get('scope') or 'latest').strip().lower()
+    if scope not in {'latest', 'all'}:
+        scope = 'latest'
+    status_filter = str(request.args.get('status') or 'all').strip().lower()
+    if status_filter not in {'all', 'available', 'used', 'retired'}:
+        status_filter = 'all'
+    try:
+        limit = min(max(int(request.args.get('limit') or 1000), 1), 5000)
+    except (TypeError, ValueError):
+        limit = 1000
+
     latest_batch_id = _latest_worldwide_name_batch_id()
     available_count = _worldwide_available_query(latest_batch_id).count()
+    latest_query = InboxWorldwideName.query
+    if latest_batch_id:
+        latest_query = latest_query.filter(InboxWorldwideName.generation_batch_id == latest_batch_id)
+    else:
+        latest_query = latest_query.filter(InboxWorldwideName.id == -1)
+    latest_total = latest_query.count()
+    latest_used = latest_query.filter(InboxWorldwideName.used_at.isnot(None)).count()
+
+    names_query = InboxWorldwideName.query
+    if scope == 'latest':
+        names_query = names_query.filter(InboxWorldwideName.generation_batch_id == latest_batch_id) if latest_batch_id else names_query.filter(InboxWorldwideName.id == -1)
+    if status_filter == 'available':
+        names_query = names_query.filter(
+            InboxWorldwideName.used_at.is_(None),
+            InboxWorldwideName.generation_batch_id == latest_batch_id,
+        ) if latest_batch_id else names_query.filter(InboxWorldwideName.id == -1)
+    elif status_filter == 'used':
+        names_query = names_query.filter(InboxWorldwideName.used_at.isnot(None))
+    elif status_filter == 'retired':
+        names_query = names_query.filter(InboxWorldwideName.used_at.is_(None))
+        if latest_batch_id:
+            names_query = names_query.filter(
+                (InboxWorldwideName.generation_batch_id != latest_batch_id)
+                | InboxWorldwideName.generation_batch_id.is_(None)
+            )
+    names = names_query.order_by(
+        InboxWorldwideName.created_at.desc(),
+        InboxWorldwideName.id.desc(),
+    ).limit(limit).all()
     return jsonify({
         'success': True,
         'provider': 'openrouter',
@@ -6498,7 +6545,49 @@ def api_worldwide_name_generator_state():
         'total_reserved': InboxWorldwideName.query.count(),
         'available_count': available_count,
         'latest_batch_id': latest_batch_id,
-        'recent_names': [_serialize_worldwide_name(row) for row in recent],
+        'latest_batch_total': latest_total,
+        'latest_batch_used': latest_used,
+        'scope': scope,
+        'status_filter': status_filter,
+        'list_count': len(names),
+        'names': [_serialize_worldwide_name(row, latest_batch_id) for row in names],
+        'recent_names': [_serialize_worldwide_name(row, latest_batch_id) for row in names[:60]],
+    })
+
+
+@app.route('/api/inbox-intelligence/worldwide-name-generator/names/<int:name_id>/status', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_update_worldwide_name_status(name_id):
+    """Allow the stored-name manager to explicitly consume a name."""
+    row = InboxWorldwideName.query.get(name_id)
+    if not row:
+        return jsonify({'success': False, 'error': 'Stored generated name not found.'}), 404
+    data = request.get_json(silent=True) or {}
+    status = str(data.get('status') or '').strip().lower()
+    if status != 'used':
+        return jsonify({'success': False, 'error': 'Only available names can be marked used; used names remain permanently consumed.'}), 400
+
+    if row.used_at:
+        latest_batch_id = _latest_worldwide_name_batch_id()
+        return jsonify({
+            'success': True,
+            'name': _serialize_worldwide_name(row, latest_batch_id),
+            'available_count': _worldwide_available_query(latest_batch_id).count(),
+            'message': f"'{row.full_name}' is already marked used and remains locked.",
+        })
+    else:
+        row.used_at = datetime.utcnow()
+        row.used_by = (session.get('user') or session.get('username') or 'manual')[:80]
+        row.used_for = str(data.get('used_for') or 'Manually marked used')[:255]
+    db.session.commit()
+
+    latest_batch_id = _latest_worldwide_name_batch_id()
+    return jsonify({
+        'success': True,
+        'name': _serialize_worldwide_name(row, latest_batch_id),
+        'available_count': _worldwide_available_query(latest_batch_id).count(),
+        'message': f"Marked '{row.full_name}' as {status}.",
     })
 
 @app.route('/api/inbox-intelligence/worldwide-name-generator/generate', methods=['POST'])
@@ -6779,7 +6868,7 @@ def _run_worldwide_name_generation_task(task_id, count, method, region, name_sty
             # Include the current reserved set during progress so the browser
             # can render names while later provider batches are still running.
             if include_names:
-                data['names'] = [_serialize_worldwide_name(row) for row in reserved_rows]
+                data['names'] = [_serialize_worldwide_name(row, task_id) for row in reserved_rows]
             return data
 
         def update(current, status, message):
