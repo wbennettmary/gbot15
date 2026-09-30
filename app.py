@@ -6684,6 +6684,125 @@ def api_edit_worldwide_name(name_id):
         'message': f"Updated '{row.full_name}'.",
     })
 
+
+@app.route('/api/inbox-intelligence/worldwide-name-generator/batches/<string:batch_id>', methods=['PUT'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_edit_worldwide_name_batch(batch_id):
+    """Replace the names in one generation list without touching locked rows."""
+    batch_id = str(batch_id or '').strip()
+    rows = InboxWorldwideName.query.filter(
+        InboxWorldwideName.generation_batch_id == batch_id,
+    ).order_by(InboxWorldwideName.id.asc()).all()
+    if not rows:
+        return jsonify({'success': False, 'error': 'Generation list not found.'}), 404
+    if any(row.used_at or row.archived_at for row in rows):
+        return jsonify({
+            'success': False,
+            'error': 'This list contains used or archived names. Use the individual controls or create a new list before editing it.',
+        }), 409
+
+    data = request.get_json(silent=True) or {}
+    raw_names = data.get('names_text')
+    if raw_names is None:
+        raw_names = data.get('names')
+    if isinstance(raw_names, list):
+        raw_names = '\n'.join(str(value or '') for value in raw_names)
+    candidates, parse_errors = _parse_external_worldwide_names(
+        str(raw_names or ''),
+        len(rows),
+    )
+    if parse_errors or len(candidates) != len(rows):
+        errors = parse_errors[:10]
+        errors.append(f'Keep exactly {len(rows):,} complete name(s) in this list.')
+        return jsonify({'success': False, 'error': 'The generation list could not be updated.', 'errors': errors}), 400
+
+    row_ids = [row.id for row in rows]
+    candidate_keys = []
+    for candidate in candidates:
+        key = _fallback_worldwide_name_key(candidate.get('full_name'))
+        if not key or key in candidate_keys:
+            return jsonify({'success': False, 'error': 'The edited list contains duplicate complete names.'}), 409
+        candidate_keys.append(key)
+        duplicate = InboxWorldwideName.query.filter(
+            InboxWorldwideName.normalized_name == key,
+            ~InboxWorldwideName.id.in_(row_ids),
+        ).first()
+        if duplicate:
+            return jsonify({
+                'success': False,
+                'error': f"'{candidate.get('full_name')}' already exists in the permanent name ledger.",
+            }), 409
+
+    for row, candidate, key in zip(rows, candidates, candidate_keys):
+        row.full_name = candidate['full_name']
+        row.given_name = candidate['given_name']
+        row.family_name = candidate['family_name']
+        row.normalized_name = key
+        if candidate.get('region'):
+            row.region = candidate['region']
+        if candidate.get('country'):
+            row.country = candidate['country']
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': 'The edited list contains a name already reserved in the permanent ledger.'}), 409
+
+    latest_batch_id = _latest_worldwide_name_batch_id()
+    return jsonify({
+        'success': True,
+        'names': [_serialize_worldwide_name(row, latest_batch_id) for row in rows],
+        'message': f'Updated generation list with {len(rows):,} name(s).',
+    })
+
+
+@app.route('/api/inbox-intelligence/worldwide-name-generator/batches/<string:batch_id>/status', methods=['POST'])
+@login_required
+@permission_required('inbox_intelligence')
+def api_update_worldwide_name_batch_status(batch_id):
+    """Archive or restore all eligible names in one generation list."""
+    batch_id = str(batch_id or '').strip()
+    rows = InboxWorldwideName.query.filter(
+        InboxWorldwideName.generation_batch_id == batch_id,
+    ).order_by(InboxWorldwideName.id.asc()).all()
+    if not rows:
+        return jsonify({'success': False, 'error': 'Generation list not found.'}), 404
+    data = request.get_json(silent=True) or {}
+    status = str(data.get('status') or '').strip().lower()
+    actor = (session.get('user') or session.get('username') or 'manual')[:255]
+    changed = 0
+    if status in {'delete', 'deleted', 'archive', 'archived'}:
+        for row in rows:
+            if not row.used_at and not row.archived_at:
+                row.archived_at = datetime.utcnow()
+                row.archived_by = actor
+                changed += 1
+        message = f'Archived {changed:,} unused name(s) in this generation list. Used names remain locked.'
+    elif status in {'restore', 'available'}:
+        for row in rows:
+            if not row.used_at and row.archived_at:
+                row.archived_at = None
+                row.archived_by = None
+                changed += 1
+        message = f'Restored {changed:,} unused name(s) in this generation list.'
+    else:
+        return jsonify({'success': False, 'error': 'Choose delete or restore for the generation list.'}), 400
+
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    latest_batch_id = _latest_worldwide_name_batch_id()
+    return jsonify({
+        'success': True,
+        'names': [_serialize_worldwide_name(row, latest_batch_id) for row in rows],
+        'changed_count': changed,
+        'available_count': _worldwide_available_query(latest_batch_id).count(),
+        'message': message,
+    })
+
 @app.route('/api/inbox-intelligence/worldwide-name-generator/generate', methods=['POST'])
 @login_required
 @permission_required('inbox_intelligence')

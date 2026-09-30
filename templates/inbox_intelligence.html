@@ -825,6 +825,30 @@
         overflow: auto;
     }
 
+    .ii-worldwide-name-batch-toolbar {
+        align-items: center;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+        margin-bottom: 10px;
+    }
+
+    .ii-worldwide-name-batch-edit-panel {
+        display: grid;
+        gap: 10px;
+    }
+
+    .ii-worldwide-name-batch-edit-panel[hidden] {
+        display: none;
+    }
+
+    .ii-worldwide-name-batch-edit-input {
+        min-height: 300px;
+        resize: vertical;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 12px;
+        line-height: 1.5;
+    }
+
     .ii-worldwide-name-batch-title {
         color: #312e81;
         font-size: 15px;
@@ -5179,10 +5203,46 @@ merge_recipe_id, content_blueprint_id</pre>
             <button class="ii-btn" type="button" aria-label="Close generated name list" onclick="closeWorldwideNameBatchModal()"><i class="fas fa-xmark"></i> Close</button>
         </div>
         <div class="ii-muted mb-2" id="worldwideNameBatchMeta"></div>
-        <div id="worldwideNameBatchModalBody" class="ii-worldwide-name-list" role="list"></div>
+        <div class="ii-row ii-worldwide-name-batch-toolbar" id="worldwideNameBatchToolbar">
+            <button class="ii-btn ii-btn-primary" type="button" id="worldwideNameBatchEditButton" onclick="beginWorldwideNameBatchEdit()"><i class="fas fa-pen"></i> Edit list</button>
+            <button class="ii-btn ii-btn-danger" type="button" id="worldwideNameBatchDeleteButton" onclick="requestWorldwideNameBatchDelete()"><i class="fas fa-trash"></i> Delete list</button>
+            <button class="ii-btn" type="button" id="worldwideNameBatchRestoreButton" onclick="updateWorldwideNameBatchStatus(undefined, 'restore')" hidden><i class="fas fa-rotate-left"></i> Restore list</button>
+        </div>
+        <div id="worldwideNameBatchViewPanel">
+            <div id="worldwideNameBatchModalBody" class="ii-worldwide-name-list" role="list"></div>
+        </div>
+        <div class="ii-worldwide-name-batch-edit-panel" id="worldwideNameBatchEditPanel" hidden>
+            <label class="ii-field">
+                <span>Edit complete names</span>
+                <textarea class="ii-input ii-worldwide-name-batch-edit-input" id="worldwideNameBatchEditInput" rows="14" spellcheck="false" placeholder="Given Name Family Name\nAnother Given Another Family"></textarea>
+            </label>
+            <div class="ii-muted">Enter exactly one complete given/family name per line, with the same number of lines as this list. Used or archived names cannot be changed.</div>
+            <div class="ii-name-generator-status" id="worldwideNameBatchEditStatus" role="status" aria-live="polite"></div>
+            <div class="ii-row justify-content-end">
+                <button class="ii-btn" type="button" onclick="cancelWorldwideNameBatchEdit()">Cancel</button>
+                <button class="ii-btn ii-btn-primary" id="worldwideNameBatchEditSaveButton" type="button" onclick="saveWorldwideNameBatchEdit()"><i class="fas fa-save"></i> Save list</button>
+            </div>
+        </div>
         <div class="ii-row justify-content-end mt-3">
             <button class="ii-btn" type="button" id="worldwideNameBatchCopyButton" onclick="copyActiveWorldwideNameBatch()"><i class="fas fa-copy"></i> Copy this list</button>
             <button class="ii-btn ii-btn-primary" type="button" onclick="closeWorldwideNameBatchModal()">Done</button>
+        </div>
+    </div>
+</div>
+
+<div class="ii-modal-backdrop" id="worldwideNameBatchActionModal" aria-hidden="true" onclick="closeWorldwideNameBatchActionModal(event)">
+    <div class="ii-modal ii-save-name-modal" role="dialog" aria-modal="true" aria-labelledby="worldwideNameBatchActionTitle" aria-describedby="worldwideNameBatchActionDescription" onclick="event.stopPropagation()">
+        <div class="ii-row justify-content-between mb-3">
+            <div>
+                <h3 id="worldwideNameBatchActionTitle">Delete generation list?</h3>
+                <p class="ii-muted mb-0" id="worldwideNameBatchActionDescription">Unused names will be archived together and remain protected from future generation. Used names stay locked.</p>
+            </div>
+            <button class="ii-btn" type="button" aria-label="Close delete list dialog" onclick="closeWorldwideNameBatchActionModal()"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="ii-card" id="worldwideNameBatchActionName"></div>
+        <div class="ii-row justify-content-end mt-3">
+            <button class="ii-btn" type="button" onclick="closeWorldwideNameBatchActionModal()">Cancel</button>
+            <button class="ii-btn ii-btn-danger" id="worldwideNameBatchActionConfirmButton" type="button" onclick="confirmWorldwideNameBatchAction()"><i class="fas fa-box-archive"></i> Delete list</button>
         </div>
     </div>
 </div>
@@ -5252,9 +5312,11 @@ merge_recipe_id, content_blueprint_id</pre>
         worldwideStoredNames: [],
         worldwideStoredBatches: [],
         worldwideStoredActiveBatchIndex: null,
+        worldwideStoredBatchEditing: false,
         worldwideNameAvailableCount: 0,
         worldwideNameEditingId: null,
         worldwideNameActionId: null,
+        worldwideNameBatchActionIndex: null,
         selectedInboxIds: new Set(),
         activeExplorerFolder: '',
         automatedQueue: [],
@@ -5768,10 +5830,14 @@ merge_recipe_id, content_blueprint_id</pre>
                 : res.status === 503
                     ? 'Service is temporarily unavailable. Please try again shortly.'
                     : `Request failed: ${res.status}`;
+            const validationDetail = Array.isArray(data.errors)
+                ? data.errors.map((item) => String(item || '').trim()).filter(Boolean).join(' ')
+                : '';
+            const message = data.error && validationDetail ? `${data.error} ${validationDetail}` : (data.error || data.message || validationDetail);
             const proxyDetail = !data.error && !data.message && raw
                 ? raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 240)
                 : '';
-            throw new Error(data.error || data.message || proxyDetail || fallback);
+            throw new Error(message || proxyDetail || fallback);
         }
         return data;
     }
@@ -6024,7 +6090,12 @@ merge_recipe_id, content_blueprint_id</pre>
             + '. Each execution is collected into one list card.';
         if (!batches.length) {
             cards.innerHTML = '<div class="ii-worldwide-name-empty"><i class="fas fa-box-open fa-2x mb-2 text-primary"></i><div><strong>No names match this view.</strong></div><div>Generate a new batch or change the scope/status filters.</div></div>';
+            if (document.getElementById('worldwideNameBatchModal')?.classList.contains('active')) closeWorldwideNameBatchModal();
             return;
+        }
+
+        if (iiState.worldwideStoredActiveBatchIndex !== null && !batches[Number(iiState.worldwideStoredActiveBatchIndex)]) {
+            closeWorldwideNameBatchModal();
         }
 
         cards.innerHTML = batches.map((batch, batchIndex) => {
@@ -6032,6 +6103,8 @@ merge_recipe_id, content_blueprint_id</pre>
             const batchAvailable = batch.rows.filter((row) => row.status === 'available').length;
             const batchUsed = batch.rows.filter((row) => row.status === 'used' || row.used_at).length;
             const batchDeleted = batch.rows.filter((row) => row.status === 'deleted').length;
+            const batchCanDelete = batch.key !== 'legacy' && batch.rows.some((row) => row.status !== 'deleted' && !row.used_at);
+            const batchCanRestore = batch.key !== 'legacy' && batch.rows.some((row) => row.status === 'deleted' && !row.used_at);
             const createdAt = first.created_at ? new Date(first.created_at).toLocaleString() : 'Earlier run';
             const source = Array.from(new Set(batch.rows.map((row) => row.provider || 'unknown'))).join(', ');
             const batchLabel = batch.key === 'legacy' ? 'Older stored names' : 'Generation run';
@@ -6066,7 +6139,10 @@ merge_recipe_id, content_blueprint_id</pre>
                 + '<div class="ii-worldwide-name-batch-meta"><span><i class="fas fa-clock"></i> ' + escapeHtml(createdAt) + '</span><span>·</span><span>' + batchUsed + ' used</span>'
                 + (batchDeleted ? '<span>·</span><span>' + batchDeleted + ' archived</span>' : '') + '</div>'
                 + '<div class="ii-worldwide-name-batch-summary"><i class="fas fa-list-check"></i><span>' + batch.rows.length + ' complete name(s) are saved in this execution.</span></div>'
-                + '<div class="ii-worldwide-name-batch-actions"><button class="ii-btn ii-btn-primary" type="button" onclick="openWorldwideNameBatch(' + batchIndex + ')"><i class="fas fa-folder-open"></i> Open list and manage</button><button class="ii-btn" type="button" onclick="copyWorldwideNameBatch(' + batchIndex + ')"><i class="fas fa-copy"></i> Copy this list</button></div>'
+                + '<div class="ii-worldwide-name-batch-actions"><button class="ii-btn ii-btn-primary" type="button" onclick="openWorldwideNameBatch(' + batchIndex + ')"><i class="fas fa-folder-open"></i> Open list and manage</button><button class="ii-btn" type="button" onclick="copyWorldwideNameBatch(' + batchIndex + ')"><i class="fas fa-copy"></i> Copy this list</button>'
+                + (batchCanDelete ? '<button class="ii-btn ii-btn-danger" type="button" onclick="requestWorldwideNameBatchDelete(' + batchIndex + ')"><i class="fas fa-trash"></i> Delete list</button>' : '')
+                + (batchCanRestore ? '<button class="ii-btn" type="button" onclick="updateWorldwideNameBatchStatus(' + batchIndex + ', \'restore\')"><i class="fas fa-rotate-left"></i> Restore list</button>' : '')
+                + '</div>'
                 + '</article>';
         }).join('');
         if (iiState.worldwideStoredActiveBatchIndex !== null && document.getElementById('worldwideNameBatchModal')?.classList.contains('active')) {
@@ -6084,13 +6160,35 @@ merge_recipe_id, content_blueprint_id</pre>
         const first = batch.rows[0] || {};
         const createdAt = first.created_at ? new Date(first.created_at).toLocaleString() : 'Earlier run';
         const source = Array.from(new Set(batch.rows.map((row) => row.provider || 'unknown'))).join(', ');
+        const isEditing = Boolean(iiState.worldwideStoredBatchEditing);
+        const canEdit = batch.key !== 'legacy' && !batch.rows.some((row) => row.used_at || row.status === 'used' || row.status === 'deleted');
+        const canDelete = batch.key !== 'legacy' && batch.rows.some((row) => row.status !== 'deleted' && !row.used_at);
+        const canRestore = batch.key !== 'legacy' && batch.rows.some((row) => row.status === 'deleted' && !row.used_at);
         title.textContent = batch.key === 'legacy' ? 'Older stored names' : 'Generated name list';
         meta.textContent = batch.rows.length + ' name(s) · ' + source + ' · created ' + createdAt;
-        body.innerHTML = batch.itemHtml || '';
+        const toolbar = document.getElementById('worldwideNameBatchToolbar');
+        const viewPanel = document.getElementById('worldwideNameBatchViewPanel');
+        const editPanel = document.getElementById('worldwideNameBatchEditPanel');
+        const editButton = document.getElementById('worldwideNameBatchEditButton');
+        const deleteButton = document.getElementById('worldwideNameBatchDeleteButton');
+        const restoreButton = document.getElementById('worldwideNameBatchRestoreButton');
+        if (toolbar) toolbar.hidden = isEditing;
+        if (viewPanel) viewPanel.hidden = isEditing;
+        if (editPanel) editPanel.hidden = !isEditing;
+        if (editButton) {
+            editButton.disabled = !canEdit;
+            editButton.title = canEdit ? 'Edit every unused name in this list.' : 'Lists containing used or archived names cannot be edited as a whole.';
+        }
+        if (deleteButton) deleteButton.hidden = !canDelete;
+        if (restoreButton) restoreButton.hidden = !canRestore;
+        const copyButton = document.getElementById('worldwideNameBatchCopyButton');
+        if (copyButton) copyButton.hidden = isEditing;
+        if (!isEditing) body.innerHTML = batch.itemHtml || '';
     }
 
     function openWorldwideNameBatch(batchIndex) {
         iiState.worldwideStoredActiveBatchIndex = Number(batchIndex);
+        iiState.worldwideStoredBatchEditing = false;
         renderWorldwideNameBatchModal();
         const modal = document.getElementById('worldwideNameBatchModal');
         modal?.classList.add('active');
@@ -6105,11 +6203,127 @@ merge_recipe_id, content_blueprint_id</pre>
         modal.classList.remove('active');
         modal.setAttribute('aria-hidden', 'true');
         iiState.worldwideStoredActiveBatchIndex = null;
+        iiState.worldwideStoredBatchEditing = false;
     }
 
     async function copyActiveWorldwideNameBatch() {
         if (iiState.worldwideStoredActiveBatchIndex === null) return;
         await copyWorldwideNameBatch(iiState.worldwideStoredActiveBatchIndex);
+    }
+
+    function setWorldwideNameBatchEditStatus(message, tone = '') {
+        const status = document.getElementById('worldwideNameBatchEditStatus');
+        if (!status) return;
+        status.classList.remove('is-error', 'is-ready');
+        if (tone === 'error') status.classList.add('is-error');
+        if (tone === 'ready') status.classList.add('is-ready');
+        status.textContent = message || '';
+    }
+
+    function beginWorldwideNameBatchEdit() {
+        const batch = (iiState.worldwideStoredBatches || [])[Number(iiState.worldwideStoredActiveBatchIndex)];
+        if (!batch) return;
+        if (batch.key === 'legacy') {
+            setWorldwideNameBatchEditStatus('Older stored names do not have a generation list ID; edit them individually.', 'error');
+            return;
+        }
+        if (batch.rows.some((row) => row.used_at || row.status === 'used' || row.status === 'deleted')) {
+            setWorldwideNameBatchEditStatus('This list contains used or archived names and cannot be edited as one list.', 'error');
+            return;
+        }
+        const input = document.getElementById('worldwideNameBatchEditInput');
+        if (input) input.value = batch.rows.map((row) => row.full_name || '').join('\n');
+        setWorldwideNameBatchEditStatus('');
+        iiState.worldwideStoredBatchEditing = true;
+        renderWorldwideNameBatchModal();
+        input?.focus();
+    }
+
+    function cancelWorldwideNameBatchEdit() {
+        iiState.worldwideStoredBatchEditing = false;
+        setWorldwideNameBatchEditStatus('');
+        renderWorldwideNameBatchModal();
+    }
+
+    async function saveWorldwideNameBatchEdit() {
+        const batch = (iiState.worldwideStoredBatches || [])[Number(iiState.worldwideStoredActiveBatchIndex)];
+        if (!batch || batch.key === 'legacy') return;
+        const button = document.getElementById('worldwideNameBatchEditSaveButton');
+        if (button) {
+            button.disabled = true;
+            button.setAttribute('aria-busy', 'true');
+        }
+        setWorldwideNameBatchEditStatus('Saving the complete generation list…');
+        try {
+            const data = await iiFetch('/api/inbox-intelligence/worldwide-name-generator/batches/' + encodeURIComponent(batch.key), {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({names_text: document.getElementById('worldwideNameBatchEditInput')?.value || ''}),
+            });
+            iiState.worldwideStoredBatchEditing = false;
+            setWorldwideNameBatchEditStatus(data.message || 'Generation list updated.', 'ready');
+            setWorldwideNameStatus(data.message || 'Generation list updated.', 'ready');
+            await Promise.all([loadStoredWorldwideNames(), loadWorldwideNameGeneratorState()]);
+        } catch (err) {
+            setWorldwideNameBatchEditStatus(err.message || 'Could not update this generation list.', 'error');
+        } finally {
+            if (button) {
+                button.disabled = false;
+                button.removeAttribute('aria-busy');
+            }
+        }
+    }
+
+    async function updateWorldwideNameBatchStatus(batchIndex, action = 'delete') {
+        const index = batchIndex === undefined || batchIndex === null
+            ? Number(iiState.worldwideStoredActiveBatchIndex)
+            : Number(batchIndex);
+        const batch = (iiState.worldwideStoredBatches || [])[index];
+        if (!batch || batch.key === 'legacy') return;
+        try {
+            const data = await iiFetch('/api/inbox-intelligence/worldwide-name-generator/batches/' + encodeURIComponent(batch.key) + '/status', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({status: action}),
+            });
+            setWorldwideNameStatus(data.message || 'Generation list status updated.', 'ready');
+            await Promise.all([loadStoredWorldwideNames(), loadWorldwideNameGeneratorState()]);
+        } catch (err) {
+            setWorldwideNameStatus(err.message || 'Could not update this generation list.', 'error');
+        }
+    }
+
+    function closeWorldwideNameBatchActionModal(event) {
+        if (event && event.target !== event.currentTarget) return;
+        const modal = document.getElementById('worldwideNameBatchActionModal');
+        if (!modal) return;
+        modal.classList.remove('active');
+        modal.setAttribute('aria-hidden', 'true');
+        iiState.worldwideNameBatchActionIndex = null;
+    }
+
+    function requestWorldwideNameBatchDelete(batchIndex) {
+        const index = batchIndex === undefined || batchIndex === null
+            ? Number(iiState.worldwideStoredActiveBatchIndex)
+            : Number(batchIndex);
+        const batch = (iiState.worldwideStoredBatches || [])[index];
+        if (!batch || batch.key === 'legacy') return;
+        const deletable = batch.rows.filter((row) => row.status !== 'deleted' && !row.used_at).length;
+        if (!deletable) return;
+        iiState.worldwideNameBatchActionIndex = index;
+        const label = document.getElementById('worldwideNameBatchActionName');
+        if (label) label.textContent = 'Generation list · ' + batch.rows.length + ' name(s) · ' + deletable + ' unused name(s) will be archived.';
+        const modal = document.getElementById('worldwideNameBatchActionModal');
+        modal?.classList.add('active');
+        modal?.setAttribute('aria-hidden', 'false');
+        document.getElementById('worldwideNameBatchActionConfirmButton')?.focus();
+    }
+
+    async function confirmWorldwideNameBatchAction() {
+        const index = iiState.worldwideNameBatchActionIndex;
+        if (index === null || index === undefined) return;
+        closeWorldwideNameBatchActionModal();
+        await updateWorldwideNameBatchStatus(index, 'delete');
     }
 
     async function loadStoredWorldwideNames() {
@@ -14290,9 +14504,22 @@ merge_recipe_id, content_blueprint_id</pre>
     document.addEventListener('DOMContentLoaded', function () {
         document.addEventListener('keydown', (event) => {
             if (event.key !== 'Escape') return;
-            if (document.getElementById('worldwideNameBatchModal')?.classList.contains('active')) closeWorldwideNameBatchModal();
-            if (document.getElementById('worldwideNameEditModal')?.classList.contains('active')) closeWorldwideNameEditModal();
-            if (document.getElementById('worldwideNameActionModal')?.classList.contains('active')) closeWorldwideNameActionModal();
+            if (document.getElementById('worldwideNameBatchActionModal')?.classList.contains('active')) {
+                closeWorldwideNameBatchActionModal();
+                return;
+            }
+            if (document.getElementById('worldwideNameEditModal')?.classList.contains('active')) {
+                closeWorldwideNameEditModal();
+                return;
+            }
+            if (document.getElementById('worldwideNameActionModal')?.classList.contains('active')) {
+                closeWorldwideNameActionModal();
+                return;
+            }
+            if (document.getElementById('worldwideNameBatchModal')?.classList.contains('active')) {
+                if (iiState.worldwideStoredBatchEditing) cancelWorldwideNameBatchEdit();
+                else closeWorldwideNameBatchModal();
+            }
         });
         document.querySelectorAll('.ii-tab').forEach((tab) => {
             tab.addEventListener('click', () => {
