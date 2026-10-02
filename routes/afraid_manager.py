@@ -401,13 +401,7 @@ def test_config():
     svc, error = get_service()
     if error:
         return jsonify({'success': False, 'error': error})
-    domain_map = svc.get_domains_with_ids()
-    if not domain_map:
-        return jsonify({
-            'success': False,
-            'error': svc.last_error or 'Cookies authenticated, but no FreeDNS domains were found in the add-subdomain form.'
-        })
-    return jsonify({'success': True, 'message': f'Cookies are valid. Found {len(domain_map)} FreeDNS domain(s).'})
+    return jsonify({'success': True, 'message': 'FreeDNS cookies are valid and the account session is active.'})
 
 @afraid_manager.route('/api/afraid/domains', methods=['GET'])
 @login_required
@@ -487,28 +481,13 @@ def get_account_domains():
     svc, error = get_service()
     if error:
         return jsonify({'success': False, 'error': error}), 503
-    domain_map = svc.get_domains_with_ids()
-    if not domain_map and svc.last_error:
+    account_domains = svc.fetch_account_domains()
+    if svc.last_error:
         return jsonify({'success': False, 'error': svc.last_error}), 503
-
-    freshness = sync_afraid_registry_domains(force=False)
-    if not freshness.get('success'):
-        return jsonify(freshness), 503
-    public_query = AfraidDomain.query.filter(
-        AfraidDomain.domain_id.isnot(None),
-        AfraidDomain.registry_status == 'public',
-    )
-    public_total = public_query.count()
-    if public_total == 0:
-        freshness = sync_afraid_registry_domains(force=True)
-        if not freshness.get('success'):
-            return jsonify(freshness), 503
-        public_total = public_query.count()
-    public_names = {name.lower() for (name,) in public_query.with_entities(AfraidDomain.domain_name).all()}
     all_items = [
-        {'domain_name': name, 'domain_id': domain_id}
-        for name, domain_id in domain_map.items()
-        if (name.lower() in public_names) == (domain_type == 'public')
+        {'domain_name': domain['domain_name'], 'domain_id': domain.get('domain_id')}
+        for domain in account_domains
+        if domain.get('status') == domain_type
     ]
     all_items.sort(key=lambda item: item['domain_name'])
     total = len(all_items)

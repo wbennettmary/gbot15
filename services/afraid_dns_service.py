@@ -180,6 +180,80 @@ class AfraidDNSService:
             logger.error(self.last_error)
             return {}
 
+    def fetch_account_domains(self):
+        """Fetch the signed-in account's domain inventory from FreeDNS Domains."""
+        self.last_error = None
+        if not self.logged_in:
+            self.last_error = "Account domains requested without an authenticated FreeDNS session."
+            return []
+        url = "https://freedns.afraid.org/domain/"
+        try:
+            resp = self.session.get(url, allow_redirects=False, timeout=20)
+            if resp.status_code in (301, 302, 303, 307, 308):
+                self.last_error = f"FreeDNS redirected the account Domains page to {resp.headers.get('Location', 'a login page')}."
+                return []
+            if resp.status_code != 200:
+                self.last_error = f"FreeDNS returned HTTP {resp.status_code} for the account Domains page."
+                return []
+            domains = self.parse_account_domains(resp.text)
+            if not domains and re.search(r"\b(?:domains|domain list)\b", re.sub(r'<[^>]+>', ' ', resp.text), re.IGNORECASE):
+                self.last_error = "FreeDNS loaded the account Domains page, but no domain rows could be parsed."
+            elif domains and not any(domain['status'] in {'public', 'private'} for domain in domains):
+                self.last_error = "FreeDNS account domains loaded, but their public/private status could not be read."
+            return domains
+        except requests.RequestException as exc:
+            self.last_error = f"Could not load the FreeDNS account Domains page: {exc}"
+            logger.error(self.last_error)
+            return []
+        except Exception as exc:
+            self.last_error = f"Error reading FreeDNS account domains: {exc}"
+            logger.error(self.last_error)
+            return []
+
+    @staticmethod
+    def parse_account_domains(html):
+        """Read account domain rows without depending on FreeDNS row class names."""
+        domains = []
+        rows = re.findall(r'<tr\b[^>]*>(.*?)</tr>', html, re.IGNORECASE | re.DOTALL)
+        domain_pattern = re.compile(
+            r'(?<![\w.-])(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}(?![\w.-])',
+            re.IGNORECASE,
+        )
+        id_pattern = re.compile(r'(?:edit_domain_id|domain_id|data_id|\bid)=(\d+)', re.IGNORECASE)
+        for row in rows:
+            cells = re.findall(r'<t[dh]\b[^>]*>(.*?)</t[dh]>', row, re.IGNORECASE | re.DOTALL)
+            if not cells:
+                continue
+            cell_text = []
+            for cell in cells:
+                attributes = ' '.join(re.findall(r'(?:title|alt)\s*=\s*[\'\"]([^\'\"]+)', cell, re.IGNORECASE))
+                text = re.sub(r'<[^>]+>', ' ', cell)
+                cell_text.append(re.sub(r'\s+', ' ', unescape(text + ' ' + attributes)).strip())
+            domain_name = next((
+                match.group(0).lower()
+                for cell in cell_text
+                for match in [domain_pattern.search(cell)]
+                if match
+            ), None)
+            if not domain_name:
+                continue
+            status = next((
+                match.group(1).lower()
+                for cell in cell_text
+                for match in [re.search(r'\b(public|private)\b', cell, re.IGNORECASE)]
+                if match
+            ), '')
+            id_match = id_pattern.search(row)
+            domains.append({
+                'domain_name': domain_name,
+                'domain_id': id_match.group(1) if id_match else None,
+                'status': status,
+            })
+        unique = {}
+        for domain in domains:
+            unique[domain['domain_name']] = domain
+        return sorted(unique.values(), key=lambda domain: domain['domain_name'])
+
     @staticmethod
     def _parse_domain_select(html):
         domain_map = {}
