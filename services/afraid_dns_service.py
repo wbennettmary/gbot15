@@ -212,14 +212,21 @@ class AfraidDNSService:
 
     @staticmethod
     def parse_account_domains(html):
-        """Read account domain rows without depending on FreeDNS row class names."""
+        """Read owned domains from the FreeDNS Domains page.
+
+        FreeDNS has used more than one layout for this page. Older/current
+        responses often expose each owned zone through a ``/subdomain/?limit``
+        link, with the domain name in a preceding bold cell. Keep the table
+        parser for layouts that provide proper rows, then fall back to those
+        stable account-management links.
+        """
         domains = []
         rows = re.findall(r'<tr\b[^>]*>(.*?)</tr>', html, re.IGNORECASE | re.DOTALL)
         domain_pattern = re.compile(
             r'(?<![\w.-])(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}(?![\w.-])',
             re.IGNORECASE,
         )
-        id_pattern = re.compile(r'(?:edit_domain_id|domain_id|data_id|\bid)=(\d+)', re.IGNORECASE)
+        id_pattern = re.compile(r'(?:edit_domain_id|domain_id|data_id|\bid)\s*=\s*[\"\']?(\d+)', re.IGNORECASE)
         for row in rows:
             cells = re.findall(r'<t[dh]\b[^>]*>(.*?)</t[dh]>', row, re.IGNORECASE | re.DOTALL)
             if not cells:
@@ -249,9 +256,37 @@ class AfraidDNSService:
                 'domain_id': id_match.group(1) if id_match else None,
                 'status': status,
             })
+
+        # FreeDNS' Domains page has also rendered its owned-zone list without
+        # <tr> elements. In that layout the domain is shown in bold before a
+        # link to its subdomain list. Match that relationship directly instead
+        # of relying on table classes or a particular cell layout.
+        owned_zone_pattern = re.compile(
+            r'''["']2["']\s*>\s*<b\b[^>]*>\s*([^<]+?)\s*</b>(?:(?!["']2["']\s*>\s*<b\b).){0,2000}?'''
+            r'''href\s*=\s*["']?/subdomain/\?limit=(\d+)''',
+            re.IGNORECASE | re.DOTALL,
+        )
+        for match in owned_zone_pattern.finditer(html):
+            domain_name = unescape(re.sub(r'<[^>]+>', ' ', match.group(1))).strip().lower().rstrip('.')
+            if not domain_pattern.fullmatch(domain_name):
+                continue
+            # The status label is rendered near the domain name. Prefer a
+            # nearby explicit status value, while allowing stealth domains to
+            # remain unclassified (the UI only offers public/private lists).
+            nearby = re.sub(r'<[^>]+>', ' ', html[match.start():match.end() + 500])
+            nearby = re.sub(r'\s+', ' ', unescape(nearby)).strip()
+            status_match = re.search(r'\b(public|private)\b', nearby, re.IGNORECASE)
+            domains.append({
+                'domain_name': domain_name,
+                'domain_id': match.group(2),
+                'status': status_match.group(1).lower() if status_match else '',
+            })
+
         unique = {}
         for domain in domains:
-            unique[domain['domain_name']] = domain
+            current = unique.get(domain['domain_name'])
+            if not current or (not current.get('domain_id') and domain.get('domain_id')) or (not current.get('status') and domain.get('status')):
+                unique[domain['domain_name']] = {**(current or {}), **domain}
         return sorted(unique.values(), key=lambda domain: domain['domain_name'])
 
     @staticmethod
