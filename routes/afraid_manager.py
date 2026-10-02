@@ -472,6 +472,44 @@ def get_used_domains():
         } for d in domains]
     })
 
+@afraid_manager.route('/api/afraid/account-domains', methods=['GET'])
+@login_required
+@json_api_errors
+def get_account_domains():
+    """List public or private domains owned by the authenticated FreeDNS account."""
+    domain_type = request.args.get('type', 'public').strip().lower()
+    if domain_type not in {'public', 'private'}:
+        return jsonify({'success': False, 'error': 'Domain type must be public or private.'}), 400
+
+    page = max(1, int(request.args.get('page', 1)))
+    per_page = min(100, max(1, int(request.args.get('per_page', 25))))
+
+    svc, error = get_service()
+    if error:
+        return jsonify({'success': False, 'error': error}), 503
+    account_domains = svc.fetch_account_domains()
+    if not account_domains and svc.last_error:
+        return jsonify({'success': False, 'error': svc.last_error}), 503
+    all_items = [
+        {'domain_name': domain['domain_name'], 'domain_id': domain['domain_id']}
+        for domain in account_domains
+        if domain.get('status', '').strip().lower() == domain_type
+    ]
+    all_items.sort(key=lambda item: item['domain_name'])
+    total = len(all_items)
+    start = (page - 1) * per_page
+    items = all_items[start:start + per_page]
+
+    return jsonify({
+        'success': True,
+        'type': domain_type,
+        'total': total,
+        'page': page,
+        'per_page': per_page,
+        'pages': max(1, (total + per_page - 1) // per_page),
+        'domains': items,
+    })
+
 @afraid_manager.route('/api/afraid/used-domains/<int:domain_id>/status', methods=['PUT'])
 @login_required
 def update_used_domain_status(domain_id):

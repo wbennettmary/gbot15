@@ -1538,6 +1538,11 @@
                 <svg class="afraid-svg-icon me-1"><use href="#afraid-icon-tags"></use></svg> Used Domains
             </button>
         </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="account-domains-tab" data-bs-toggle="tab" data-bs-target="#accountDomainsPane" type="button" role="tab">
+                <svg class="afraid-svg-icon me-1"><use href="#afraid-icon-globe"></use></svg> Account Domains
+            </button>
+        </li>
     </ul>
 
     <div class="tab-content" id="afraidTabContent">
@@ -1956,6 +1961,43 @@
                 </div>
             </div>
         </div>
+
+        <div class="tab-pane fade" id="accountDomainsPane" role="tabpanel" aria-labelledby="account-domains-tab">
+            <div class="card mb-4">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center gap-3 flex-wrap">
+                    <div>
+                        <h5 class="card-title mb-1"><i class="fas fa-globe me-2"></i>FreeDNS Account Domains</h5>
+                        <div class="small text-muted" id="accountDomainsDescription">Browse public domains owned by this FreeDNS account.</div>
+                    </div>
+                    <button class="btn btn-sm btn-outline-secondary" id="btnRefreshAccountDomains" type="button">
+                        <i class="fas fa-rotate me-1" aria-hidden="true"></i>Refresh
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="btn-group mb-3" role="group" aria-label="Domain visibility">
+                        <button type="button" class="btn btn-primary" id="btnPublicAccountDomains" aria-pressed="true">Public domains</button>
+                        <button type="button" class="btn btn-outline-primary" id="btnPrivateAccountDomains" aria-pressed="false">Private domains</button>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="small text-muted" id="accountDomainsCount" aria-live="polite">Loading domains...</span>
+                        <span class="small text-muted" id="accountDomainsPageStatus" aria-live="polite">Page 1</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped align-middle">
+                            <caption class="visually-hidden">Domains available in the selected FreeDNS account view</caption>
+                            <thead><tr><th scope="col">Domain</th><th scope="col">Domain ID</th></tr></thead>
+                            <tbody id="accountDomainsTableBody">
+                                <tr><td colspan="2" class="text-center text-muted">Loading domains...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mt-3">
+                        <button class="btn btn-sm btn-outline-secondary" id="btnPrevAccountDomainPage" type="button" disabled>Previous</button>
+                        <button class="btn btn-sm btn-outline-secondary" id="btnNextAccountDomainPage" type="button" disabled>Next</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -2242,6 +2284,10 @@
 </div>
 
 <script>
+let accountDomainType = 'public';
+let accountDomainPage = 1;
+let accountDomainRequest = null;
+
 document.addEventListener('DOMContentLoaded', function() {
     if (document.getElementById('cookieStatus')) {
         loadConfig();
@@ -2330,6 +2376,12 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('lists-tab').addEventListener('shown.bs.tab', loadAfraidLists);
     document.getElementById('btnRefreshUsedDomains').addEventListener('click', loadUsedDomains);
     document.getElementById('used-domains-tab').addEventListener('shown.bs.tab', loadUsedDomains);
+    document.getElementById('account-domains-tab').addEventListener('shown.bs.tab', loadAccountDomains);
+    document.getElementById('btnRefreshAccountDomains').addEventListener('click', () => loadAccountDomains());
+    document.getElementById('btnPublicAccountDomains').addEventListener('click', () => setAccountDomainType('public'));
+    document.getElementById('btnPrivateAccountDomains').addEventListener('click', () => setAccountDomainType('private'));
+    document.getElementById('btnPrevAccountDomainPage').addEventListener('click', () => changeAccountDomainPage(-1));
+    document.getElementById('btnNextAccountDomainPage').addEventListener('click', () => changeAccountDomainPage(1));
     document.getElementById('afraidListForm').addEventListener('submit', saveManualAfraidList);
     document.getElementById('btnCancelAfraidListEdit').addEventListener('click', resetAfraidListForm);
     document.getElementById('afraidListRaw').addEventListener('input', updateAfraidListCount);
@@ -4580,6 +4632,69 @@ function logAfraidExternalCf(message) {
     const existing = el.textContent === 'Ready.' ? '' : `${el.textContent}\n`;
     el.textContent = `${existing}[${timestamp}] ${message}`;
     el.scrollTop = el.scrollHeight;
+}
+
+function setAccountDomainType(type) {
+    if (!['public', 'private'].includes(type) || accountDomainType === type) return;
+    accountDomainType = type;
+    accountDomainPage = 1;
+    const publicButton = document.getElementById('btnPublicAccountDomains');
+    const privateButton = document.getElementById('btnPrivateAccountDomains');
+    publicButton.className = type === 'public' ? 'btn btn-primary' : 'btn btn-outline-primary';
+    privateButton.className = type === 'private' ? 'btn btn-primary' : 'btn btn-outline-primary';
+    publicButton.setAttribute('aria-pressed', String(type === 'public'));
+    privateButton.setAttribute('aria-pressed', String(type === 'private'));
+    document.getElementById('accountDomainsDescription').textContent = type === 'public'
+        ? 'Browse public domains owned by this FreeDNS account.'
+        : 'Browse private domains owned by this FreeDNS account.';
+    loadAccountDomains();
+}
+
+function changeAccountDomainPage(delta) {
+    accountDomainPage = Math.max(1, accountDomainPage + delta);
+    loadAccountDomains();
+}
+
+async function loadAccountDomains() {
+    const tbody = document.getElementById('accountDomainsTableBody');
+    const count = document.getElementById('accountDomainsCount');
+    const refresh = document.getElementById('btnRefreshAccountDomains');
+    if (accountDomainRequest) accountDomainRequest.abort();
+    accountDomainRequest = new AbortController();
+    const request = accountDomainRequest;
+    tbody.innerHTML = '<tr><td colspan="2" class="text-center text-muted">Loading domains...</td></tr>';
+    count.textContent = 'Loading domains...';
+    refresh.disabled = true;
+    try {
+        const params = new URLSearchParams({type: accountDomainType, page: String(accountDomainPage), per_page: '50'});
+        const res = await fetch(`/api/afraid/account-domains?${params.toString()}`, {signal: request.signal});
+        const data = await parseJsonResponse(res);
+        if (!res.ok || !data.success) throw new Error(data.error || 'Could not load account domains.');
+        if (request !== accountDomainRequest) return;
+        tbody.replaceChildren();
+        if (!data.domains || data.domains.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="2" class="text-center text-muted">No ${accountDomainType} domains found.</td></tr>`;
+        } else {
+            data.domains.forEach(domain => {
+                const row = document.createElement('tr');
+                row.innerHTML = `<td><strong>${escapeHtml(domain.domain_name)}</strong></td><td class="font-monospace text-muted">${escapeHtml(domain.domain_id || '—')}</td>`;
+                tbody.appendChild(row);
+            });
+        }
+        count.textContent = `${data.total} ${accountDomainType} domain${data.total === 1 ? '' : 's'}`;
+        document.getElementById('accountDomainsPageStatus').textContent = `Page ${data.page} of ${data.pages}`;
+        document.getElementById('btnPrevAccountDomainPage').disabled = data.page <= 1;
+        document.getElementById('btnNextAccountDomainPage').disabled = data.page >= data.pages;
+    } catch (err) {
+        if (err.name === 'AbortError' || request !== accountDomainRequest) return;
+        tbody.innerHTML = `<tr><td colspan="2"><div class="alert alert-danger mb-0">${escapeHtml(err.message || 'Could not load account domains.')} <button type="button" class="btn btn-sm btn-outline-danger ms-2" onclick="loadAccountDomains()">Retry</button></div></td></tr>`;
+        count.textContent = 'Domains could not be loaded';
+        document.getElementById('accountDomainsPageStatus').textContent = `Page ${accountDomainPage}`;
+        document.getElementById('btnPrevAccountDomainPage').disabled = accountDomainPage <= 1;
+        document.getElementById('btnNextAccountDomainPage').disabled = true;
+    } finally {
+        if (request === accountDomainRequest) refresh.disabled = false;
+    }
 }
 
 async function loadUsedDomains() {

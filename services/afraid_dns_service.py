@@ -180,6 +180,27 @@ class AfraidDNSService:
             logger.error(self.last_error)
             return {}
 
+    def fetch_account_domains(self):
+        """Fetch domains owned by the authenticated account from its Domains page."""
+        self.last_error = None
+        if not self.logged_in:
+            self.last_error = "fetch_account_domains called but not authenticated."
+            return []
+        url = "https://freedns.afraid.org/domain/"
+        try:
+            resp = self.session.get(url, allow_redirects=False, timeout=20)
+            if resp.status_code in (301, 302, 303, 307, 308):
+                self.last_error = f"FreeDNS redirected {url} to {resp.headers.get('Location', 'login page')}."
+                return []
+            if resp.status_code != 200:
+                self.last_error = f"FreeDNS returned HTTP {resp.status_code} for {url}."
+                return []
+            return self.parse_registry_domains(resp.text)
+        except Exception as e:
+            self.last_error = f"Error fetching FreeDNS account domains: {e}"
+            logger.error(self.last_error)
+            return []
+
     @staticmethod
     def _parse_domain_select(html):
         domain_map = {}
