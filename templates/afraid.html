@@ -1966,8 +1966,8 @@
             <div class="card mb-4">
                 <div class="card-header bg-light d-flex justify-content-between align-items-center gap-3 flex-wrap">
                     <div>
-                        <h5 class="card-title mb-1"><i class="fas fa-globe me-2"></i>FreeDNS Account Domains</h5>
-                        <div class="small text-muted" id="accountDomainsDescription">Browse public domains owned by this FreeDNS account.</div>
+                        <h5 class="card-title mb-1"><i class="fas fa-globe me-2"></i>FreeDNS Domains</h5>
+                        <div class="small text-muted" id="accountDomainsDescription">Browse public domains in the shared FreeDNS registry.</div>
                     </div>
                     <button class="btn btn-sm btn-outline-secondary" id="btnRefreshAccountDomains" type="button">
                         <i class="fas fa-rotate me-1" aria-hidden="true"></i>Refresh
@@ -4645,8 +4645,8 @@ function setAccountDomainType(type) {
     publicButton.setAttribute('aria-pressed', String(type === 'public'));
     privateButton.setAttribute('aria-pressed', String(type === 'private'));
     document.getElementById('accountDomainsDescription').textContent = type === 'public'
-        ? 'Browse public domains owned by this FreeDNS account.'
-        : 'Browse private domains owned by this FreeDNS account.';
+        ? 'Browse public domains in the shared FreeDNS registry.'
+        : 'Browse private domains exposed by this FreeDNS account.';
     loadAccountDomains();
 }
 
