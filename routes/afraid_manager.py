@@ -478,21 +478,36 @@ def get_account_domains():
     page = max(1, int(request.args.get('page', 1)))
     per_page = min(100, max(1, int(request.args.get('per_page', 25))))
 
-    svc, error = get_service()
-    if error:
-        return jsonify({'success': False, 'error': error}), 503
-    account_domains = svc.fetch_account_domains()
-    if svc.last_error:
-        return jsonify({'success': False, 'error': svc.last_error}), 503
-    all_items = [
-        {'domain_name': domain['domain_name'], 'domain_id': domain.get('domain_id')}
-        for domain in account_domains
-        if domain.get('status') == domain_type
-    ]
-    all_items.sort(key=lambda item: item['domain_name'])
-    total = len(all_items)
-    start = (page - 1) * per_page
-    items = all_items[start:start + per_page]
+    if domain_type == 'public':
+        # Use the same synchronized public registry data shown in the Process
+        # tab. The account Domains page has a different layout and should not
+        # be used as the source for public registry domains.
+        freshness = sync_afraid_registry_domains(force=False)
+        if not freshness.get('success'):
+            return jsonify({'success': False, 'error': freshness.get('error', 'FreeDNS public registry is unavailable.')}), 503
+        query = AfraidDomain.query.filter(
+            AfraidDomain.domain_id.isnot(None),
+            AfraidDomain.registry_status == 'public',
+        )
+        total = query.count()
+        domains = query.order_by(AfraidDomain.domain_name.asc()).offset((page - 1) * per_page).limit(per_page).all()
+        items = [{'domain_name': domain.domain_name, 'domain_id': domain.domain_id} for domain in domains]
+    else:
+        svc, error = get_service()
+        if error:
+            return jsonify({'success': False, 'error': error}), 503
+        account_domains = svc.fetch_account_domains()
+        if svc.last_error:
+            return jsonify({'success': False, 'error': svc.last_error}), 503
+        all_items = [
+            {'domain_name': domain['domain_name'], 'domain_id': domain.get('domain_id')}
+            for domain in account_domains
+            if domain.get('status') == domain_type
+        ]
+        all_items.sort(key=lambda item: item['domain_name'])
+        total = len(all_items)
+        start = (page - 1) * per_page
+        items = all_items[start:start + per_page]
 
     return jsonify({
         'success': True,
