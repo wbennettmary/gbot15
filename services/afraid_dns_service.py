@@ -195,11 +195,53 @@ class AfraidDNSService:
             if resp.status_code != 200:
                 self.last_error = f"FreeDNS returned HTTP {resp.status_code} for {url}."
                 return []
-            return self.parse_registry_domains(resp.text)
+            domains = self.parse_account_domains(resp.text)
+            if not domains and re.search(r'(?:edit_domain_id|domain_id|id)=\d+', resp.text, re.IGNORECASE):
+                self.last_error = 'FreeDNS account domain rows were found but could not be read.'
+            elif domains and any(domain['status'] not in {'public', 'private'} for domain in domains):
+                self.last_error = 'FreeDNS account domains loaded, but their public/private status could not be read.'
+            return domains
         except Exception as e:
             self.last_error = f"Error fetching FreeDNS account domains: {e}"
             logger.error(self.last_error)
             return []
+
+    @staticmethod
+    def parse_account_domains(html):
+        """Parse owned-domain rows while tolerating FreeDNS table markup variants."""
+        domains = []
+        rows = re.findall(r'<tr\b[^>]*>(.*?)</tr>', html, re.IGNORECASE | re.DOTALL)
+        link_pattern = re.compile(
+            r'<a\b[^>]*href\s*=\s*[\'\"][^\'\"]*(?:edit_domain_id|domain_id|id)=(\d+)[^\'\"]*[\'\"][^>]*>(.*?)</a>',
+            re.IGNORECASE | re.DOTALL,
+        )
+        for row in rows:
+            link = link_pattern.search(row)
+            if not link:
+                continue
+            domain_id, label = link.groups()
+            domain_name = re.sub(r'<[^>]+>', ' ', label)
+            domain_name = re.sub(r'\s+', ' ', unescape(domain_name)).strip().lower()
+            if not domain_name or '.' not in domain_name:
+                continue
+            cells = re.findall(r'<td\b[^>]*>(.*?)</td>', row, re.IGNORECASE | re.DOTALL)
+            cell_text = [
+                re.sub(r'\s+', ' ', unescape(re.sub(r'<[^>]+>', ' ', cell)) + ' ' + ' '.join(re.findall(r'(?:title|alt)\s*=\s*[\'\"]([^\'\"]+)', cell, re.IGNORECASE))).strip().lower()
+                for cell in cells
+            ]
+            status = next((
+                match.group(1).lower()
+                for text in cell_text
+                for match in [re.search(r'\b(public|private)\b', text)]
+                if match
+            ), '')
+            domains.append({
+                'domain_name': domain_name,
+                'domain_id': domain_id,
+                'tld': domain_name.rsplit('.', 1)[-1],
+                'status': status,
+            })
+        return domains
 
     @staticmethod
     def _parse_domain_select(html):

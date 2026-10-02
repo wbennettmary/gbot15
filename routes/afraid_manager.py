@@ -488,7 +488,7 @@ def get_account_domains():
     if error:
         return jsonify({'success': False, 'error': error}), 503
     account_domains = svc.fetch_account_domains()
-    if not account_domains and svc.last_error:
+    if svc.last_error:
         return jsonify({'success': False, 'error': svc.last_error}), 503
     all_items = [
         {'domain_name': domain['domain_name'], 'domain_id': domain['domain_id']}
