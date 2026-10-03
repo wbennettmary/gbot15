@@ -189,16 +189,20 @@ class AfraidDNSService:
             return []
         url = "https://freedns.afraid.org/domain/"
         try:
-            pending_urls = [url]
-            visited_urls = set()
+            pending_requests = [(url, 'get', None)]
+            visited_requests = set()
             domains_by_name = {}
             first_page_html = ''
-            while pending_urls and len(visited_urls) < 500:
-                page_url = pending_urls.pop(0)
-                if page_url in visited_urls:
+            while pending_requests and len(visited_requests) < 500:
+                page_url, method, form_data = pending_requests.pop(0)
+                request_key = (method, page_url, tuple(sorted((form_data or {}).items())))
+                if request_key in visited_requests:
                     continue
-                visited_urls.add(page_url)
-                resp = self.session.get(page_url, allow_redirects=False, timeout=20)
+                visited_requests.add(request_key)
+                if method == 'post':
+                    resp = self.session.post(page_url, data=form_data or {}, allow_redirects=False, timeout=20)
+                else:
+                    resp = self.session.get(page_url, allow_redirects=False, timeout=20)
                 if resp.status_code in (301, 302, 303, 307, 308):
                     self.last_error = f"FreeDNS redirected the account Domains page to {resp.headers.get('Location', 'a login page')}."
                     return []
@@ -213,11 +217,12 @@ class AfraidDNSService:
                         **previous,
                         **{key: value for key, value in domain.items() if value not in (None, '')},
                     }
-                for next_url in self._account_domain_pagination_urls(resp.text, page_url):
-                    if next_url not in visited_urls and next_url not in pending_urls:
-                        pending_urls.append(next_url)
+                for next_request in self._account_domain_pagination_requests(resp.text, page_url):
+                    next_key = (next_request[1], next_request[0], tuple(sorted((next_request[2] or {}).items())))
+                    if next_key not in visited_requests and next_request not in pending_requests:
+                        pending_requests.append(next_request)
 
-            if pending_urls:
+            if pending_requests:
                 self.last_error = 'FreeDNS account Domains pagination exceeded 500 pages.'
                 return []
             domains = sorted(domains_by_name.values(), key=lambda domain: domain['domain_name'])
@@ -234,10 +239,10 @@ class AfraidDNSService:
             return []
 
     @staticmethod
-    def _account_domain_pagination_urls(html, current_url):
-        """Find same-site account Domains pagination links in a page."""
+    def _account_domain_pagination_requests(html, current_url):
+        """Find same-site account Domains pagination links and forms."""
         pagination_keys = {'page', 'page_num', 'p', 'start', 'offset', 'from', 'limit'}
-        page_urls = []
+        requests_to_make = []
 
         def add_page_url(candidate):
             resolved = urljoin(current_url, unescape(candidate))
@@ -247,8 +252,10 @@ class AfraidDNSService:
             path = parsed.path.rstrip('/')
             if path not in {'/domain', '/domain/index.php'}:
                 return
-            if resolved not in page_urls and resolved != current_url:
-                page_urls.append(resolved)
+            if resolved != current_url:
+                request_item = (resolved, 'get', None)
+                if request_item not in requests_to_make:
+                    requests_to_make.append(request_item)
 
         for _attributes, double_quoted, single_quoted, unquoted, anchor_html in re.findall(
             r'<a\b([^>]*?\bhref\s*=\s*)(?:"([^"]+)"|\'([^\']+)\'|([^\s>]+))[^>]*>(.*?)</a>',
@@ -295,7 +302,8 @@ class AfraidDNSService:
 
         for form_attrs, form_html in re.findall(r'<form\b([^>]*)>(.*?)</form>', html, re.IGNORECASE | re.DOTALL):
             method_match = re.search(r'\bmethod\s*=\s*[\'\"]?([^\s\'\">]+)', form_attrs, re.IGNORECASE)
-            if method_match and method_match.group(1).lower() != 'get':
+            method = method_match.group(1).lower() if method_match else 'get'
+            if method not in {'get', 'post'}:
                 continue
             action_match = re.search(r'\baction\s*=\s*(?:[\'\"]([^\'\"]+)[\'\"]|([^\s>]+))', form_attrs, re.IGNORECASE)
             action = (action_match.group(1) or action_match.group(2)) if action_match else current_url
@@ -317,6 +325,16 @@ class AfraidDNSService:
                 if name.lower() in pagination_keys:
                     paging_fields[name] = value
 
+            for control_attrs in re.findall(r'<(?:button|input)\b([^>]*)>', form_html, re.IGNORECASE | re.DOTALL):
+                name_match = re.search(r'\bname\s*=\s*[\'\"]?([^\s\'\">]+)', control_attrs, re.IGNORECASE)
+                value_match = re.search(r'\bvalue\s*=\s*[\'\"]([^\'\"]*)[\'\"]', control_attrs, re.IGNORECASE)
+                if not name_match or not value_match:
+                    continue
+                name = unescape(name_match.group(1))
+                value = unescape(value_match.group(1))
+                if name.lower() in pagination_keys and name not in paging_fields:
+                    paging_fields[name] = [value]
+
             for select_match in re.finditer(r'<select\b([^>]*)>(.*?)</select>', form_html, re.IGNORECASE | re.DOTALL):
                 name_match = re.search(r'\bname\s*=\s*[\'\"]?([^\s\'\">]+)', select_match.group(1), re.IGNORECASE)
                 if not name_match:
@@ -337,8 +355,14 @@ class AfraidDNSService:
                     continue
                 for value in values:
                     query = {**form_values, name: value}
-                    add_page_url(urlunparse(action_parts._replace(query=urlencode(query, doseq=True))))
-        return page_urls
+                    if method == 'post':
+                        request_item = (action_url, 'post', query)
+                        if request_item not in requests_to_make:
+                            requests_to_make.append(request_item)
+                    else:
+                        candidate = urlunparse(action_parts._replace(query=urlencode(query, doseq=True)))
+                        add_page_url(candidate)
+        return requests_to_make
 
     @staticmethod
     def parse_account_domains(html):

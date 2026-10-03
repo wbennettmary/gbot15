@@ -470,7 +470,7 @@ def get_used_domains():
 @login_required
 @json_api_errors
 def get_account_domains():
-    """List the signed-in FreeDNS account's own domains by visibility."""
+    """List public registry domains or this account's private domains."""
     domain_type = request.args.get('type', 'public').strip().lower()
     if domain_type not in {'public', 'private'}:
         return jsonify({'success': False, 'error': 'Domain type must be public or private.'}), 400
@@ -478,30 +478,38 @@ def get_account_domains():
     page = max(1, int(request.args.get('page', 1)))
     per_page = min(100, max(1, int(request.args.get('per_page', 25))))
 
-    svc, error = get_service()
-    if error:
-        return jsonify({'success': False, 'error': error}), 503
-    account_domains = svc.fetch_account_domains()
-    if svc.last_error:
-        return jsonify({'success': False, 'error': svc.last_error}), 503
-
-    # This view is account-scoped and independent of the Process tab's public
-    # registry cache. FreeDNS may omit visibility text on owned-domain rows;
-    # retain those account-owned domains in the Private view.
-    matching_domains = []
-    for domain in account_domains:
-        status = domain.get('status')
-        if status not in {'public', 'private'}:
-            status = 'private'
-        if status == domain_type:
-            matching_domains.append(domain)
-    matching_domains.sort(key=lambda item: item['domain_name'])
-    total = len(matching_domains)
-    start = (page - 1) * per_page
-    items = [
-        {'domain_name': domain['domain_name'], 'domain_id': domain.get('domain_id')}
-        for domain in matching_domains[start:start + per_page]
-    ]
+    if domain_type == 'public':
+        # Public domains come from the FreeDNS registry used by Process.
+        freshness = sync_afraid_registry_domains(force=False)
+        if not freshness.get('success'):
+            return jsonify({'success': False, 'error': freshness.get('error', 'FreeDNS public registry is unavailable.')}), 503
+        query = AfraidDomain.query.filter(
+            AfraidDomain.domain_id.isnot(None),
+            AfraidDomain.registry_status == 'public',
+        )
+        total = query.count()
+        domains = query.order_by(AfraidDomain.domain_name.asc()).offset((page - 1) * per_page).limit(per_page).all()
+        items = [{'domain_name': domain.domain_name, 'domain_id': domain.domain_id} for domain in domains]
+    else:
+        # Private domains come directly from the signed-in account page; do
+        # not derive them from the public registry used by Process.
+        svc, error = get_service()
+        if error:
+            return jsonify({'success': False, 'error': error}), 503
+        account_domains = svc.fetch_account_domains()
+        if svc.last_error:
+            return jsonify({'success': False, 'error': svc.last_error}), 503
+        matching_domains = [
+            domain for domain in account_domains
+            if domain.get('status') == 'private' or domain.get('status') not in {'public', 'private'}
+        ]
+        matching_domains.sort(key=lambda item: item['domain_name'])
+        total = len(matching_domains)
+        start = (page - 1) * per_page
+        items = [
+            {'domain_name': domain['domain_name'], 'domain_id': domain.get('domain_id')}
+            for domain in matching_domains[start:start + per_page]
+        ]
 
     return jsonify({
         'success': True,
