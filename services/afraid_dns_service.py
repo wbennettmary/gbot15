@@ -3,7 +3,7 @@ import re
 import logging
 from http.cookies import SimpleCookie
 from html import unescape
-from urllib.parse import parse_qsl, urljoin, urlparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 logger = logging.getLogger(__name__)
 
@@ -238,6 +238,18 @@ class AfraidDNSService:
         """Find same-site account Domains pagination links in a page."""
         pagination_keys = {'page', 'page_num', 'p', 'start', 'offset', 'from', 'limit'}
         page_urls = []
+
+        def add_page_url(candidate):
+            resolved = urljoin(current_url, unescape(candidate))
+            parsed = urlparse(resolved)
+            if parsed.netloc.lower() not in {'freedns.afraid.org', 'www.freedns.afraid.org'}:
+                return
+            path = parsed.path.rstrip('/')
+            if path not in {'/domain', '/domain/index.php'}:
+                return
+            if resolved not in page_urls and resolved != current_url:
+                page_urls.append(resolved)
+
         for _attributes, double_quoted, single_quoted, unquoted, anchor_html in re.findall(
             r'<a\b([^>]*?\bhref\s*=\s*)(?:"([^"]+)"|\'([^\']+)\'|([^\s>]+))[^>]*>(.*?)</a>',
             html,
@@ -250,7 +262,7 @@ class AfraidDNSService:
             parsed = urlparse(resolved)
             if parsed.netloc.lower() not in {'freedns.afraid.org', 'www.freedns.afraid.org'}:
                 continue
-            if parsed.path.rstrip('/') != '/domain':
+            if parsed.path.rstrip('/') not in {'/domain', '/domain/index.php'}:
                 continue
             query = dict(parse_qsl(parsed.query, keep_blank_values=True))
             has_page_parameter = any(key.lower() in pagination_keys for key in query)
@@ -259,8 +271,73 @@ class AfraidDNSService:
             )
             if not has_page_parameter and not is_page_link:
                 continue
-            if resolved not in page_urls:
-                page_urls.append(resolved)
+
+            add_page_url(resolved)
+
+        # Some FreeDNS layouts render pagination as a GET form with a hidden
+        # current-page field instead of next/numbered links. Use its own page
+        # count (when present) to request each page value.
+        plain_text = re.sub(r'<[^>]+>', ' ', html)
+        plain_text = re.sub(r'\s+', ' ', unescape(plain_text))
+        pages_match = re.search(r'\bPage\s+\d+\s+of\s+(\d+)\b', plain_text, re.IGNORECASE)
+        showing_match = re.search(
+            r'\bShowing\s+([\d,]+)\s*[-–]\s*([\d,]+)\s+of\s+([\d,]+)\s+total\b',
+            plain_text,
+            re.IGNORECASE,
+        )
+        total_pages = int(pages_match.group(1)) if pages_match else 0
+        page_size = 0
+        total_rows = 0
+        if showing_match:
+            first_row, last_row, total_rows = (int(value.replace(',', '')) for value in showing_match.groups())
+            page_size = max(1, last_row - first_row + 1)
+            total_pages = max(total_pages, (total_rows + page_size - 1) // page_size)
+
+        for form_attrs, form_html in re.findall(r'<form\b([^>]*)>(.*?)</form>', html, re.IGNORECASE | re.DOTALL):
+            method_match = re.search(r'\bmethod\s*=\s*[\'\"]?([^\s\'\">]+)', form_attrs, re.IGNORECASE)
+            if method_match and method_match.group(1).lower() != 'get':
+                continue
+            action_match = re.search(r'\baction\s*=\s*(?:[\'\"]([^\'\"]+)[\'\"]|([^\s>]+))', form_attrs, re.IGNORECASE)
+            action = (action_match.group(1) or action_match.group(2)) if action_match else current_url
+            action_url = urljoin(current_url, unescape(action))
+            action_parts = urlparse(action_url)
+            if action_parts.netloc.lower() not in {'freedns.afraid.org', 'www.freedns.afraid.org'} or action_parts.path.rstrip('/') not in {'/domain', '/domain/index.php'}:
+                continue
+
+            form_values = dict(parse_qsl(action_parts.query, keep_blank_values=True))
+            paging_fields = {}
+            for input_attrs in re.findall(r'<input\b([^>]*)>', form_html, re.IGNORECASE | re.DOTALL):
+                name_match = re.search(r'\bname\s*=\s*[\'\"]?([^\s\'\">]+)', input_attrs, re.IGNORECASE)
+                value_match = re.search(r'\bvalue\s*=\s*[\'\"]([^\'\"]*)[\'\"]', input_attrs, re.IGNORECASE)
+                if not name_match:
+                    continue
+                name = unescape(name_match.group(1))
+                value = unescape(value_match.group(1)) if value_match else ''
+                form_values[name] = value
+                if name.lower() in pagination_keys:
+                    paging_fields[name] = value
+
+            for select_match in re.finditer(r'<select\b([^>]*)>(.*?)</select>', form_html, re.IGNORECASE | re.DOTALL):
+                name_match = re.search(r'\bname\s*=\s*[\'\"]?([^\s\'\">]+)', select_match.group(1), re.IGNORECASE)
+                if not name_match:
+                    continue
+                name = unescape(name_match.group(1))
+                if name.lower() in pagination_keys:
+                    values = re.findall(r'<option\b[^>]*\bvalue\s*=\s*[\'\"]?([^\s\'\">]+)', select_match.group(2), re.IGNORECASE)
+                    paging_fields[name] = values
+
+            for name, current_value in paging_fields.items():
+                if isinstance(current_value, list):
+                    values = current_value
+                elif name.lower() in {'page', 'page_num', 'p'} and total_pages:
+                    values = [str(page) for page in range(1, total_pages + 1)]
+                elif name.lower() in {'start', 'offset', 'from'} and total_pages and page_size:
+                    values = [str(offset) for offset in range(0, total_rows, page_size)]
+                else:
+                    continue
+                for value in values:
+                    query = {**form_values, name: value}
+                    add_page_url(urlunparse(action_parts._replace(query=urlencode(query, doseq=True))))
         return page_urls
 
     @staticmethod
