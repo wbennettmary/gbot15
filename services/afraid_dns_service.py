@@ -233,7 +233,14 @@ class AfraidDNSService:
                 continue
             cell_text = []
             for cell in cells:
-                attributes = ' '.join(re.findall(r'(?:title|alt)\s*=\s*[\'\"]([^\'\"]+)', cell, re.IGNORECASE))
+                # FreeDNS has rendered the visibility label as text, an icon
+                # title/alt, and (in some layouts) a class or image filename.
+                # Preserve those hints before stripping the HTML tags.
+                attributes = ' '.join(re.findall(
+                    r'(?:title|alt|aria-label|data-status|class|src)\s*=\s*[\'\"]([^\'\"]+)',
+                    cell,
+                    re.IGNORECASE,
+                ))
                 text = re.sub(r'<[^>]+>', ' ', cell)
                 cell_text.append(re.sub(r'\s+', ' ', unescape(text + ' ' + attributes)).strip())
             domain_name = next((
@@ -273,8 +280,34 @@ class AfraidDNSService:
             # The status label is rendered near the domain name. Prefer a
             # nearby explicit status value, while allowing stealth domains to
             # remain unclassified (the UI only offers public/private lists).
-            nearby = re.sub(r'<[^>]+>', ' ', html[match.start():match.end() + 500])
-            nearby = re.sub(r'\s+', ' ', unescape(nearby)).strip()
+            # Status metadata can appear immediately before the bold domain
+            # (for example an icon in its own cell), so inspect both sides of
+            # the owned-zone link. Keep this window local to avoid reading a
+            # later account row's visibility label.
+            row_start = html.lower().rfind('<tr', 0, match.start())
+            previous_row_end = html.lower().rfind('</tr>', 0, match.start())
+            if row_start > previous_row_end:
+                row_end = html.lower().find('</tr>', match.end())
+                nearby_start = row_start
+                nearby_end = row_end + len('</tr>') if row_end >= 0 else min(len(html), match.end() + 500)
+            else:
+                # Non-table layouts place each domain in a short block. Bound
+                # the context at common block separators so another domain's
+                # status cannot be mistaken for this one.
+                separators = ('<br', '<li', '<div', '<p', '</td>')
+                starts = [html.lower().rfind(tag, 0, match.start()) for tag in separators]
+                nearby_start = max([start for start in starts if start >= 0] or [max(0, match.start() - 250)])
+                ends = [html.lower().find(tag, match.end()) for tag in separators]
+                ends = [end for end in ends if end >= 0]
+                nearby_end = min(ends) if ends else min(len(html), match.end() + 250)
+            nearby_html = html[nearby_start:nearby_end]
+            nearby_attributes = ' '.join(re.findall(
+                r'(?:title|alt|aria-label|data-status|class|src)\s*=\s*[\'\"]([^\'\"]+)',
+                nearby_html,
+                re.IGNORECASE,
+            ))
+            nearby = re.sub(r'<[^>]+>', ' ', nearby_html)
+            nearby = re.sub(r'\s+', ' ', unescape(nearby + ' ' + nearby_attributes)).strip()
             status_match = re.search(r'\b(public|private)\b', nearby, re.IGNORECASE)
             domains.append({
                 'domain_name': domain_name,
