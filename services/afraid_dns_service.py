@@ -3,6 +3,7 @@ import re
 import logging
 from http.cookies import SimpleCookie
 from html import unescape
+from urllib.parse import parse_qsl, urljoin, urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -188,15 +189,39 @@ class AfraidDNSService:
             return []
         url = "https://freedns.afraid.org/domain/"
         try:
-            resp = self.session.get(url, allow_redirects=False, timeout=20)
-            if resp.status_code in (301, 302, 303, 307, 308):
-                self.last_error = f"FreeDNS redirected the account Domains page to {resp.headers.get('Location', 'a login page')}."
+            pending_urls = [url]
+            visited_urls = set()
+            domains_by_name = {}
+            first_page_html = ''
+            while pending_urls and len(visited_urls) < 500:
+                page_url = pending_urls.pop(0)
+                if page_url in visited_urls:
+                    continue
+                visited_urls.add(page_url)
+                resp = self.session.get(page_url, allow_redirects=False, timeout=20)
+                if resp.status_code in (301, 302, 303, 307, 308):
+                    self.last_error = f"FreeDNS redirected the account Domains page to {resp.headers.get('Location', 'a login page')}."
+                    return []
+                if resp.status_code != 200:
+                    self.last_error = f"FreeDNS returned HTTP {resp.status_code} for the account Domains page."
+                    return []
+                if not first_page_html:
+                    first_page_html = resp.text
+                for domain in self.parse_account_domains(resp.text):
+                    previous = domains_by_name.get(domain['domain_name'], {})
+                    domains_by_name[domain['domain_name']] = {
+                        **previous,
+                        **{key: value for key, value in domain.items() if value not in (None, '')},
+                    }
+                for next_url in self._account_domain_pagination_urls(resp.text, page_url):
+                    if next_url not in visited_urls and next_url not in pending_urls:
+                        pending_urls.append(next_url)
+
+            if pending_urls:
+                self.last_error = 'FreeDNS account Domains pagination exceeded 500 pages.'
                 return []
-            if resp.status_code != 200:
-                self.last_error = f"FreeDNS returned HTTP {resp.status_code} for the account Domains page."
-                return []
-            domains = self.parse_account_domains(resp.text)
-            if not domains and re.search(r"\b(?:domains|domain list)\b", re.sub(r'<[^>]+>', ' ', resp.text), re.IGNORECASE):
+            domains = sorted(domains_by_name.values(), key=lambda domain: domain['domain_name'])
+            if not domains and re.search(r"\b(?:domains|domain list)\b", re.sub(r'<[^>]+>', ' ', first_page_html), re.IGNORECASE):
                 self.last_error = "FreeDNS loaded the account Domains page, but no domain rows could be parsed."
             return domains
         except requests.RequestException as exc:
@@ -207,6 +232,36 @@ class AfraidDNSService:
             self.last_error = f"Error reading FreeDNS account domains: {exc}"
             logger.error(self.last_error)
             return []
+
+    @staticmethod
+    def _account_domain_pagination_urls(html, current_url):
+        """Find same-site account Domains pagination links in a page."""
+        pagination_keys = {'page', 'page_num', 'p', 'start', 'offset', 'from', 'limit'}
+        page_urls = []
+        for _attributes, double_quoted, single_quoted, unquoted, anchor_html in re.findall(
+            r'<a\b([^>]*?\bhref\s*=\s*)(?:"([^"]+)"|\'([^\']+)\'|([^\s>]+))[^>]*>(.*?)</a>',
+            html,
+            re.IGNORECASE | re.DOTALL,
+        ):
+            anchor_text = re.sub(r'<[^>]+>', ' ', anchor_html)
+            anchor_text = re.sub(r'\s+', ' ', unescape(anchor_text)).strip()
+            href = double_quoted or single_quoted or unquoted
+            resolved = urljoin(current_url, unescape(href))
+            parsed = urlparse(resolved)
+            if parsed.netloc.lower() not in {'freedns.afraid.org', 'www.freedns.afraid.org'}:
+                continue
+            if parsed.path.rstrip('/') != '/domain':
+                continue
+            query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+            has_page_parameter = any(key.lower() in pagination_keys for key in query)
+            is_page_link = bool(re.fullmatch(r'\d+', anchor_text)) or bool(
+                re.search(r'\b(?:next|previous|last|first)\b|[»›]', anchor_text, re.IGNORECASE)
+            )
+            if not has_page_parameter and not is_page_link:
+                continue
+            if resolved not in page_urls:
+                page_urls.append(resolved)
+        return page_urls
 
     @staticmethod
     def parse_account_domains(html):
