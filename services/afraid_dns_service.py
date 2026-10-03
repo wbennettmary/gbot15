@@ -198,8 +198,6 @@ class AfraidDNSService:
             domains = self.parse_account_domains(resp.text)
             if not domains and re.search(r"\b(?:domains|domain list)\b", re.sub(r'<[^>]+>', ' ', resp.text), re.IGNORECASE):
                 self.last_error = "FreeDNS loaded the account Domains page, but no domain rows could be parsed."
-            elif domains and not any(domain['status'] in {'public', 'private'} for domain in domains):
-                self.last_error = "FreeDNS account domains loaded, but their public/private status could not be read."
             return domains
         except requests.RequestException as exc:
             self.last_error = f"Could not load the FreeDNS account Domains page: {exc}"

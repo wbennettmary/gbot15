@@ -499,10 +499,26 @@ def get_account_domains():
         account_domains = svc.fetch_account_domains()
         if svc.last_error:
             return jsonify({'success': False, 'error': svc.last_error}), 503
+        # FreeDNS sometimes returns owned domains without a readable
+        # visibility label. Its public registry cache is authoritative for
+        # public zones; treat the remaining account-owned zones as private so
+        # those domains are still available in the Private domains view.
+        known_public_domains = {
+            name for (name,) in AfraidDomain.query.with_entities(AfraidDomain.domain_name).filter(
+                AfraidDomain.source == 'registry',
+                AfraidDomain.registry_status == 'public',
+            ).all()
+        }
+        def matches_domain_type(domain):
+            status = domain.get('status')
+            if status not in {'public', 'private'}:
+                status = 'public' if domain['domain_name'] in known_public_domains else 'private'
+            return status == domain_type
+
         all_items = [
             {'domain_name': domain['domain_name'], 'domain_id': domain.get('domain_id')}
             for domain in account_domains
-            if domain.get('status') == domain_type
+            if matches_domain_type(domain)
         ]
         all_items.sort(key=lambda item: item['domain_name'])
         total = len(all_items)
