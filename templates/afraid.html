@@ -1602,6 +1602,16 @@
                 </div>
                 <div class="card-body">
                     <form id="createSubdomainForm">
+                        <fieldset class="mb-3" aria-describedby="processDomainTypeHelp">
+                            <legend class="form-label fw-semibold">FreeDNS domain type</legend>
+                            <div class="btn-group" role="group" aria-label="FreeDNS domain type">
+                                <input type="radio" class="btn-check" name="processDomainType" id="processDomainTypePublic" value="public" checked>
+                                <label class="btn btn-outline-primary" for="processDomainTypePublic">Public domains</label>
+                                <input type="radio" class="btn-check" name="processDomainType" id="processDomainTypePrivate" value="private">
+                                <label class="btn btn-outline-primary" for="processDomainTypePrivate">Private domains</label>
+                            </div>
+                            <div class="form-text" id="processDomainTypeHelp">Choose public FreeDNS registry domains for CNAME creation.</div>
+                        </fieldset>
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Type</label>
@@ -1639,7 +1649,7 @@
                                 <div class="afraid-tld-group-search-header">
                                     <div>
                                         <div class="small fw-bold text-dark">Select the groups to fetch</div>
-                                        <div class="form-text mt-0">Choose one or more groups, such as <strong>.com</strong>, <strong>.net</strong>, and <strong>.ca</strong>. Only those groups will be fetched.</div>
+                                        <div class="form-text mt-0" id="tldGroupHelpText">Choose one or more groups, such as <strong>.com</strong>, <strong>.net</strong>, and <strong>.ca</strong>. Only those groups will be fetched.</div>
                                     </div>
                                     <button type="button" class="btn btn-sm btn-primary" id="btnLoadSelectedTldGroups">
                                         <svg class="afraid-svg-icon me-1" aria-hidden="true"><use href="#afraid-icon-check-double" xlink:href="#afraid-icon-check-double"></use></svg>Load selected groups
@@ -1714,6 +1724,7 @@
                             <div class="col-lg-6">
                                 <label for="manualBaseDomainsInput" class="form-label fw-semibold">Manual Input Domains</label>
                                 <textarea class="form-control font-monospace" id="manualBaseDomainsInput" rows="8" placeholder="example.com&#10;example.net" style="height: 220px;"></textarea>
+                                <div class="form-text" id="privateManualDomainsHelp" hidden>In private mode, each domain must appear in the loaded private FreeDNS registry.</div>
                                 <div class="form-text" id="manualBaseDomainsCount">0 manual domains</div>
                             </div>
                         </div>
@@ -2316,6 +2327,11 @@ document.addEventListener('DOMContentLoaded', function() {
         input.focus();
     });
     document.getElementById('btnLoadSelectedTldGroups').addEventListener('click', () => loadSelectedTldDomains());
+    document.querySelectorAll('input[name="processDomainType"]').forEach(input => {
+        input.addEventListener('change', (event) => {
+            if (event.target.checked) setProcessDomainType(event.target.value);
+        });
+    });
     document.getElementById('btnSearchDomainGroup').addEventListener('click', searchDomainGroup);
     document.getElementById('domainSearchInput').addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
@@ -2508,6 +2524,7 @@ let afraidDomainSyncPromise = null;
 let afraidSelectedRegistryDomains = new Set();
 let afraidTldGroups = [];
 let afraidSelectedTldGroups = new Set();
+let afraidProcessDomainType = 'public';
 
 async function syncAfraidDomainsIfStale(force = false, options = {}) {
     if (afraidDomainSyncPromise) return afraidDomainSyncPromise;
@@ -2622,16 +2639,65 @@ function changeDomainPage(delta) {
     loadDomains();
 }
 
+function setProcessDomainType(type) {
+    if (!['public', 'private'].includes(type) || afraidProcessDomainType === type) return;
+    afraidProcessDomainType = type;
+    afraidSelectedRegistryDomains.clear();
+    afraidSelectedTldGroups.clear();
+    const privateMode = type === 'private';
+    const analyticsControls = document.querySelector('.afraid-domain-filter-controls');
+    const usedDomainActions = document.querySelector('.afraid-used-domain-actions');
+    document.getElementById('processDomainTypeHelp').textContent = privateMode
+        ? 'Choose private domains from this FreeDNS account for CNAME creation.'
+        : 'Choose public FreeDNS registry domains for CNAME creation.';
+    document.getElementById('tldGroupHelpText').textContent = privateMode
+        ? 'Choose one or more TLD groups owned by this FreeDNS account. Only those groups will be loaded.'
+        : 'Choose one or more groups, such as .com, .net, and .ca. Only those groups will be fetched.';
+    analyticsControls.hidden = privateMode;
+    analyticsControls.style.display = privateMode ? 'none' : '';
+    usedDomainActions.hidden = privateMode;
+    usedDomainActions.style.display = privateMode ? 'none' : '';
+    document.getElementById('privateManualDomainsHelp').hidden = !privateMode;
+    document.getElementById('tldDomainList').innerHTML = privateMode
+        ? '<div class="text-muted small">Select a TLD group to view private domains.</div>'
+        : '<div class="text-muted small">Select a TLD group to view public domains.</div>';
+    document.getElementById('domainSearchStatus').textContent = privateMode
+        ? 'Search selects the matching private FreeDNS domain and its TLD group.'
+        : 'Search selects the matching TLD group and shows that domain below.';
+    document.getElementById('domainSearchInput').value = '';
+    document.getElementById('domainSelectionStatus').textContent = '';
+    syncSelectedTldDomains();
+    loadTlds();
+}
+
 async function loadTlds() {
+    const requestToken = (window.afraidTldsRequestToken || 0) + 1;
+    window.afraidTldsRequestToken = requestToken;
+    const requestedType = afraidProcessDomainType;
     try {
-        const res = await fetch('/api/afraid/tlds');
-        const data = await res.json();
+        const responses = await Promise.all([
+            fetch('/api/afraid/tlds?' + new URLSearchParams({type: requestedType})),
+            requestedType === 'public' ? Promise.resolve(null) : fetch('/api/afraid/tlds?type=public').catch(() => null)
+        ]);
+        const data = await responses[0].json();
+        const publicData = requestedType === 'public'
+            ? data
+            : (responses[1] ? await responses[1].json().catch(() => ({tlds: []})) : {tlds: []});
+        if (requestToken !== window.afraidTldsRequestToken || requestedType !== afraidProcessDomainType) return;
         const select = document.getElementById('tldSelect');
         const aiSelect = document.getElementById('afraidAiTldSelect');
         const current = select.value;
         const aiCurrent = aiSelect?.value || '';
         select.innerHTML = '<option value="">All TLDs</option>';
         if (aiSelect) aiSelect.innerHTML = '<option value="">All TLDs</option>';
+        (publicData.tlds || []).forEach(item => {
+            if (!aiSelect) return;
+            const opt = document.createElement('option');
+            opt.value = item.tld;
+            opt.textContent = `.${item.tld} (${item.available}/${item.count})`;
+            aiSelect.appendChild(opt);
+        });
+        if (aiSelect) aiSelect.value = aiCurrent;
         if (data.success) {
             afraidTldGroups = Array.isArray(data.tlds) ? data.tlds : [];
             const availableTlds = new Set(afraidTldGroups.map(item => String(item.tld || '').trim().toLowerCase()));
@@ -2641,10 +2707,8 @@ async function loadTlds() {
                 opt.value = item.tld;
                 opt.textContent = `.${item.tld} (${item.available}/${item.count})`;
                 select.appendChild(opt);
-                if (aiSelect) aiSelect.appendChild(opt.cloneNode(true));
             });
             select.value = current;
-            if (aiSelect) aiSelect.value = aiCurrent;
             renderTldGroupSearch(afraidTldGroups, document.getElementById('tldGroupSearchInput')?.value || '');
             loadSelectedTldDomains();
         }
@@ -2709,9 +2773,9 @@ async function loadSelectedTldDomains(options = {}) {
     }
     if (status) status.textContent = `Fetching domains from ${selectedTlds.map(tld => `.${tld}`).join(', ')} only...`;
     try {
-        const analyticsTags = getAfraidDomainAnalyticsFilter();
+        const analyticsTags = afraidProcessDomainType === 'public' ? getAfraidDomainAnalyticsFilter() : [];
         const responses = await Promise.all(selectedTlds.map(async tld => {
-            const params = new URLSearchParams({limit: 5000, include_used: 'true', tld});
+            const params = new URLSearchParams({limit: 5000, include_used: 'true', tld, type: afraidProcessDomainType});
             if (analyticsTags.length) params.set('analytics_tag', analyticsTags.join(','));
             const res = await fetch('/api/afraid/domain-options?' + params.toString());
             const data = await parseJsonResponse(res);
@@ -2719,7 +2783,7 @@ async function loadSelectedTldDomains(options = {}) {
             return (data.domains || []).map(domain => ({...domain, tld}));
         }));
         if (requestToken !== window.afraidTldDomainsRequestToken) return;
-        const activeFilters = getAfraidDomainAnalyticsFilter();
+        const activeFilters = afraidProcessDomainType === 'public' ? getAfraidDomainAnalyticsFilter() : [];
         const domains = [...new Map(responses.flat().map(domain => [domain.domain_name, domain])).values()];
         renderSelectedTldDomains(domains, activeFilters.length > 0);
         updateTldGroupSelectionStatus(`Loaded ${domains.length} domain${domains.length === 1 ? '' : 's'} from ${selectedTlds.map(tld => `.${tld}`).join(', ')} only.`);
@@ -2772,7 +2836,7 @@ async function searchDomainGroup() {
     status.textContent = 'Searching cached registry...';
     status.className = 'form-text text-muted';
     try {
-        const res = await fetch('/api/afraid/domain-search?' + new URLSearchParams({q}).toString());
+        const res = await fetch('/api/afraid/domain-search?' + new URLSearchParams({q, type: afraidProcessDomainType}).toString());
         const data = await parseJsonResponse(res);
         if (!data.success) {
             status.textContent = data.error || 'Domain not found.';
@@ -2797,9 +2861,10 @@ async function searchDomainGroup() {
 function renderSelectedTldDomains(domains, showAnalyticsTags = false) {
     const list = document.getElementById('tldDomainList');
     list.innerHTML = '';
-    const usedNow = new Set(window.afraidUsedBaseDomains || []);
+    const usedNow = new Set(afraidProcessDomainType === 'public' ? (window.afraidUsedBaseDomains || []) : []);
     if (!domains || !domains.length) {
-        list.innerHTML = '<div class="text-muted small">No domains loaded. Select one or more TLD groups above, then click “Load selected groups”.</div>';
+        const visibility = afraidProcessDomainType === 'private' ? 'private' : 'public';
+        list.innerHTML = `<div class="text-muted small">No ${visibility} domains loaded. Select one or more TLD groups above, then click “Load selected groups”.</div>`;
         return;
     }
     domains.forEach(item => {
@@ -3407,6 +3472,7 @@ async function startProcess() {
         const destinations = selectedDestination ? [selectedDestination] : [];
         const manualSubdomains = getManualSubdomains();
         const payload = {
+            domain_type: afraidProcessDomainType,
             tld: document.getElementById('tldSelect').value,
             total_count: document.getElementById('totalCountInput').value,
             afraid_count: document.getElementById('afraidCountInput').value.trim(),

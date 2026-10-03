@@ -563,10 +563,20 @@ def get_domain_options():
     freshness = sync_afraid_registry_domains(force=False)
     if not freshness.get('success'):
         return jsonify(freshness), 503
+    domain_type = request.args.get('type', 'public').strip().lower()
+    if domain_type not in {'public', 'private'}:
+        return jsonify({'success': False, 'error': 'Domain type must be public or private.'}), 400
     tld = request.args.get('tld', '').strip().lower()
     limit = min(5000, max(1, int(request.args.get('limit', 1000))))
     include_used = request.args.get('include_used', '').lower() == 'true'
-    query = AfraidDomain.query.filter(AfraidDomain.domain_id.isnot(None), AfraidDomain.registry_status == 'public') if include_used else available_domain_query()
+    query = AfraidDomain.query.filter(
+        AfraidDomain.domain_id.isnot(None),
+        AfraidDomain.registry_status == domain_type,
+    )
+    if domain_type == 'private':
+        query = query.filter(AfraidDomain.source == 'registry')
+    if domain_type == 'public' and not include_used:
+        query = available_domain_query()
     if tld:
         query = query.filter_by(tld=tld)
     analytics_tag = request.args.get('analytics_tag', '').strip().lower()
@@ -580,7 +590,13 @@ def get_domain_options():
             if _afraid_analytics_filter_match(analytics, requested_analytics_tags)
         ]
         query = query.filter(AfraidDomain.domain_name.in_(matching_names))
-    if include_used:
+    if domain_type == 'private':
+        domains = query.order_by(
+            AfraidDomain.rotation_count.asc(),
+            AfraidDomain.last_used_at.asc(),
+            AfraidDomain.domain_name.asc()
+        ).all()
+    elif include_used:
         domains = query.order_by(
             AfraidDomain.last_used_at.is_(None).asc(),
             AfraidDomain.last_used_at.desc(),
@@ -595,11 +611,12 @@ def get_domain_options():
     analytics_tags = _afraid_analytics_tags([domain.domain_name for domain in domains])
     return jsonify({
         'success': True,
+        'type': domain_type,
         'domains': [{
             'domain_name': d.domain_name,
             'domain_id': d.domain_id,
             'tld': d.tld,
-            'used_this_month': bool(d.last_used_at and d.last_used_at >= used_cutoff()),
+            'used_this_month': domain_type == 'public' and bool(d.last_used_at and d.last_used_at >= used_cutoff()),
             'hosts_in_use': d.hosts_in_use,
             'registry_created_on': d.registry_created_on,
             **_afraid_domain_analytics_fields(d, analytics_tags)
@@ -612,26 +629,35 @@ def search_afraid_domain():
     freshness = sync_afraid_registry_domains(force=False)
     if not freshness.get('success'):
         return jsonify(freshness), 503
+    domain_type = request.args.get('type', 'public').strip().lower()
+    if domain_type not in {'public', 'private'}:
+        return jsonify({'success': False, 'error': 'Domain type must be public or private.'}), 400
     q = request.args.get('q', '').strip().lower()
     if not q:
         return jsonify({'success': False, 'error': 'Domain search is required'}), 400
-    domain = AfraidDomain.query.filter(
+    query = AfraidDomain.query.filter(
         AfraidDomain.domain_id.isnot(None),
-        AfraidDomain.registry_status == 'public',
+        AfraidDomain.registry_status == domain_type,
         AfraidDomain.domain_name == q
-    ).first()
+    )
+    if domain_type == 'private':
+        query = query.filter(AfraidDomain.source == 'registry')
+    domain = query.first()
     if not domain:
-        domain = AfraidDomain.query.filter(
+        query = AfraidDomain.query.filter(
             AfraidDomain.domain_id.isnot(None),
-            AfraidDomain.registry_status == 'public',
+            AfraidDomain.registry_status == domain_type,
             AfraidDomain.domain_name.ilike(f"%{q}%")
-        ).order_by(AfraidDomain.domain_name.asc()).first()
+        )
+        if domain_type == 'private':
+            query = query.filter(AfraidDomain.source == 'registry')
+        domain = query.order_by(AfraidDomain.domain_name.asc()).first()
     if not domain:
-        return jsonify({'success': False, 'error': 'Domain not found in cached public FreeDNS registry'}), 404
+        return jsonify({'success': False, 'error': f'Domain not found in cached {domain_type} FreeDNS registry'}), 404
     return jsonify({'success': True, 'domain': {
         'domain_name': domain.domain_name,
         'tld': domain.tld,
-        'used_this_month': bool(domain.last_used_at and domain.last_used_at >= used_cutoff())
+        'used_this_month': domain_type == 'public' and bool(domain.last_used_at and domain.last_used_at >= used_cutoff())
     }})
 
 @afraid_manager.route('/api/afraid/service-accounts', methods=['GET'])
@@ -722,20 +748,29 @@ def get_tld_groups():
     freshness = sync_afraid_registry_domains(force=False)
     if not freshness.get('success'):
         return jsonify(freshness), 503
+    domain_type = request.args.get('type', 'public').strip().lower()
+    if domain_type not in {'public', 'private'}:
+        return jsonify({'success': False, 'error': 'Domain type must be public or private.'}), 400
     rows = db.session.query(AfraidDomain.tld, func.count(AfraidDomain.id)).filter(
         AfraidDomain.tld.isnot(None),
         AfraidDomain.domain_id.isnot(None),
-        AfraidDomain.registry_status == 'public'
-    ).group_by(AfraidDomain.tld).order_by(AfraidDomain.tld.asc()).all()
-    used_rows = db.session.query(AfraidDomain.tld, func.count(AfraidDomain.id)).filter(
-        AfraidDomain.tld.isnot(None),
-        AfraidDomain.last_used_at >= used_cutoff(),
-        AfraidDomain.domain_id.isnot(None),
-        AfraidDomain.registry_status == 'public'
-    ).group_by(AfraidDomain.tld).all()
+        AfraidDomain.registry_status == domain_type
+    )
+    if domain_type == 'private':
+        rows = rows.filter(AfraidDomain.source == 'registry')
+    rows = rows.group_by(AfraidDomain.tld).order_by(AfraidDomain.tld.asc()).all()
+    used_rows = []
+    if domain_type == 'public':
+        used_rows = db.session.query(AfraidDomain.tld, func.count(AfraidDomain.id)).filter(
+            AfraidDomain.tld.isnot(None),
+            AfraidDomain.last_used_at >= used_cutoff(),
+            AfraidDomain.domain_id.isnot(None),
+            AfraidDomain.registry_status == 'public'
+        ).group_by(AfraidDomain.tld).all()
     used_by_tld = {tld: count for tld, count in used_rows}
     return jsonify({
         'success': True,
+        'type': domain_type,
         'tlds': [{'tld': tld, 'count': count, 'used': used_by_tld.get(tld, 0), 'available': count - used_by_tld.get(tld, 0)} for tld, count in rows if tld]
     })
 
@@ -1178,6 +1213,9 @@ def create_batch_subdomains():
     data = request.get_json(silent=True) or {}
     if not isinstance(data, dict):
         return jsonify({'success': False, 'error': 'Invalid CNAME creation payload.'}), 400
+    domain_type = str(data.get('domain_type') or 'public').strip().lower()
+    if domain_type not in {'public', 'private'}:
+        return jsonify({'success': False, 'error': 'Domain type must be public or private.'}), 400
     selected_cloudflare_config_ids, cloudflare_selection_error = _parse_cloudflare_config_ids(
         data.get('cloudflare_config_ids') or data.get('cloudflare_account_ids')
     )
@@ -1230,7 +1268,7 @@ def create_batch_subdomains():
             for row in AfraidDomain.query.filter(
                 AfraidDomain.domain_name.in_(selected_registry_domains),
                 AfraidDomain.source == 'registry',
-                AfraidDomain.registry_status == 'public',
+                AfraidDomain.registry_status == domain_type,
                 AfraidDomain.domain_id.isnot(None),
             ).all()
         }
@@ -1268,7 +1306,21 @@ def create_batch_subdomains():
     if error:
         return jsonify({'success': False, 'error': error}), 401
 
-    if base_domains:
+    if base_domains and domain_type == 'private':
+        afraid_domains = []
+        for selected_domain in base_domains:
+            domain_record = AfraidDomain.query.filter_by(
+                domain_name=selected_domain,
+                source='registry',
+                registry_status='private',
+            ).first()
+            if not domain_record or not domain_record.domain_id:
+                return jsonify({
+                    'success': False,
+                    'error': f"Private FreeDNS domain '{selected_domain}' is not in the refreshed private-domain list. Refresh the registry and select it again."
+                }), 400
+            afraid_domains.append(domain_record)
+    elif base_domains:
         afraid_domains = []
         for selected_domain in base_domains:
             domain_record = AfraidDomain.query.filter_by(domain_name=selected_domain).first()
@@ -1292,10 +1344,23 @@ def create_batch_subdomains():
                 return jsonify({'success': False, 'error': f"FreeDNS domain '{selected_domain}' is not a usable public registry domain."}), 400
             domain_record.registry_status = 'public'
             afraid_domains.append(domain_record)
+    elif domain_type == 'private':
+        query = AfraidDomain.query.filter(
+            AfraidDomain.domain_id.isnot(None),
+            AfraidDomain.source == 'registry',
+            AfraidDomain.registry_status == 'private',
+        )
+        if tld:
+            query = query.filter_by(tld=tld)
+        afraid_domains = query.order_by(
+            AfraidDomain.rotation_count.asc(),
+            AfraidDomain.last_used_at.asc(),
+            AfraidDomain.id.asc(),
+        ).limit(afraid_count or 5000).all()
     else:
         afraid_domains = get_rotated_afraid_domains(tld, afraid_count or 5000)
     if not afraid_domains:
-        return jsonify({'success': False, 'error': f"No cached FreeDNS domains found for TLD '{tld}'."}), 404
+        return jsonify({'success': False, 'error': f"No cached FreeDNS {domain_type} domains found for TLD '{tld}'."}), 404
 
     try:
         cf_zones = []
