@@ -44,6 +44,7 @@ def _parse_cloudflare_config_ids(raw_value):
     return ids, None
 AFRAID_DOMAIN_SYNC_INTERVAL = timedelta(hours=1)
 _AFRAID_DOMAIN_SYNC_LOCK = threading.Lock()
+_AFRAID_REGISTRY_CACHE_COMPLETE = False
 
 afraid_manager = Blueprint('afraid_manager', __name__)
 
@@ -187,19 +188,20 @@ def available_domain_query():
 def _sync_timestamp_text(value):
     return value.isoformat() + 'Z' if value else None
 
-def sync_afraid_registry_domains(force=False, start_page=1, end_page=212):
-    """Refresh the FreeDNS registry cache, removing domains no longer public.
+def sync_afraid_registry_domains(force=False, start_page=1, end_page=None):
+    """Refresh every FreeDNS registry status and remove domains no longer listed.
 
     A successful full refresh records the time on AfraidConfig. Calls made within
     the one-hour freshness window reuse the verified cache instead of hitting
     FreeDNS again.
     """
+    global _AFRAID_REGISTRY_CACHE_COMPLETE
     config = AfraidConfig.query.first()
     if not config or not config.cookies_str:
         return {'success': False, 'error': 'Afraid cookies not configured. Please import your browser cookies.'}
 
     now = datetime.utcnow()
-    if not force and config.domains_synced_at and now - config.domains_synced_at < AFRAID_DOMAIN_SYNC_INTERVAL:
+    if not force and _AFRAID_REGISTRY_CACHE_COMPLETE and config.domains_synced_at and now - config.domains_synced_at < AFRAID_DOMAIN_SYNC_INTERVAL:
         return {
             'success': True,
             'skipped': True,
@@ -207,11 +209,9 @@ def sync_afraid_registry_domains(force=False, start_page=1, end_page=212):
             'synced_at': _sync_timestamp_text(config.domains_synced_at),
             'added': 0,
             'updated': 0,
-            'total': AfraidDomain.query.filter(
-                AfraidDomain.source == 'registry',
-                AfraidDomain.registry_status == 'public',
-                AfraidDomain.domain_id.isnot(None),
-            ).count(),
+            'total': AfraidDomain.query.filter(AfraidDomain.source == 'registry', AfraidDomain.domain_id.isnot(None)).count(),
+            'public': AfraidDomain.query.filter(AfraidDomain.source == 'registry', AfraidDomain.registry_status == 'public').count(),
+            'private': AfraidDomain.query.filter(AfraidDomain.source == 'registry', AfraidDomain.registry_status == 'private').count(),
             'seen': 0,
             'pages': 0,
             'errors': [],
@@ -221,7 +221,7 @@ def sync_afraid_registry_domains(force=False, start_page=1, end_page=212):
         db.session.expire_all()
         config = AfraidConfig.query.first()
         now = datetime.utcnow()
-        if not force and config and config.domains_synced_at and now - config.domains_synced_at < AFRAID_DOMAIN_SYNC_INTERVAL:
+        if not force and _AFRAID_REGISTRY_CACHE_COMPLETE and config and config.domains_synced_at and now - config.domains_synced_at < AFRAID_DOMAIN_SYNC_INTERVAL:
             return {
                 'success': True,
                 'skipped': True,
@@ -229,11 +229,9 @@ def sync_afraid_registry_domains(force=False, start_page=1, end_page=212):
                 'synced_at': _sync_timestamp_text(config.domains_synced_at),
                 'added': 0,
                 'updated': 0,
-                'total': AfraidDomain.query.filter(
-                    AfraidDomain.source == 'registry',
-                    AfraidDomain.registry_status == 'public',
-                    AfraidDomain.domain_id.isnot(None),
-                ).count(),
+                'total': AfraidDomain.query.filter(AfraidDomain.source == 'registry', AfraidDomain.domain_id.isnot(None)).count(),
+                'public': AfraidDomain.query.filter(AfraidDomain.source == 'registry', AfraidDomain.registry_status == 'public').count(),
+                'private': AfraidDomain.query.filter(AfraidDomain.source == 'registry', AfraidDomain.registry_status == 'private').count(),
                 'seen': 0,
                 'pages': 0,
                 'errors': [],
@@ -244,28 +242,46 @@ def sync_afraid_registry_domains(force=False, start_page=1, end_page=212):
             return {'success': False, 'error': error}
 
         start_page = max(1, int(start_page or 1))
-        end_page = max(start_page, min(212, int(end_page or 212)))
+        requested_end_page = max(start_page, int(end_page)) if end_page not in (None, '') else None
+        try:
+            first_page_domains, discovered_page_count = svc.fetch_registry_page_with_info(start_page)
+        except Exception as exc:
+            return {'success': False, 'error': f'Could not read FreeDNS registry page {start_page}: {exc}'}
+        if requested_end_page is None:
+            if not discovered_page_count:
+                return {'success': False, 'error': 'Could not determine the total number of FreeDNS registry pages.'}
+            end_page = max(start_page, discovered_page_count)
+        else:
+            end_page = min(requested_end_page, discovered_page_count) if discovered_page_count else requested_end_page
         added = 0
         updated = 0
         total_seen = 0
         public_seen = 0
+        private_seen = 0
         errors = []
-        public_domain_names = set()
+        registry_domain_names = set()
+        first_page_cache = {start_page: first_page_domains}
 
         for page in range(start_page, end_page + 1):
             try:
-                registry_domains = svc.fetch_registry_page(page)
+                registry_domains = first_page_cache.pop(page, None)
+                if registry_domains is None:
+                    registry_domains, _page_count = svc.fetch_registry_page_with_info(page)
             except Exception as exc:
                 errors.append(f'page {page}: {exc}')
                 continue
 
             total_seen += len(registry_domains)
             for item in registry_domains:
-                if item.get('status') != 'public':
+                domain_name = item.get('domain_name')
+                if not domain_name:
                     continue
-                public_seen += 1
-                domain_name = item['domain_name']
-                public_domain_names.add(domain_name)
+                status = (item.get('status') or '').strip().lower()
+                if status == 'public':
+                    public_seen += 1
+                elif status == 'private':
+                    private_seen += 1
+                registry_domain_names.add(domain_name)
                 domain = AfraidDomain.query.filter_by(domain_name=domain_name).first()
                 if not domain:
                     domain = AfraidDomain(domain_name=domain_name)
@@ -285,7 +301,7 @@ def sync_afraid_registry_domains(force=False, start_page=1, end_page=212):
             if page % 10 == 0:
                 db.session.commit()
 
-        if public_seen == 0:
+        if not registry_domain_names:
             db.session.rollback()
             return {
                 'success': False,
@@ -305,28 +321,35 @@ def sync_afraid_registry_domains(force=False, start_page=1, end_page=212):
                 'error': f"FreeDNS registry refresh was incomplete ({len(errors)} page error(s)); cached domains were not marked fresh.",
                 'added': added,
                 'updated': updated,
-                'total': public_seen,
+                'total': len(registry_domain_names),
+                'public': public_seen,
+                'private': private_seen,
                 'seen': total_seen,
                 'pages': end_page - start_page + 1,
                 'errors': errors[:10],
             }
 
+        full_refresh = bool(start_page == 1 and discovered_page_count and end_page >= discovered_page_count)
         stale_query = AfraidDomain.query.filter(AfraidDomain.source == 'registry')
-        if public_domain_names:
-            stale_query = stale_query.filter(~AfraidDomain.domain_name.in_(public_domain_names))
-        stale_query.delete(synchronize_session=False)
+        if full_refresh:
+            if registry_domain_names:
+                stale_query = stale_query.filter(~AfraidDomain.domain_name.in_(registry_domain_names))
+            stale_query.delete(synchronize_session=False)
         config = AfraidConfig.query.first()
-        if config:
+        if config and full_refresh:
             config.domains_synced_at = datetime.utcnow()
         db.session.commit()
+        _AFRAID_REGISTRY_CACHE_COMPLETE = bool(full_refresh)
         return {
             'success': True,
             'skipped': False,
-            'message': 'FreeDNS registry cache refreshed successfully.',
+            'message': 'FreeDNS registry cache refreshed successfully.' if full_refresh else 'FreeDNS registry page range refreshed.',
             'synced_at': _sync_timestamp_text(config.domains_synced_at if config else None),
             'added': added,
             'updated': updated,
-            'total': public_seen,
+            'total': len(registry_domain_names),
+            'public': public_seen,
+            'private': private_seen,
             'seen': total_seen,
             'pages': end_page - start_page + 1,
             'errors': [],
@@ -470,7 +493,7 @@ def get_used_domains():
 @login_required
 @json_api_errors
 def get_account_domains():
-    """List public registry domains or this account's private domains."""
+    """List domains from the complete FreeDNS registry by visibility."""
     domain_type = request.args.get('type', 'public').strip().lower()
     if domain_type not in {'public', 'private'}:
         return jsonify({'success': False, 'error': 'Domain type must be public or private.'}), 400
@@ -478,38 +501,17 @@ def get_account_domains():
     page = max(1, int(request.args.get('page', 1)))
     per_page = min(100, max(1, int(request.args.get('per_page', 25))))
 
-    if domain_type == 'public':
-        # Public domains come from the FreeDNS registry used by Process.
-        freshness = sync_afraid_registry_domains(force=False)
-        if not freshness.get('success'):
-            return jsonify({'success': False, 'error': freshness.get('error', 'FreeDNS public registry is unavailable.')}), 503
-        query = AfraidDomain.query.filter(
-            AfraidDomain.domain_id.isnot(None),
-            AfraidDomain.registry_status == 'public',
-        )
-        total = query.count()
-        domains = query.order_by(AfraidDomain.domain_name.asc()).offset((page - 1) * per_page).limit(per_page).all()
-        items = [{'domain_name': domain.domain_name, 'domain_id': domain.domain_id} for domain in domains]
-    else:
-        # Private domains come directly from the signed-in account page; do
-        # not derive them from the public registry used by Process.
-        svc, error = get_service()
-        if error:
-            return jsonify({'success': False, 'error': error}), 503
-        account_domains = svc.fetch_account_domains()
-        if svc.last_error:
-            return jsonify({'success': False, 'error': svc.last_error}), 503
-        matching_domains = [
-            domain for domain in account_domains
-            if domain.get('status') == 'private' or domain.get('status') not in {'public', 'private'}
-        ]
-        matching_domains.sort(key=lambda item: item['domain_name'])
-        total = len(matching_domains)
-        start = (page - 1) * per_page
-        items = [
-            {'domain_name': domain['domain_name'], 'domain_id': domain.get('domain_id')}
-            for domain in matching_domains[start:start + per_page]
-        ]
+    freshness = sync_afraid_registry_domains(force=False)
+    if not freshness.get('success'):
+        return jsonify({'success': False, 'error': freshness.get('error', 'FreeDNS registry is unavailable.')}), 503
+    query = AfraidDomain.query.filter(
+        AfraidDomain.domain_id.isnot(None),
+        AfraidDomain.source == 'registry',
+        AfraidDomain.registry_status == domain_type,
+    )
+    total = query.count()
+    domains = query.order_by(AfraidDomain.domain_name.asc()).offset((page - 1) * per_page).limit(per_page).all()
+    items = [{'domain_name': domain.domain_name, 'domain_id': domain.domain_id} for domain in domains]
 
     return jsonify({
         'success': True,
@@ -694,7 +696,7 @@ def fetch_domains_from_afraid():
     result = sync_afraid_registry_domains(
         force=bool(data.get('force', True)),
         start_page=data.get('start_page') or 1,
-        end_page=data.get('end_page') or 212,
+        end_page=data.get('end_page'),
     )
     return jsonify(result), 200 if result.get('success') else 400
 

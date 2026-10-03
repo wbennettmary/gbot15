@@ -502,11 +502,37 @@ class AfraidDNSService:
 
     def fetch_registry_page(self, page_number):
         """Fetch and parse one FreeDNS public registry page."""
+        domains, _total_pages = self.fetch_registry_page_with_info(page_number)
+        return domains
+
+    def fetch_registry_page_with_info(self, page_number):
+        """Fetch a registry page and discover the registry's current page count."""
         url = f"https://freedns.afraid.org/domain/registry/page-{page_number}.html"
         resp = self.session.get(url, allow_redirects=False, timeout=30)
         if resp.status_code != 200:
             raise RuntimeError(f"FreeDNS returned HTTP {resp.status_code} for {url}")
-        return self.parse_registry_domains(resp.text)
+        return self.parse_registry_domains(resp.text), self.parse_registry_page_count(resp.text)
+
+    @staticmethod
+    def parse_registry_page_count(html):
+        text = re.sub(r'<[^>]+>', ' ', html or '')
+        text = re.sub(r'\s+', ' ', unescape(text)).strip()
+        page_match = re.search(r'\bPage\s+\d+\s+of\s+([\d,]+)\b', text, re.IGNORECASE)
+        if page_match:
+            return int(page_match.group(1).replace(',', ''))
+        showing_match = re.search(
+            r'\bShowing\s+([\d,]+)\s*[-–]\s*([\d,]+)\s+of\s+([\d,]+)\s+total\b',
+            text,
+            re.IGNORECASE,
+        )
+        if showing_match:
+            first_row, last_row, total_rows = (
+                int(value.replace(',', '')) for value in showing_match.groups()
+            )
+            page_size = max(1, last_row - first_row + 1)
+            return (total_rows + page_size - 1) // page_size
+        linked_pages = re.findall(r'/domain/registry/page-(\d+)\.html', html or '', re.IGNORECASE)
+        return max((int(page) for page in linked_pages), default=None)
 
     @staticmethod
     def parse_registry_domains(html):

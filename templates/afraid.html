@@ -2525,14 +2525,14 @@ async function syncAfraidDomainsIfStale(force = false, options = {}) {
             const res = await fetch('/api/afraid/fetch-domains', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({start_page: 1, end_page: 212, force: Boolean(force)})
+                body: JSON.stringify({start_page: 1, force: Boolean(force)})
             });
             const data = await parseJsonResponse(res);
             if (!data.success) throw new Error(data.error || 'FreeDNS registry refresh failed.');
             const syncedAt = data.synced_at ? new Date(data.synced_at).toLocaleString() : 'now';
             if (status) status.textContent = data.skipped
                 ? `Registry synced ${syncedAt} · cache still fresh`
-                : `Registry synced ${syncedAt} · ${data.total || 0} public domains`;
+                : `Registry synced ${syncedAt} · ${data.total || 0} listed (${data.public || 0} public, ${data.private || 0} private)`;
             if (refreshUi) {
                 await Promise.allSettled([loadTlds(), loadDomains()]);
             }
@@ -4646,7 +4646,7 @@ function setAccountDomainType(type) {
     privateButton.setAttribute('aria-pressed', String(type === 'private'));
     document.getElementById('accountDomainsDescription').textContent = type === 'public'
         ? 'Browse public domains from the FreeDNS registry.'
-        : 'Browse private domains exposed by this FreeDNS account.';
+        : 'Browse private domains from the FreeDNS registry.';
     loadAccountDomains();
 }
 
