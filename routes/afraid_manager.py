@@ -260,6 +260,7 @@ def sync_afraid_registry_domains(force=False, start_page=1, end_page=None):
         private_seen = 0
         errors = []
         registry_domain_names = set()
+        domains_by_name = {}
         first_page_cache = {start_page: first_page_domains}
 
         for page in range(start_page, end_page + 1):
@@ -273,7 +274,7 @@ def sync_afraid_registry_domains(force=False, start_page=1, end_page=None):
 
             total_seen += len(registry_domains)
             for item in registry_domains:
-                domain_name = item.get('domain_name')
+                domain_name = (item.get('domain_name') or '').strip().lower().rstrip('.')
                 if not domain_name:
                     continue
                 status = (item.get('status') or '').strip().lower()
@@ -282,13 +283,28 @@ def sync_afraid_registry_domains(force=False, start_page=1, end_page=None):
                 elif status == 'private':
                     private_seen += 1
                 registry_domain_names.add(domain_name)
-                domain = AfraidDomain.query.filter_by(domain_name=domain_name).first()
+                domain = domains_by_name.get(domain_name)
+                if domain is None:
+                    domain = AfraidDomain.query.filter_by(domain_name=domain_name).first()
                 if not domain:
                     domain = AfraidDomain(domain_name=domain_name)
-                    db.session.add(domain)
-                    added += 1
+                    try:
+                        # A process-local lock cannot prevent another app worker
+                        # from syncing the same registry row at the same time.
+                        # Flush the insert inside a savepoint so a concurrent
+                        # unique-key winner does not abort the whole sync.
+                        with db.session.begin_nested():
+                            db.session.add(domain)
+                            db.session.flush()
+                        added += 1
+                    except IntegrityError:
+                        domain = AfraidDomain.query.filter_by(domain_name=domain_name).first()
+                        if domain is None:
+                            raise
+                        updated += 1
                 else:
                     updated += 1
+                domains_by_name[domain_name] = domain
                 domain.domain_id = item.get('domain_id')
                 domain.tld = item.get('tld')
                 domain.source = 'registry'
