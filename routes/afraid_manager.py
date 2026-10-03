@@ -470,7 +470,7 @@ def get_used_domains():
 @login_required
 @json_api_errors
 def get_account_domains():
-    """List public registry domains and private choices exposed by the FreeDNS account."""
+    """List the signed-in FreeDNS account's own domains by visibility."""
     domain_type = request.args.get('type', 'public').strip().lower()
     if domain_type not in {'public', 'private'}:
         return jsonify({'success': False, 'error': 'Domain type must be public or private.'}), 400
@@ -478,52 +478,30 @@ def get_account_domains():
     page = max(1, int(request.args.get('page', 1)))
     per_page = min(100, max(1, int(request.args.get('per_page', 25))))
 
-    if domain_type == 'public':
-        # Use the same synchronized public registry data shown in the Process
-        # tab. The account Domains page has a different layout and should not
-        # be used as the source for public registry domains.
-        freshness = sync_afraid_registry_domains(force=False)
-        if not freshness.get('success'):
-            return jsonify({'success': False, 'error': freshness.get('error', 'FreeDNS public registry is unavailable.')}), 503
-        query = AfraidDomain.query.filter(
-            AfraidDomain.domain_id.isnot(None),
-            AfraidDomain.registry_status == 'public',
-        )
-        total = query.count()
-        domains = query.order_by(AfraidDomain.domain_name.asc()).offset((page - 1) * per_page).limit(per_page).all()
-        items = [{'domain_name': domain.domain_name, 'domain_id': domain.domain_id} for domain in domains]
-    else:
-        svc, error = get_service()
-        if error:
-            return jsonify({'success': False, 'error': error}), 503
-        account_domains = svc.fetch_account_domains()
-        if svc.last_error:
-            return jsonify({'success': False, 'error': svc.last_error}), 503
-        # FreeDNS sometimes returns owned domains without a readable
-        # visibility label. Its public registry cache is authoritative for
-        # public zones; treat the remaining account-owned zones as private so
-        # those domains are still available in the Private domains view.
-        known_public_domains = {
-            name for (name,) in AfraidDomain.query.with_entities(AfraidDomain.domain_name).filter(
-                AfraidDomain.source == 'registry',
-                AfraidDomain.registry_status == 'public',
-            ).all()
-        }
-        def matches_domain_type(domain):
-            status = domain.get('status')
-            if status not in {'public', 'private'}:
-                status = 'public' if domain['domain_name'] in known_public_domains else 'private'
-            return status == domain_type
+    svc, error = get_service()
+    if error:
+        return jsonify({'success': False, 'error': error}), 503
+    account_domains = svc.fetch_account_domains()
+    if svc.last_error:
+        return jsonify({'success': False, 'error': svc.last_error}), 503
 
-        all_items = [
-            {'domain_name': domain['domain_name'], 'domain_id': domain.get('domain_id')}
-            for domain in account_domains
-            if matches_domain_type(domain)
-        ]
-        all_items.sort(key=lambda item: item['domain_name'])
-        total = len(all_items)
-        start = (page - 1) * per_page
-        items = all_items[start:start + per_page]
+    # This view is account-scoped and independent of the Process tab's public
+    # registry cache. FreeDNS may omit visibility text on owned-domain rows;
+    # retain those account-owned domains in the Private view.
+    matching_domains = []
+    for domain in account_domains:
+        status = domain.get('status')
+        if status not in {'public', 'private'}:
+            status = 'private'
+        if status == domain_type:
+            matching_domains.append(domain)
+    matching_domains.sort(key=lambda item: item['domain_name'])
+    total = len(matching_domains)
+    start = (page - 1) * per_page
+    items = [
+        {'domain_name': domain['domain_name'], 'domain_id': domain.get('domain_id')}
+        for domain in matching_domains[start:start + per_page]
+    ]
 
     return jsonify({
         'success': True,
