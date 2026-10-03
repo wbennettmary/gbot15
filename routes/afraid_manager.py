@@ -1183,13 +1183,38 @@ def is_quota_error(message):
         return True
     return any(term in text for term in quota_terms) and any(term in text for term in record_terms)
 
+def classify_afraid_cleanup_records(records):
+    """Attach the most specific cached FreeDNS domain visibility to each FQDN."""
+    visibility_by_domain = {
+        row.domain_name.lower().rstrip('.'): row.registry_status.lower()
+        for row in AfraidDomain.query.filter(
+            AfraidDomain.domain_id.isnot(None),
+            AfraidDomain.registry_status.in_(['public', 'private']),
+        ).all()
+        if row.domain_name and row.registry_status
+    }
+    for record in records:
+        labels = (record.get('fqdn') or '').lower().rstrip('.').split('.')
+        for index in range(max(0, len(labels) - 1)):
+            candidate = '.'.join(labels[index:])
+            if candidate in visibility_by_domain:
+                record['base_domain'] = candidate
+                record['domain_visibility'] = visibility_by_domain[candidate]
+                break
+        record.setdefault('domain_visibility', 'unknown')
+    return records
+
 @afraid_manager.route('/api/afraid/subdomains', methods=['GET'])
 @login_required
 def get_existing_subdomains():
+    freshness = sync_afraid_registry_domains(force=False)
+    if not freshness.get('success'):
+        return jsonify({'success': False, 'error': f"Cannot classify cleanup records until the FreeDNS registry is refreshed: {freshness.get('error', 'refresh failed')}"}), 503
     svc, error = get_service()
     if error:
         return jsonify({'success': False, 'error': error}), 401
     records = svc.get_existing_subdomains()
+    records = classify_afraid_cleanup_records(records)
     return jsonify({'success': True, 'records': records, 'total': len(records), 'error': svc.last_error})
 
 @afraid_manager.route('/api/afraid/subdomains/delete', methods=['POST'])
@@ -1197,14 +1222,24 @@ def get_existing_subdomains():
 def delete_existing_subdomains():
     data = request.get_json(silent=True) or {}
     delete_all = bool(data.get('delete_all'))
+    include_private = data.get('include_private') is True
     selected = set(data.get('delete_values') or [])
+    freshness = sync_afraid_registry_domains(force=False)
+    if not freshness.get('success'):
+        return jsonify({'success': False, 'error': f"Cannot safely classify cleanup records until the FreeDNS registry is refreshed: {freshness.get('error', 'refresh failed')}"}), 503
     svc, error = get_service()
     if error:
         return jsonify({'success': False, 'error': error}), 401
-    records = svc.get_existing_subdomains()
-    targets = records if delete_all else [r for r in records if r.get('delete_value') in selected]
+    records = classify_afraid_cleanup_records(svc.get_existing_subdomains())
+    allowed_visibility = {'public', 'private'} if include_private else {'public'}
+    eligible_records = [r for r in records if r.get('domain_visibility') in allowed_visibility]
+    requested_records = records if delete_all else [r for r in records if r.get('delete_value') in selected]
+    targets = eligible_records if delete_all else [r for r in eligible_records if r.get('delete_value') in selected]
+    skipped = len(requested_records) - len(targets)
     success, message = svc.delete_subdomains(targets)
-    return jsonify({'success': success, 'message': message, 'deleted': len(targets)})
+    if skipped:
+        message = f'{message} Skipped {skipped} private or unclassified record(s).'
+    return jsonify({'success': success, 'message': message, 'deleted': len(targets), 'skipped': skipped})
 
 @afraid_manager.route('/api/afraid/create-batch', methods=['POST'])
 @login_required

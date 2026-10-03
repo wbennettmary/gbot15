@@ -1859,6 +1859,11 @@
                                     <span class="badge rounded-pill afraid-quota-count" id="afraidQuotaCount" aria-live="polite">0 records loaded</span>
                                 </div>
                                 <div class="small text-muted">Load existing records and remove unused subdomains when capacity is reached.</div>
+                                <div class="form-check mt-2">
+                                    <input class="form-check-input" type="checkbox" id="includePrivateQuotaCleanup">
+                                    <label class="form-check-label small fw-semibold" for="includePrivateQuotaCleanup">Select private domains for cleanup</label>
+                                    <div class="form-text mt-0">Private records are excluded by default. Checking this selects them; you can uncheck individual records below.</div>
+                                </div>
                             </div>
                             <div class="afraid-quota-actions">
                                 <button class="btn btn-sm btn-light" id="btnLoadSubdomains" type="button"><svg class="afraid-svg-icon me-1" aria-hidden="true"><use href="#afraid-icon-rotate" xlink:href="#afraid-icon-rotate"></use></svg>Load Existing</button>
@@ -1868,9 +1873,9 @@
                         </div>
                         <div class="table-responsive afraid-quota-table-wrap">
                             <table class="table table-sm table-striped mb-0 afraid-quota-table">
-                                <thead><tr><th style="width:40px"><input type="checkbox" id="selectAllSubdomains" aria-label="Select visible subdomains"></th><th>Subdomain</th><th>Type</th><th>Destination</th></tr></thead>
+                                <thead><tr><th style="width:40px"><input type="checkbox" id="selectAllSubdomains" aria-label="Select visible eligible subdomains"></th><th>Subdomain</th><th>Type</th><th>Destination</th><th>Domain access</th></tr></thead>
                                 <tbody id="subdomainsTableBody">
-                                    <tr><td colspan="4" class="text-center text-muted">Load existing records before cleanup.</td></tr>
+                                    <tr><td colspan="5" class="text-center text-muted">Load existing records before cleanup.</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -2346,6 +2351,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('btnNextSubdomainPage').addEventListener('click', () => changeSubdomainPage(1));
     document.getElementById('btnMarkAllSubdomains').addEventListener('click', markAllSubdomains);
     document.getElementById('selectAllSubdomains').addEventListener('change', toggleAllSubdomains);
+    document.getElementById('includePrivateQuotaCleanup').addEventListener('change', handlePrivateCleanupToggle);
     document.getElementById('btnDeleteSelectedSubdomains').addEventListener('click', deleteSelectedSubdomains);
     document.getElementById('btnCreateCnameSubdomain').addEventListener('click', startProcess);
     document.getElementById('btnResetCloudflareUsage').addEventListener('click', () => {
@@ -3354,12 +3360,20 @@ function renderExistingSubdomainsPage() {
 
     tbody.innerHTML = '';
     if (!pageRecords.length) {
-        tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted">${afraidSubdomainRecords.length ? 'No records on this page.' : 'No existing subdomains found.'}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">${afraidSubdomainRecords.length ? 'No records on this page.' : 'No existing subdomains found.'}</td></tr>`;
     } else {
         pageRecords.forEach(record => {
             const tr = document.createElement('tr');
-            tr.innerHTML = `<td><input type="checkbox" class="subdomain-delete-check" value="${escapeHtml(record.delete_value)}" aria-label="Select ${escapeHtml(record.fqdn)}"${record.selected ? ' checked' : ''}></td>
-                <td>${escapeHtml(record.fqdn)}</td><td>${escapeHtml(record.type)}</td><td>${escapeHtml(record.destination)}</td>`;
+            const visibility = record.domain_visibility || 'unknown';
+            const includePrivate = document.getElementById('includePrivateQuotaCleanup').checked;
+            const canSelect = visibility === 'public' || (visibility === 'private' && includePrivate);
+            const badgeClass = visibility === 'public' ? 'bg-success' : visibility === 'private' ? 'bg-warning text-dark' : 'bg-secondary';
+            const disabledHint = visibility === 'private'
+                ? 'Check Include private domains in cleanup to select this record.'
+                : 'This record could not be matched to a public or private FreeDNS domain.';
+            tr.innerHTML = `<td><input type="checkbox" class="subdomain-delete-check" value="${escapeHtml(record.delete_value)}" aria-label="Select ${escapeHtml(record.fqdn)}"${record.selected && canSelect ? ' checked' : ''}${canSelect ? '' : ` disabled title="${disabledHint}"`}></td>
+                <td>${escapeHtml(record.fqdn)}${record.base_domain ? `<div class="small text-muted">${escapeHtml(record.base_domain)}</div>` : ''}</td><td>${escapeHtml(record.type)}</td><td>${escapeHtml(record.destination)}</td>
+                <td><span class="badge ${badgeClass}">${escapeHtml(visibility)}</span></td>`;
             tr.querySelector('input').addEventListener('change', event => {
                 record.selected = event.target.checked;
                 updateSubdomainSelectAllState();
@@ -3388,7 +3402,7 @@ async function loadExistingSubdomains() {
         selectAll.indeterminate = false;
     }
     if (countEl) countEl.textContent = 'Loading…';
-    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Loading existing records…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Loading existing records…</td></tr>';
     try {
         const res = await fetch('/api/afraid/subdomains');
         const data = await parseJsonResponse(res);
@@ -3399,7 +3413,7 @@ async function loadExistingSubdomains() {
         afraidSubdomainRecords = records.map(record => ({...record, selected: false}));
         renderExistingSubdomainsPage();
     } catch (err) {
-        tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger">${escapeHtml(err.message || 'Could not load existing subdomains.')}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">${escapeHtml(err.message || 'Could not load existing subdomains.')}</td></tr>`;
         if (countEl) countEl.textContent = 'Unavailable';
         updateSubdomainPagination();
         showAlert('createAlert', escapeHtml(err.message || 'Could not load existing subdomains.'), 'danger');
@@ -3411,7 +3425,7 @@ function getSubdomainChecks() {
 }
 
 function toggleAllSubdomains(e) {
-    const visibleValues = new Set(getSubdomainChecks().map(check => check.value));
+    const visibleValues = new Set(getSubdomainChecks().filter(check => !check.disabled).map(check => check.value));
     afraidSubdomainRecords.forEach(record => {
         if (visibleValues.has(record.delete_value)) record.selected = e.target.checked;
     });
@@ -3429,17 +3443,28 @@ function markAllSubdomains() {
         alert('Load existing subdomains first.');
         return;
     }
-    afraidSubdomainRecords.forEach(record => { record.selected = true; });
+    const includePrivate = document.getElementById('includePrivateQuotaCleanup').checked;
+    afraidSubdomainRecords.forEach(record => {
+        record.selected = record.domain_visibility === 'public' || (includePrivate && record.domain_visibility === 'private');
+    });
+    renderExistingSubdomainsPage();
+}
+
+function handlePrivateCleanupToggle(event) {
+    afraidSubdomainRecords.forEach(record => {
+        if (record.domain_visibility === 'private') record.selected = event.target.checked;
+    });
     renderExistingSubdomainsPage();
 }
 
 function updateSubdomainSelectAllState() {
-    const checks = getSubdomainChecks();
+    const checks = getSubdomainChecks().filter(check => !check.disabled);
     const selectAll = document.getElementById('selectAllSubdomains');
     if (!selectAll) return;
     const checked = checks.filter(check => check.checked).length;
     selectAll.checked = checks.length > 0 && checked === checks.length;
     selectAll.indeterminate = checked > 0 && checked < checks.length;
+    selectAll.disabled = checks.length === 0;
 }
 
 async function deleteSelectedSubdomains() {
@@ -3448,7 +3473,10 @@ async function deleteSelectedSubdomains() {
     const res = await fetch('/api/afraid/subdomains/delete', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({delete_values})
+        body: JSON.stringify({
+            delete_values,
+            include_private: document.getElementById('includePrivateQuotaCleanup').checked
+        })
     });
     const data = await parseJsonResponse(res);
     alert(data.message || `Deleted ${data.deleted || 0}`);
