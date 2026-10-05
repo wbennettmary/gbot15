@@ -4764,6 +4764,10 @@ function setAccountDomainType(type) {
     else loadAccountDomains();
 }
 
+function updateAccountDomainsCopyButtonLabel() {
+    document.getElementById('btnCopyAllAccountDomains').innerHTML = `<svg class="afraid-svg-icon me-1" aria-hidden="true"><use href="#afraid-icon-copy"></use></svg>Copy all ${accountDomainType} domains`;
+}
+
 function changeAccountDomainPage(delta) {
     accountDomainPage = Math.max(1, accountDomainPage + delta);
     renderAccountDomainsPage();
@@ -4810,32 +4814,31 @@ async function copyAllAccountDomains() {
         status.textContent = 'The domain list is not loaded yet. Use Refresh to load it, then copy.';
         return;
     }
-    const publicDomains = accountDomainsCache.public;
-    const privateDomains = accountDomainsCache.private;
-    const names = [...new Set([...publicDomains, ...privateDomains]
+    const selectedDomains = accountDomainsCache[accountDomainType] || [];
+    const names = [...new Set(selectedDomains
         .map(domain => String(domain.domain_name || '').trim().toLowerCase())
         .filter(Boolean))];
     if (!names.length) {
         status.className = 'small text-muted mb-2';
-        status.textContent = 'No public or private domains were found to copy.';
+        status.textContent = `No ${accountDomainType} domains were found to copy.`;
         return;
     }
     const copyRequest = requestClipboardWrite(names.join('\n'));
     button.disabled = true;
     status.className = 'small text-muted mb-2';
-    status.textContent = 'Copying the loaded public and private domain names...';
+    status.textContent = `Copying the loaded ${accountDomainType} domain names...`;
     const copied = await copyRequest;
     button.disabled = false;
     if (copied) {
         fallback.hidden = true;
         status.className = 'small text-success mb-2';
-        status.textContent = `Copied ${names.length} domain names (${publicDomains.length} public, ${privateDomains.length} private).`;
+        status.textContent = `Copied ${names.length} ${accountDomainType} domain names.`;
     } else {
         fallback.hidden = false;
         document.getElementById('accountDomainsCopyText').value = names.join('\n');
         selectAccountDomainsCopyText();
         status.className = 'small text-warning mb-2';
-        status.textContent = 'The browser blocked clipboard access. The loaded list is selected below; press Ctrl+C or ⌘+C to copy it.';
+        status.textContent = `The browser blocked clipboard access. The loaded ${accountDomainType} list is selected below; press Ctrl+C or ⌘+C to copy it.`;
     }
 }
 
@@ -4875,7 +4878,7 @@ async function loadAccountDomains() {
             private: allDomains.filter(domain => domain.type === 'private'),
         };
         renderAccountDomainsPage();
-        copyButton.innerHTML = accountDomainsCopyButtonLabel;
+        updateAccountDomainsCopyButtonLabel();
         copyStatus.className = 'small text-muted mb-2';
         copyStatus.textContent = `All domains loaded: ${accountDomainsCache.public.length} public and ${accountDomainsCache.private.length} private. Copy is ready.`;
     } catch (err) {
@@ -4900,6 +4903,7 @@ function renderAccountDomainsPage() {
     if (!accountDomainsCache) return;
     const tbody = document.getElementById('accountDomainsTableBody');
     const domains = accountDomainsCache[accountDomainType] || [];
+    updateAccountDomainsCopyButtonLabel();
     const total = domains.length;
     const pageSize = 50;
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
