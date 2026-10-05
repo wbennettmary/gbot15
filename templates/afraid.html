@@ -2000,6 +2000,14 @@
                         <button type="button" class="btn btn-outline-primary" id="btnPrivateAccountDomains" aria-pressed="false">Private domains</button>
                     </div>
                     <div class="small text-muted mb-2" id="accountDomainsCopyStatus" role="status" aria-live="polite"></div>
+                    <div id="accountDomainsCopyFallback" class="mb-3" hidden>
+                        <label for="accountDomainsCopyText" class="form-label small fw-semibold">All public and private domain names</label>
+                        <textarea class="form-control font-monospace" id="accountDomainsCopyText" rows="6" readonly aria-describedby="accountDomainsCopyHelp"></textarea>
+                        <div class="d-flex align-items-center gap-2 mt-2 flex-wrap">
+                            <button class="btn btn-sm btn-outline-secondary" id="btnSelectAccountDomainsCopyText" type="button">Select all names</button>
+                            <span class="small text-muted" id="accountDomainsCopyHelp">Press Ctrl+C or ⌘+C to copy the selected names.</span>
+                        </div>
+                    </div>
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <span class="small text-muted" id="accountDomainsCount" aria-live="polite">Loading domains...</span>
                         <span class="small text-muted" id="accountDomainsPageStatus" aria-live="polite">Page 1</span>
@@ -2309,6 +2317,8 @@
 let accountDomainType = 'public';
 let accountDomainPage = 1;
 let accountDomainRequest = null;
+let accountDomainsCopyPayload = null;
+const accountDomainsCopyButtonLabel = '<svg class="afraid-svg-icon me-1" aria-hidden="true"><use href="#afraid-icon-copy"></use></svg>Copy all domains';
 
 document.addEventListener('DOMContentLoaded', function() {
     if (document.getElementById('cookieStatus')) {
@@ -2405,8 +2415,15 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('btnRefreshUsedDomains').addEventListener('click', loadUsedDomains);
     document.getElementById('used-domains-tab').addEventListener('shown.bs.tab', loadUsedDomains);
     document.getElementById('account-domains-tab').addEventListener('shown.bs.tab', loadAccountDomains);
-    document.getElementById('btnRefreshAccountDomains').addEventListener('click', () => loadAccountDomains());
+    document.getElementById('btnRefreshAccountDomains').addEventListener('click', () => {
+        accountDomainsCopyPayload = null;
+        document.getElementById('accountDomainsCopyFallback').hidden = true;
+        document.getElementById('accountDomainsCopyStatus').textContent = '';
+        document.getElementById('btnCopyAllAccountDomains').innerHTML = accountDomainsCopyButtonLabel;
+        loadAccountDomains();
+    });
     document.getElementById('btnCopyAllAccountDomains').addEventListener('click', copyAllAccountDomains);
+    document.getElementById('btnSelectAccountDomainsCopyText').addEventListener('click', selectAccountDomainsCopyText);
     document.getElementById('btnPublicAccountDomains').addEventListener('click', () => setAccountDomainType('public'));
     document.getElementById('btnPrivateAccountDomains').addEventListener('click', () => setAccountDomainType('private'));
     document.getElementById('btnPrevAccountDomainPage').addEventListener('click', () => changeAccountDomainPage(-1));
@@ -4775,13 +4792,18 @@ async function fetchAllAccountDomains(type) {
     return domains;
 }
 
-async function writeTextToClipboard(text) {
-    if (navigator.clipboard?.writeText) {
+function requestClipboardWrite(text) {
+    let clipboard = null;
+    try {
+        clipboard = navigator.clipboard;
+    } catch (error) {
+        // Clipboard access can be unavailable in restricted browser contexts.
+    }
+    if (clipboard?.writeText) {
         try {
-            await navigator.clipboard.writeText(text);
-            return;
+            return clipboard.writeText(text).then(() => true, () => false);
         } catch (error) {
-            // Try the browser's selection-based fallback when clipboard permission is unavailable.
+            // Fall through to the synchronous legacy API while the click is still active.
         }
     }
     const textarea = document.createElement('textarea');
@@ -4794,16 +4816,39 @@ async function writeTextToClipboard(text) {
     let copied = false;
     try {
         copied = Boolean(document.execCommand?.('copy'));
+    } catch (error) {
+        copied = false;
     } finally {
         textarea.remove();
     }
-    if (!copied) throw new Error('Clipboard access was denied. Allow clipboard access and try again.');
+    return Promise.resolve(copied);
 }
 
 async function copyAllAccountDomains() {
     const button = document.getElementById('btnCopyAllAccountDomains');
     const status = document.getElementById('accountDomainsCopyStatus');
-    const originalHtml = button.innerHTML;
+    const fallback = document.getElementById('accountDomainsCopyFallback');
+    if (accountDomainsCopyPayload) {
+        const copyRequest = requestClipboardWrite(accountDomainsCopyPayload.text);
+        button.disabled = true;
+        status.className = 'small text-muted mb-2';
+        status.textContent = 'Copying all public and private domain names...';
+        const copied = await copyRequest;
+        button.disabled = false;
+        if (copied) {
+            fallback.hidden = true;
+            status.className = 'small text-success mb-2';
+            status.textContent = `Copied ${accountDomainsCopyPayload.count} domain names (${accountDomainsCopyPayload.publicCount} public, ${accountDomainsCopyPayload.privateCount} private).`;
+        } else {
+            fallback.hidden = false;
+            document.getElementById('accountDomainsCopyText').value = accountDomainsCopyPayload.text;
+            selectAccountDomainsCopyText();
+            status.className = 'small text-warning mb-2';
+            status.textContent = 'The browser blocked clipboard access. The complete domain list is selected below; press Ctrl+C or ⌘+C to copy it.';
+        }
+        return;
+    }
+
     button.disabled = true;
     button.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Loading all domains...';
     status.className = 'small text-muted mb-2';
@@ -4817,19 +4862,40 @@ async function copyAllAccountDomains() {
             .map(domain => String(domain.domain_name || '').trim().toLowerCase())
             .filter(Boolean))];
         if (!names.length) {
+            button.innerHTML = accountDomainsCopyButtonLabel;
             status.textContent = 'No public or private domains were found to copy.';
             return;
         }
-        await writeTextToClipboard(names.join('\n'));
-        status.className = 'small text-success mb-2';
-        status.textContent = `Copied ${names.length} domain names (${publicDomains.length} public, ${privateDomains.length} private).`;
+        accountDomainsCopyPayload = {
+            text: names.join('\n'),
+            count: names.length,
+            publicCount: publicDomains.length,
+            privateCount: privateDomains.length,
+        };
+        const copyRequest = requestClipboardWrite(accountDomainsCopyPayload.text);
+        const copied = await copyRequest;
+        if (copied) {
+            button.innerHTML = accountDomainsCopyButtonLabel;
+            status.className = 'small text-success mb-2';
+            status.textContent = `Copied ${names.length} domain names (${publicDomains.length} public, ${privateDomains.length} private).`;
+        } else {
+            button.innerHTML = '<svg class="afraid-svg-icon me-1" aria-hidden="true"><use href="#afraid-icon-copy"></use></svg>Copy domains now';
+            status.className = 'small text-muted mb-2';
+            status.textContent = `Retrieved ${names.length} domains (${publicDomains.length} public, ${privateDomains.length} private). Click the button again to copy.`;
+        }
     } catch (error) {
+        button.innerHTML = accountDomainsCopyButtonLabel;
         status.className = 'small text-danger mb-2';
         status.textContent = error.message || 'Could not copy all domains. Try again.';
     } finally {
         button.disabled = false;
-        button.innerHTML = originalHtml;
     }
+}
+
+function selectAccountDomainsCopyText() {
+    const textarea = document.getElementById('accountDomainsCopyText');
+    textarea.focus();
+    textarea.select();
 }
 
 async function loadAccountDomains() {
