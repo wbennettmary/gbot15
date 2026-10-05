@@ -1986,7 +1986,7 @@
                         <div class="small text-muted" id="accountDomainsDescription">Browse public domains from the FreeDNS registry.</div>
                     </div>
                     <div class="d-flex align-items-center gap-2">
-                        <button class="btn btn-sm btn-outline-primary" id="btnCopyAllAccountDomains" type="button">
+                        <button class="btn btn-sm btn-outline-primary" id="btnCopyAllAccountDomains" type="button" disabled>
                             <svg class="afraid-svg-icon me-1" aria-hidden="true"><use href="#afraid-icon-copy"></use></svg>Copy all domains
                         </button>
                         <button class="btn btn-sm btn-outline-secondary" id="btnRefreshAccountDomains" type="button">
@@ -2317,7 +2317,7 @@
 let accountDomainType = 'public';
 let accountDomainPage = 1;
 let accountDomainRequest = null;
-let accountDomainsCopyPayload = null;
+let accountDomainsCache = null;
 const accountDomainsCopyButtonLabel = '<svg class="afraid-svg-icon me-1" aria-hidden="true"><use href="#afraid-icon-copy"></use></svg>Copy all domains';
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -2415,13 +2415,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('btnRefreshUsedDomains').addEventListener('click', loadUsedDomains);
     document.getElementById('used-domains-tab').addEventListener('shown.bs.tab', loadUsedDomains);
     document.getElementById('account-domains-tab').addEventListener('shown.bs.tab', loadAccountDomains);
-    document.getElementById('btnRefreshAccountDomains').addEventListener('click', () => {
-        accountDomainsCopyPayload = null;
-        document.getElementById('accountDomainsCopyFallback').hidden = true;
-        document.getElementById('accountDomainsCopyStatus').textContent = '';
-        document.getElementById('btnCopyAllAccountDomains').innerHTML = accountDomainsCopyButtonLabel;
-        loadAccountDomains();
-    });
+    document.getElementById('btnRefreshAccountDomains').addEventListener('click', loadAccountDomains);
     document.getElementById('btnCopyAllAccountDomains').addEventListener('click', copyAllAccountDomains);
     document.getElementById('btnSelectAccountDomainsCopyText').addEventListener('click', selectAccountDomainsCopyText);
     document.getElementById('btnPublicAccountDomains').addEventListener('click', () => setAccountDomainType('public'));
@@ -4765,31 +4759,14 @@ function setAccountDomainType(type) {
     document.getElementById('accountDomainsDescription').textContent = type === 'public'
         ? 'Browse public domains from the FreeDNS registry.'
         : 'Browse private domains from the FreeDNS registry.';
-    loadAccountDomains();
+    accountDomainPage = 1;
+    if (accountDomainsCache) renderAccountDomainsPage();
+    else loadAccountDomains();
 }
 
 function changeAccountDomainPage(delta) {
     accountDomainPage = Math.max(1, accountDomainPage + delta);
-    loadAccountDomains();
-}
-
-async function fetchAllAccountDomains(type) {
-    const domains = [];
-    let pages = 1;
-    let total = 0;
-    for (let page = 1; page <= pages; page += 1) {
-        const params = new URLSearchParams({type, page: String(page), per_page: '100'});
-        const res = await fetch(`/api/afraid/account-domains?${params.toString()}`);
-        const data = await parseJsonResponse(res);
-        if (!res.ok || !data.success) throw new Error(data.error || `Could not load ${type} domains.`);
-        if (page === 1) {
-            pages = Math.max(1, Number(data.pages) || 1);
-            total = Number(data.total) || 0;
-        }
-        domains.push(...(Array.isArray(data.domains) ? data.domains : []));
-    }
-    if (domains.length < total) throw new Error(`Only ${domains.length} of ${total} ${type} domains could be retrieved.`);
-    return domains;
+    renderAccountDomainsPage();
 }
 
 function requestClipboardWrite(text) {
@@ -4828,67 +4805,37 @@ async function copyAllAccountDomains() {
     const button = document.getElementById('btnCopyAllAccountDomains');
     const status = document.getElementById('accountDomainsCopyStatus');
     const fallback = document.getElementById('accountDomainsCopyFallback');
-    if (accountDomainsCopyPayload) {
-        const copyRequest = requestClipboardWrite(accountDomainsCopyPayload.text);
-        button.disabled = true;
-        status.className = 'small text-muted mb-2';
-        status.textContent = 'Copying all public and private domain names...';
-        const copied = await copyRequest;
-        button.disabled = false;
-        if (copied) {
-            fallback.hidden = true;
-            status.className = 'small text-success mb-2';
-            status.textContent = `Copied ${accountDomainsCopyPayload.count} domain names (${accountDomainsCopyPayload.publicCount} public, ${accountDomainsCopyPayload.privateCount} private).`;
-        } else {
-            fallback.hidden = false;
-            document.getElementById('accountDomainsCopyText').value = accountDomainsCopyPayload.text;
-            selectAccountDomainsCopyText();
-            status.className = 'small text-warning mb-2';
-            status.textContent = 'The browser blocked clipboard access. The complete domain list is selected below; press Ctrl+C or ⌘+C to copy it.';
-        }
+    if (!accountDomainsCache) {
+        status.className = 'small text-warning mb-2';
+        status.textContent = 'The domain list is not loaded yet. Use Refresh to load it, then copy.';
         return;
     }
-
+    const publicDomains = accountDomainsCache.public;
+    const privateDomains = accountDomainsCache.private;
+    const names = [...new Set([...publicDomains, ...privateDomains]
+        .map(domain => String(domain.domain_name || '').trim().toLowerCase())
+        .filter(Boolean))];
+    if (!names.length) {
+        status.className = 'small text-muted mb-2';
+        status.textContent = 'No public or private domains were found to copy.';
+        return;
+    }
+    const copyRequest = requestClipboardWrite(names.join('\n'));
     button.disabled = true;
-    button.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Loading all domains...';
     status.className = 'small text-muted mb-2';
-    status.textContent = 'Retrieving every public and private domain page...';
-    try {
-        const [publicDomains, privateDomains] = await Promise.all([
-            fetchAllAccountDomains('public'),
-            fetchAllAccountDomains('private')
-        ]);
-        const names = [...new Set([...publicDomains, ...privateDomains]
-            .map(domain => String(domain.domain_name || '').trim().toLowerCase())
-            .filter(Boolean))];
-        if (!names.length) {
-            button.innerHTML = accountDomainsCopyButtonLabel;
-            status.textContent = 'No public or private domains were found to copy.';
-            return;
-        }
-        accountDomainsCopyPayload = {
-            text: names.join('\n'),
-            count: names.length,
-            publicCount: publicDomains.length,
-            privateCount: privateDomains.length,
-        };
-        const copyRequest = requestClipboardWrite(accountDomainsCopyPayload.text);
-        const copied = await copyRequest;
-        if (copied) {
-            button.innerHTML = accountDomainsCopyButtonLabel;
-            status.className = 'small text-success mb-2';
-            status.textContent = `Copied ${names.length} domain names (${publicDomains.length} public, ${privateDomains.length} private).`;
-        } else {
-            button.innerHTML = '<svg class="afraid-svg-icon me-1" aria-hidden="true"><use href="#afraid-icon-copy"></use></svg>Copy domains now';
-            status.className = 'small text-muted mb-2';
-            status.textContent = `Retrieved ${names.length} domains (${publicDomains.length} public, ${privateDomains.length} private). Click the button again to copy.`;
-        }
-    } catch (error) {
-        button.innerHTML = accountDomainsCopyButtonLabel;
-        status.className = 'small text-danger mb-2';
-        status.textContent = error.message || 'Could not copy all domains. Try again.';
-    } finally {
-        button.disabled = false;
+    status.textContent = 'Copying the loaded public and private domain names...';
+    const copied = await copyRequest;
+    button.disabled = false;
+    if (copied) {
+        fallback.hidden = true;
+        status.className = 'small text-success mb-2';
+        status.textContent = `Copied ${names.length} domain names (${publicDomains.length} public, ${privateDomains.length} private).`;
+    } else {
+        fallback.hidden = false;
+        document.getElementById('accountDomainsCopyText').value = names.join('\n');
+        selectAccountDomainsCopyText();
+        status.className = 'small text-warning mb-2';
+        status.textContent = 'The browser blocked clipboard access. The loaded list is selected below; press Ctrl+C or ⌘+C to copy it.';
     }
 }
 
@@ -4902,32 +4849,35 @@ async function loadAccountDomains() {
     const tbody = document.getElementById('accountDomainsTableBody');
     const count = document.getElementById('accountDomainsCount');
     const refresh = document.getElementById('btnRefreshAccountDomains');
+    const copyButton = document.getElementById('btnCopyAllAccountDomains');
+    const copyStatus = document.getElementById('accountDomainsCopyStatus');
     if (accountDomainRequest) accountDomainRequest.abort();
     accountDomainRequest = new AbortController();
     const request = accountDomainRequest;
+    accountDomainsCache = null;
+    document.getElementById('accountDomainsCopyFallback').hidden = true;
     tbody.innerHTML = '<tr><td colspan="2" class="text-center text-muted">Loading domains...</td></tr>';
     count.textContent = 'Loading domains...';
+    copyButton.disabled = true;
+    copyButton.innerHTML = accountDomainsCopyButtonLabel;
+    copyStatus.className = 'small text-muted mb-2';
+    copyStatus.textContent = 'Loading the cached public and private domain list...';
     refresh.disabled = true;
     try {
-        const params = new URLSearchParams({type: accountDomainType, page: String(accountDomainPage), per_page: '50'});
+        const params = new URLSearchParams({all: 'true'});
         const res = await fetch(`/api/afraid/account-domains?${params.toString()}`, {signal: request.signal});
         const data = await parseJsonResponse(res);
         if (!res.ok || !data.success) throw new Error(data.error || 'Could not load account domains.');
         if (request !== accountDomainRequest) return;
-        tbody.replaceChildren();
-        if (!data.domains || data.domains.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="2" class="text-center text-muted">No ${accountDomainType} domains found.</td></tr>`;
-        } else {
-            data.domains.forEach(domain => {
-                const row = document.createElement('tr');
-                row.innerHTML = `<td><strong>${escapeHtml(domain.domain_name)}</strong></td><td class="font-monospace text-muted">${escapeHtml(domain.domain_id || '—')}</td>`;
-                tbody.appendChild(row);
-            });
-        }
-        count.textContent = `${data.total} ${accountDomainType} domain${data.total === 1 ? '' : 's'}`;
-        document.getElementById('accountDomainsPageStatus').textContent = `Page ${data.page} of ${data.pages}`;
-        document.getElementById('btnPrevAccountDomainPage').disabled = data.page <= 1;
-        document.getElementById('btnNextAccountDomainPage').disabled = data.page >= data.pages;
+        const allDomains = Array.isArray(data.domains) ? data.domains : [];
+        accountDomainsCache = {
+            public: allDomains.filter(domain => domain.type === 'public'),
+            private: allDomains.filter(domain => domain.type === 'private'),
+        };
+        renderAccountDomainsPage();
+        copyButton.innerHTML = accountDomainsCopyButtonLabel;
+        copyStatus.className = 'small text-muted mb-2';
+        copyStatus.textContent = `All domains loaded: ${accountDomainsCache.public.length} public and ${accountDomainsCache.private.length} private. Copy is ready.`;
     } catch (err) {
         if (err.name === 'AbortError' || request !== accountDomainRequest) return;
         tbody.innerHTML = `<tr><td colspan="2"><div class="alert alert-danger mb-0">${escapeHtml(err.message || 'Could not load account domains.')} <button type="button" class="btn btn-sm btn-outline-danger ms-2" onclick="loadAccountDomains()">Retry</button></div></td></tr>`;
@@ -4935,9 +4885,41 @@ async function loadAccountDomains() {
         document.getElementById('accountDomainsPageStatus').textContent = `Page ${accountDomainPage}`;
         document.getElementById('btnPrevAccountDomainPage').disabled = accountDomainPage <= 1;
         document.getElementById('btnNextAccountDomainPage').disabled = true;
+        copyButton.innerHTML = accountDomainsCopyButtonLabel;
+        copyStatus.className = 'small text-danger mb-2';
+        copyStatus.textContent = 'Load the complete domain list before copying.';
     } finally {
-        if (request === accountDomainRequest) refresh.disabled = false;
+        if (request === accountDomainRequest) {
+            refresh.disabled = false;
+            copyButton.disabled = !accountDomainsCache;
+        }
     }
+}
+
+function renderAccountDomainsPage() {
+    if (!accountDomainsCache) return;
+    const tbody = document.getElementById('accountDomainsTableBody');
+    const domains = accountDomainsCache[accountDomainType] || [];
+    const total = domains.length;
+    const pageSize = 50;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    accountDomainPage = Math.min(Math.max(accountDomainPage, 1), totalPages);
+    const start = (accountDomainPage - 1) * pageSize;
+    const pageDomains = domains.slice(start, start + pageSize);
+    tbody.replaceChildren();
+    if (!pageDomains.length) {
+        tbody.innerHTML = `<tr><td colspan="2" class="text-center text-muted">No ${accountDomainType} domains found.</td></tr>`;
+    } else {
+        pageDomains.forEach(domain => {
+            const row = document.createElement('tr');
+            row.innerHTML = `<td><strong>${escapeHtml(domain.domain_name)}</strong></td><td class="font-monospace text-muted">${escapeHtml(domain.domain_id || '—')}</td>`;
+            tbody.appendChild(row);
+        });
+    }
+    document.getElementById('accountDomainsCount').textContent = `${total} ${accountDomainType} domain${total === 1 ? '' : 's'}`;
+    document.getElementById('accountDomainsPageStatus').textContent = `Page ${accountDomainPage} of ${totalPages}`;
+    document.getElementById('btnPrevAccountDomainPage').disabled = accountDomainPage <= 1;
+    document.getElementById('btnNextAccountDomainPage').disabled = accountDomainPage >= totalPages;
 }
 
 async function loadUsedDomains() {

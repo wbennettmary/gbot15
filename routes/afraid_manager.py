@@ -510,6 +510,30 @@ def get_used_domains():
 @json_api_errors
 def get_account_domains():
     """List domains from the complete FreeDNS registry by visibility."""
+    include_all = request.args.get('all', '').strip().lower() == 'true'
+    if include_all:
+        freshness = sync_afraid_registry_domains(force=False)
+        if not freshness.get('success'):
+            return jsonify({'success': False, 'error': freshness.get('error', 'FreeDNS registry is unavailable.')}), 503
+        rows = AfraidDomain.query.filter(
+            AfraidDomain.domain_id.isnot(None),
+            AfraidDomain.source == 'registry',
+            AfraidDomain.registry_status.in_(['public', 'private']),
+        ).order_by(AfraidDomain.domain_name.asc()).all()
+        domains = [{
+            'domain_name': domain.domain_name,
+            'domain_id': domain.domain_id,
+            'type': domain.registry_status,
+        } for domain in rows]
+        return jsonify({
+            'success': True,
+            'type': 'all',
+            'total': len(domains),
+            'public': sum(1 for domain in domains if domain['type'] == 'public'),
+            'private': sum(1 for domain in domains if domain['type'] == 'private'),
+            'domains': domains,
+        })
+
     domain_type = request.args.get('type', 'public').strip().lower()
     if domain_type not in {'public', 'private'}:
         return jsonify({'success': False, 'error': 'Domain type must be public or private.'}), 400
