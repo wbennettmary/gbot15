@@ -1985,15 +1985,21 @@
                         <h5 class="card-title mb-1"><i class="fas fa-globe me-2"></i>FreeDNS Domains</h5>
                         <div class="small text-muted" id="accountDomainsDescription">Browse public domains from the FreeDNS registry.</div>
                     </div>
-                    <button class="btn btn-sm btn-outline-secondary" id="btnRefreshAccountDomains" type="button">
-                        <i class="fas fa-rotate me-1" aria-hidden="true"></i>Refresh
-                    </button>
+                    <div class="d-flex align-items-center gap-2">
+                        <button class="btn btn-sm btn-outline-primary" id="btnCopyAllAccountDomains" type="button">
+                            <svg class="afraid-svg-icon me-1" aria-hidden="true"><use href="#afraid-icon-copy"></use></svg>Copy all domains
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" id="btnRefreshAccountDomains" type="button">
+                            <i class="fas fa-rotate me-1" aria-hidden="true"></i>Refresh
+                        </button>
+                    </div>
                 </div>
                 <div class="card-body">
                     <div class="btn-group mb-3" role="group" aria-label="Domain visibility">
                         <button type="button" class="btn btn-primary" id="btnPublicAccountDomains" aria-pressed="true">Public domains</button>
                         <button type="button" class="btn btn-outline-primary" id="btnPrivateAccountDomains" aria-pressed="false">Private domains</button>
                     </div>
+                    <div class="small text-muted mb-2" id="accountDomainsCopyStatus" role="status" aria-live="polite"></div>
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <span class="small text-muted" id="accountDomainsCount" aria-live="polite">Loading domains...</span>
                         <span class="small text-muted" id="accountDomainsPageStatus" aria-live="polite">Page 1</span>
@@ -2400,6 +2406,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('used-domains-tab').addEventListener('shown.bs.tab', loadUsedDomains);
     document.getElementById('account-domains-tab').addEventListener('shown.bs.tab', loadAccountDomains);
     document.getElementById('btnRefreshAccountDomains').addEventListener('click', () => loadAccountDomains());
+    document.getElementById('btnCopyAllAccountDomains').addEventListener('click', copyAllAccountDomains);
     document.getElementById('btnPublicAccountDomains').addEventListener('click', () => setAccountDomainType('public'));
     document.getElementById('btnPrivateAccountDomains').addEventListener('click', () => setAccountDomainType('private'));
     document.getElementById('btnPrevAccountDomainPage').addEventListener('click', () => changeAccountDomainPage(-1));
@@ -4747,6 +4754,82 @@ function setAccountDomainType(type) {
 function changeAccountDomainPage(delta) {
     accountDomainPage = Math.max(1, accountDomainPage + delta);
     loadAccountDomains();
+}
+
+async function fetchAllAccountDomains(type) {
+    const domains = [];
+    let pages = 1;
+    let total = 0;
+    for (let page = 1; page <= pages; page += 1) {
+        const params = new URLSearchParams({type, page: String(page), per_page: '100'});
+        const res = await fetch(`/api/afraid/account-domains?${params.toString()}`);
+        const data = await parseJsonResponse(res);
+        if (!res.ok || !data.success) throw new Error(data.error || `Could not load ${type} domains.`);
+        if (page === 1) {
+            pages = Math.max(1, Number(data.pages) || 1);
+            total = Number(data.total) || 0;
+        }
+        domains.push(...(Array.isArray(data.domains) ? data.domains : []));
+    }
+    if (domains.length < total) throw new Error(`Only ${domains.length} of ${total} ${type} domains could be retrieved.`);
+    return domains;
+}
+
+async function writeTextToClipboard(text) {
+    if (navigator.clipboard?.writeText) {
+        try {
+            await navigator.clipboard.writeText(text);
+            return;
+        } catch (error) {
+            // Try the browser's selection-based fallback when clipboard permission is unavailable.
+        }
+    }
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    let copied = false;
+    try {
+        copied = Boolean(document.execCommand?.('copy'));
+    } finally {
+        textarea.remove();
+    }
+    if (!copied) throw new Error('Clipboard access was denied. Allow clipboard access and try again.');
+}
+
+async function copyAllAccountDomains() {
+    const button = document.getElementById('btnCopyAllAccountDomains');
+    const status = document.getElementById('accountDomainsCopyStatus');
+    const originalHtml = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Loading all domains...';
+    status.className = 'small text-muted mb-2';
+    status.textContent = 'Retrieving every public and private domain page...';
+    try {
+        const [publicDomains, privateDomains] = await Promise.all([
+            fetchAllAccountDomains('public'),
+            fetchAllAccountDomains('private')
+        ]);
+        const names = [...new Set([...publicDomains, ...privateDomains]
+            .map(domain => String(domain.domain_name || '').trim().toLowerCase())
+            .filter(Boolean))];
+        if (!names.length) {
+            status.textContent = 'No public or private domains were found to copy.';
+            return;
+        }
+        await writeTextToClipboard(names.join('\n'));
+        status.className = 'small text-success mb-2';
+        status.textContent = `Copied ${names.length} domain names (${publicDomains.length} public, ${privateDomains.length} private).`;
+    } catch (error) {
+        status.className = 'small text-danger mb-2';
+        status.textContent = error.message || 'Could not copy all domains. Try again.';
+    } finally {
+        button.disabled = false;
+        button.innerHTML = originalHtml;
+    }
 }
 
 async function loadAccountDomains() {
